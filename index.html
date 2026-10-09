@@ -146,6 +146,11 @@ h2.sec{font-size:1.45rem; margin:56px 0 6px; letter-spacing:-.01em; text-wrap:ba
 .dados-banco{font-variant-numeric:tabular-nums; border:1px dashed var(--accent); border-radius:10px; padding:12px 14px; margin:10px 0; background:var(--accent-soft)}
 .dados-banco div{display:flex; justify-content:space-between; gap:10px}
 .copia{display:flex; gap:8px; align-items:center}
+.pix{display:flex; gap:14px; align-items:flex-start; flex-wrap:wrap; margin:10px 0}
+.pix .qr{background:#fff; padding:8px; border-radius:10px; border:1px solid var(--line); line-height:0; flex:none}
+.pix .qr img,.pix .qr canvas{display:block; width:168px; height:168px}
+.pix-txt{flex:1; min-width:200px; display:flex; flex-direction:column; gap:6px}
+.copia-cola{width:100%; font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.72rem; padding:8px; border-radius:8px; border:1px solid var(--line); background:var(--field); resize:none; word-break:break-all}
 .codigo{font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:800; letter-spacing:.08em; font-size:1.1rem; padding:6px 12px; border-radius:8px; background:var(--bg); border:1px solid var(--line)}
 
 /* Barra do pacote */
@@ -361,6 +366,7 @@ footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wr
 
 <div class="toast" id="toast" role="status" hidden></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script src="firebase-config.js"></script>
 <script type="module">
 /* ============================================================
@@ -371,6 +377,23 @@ const PRECO = 55;                       // R$ por programa ao mês
 const MESES_GRATIS = 2;
 const WHATSAPP = '5522981343392';       // avisos de compra e pedidos personalizados
 const BANCO = {banco: 'Itaú', agencia: '4261', conta: '61789-0'};
+const PIX = {chave: '+5522981343392', chaveMostrar: '(22) 98134-3392 (celular)', nome: 'TOTAL CIVIL', cidade: 'RIO DAS OSTRAS'};
+
+/* Pix "copia e cola" (padrão BR Code do Banco Central) */
+function pixPayload(valor, txid){
+  const f = (id, v) => id + String(v.length).padStart(2, '0') + v;
+  const conta = f('00', 'br.gov.bcb.pix') + f('01', PIX.chave);
+  let s = f('00', '01') + f('26', conta) + f('52', '0000') + f('53', '986') +
+          (valor > 0 ? f('54', valor.toFixed(2)) : '') + f('58', 'BR') + f('59', PIX.nome) + f('60', PIX.cidade) +
+          f('62', f('05', (txid || '***').replace(/[^A-Za-z0-9]/g, '').slice(0, 25) || '***')) + '6304';
+  let crc = 0xFFFF;
+  for(let i = 0; i < s.length; i++){
+    crc ^= s.charCodeAt(i) << 8;
+    for(let j = 0; j < 8; j++) crc = (crc & 0x8000) ? ((crc << 1) ^ 0x1021) & 0xFFFF : (crc << 1) & 0xFFFF;
+  }
+  return s + crc.toString(16).toUpperCase().padStart(4, '0');
+}
+window.__pixPayload = pixPayload;
 
 /* Programas. campo = permissão no cadastro (Firestore); solic = pedido antigo usado pelos programas */
 const PROGRAMAS = [
@@ -598,14 +621,34 @@ function mostrarPedido(p){
       '<div class="lin tot"><span>A partir do 3º mês</span><span>' + brl(v.mensal) + '/mês</span></div></div>' +
     (p.pag === 'cartao'
       ? '<p class="mini">Pagamento por <b>cartão de crédito</b>: o administrador envia o link de pagamento pelo WhatsApp.</p>'
-      : '<p class="mini">Pagamento por <b>Pix</b> (por dados bancários), a partir do 3º mês:</p>' + blocoBanco()) +
+      : '<p class="mini">Pagamento por <b>Pix</b> a partir do 3º mês. Guarde estes dados (também ficam em “Minha conta”):</p>' + blocoBanco(v.mensal, 'TC' + Date.now().toString(36))) +
     '<p class="mini" style="margin:12px 0">Toque abaixo para avisar o administrador pelo WhatsApp. A mensagem já vai pronta com o seu pedido.</p>' +
     '<a class="bt pri" style="width:100%" href="' + esc(url) + '" target="_blank" rel="noopener">Avisar pelo WhatsApp</a>';
   abrir('dl-pedido');
 }
-function blocoBanco(){
-  return '<div class="dados-banco"><div><span>Banco</span><b>' + BANCO.banco + '</b></div><div><span>Agência</span><b>' + BANCO.agencia + '</b></div><div><span>Conta corrente</span><b>' + BANCO.conta + '</b></div></div>';
+let pixSeq = 0;
+function blocoBanco(valor, txid){
+  const cod = pixPayload(valor || 0, txid);
+  const id = 'pix' + (++pixSeq);
+  setTimeout(() => desenharQR(id, cod), 0);
+  return '<div class="pix"><div class="qr" id="' + id + '" aria-label="QR Code Pix"></div><div class="pix-txt">' +
+    '<div class="rot">Pix' + (valor > 0 ? ' · ' + brl(valor) : '') + '</div>' +
+    '<div class="mini">Chave: <b>' + PIX.chaveMostrar + '</b></div>' +
+    '<textarea class="copia-cola" readonly rows="3">' + esc(cod) + '</textarea>' +
+    '<button class="bt peq" type="button" data-copiar-pix="' + esc(cod) + '">Copiar Pix copia e cola</button></div></div>' +
+    '<div class="dados-banco"><div><span>Banco</span><b>' + BANCO.banco + '</b></div><div><span>Agência</span><b>' + BANCO.agencia + '</b></div><div><span>Conta corrente</span><b>' + BANCO.conta + '</b></div></div>';
 }
+function desenharQR(id, texto){
+  const el = $(id); if(!el) return;
+  if(typeof QRCode === 'undefined'){ el.hidden = true; return; }
+  el.innerHTML = '';
+  try{ new QRCode(el, {text: texto, width: 168, height: 168, correctLevel: QRCode.CorrectLevel.M}); }catch(e){ el.hidden = true; }
+}
+document.addEventListener('click', async ev => {
+  const b = ev.target.closest('[data-copiar-pix]'); if(!b) return;
+  try{ await navigator.clipboard.writeText(b.dataset.copiarPix); toast('Pix copiado. Cole no app do seu banco, em “Pix copia e cola”.'); }
+  catch(e){ const t = b.parentElement.querySelector('textarea'); if(t){ t.focus(); t.select(); } toast('Selecione o código e copie.'); }
+});
 
 /* ---------- entrar / sair ---------- */
 let criando = false;
@@ -684,7 +727,7 @@ $('bt-conta').onclick = () => {
     (eu.admin ? '<p class="mini">Você é administrador: tem acesso a todos os programas.</p>' :
       '<div class="resumo"><div class="lin"><span>Mensalidade</span><b>' + brl(nLib * PRECO) + '</b></div>' +
       '<div class="lin"><span>Forma de pagamento</span><span>' + (eu.formaPagamento === 'cartao' ? 'Cartão de crédito' : 'Pix') + '</span></div></div>' +
-      '<p class="mini">Pagamento por Pix (dados bancários):</p>' + blocoBanco() +
+      '<p class="mini">Pague a mensalidade por Pix:</p>' + blocoBanco(nLib * PRECO, codigoDe(eu.uid)) +
       '<button class="bt pri" type="button" id="bt-paguei" style="width:100%;margin-top:6px">Já paguei: avisar pelo WhatsApp</button>') +
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">' +
       '<button class="bt" type="button" id="bt-alterar-pacote">Contratar mais programas</button>' +
