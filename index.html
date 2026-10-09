@@ -230,7 +230,7 @@ footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wr
       <li><b>R$ 55</b> por programa ao mês</li>
       <li><b>2 meses</b> grátis para começar</li>
       <li><b>10% de desconto</b> por indicação</li>
-      <li>Pix ou cartão de crédito</li>
+      <li>Pix ou transferência Itaú</li>
     </ul>
 
     <ul class="grid" id="lista-programas"></ul>
@@ -240,7 +240,7 @@ footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wr
     <ol class="passos">
       <li><b>Escolha os programas</b><span>Marque “Incluir no pacote” nos programas que você quer usar.</span></li>
       <li><b>Crie sua conta</b><span>Um único e-mail e senha para todos os programas.</span></li>
-      <li><b>Pague por Pix ou cartão</b><span>Os 2 primeiros meses são grátis. Depois, R$ 55 por programa ao mês.</span></li>
+      <li><b>Pague por Pix ou transferência</b><span>Os 2 primeiros meses são grátis. Depois, R$ 55 por programa ao mês.</span></li>
       <li><b>Acesso liberado</b><span>O administrador confere o pedido e libera os programas escolhidos.</span></li>
     </ol>
 
@@ -284,7 +284,7 @@ footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wr
 </div>
 
 <footer>
-  <div class="wrap"><span>© 2026 Total Civil. Todos os direitos reservados.</span><span>Pagamentos: Pix ou cartão de crédito · Banco Itaú</span></div>
+  <div class="wrap"><span>© 2026 Total Civil. Todos os direitos reservados.</span><span>Pagamentos: Pix ou transferência · Banco Itaú</span></div>
 </footer>
 
 <!-- ===== Janela: Entrar ===== -->
@@ -328,7 +328,7 @@ footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wr
         <div class="campo"><span class="rot">Forma de pagamento</span>
           <div class="opcoes" style="margin:4px 0 0">
             <label class="opcao"><input type="radio" name="cd-pag" value="pix" checked><span class="nm">Pix</span></label>
-            <label class="opcao"><input type="radio" name="cd-pag" value="cartao"><span class="nm">Cartão de crédito</span></label>
+            <label class="opcao"><input type="radio" name="cd-pag" value="transferencia"><span class="nm">Transferência (Itaú)</span></label>
           </div>
         </div>
       </div>
@@ -608,7 +608,7 @@ function textoPedido(p){
     'Nome: ' + (p.nome || '') + '\nE-mail: ' + (p.email || '') + (p.zap ? '\nWhatsApp: ' + p.zap : '') +
     '\nProgramas: ' + p.ks.map(k => porKey(k).nome + (porKey(k).disp ? '' : ' (em breve)')).join(', ') +
     '\nMensalidade após 2 meses grátis: ' + brl(v.mensal) +
-    '\nPagamento: ' + (p.pag === 'cartao' ? 'cartão de crédito' : 'Pix') +
+    '\nPagamento: ' + nomePag(p.pag) +
     (p.indic ? '\nCódigo de indicação usado: ' + p.indic : '') +
     '\n\nPor favor, confira e libere meu acesso.';
 }
@@ -619,14 +619,13 @@ function mostrarPedido(p){
     '<div class="msg ok">Pedido registrado. Os 2 primeiros meses são grátis: assim que o administrador conferir, os programas são liberados.</div>' +
     '<div class="resumo">' + p.ks.map(k => '<div class="lin"><span>' + esc(porKey(k).nome) + '</span><span>' + (porKey(k).disp ? brl(PRECO) + '/mês' : 'em breve') + '</span></div>').join('') +
       '<div class="lin tot"><span>A partir do 3º mês</span><span>' + brl(v.mensal) + '/mês</span></div></div>' +
-    (p.pag === 'cartao'
-      ? '<p class="mini">Pagamento por <b>cartão de crédito</b>: o administrador envia o link de pagamento pelo WhatsApp.</p>'
-      : '<p class="mini">Pagamento por <b>Pix</b> a partir do 3º mês. Guarde estes dados (também ficam em “Minha conta”):</p>' + blocoBanco(v.mensal, 'TC' + Date.now().toString(36))) +
+    '<p class="mini">Pagamento a partir do 3º mês, por <b>Pix</b> ou <b>transferência</b> para a conta Itaú abaixo. Os dados também ficam em “Minha conta”:</p>' + blocoBanco(v.mensal, 'TC' + Date.now().toString(36)) +
     '<p class="mini" style="margin:12px 0">Toque abaixo para avisar o administrador pelo WhatsApp. A mensagem já vai pronta com o seu pedido.</p>' +
     '<a class="bt pri" style="width:100%" href="' + esc(url) + '" target="_blank" rel="noopener">Avisar pelo WhatsApp</a>';
   abrir('dl-pedido');
 }
 let pixSeq = 0;
+const nomePag = f => f === 'transferencia' ? 'Transferência para o Itaú' : f === 'cartao' ? 'Cartão de crédito' : 'Pix';
 function blocoBanco(valor, txid){
   const cod = pixPayload(valor || 0, txid);
   const id = 'pix' + (++pixSeq);
@@ -726,8 +725,8 @@ $('bt-conta').onclick = () => {
     '<div class="resumo">' + linhas + '</div>' +
     (eu.admin ? '<p class="mini">Você é administrador: tem acesso a todos os programas.</p>' :
       '<div class="resumo"><div class="lin"><span>Mensalidade</span><b>' + brl(nLib * PRECO) + '</b></div>' +
-      '<div class="lin"><span>Forma de pagamento</span><span>' + (eu.formaPagamento === 'cartao' ? 'Cartão de crédito' : 'Pix') + '</span></div></div>' +
-      '<p class="mini">Pague a mensalidade por Pix:</p>' + blocoBanco(nLib * PRECO, codigoDe(eu.uid)) +
+      '<div class="lin"><span>Forma de pagamento</span><span>' + nomePag(eu.formaPagamento) + '</span></div></div>' +
+      '<p class="mini">Pague a mensalidade por Pix ou transferência para a conta Itaú:</p>' + blocoBanco(nLib * PRECO, codigoDe(eu.uid)) +
       '<button class="bt pri" type="button" id="bt-paguei" style="width:100%;margin-top:6px">Já paguei: avisar pelo WhatsApp</button>') +
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">' +
       '<button class="bt" type="button" id="bt-alterar-pacote">Contratar mais programas</button>' +
@@ -735,7 +734,7 @@ $('bt-conta').onclick = () => {
   const bp = $('bt-paguei');
   if(bp) bp.onclick = async () => {
     const t = '*Pagamento Total Civil*\nNome: ' + (eu.nome || '') + '\nE-mail: ' + eu.email + '\nValor: ' + brl(nLib * PRECO) +
-      '\nForma: ' + (eu.formaPagamento === 'cartao' ? 'cartão de crédito' : 'Pix') + '\n\nAcabei de pagar a mensalidade. Por favor, confira.';
+      '\nForma: ' + nomePag(eu.formaPagamento) + '\n\nAcabei de pagar a mensalidade. Por favor, confira.';
     const aba = reservarAba();
     try{ await fb.fs.updateDoc(fb.fs.doc(fb.d, 'usuarios', eu.uid), {pagamentoAvisadoEm: fb.fs.serverTimestamp()}); }catch(e){}
     if(!enviarAba(aba, linkZap(t))) location.href = linkZap(t);
@@ -847,7 +846,7 @@ async function renderUsuarios(){
     const nInd = indicacoes[codigoDe(u.uid)] || 0;
     const pedidoInfo = e === 'adm' ? '' :
       '<div class="mini">' + (e === 'pen' ? 'Mensal do pedido' : 'Mensal') + ': <b>' + brl(nAtivos * PRECO) + '</b>' + (nInd ? ' <span class="tag pediu">−10% no próximo mês</span>' : '') + '</div>' +
-      '<div class="mini">Pagamento: ' + (u.formaPagamento === 'cartao' ? 'cartão' : u.formaPagamento === 'pix' ? 'Pix' : '—') + '</div>' +
+      '<div class="mini">Pagamento: ' + (u.formaPagamento ? nomePag(u.formaPagamento) : '—') + '</div>' +
       (u.pedidoEm ? '<div class="mini">Pedido em ' + fmtData(u.pedidoEm) + '</div>' : '') +
       (u.pagamentoAvisadoEm ? '<div class="mini"><b>Avisou pagamento em ' + fmtData(u.pagamentoAvisadoEm) + '</b></div>' : '') +
       '<div class="mini">Código: ' + codigoDe(u.uid) + (nInd ? ' · indicou ' + nInd : '') + '</div>' +
