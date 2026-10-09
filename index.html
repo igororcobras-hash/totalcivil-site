@@ -229,7 +229,8 @@ footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wr
     <ul class="selos">
       <li><b>R$ 55</b> por programa ao mês</li>
       <li><b>2 meses</b> grátis para começar</li>
-      <li><b>10% de desconto</b> por indicação</li>
+      <li><b>10% de desconto</b> no plano anual</li>
+      <li><b>Dias grátis</b> por indicação</li>
       <li>Pix ou transferência Itaú</li>
     </ul>
 
@@ -240,14 +241,14 @@ footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wr
     <ol class="passos">
       <li><b>Escolha os programas</b><span>Marque “Incluir no pacote” nos programas que você quer usar.</span></li>
       <li><b>Crie sua conta</b><span>Um único e-mail e senha para todos os programas.</span></li>
-      <li><b>Pague por Pix ou transferência</b><span>Os 2 primeiros meses são grátis. Depois, R$ 55 por programa ao mês.</span></li>
+      <li><b>Pague por Pix ou transferência</b><span>Os 2 primeiros meses são grátis. Depois, R$ 55 por programa ao mês, ou plano anual com 10% de desconto.</span></li>
       <li><b>Acesso liberado</b><span>O administrador confere o pedido e libera os programas escolhidos.</span></li>
     </ol>
 
     <div class="faixa">
       <section class="painel destaque" id="indique">
-        <h3>Indique e ganhe 10%</h3>
-        <p>Cada conta tem um código de indicação. Quando alguém se cadastra com o seu código, você ganha 10% de desconto na mensalidade do mês seguinte.</p>
+        <h3>Indique e ganhe dias grátis</h3>
+        <p>Cada conta tem um código de indicação. Para cada pessoa que se cadastrar e contratar com o seu código, você ganha 3 dias a mais de acesso no plano mensal ou 36 dias no plano anual (equivale a 10% do período).</p>
         <div id="indique-fora"><button class="bt" type="button" data-abrir="dl-entrar">Entrar para ver meu código</button></div>
         <div id="indique-dentro" hidden>
           <div class="rot" style="margin-bottom:6px">Seu código de indicação</div>
@@ -332,6 +333,11 @@ footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wr
           </div>
         </div>
       </div>
+      <span class="rot">Plano</span>
+      <div class="opcoes duas" style="margin:4px 0 12px;gap:6px 12px">
+        <label class="opcao"><input type="radio" name="cd-plano" value="mensal" checked><span class="nm">Mensal</span><span class="vl" id="vl-mensal"></span></label>
+        <label class="opcao"><input type="radio" name="cd-plano" value="anual"><span class="nm">Anual · 10% off</span><span class="vl" id="vl-anual"></span></label>
+      </div>
       <div class="resumo" id="cad-resumo"></div>
       <div class="msg" id="cd-msg" hidden></div>
       <button class="bt pri" type="submit" id="cd-bt" style="width:100%">Criar conta e enviar pedido</button>
@@ -375,6 +381,23 @@ footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wr
 const SDK = 'https://www.gstatic.com/firebasejs/12.19.0/';
 const PRECO = 55;                       // R$ por programa ao mês
 const MESES_GRATIS = 2;
+const DESC_ANUAL = 0.10;                // plano anual: 10% de desconto
+const DIAS_INDICACAO = {mensal: 3, anual: 36};   // bônus por indicação (≈10% do período)
+/* Links de pagamento com cartão (PicPay). Enquanto vazios, o botão aparece desativado.
+   Chave = número de programas do pacote. */
+const LINKS_CARTAO = {
+  mensal: {1: '', 2: '', 3: '', 4: '', 5: ''},
+  anual:  {1: '', 2: '', 3: '', 4: '', 5: ''}
+};
+const valorPlano = (n, plano) => plano === 'anual' ? Math.round(n * PRECO * 12 * (1 - DESC_ANUAL) * 100) / 100 : n * PRECO;
+const nomePlano = pl => pl === 'anual' ? 'Anual (10% de desconto)' : 'Mensal';
+const sufixoPlano = pl => pl === 'anual' ? '/ano' : '/mês';
+function botaoCartao(n, plano){
+  const link = n > 0 && (LINKS_CARTAO[plano] || {})[n];
+  return link
+    ? '<a class="bt" style="width:100%;margin-top:6px" href="' + esc(link) + '" target="_blank" rel="noopener">Pagar com cartão de crédito (PicPay)</a>'
+    : '<button class="bt" type="button" style="width:100%;margin-top:6px" disabled title="Em breve">Pagar com cartão de crédito · em breve</button>';
+}
 const WHATSAPP = '5522981343392';       // avisos de compra e pedidos personalizados
 const BANCO = {banco: 'Itaú', agencia: '4261', conta: '61789-0'};
 const PIX = {chave: '+5522981343392', chaveMostrar: '(22) 98134-3392 (celular)', nome: 'TOTAL CIVIL', cidade: 'RIO DAS OSTRAS'};
@@ -420,6 +443,8 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const brl = v => 'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 const fmtData = d => d ? d.toLocaleDateString('pt-BR') : '—';
+/* data local no formato do campo de data (aaaa-mm-dd), sem o deslocamento do fuso UTC */
+const dataISO = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 const paraData = v => { if(!v) return null; if(typeof v.toDate === 'function') return v.toDate(); const d = new Date(v); return isNaN(d) ? null : d; };
 const codigoDe = uid => 'TC' + String(uid || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase();
 const soDigitos = s => String(s || '').replace(/\D/g, '');
@@ -442,6 +467,16 @@ function traduzir(e, padrao){
   if(/network|unavailable/.test(c)) return 'Sem conexão com o servidor. Verifique a internet.';
   if(/permission-denied/.test(c)) return 'O servidor recusou a operação (regras do Firestore desatualizadas?).';
   return (padrao || 'Não foi possível concluir') + (e && e.message ? ': ' + e.message : '.');
+}
+/* grava; se as regras do servidor ainda não aceitarem o campo "plano", grava sem ele */
+async function gravar(tipo, ref, dados){
+  const {fs} = fb;
+  const f = () => tipo === 'set' ? fs.setDoc(ref, dados) : fs.updateDoc(ref, dados);
+  try{ return await comPrazo(f(), 20000); }
+  catch(e){
+    if(/permission-denied/.test(e && e.code || '') && 'plano' in dados){ const d2 = Object.assign({}, dados); delete d2.plano; console.warn('Regras sem o campo plano; gravando sem ele.'); return await comPrazo(tipo === 'set' ? fs.setDoc(ref, d2) : fs.updateDoc(ref, d2), 20000); }
+    throw e;
+  }
 }
 function comPrazo(p, ms){ return Promise.race([p, new Promise((_, r) => setTimeout(() => r(new Error('o servidor não respondeu a tempo. Tente de novo.')), ms))]); }
 
@@ -511,6 +546,7 @@ function abrirCadastro(){
   $('t-cad').textContent = logado ? 'Contratar ou alterar pacote' : 'Criar conta e contratar';
   $('cd-bt').textContent = logado ? 'Enviar pedido' : 'Criar conta e enviar pedido';
   if(logado && eu.indicadoPor) $('cd-indic').value = eu.indicadoPor;
+  const pl = document.querySelector('input[name="cd-plano"][value="' + ((eu && eu.plano) || 'mensal') + '"]'); if(pl) pl.checked = true;
   $('cad-programas').innerHTML = PROGRAMAS.map(p => {
     const lib = p.disp && liberado(eu, p);
     return '<label class="opcao"><input type="checkbox" value="' + p.key + '"' + (sel.has(p.key) || lib ? ' checked' : '') + (lib ? ' disabled' : '') + '>' +
@@ -521,22 +557,28 @@ function abrirCadastro(){
   abrir('dl-cadastro');
 }
 function marcadosCadastro(){ return [...$('cad-programas').querySelectorAll('input:checked')].map(i => i.value); }
+const planoCadastro = () => (document.querySelector('input[name="cd-plano"]:checked') || {}).value || 'mensal';
 function resumoCadastro(){
   const ks = marcadosCadastro();
-  const v = valores(ks);
+  const v = valores(ks), pl = planoCadastro();
+  $('vl-mensal').textContent = brl(valorPlano(v.disp, 'mensal')) + '/mês';
+  $('vl-anual').textContent = brl(valorPlano(v.disp, 'anual')) + '/ano';
   $('cad-resumo').innerHTML =
-    '<div class="lin"><span>Programas disponíveis</span><span>' + v.disp + ' × ' + brl(PRECO) + '</span></div>' +
+    '<div class="lin"><span>Programas disponíveis</span><span>' + v.disp + ' × ' + brl(PRECO) + '/mês</span></div>' +
     (v.breve ? '<div class="lin"><span>Lançamentos reservados</span><span>' + v.breve + ' (sem cobrança agora)</span></div>' : '') +
+    (pl === 'anual' ? '<div class="lin"><span>Plano anual: 12 meses com 10% de desconto</span><span>−' + brl(v.disp * PRECO * 12 * DESC_ANUAL) + '</span></div>' : '') +
     '<div class="lin"><span>1º e 2º mês</span><span>grátis</span></div>' +
-    '<div class="lin tot"><span>A partir do 3º mês</span><span>' + brl(v.mensal) + '/mês</span></div>';
+    '<div class="lin tot"><span>A partir do 3º mês</span><span>' + brl(valorPlano(v.disp, pl)) + sufixoPlano(pl) + '</span></div>';
 }
 $('cad-programas').addEventListener('change', resumoCadastro);
+document.querySelectorAll('input[name="cd-plano"]').forEach(r => r.addEventListener('change', resumoCadastro));
 
 $('form-cadastro').addEventListener('submit', async ev => {
   ev.preventDefault();
   if(!fb){ msg('cd-msg', 'Conectando ao servidor… tente de novo em instantes.', 'erro'); return; }
   const ks = marcadosCadastro().filter(k => !(eu && liberado(eu, porKey(k))));
   const pag = (document.querySelector('input[name="cd-pag"]:checked') || {}).value || 'pix';
+  const plano = planoCadastro();
   const indic = String($('cd-indic').value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
   if(!ks.length){ msg('cd-msg', 'Marque ao menos um programa.', 'erro'); return; }
   const {a, d, auth, fs} = fb;
@@ -563,10 +605,10 @@ $('form-cadastro').addEventListener('submit', async ev => {
         ativo: false, admin: false, recusado: false, validade: null, criadoEm: fs.serverTimestamp(),
         orcamentoSolicitado: ks.includes('orcamento'), orcamentoAtivo: false,
         intertravadoSolicitado: ks.includes('intertravado'), intertravadoAtivo: false,
-        programasPedidos: ks, formaPagamento: pag, pedidoEm: fs.serverTimestamp()
+        programasPedidos: ks, formaPagamento: pag, plano, pedidoEm: fs.serverTimestamp()
       };
       if(indic && indic !== codigoDe(uid)) perfil.indicadoPor = indic;
-      await comPrazo(fs.setDoc(fs.doc(d, 'usuarios', uid), perfil), 20000);
+      await gravar('set', fs.doc(d, 'usuarios', uid), perfil);
       criando = false;
       await carregarPerfil(cred.user);
     }else if(eu.semPerfil){
@@ -576,25 +618,25 @@ $('form-cadastro').addEventListener('submit', async ev => {
         ativo: false, admin: false, recusado: false, validade: null, criadoEm: fs.serverTimestamp(),
         orcamentoSolicitado: ks.includes('orcamento'), orcamentoAtivo: false,
         intertravadoSolicitado: ks.includes('intertravado'), intertravadoAtivo: false,
-        programasPedidos: ks, formaPagamento: pag, pedidoEm: fs.serverTimestamp()};
+        programasPedidos: ks, formaPagamento: pag, plano, pedidoEm: fs.serverTimestamp()};
       if(indic && indic !== codigoDe(uid)) perfil.indicadoPor = indic;
       msg('cd-msg', 'Enviando pedido…', 'info');
-      await comPrazo(fs.setDoc(fs.doc(d, 'usuarios', uid), perfil), 20000);
+      await gravar('set', fs.doc(d, 'usuarios', uid), perfil);
       await carregarPerfil(fb.a.currentUser);
     }else{
       uid = eu.uid; nome = eu.nome; email = eu.email; zap = eu.whatsapp;
       const antes = Array.isArray(eu.programasPedidos) ? eu.programasPedidos : [];
       const todos = [...new Set([...antes, ...ks])];
-      const upd = {programasPedidos: todos, formaPagamento: pag, pedidoEm: fs.serverTimestamp()};
+      const upd = {programasPedidos: todos, formaPagamento: pag, plano, pedidoEm: fs.serverTimestamp()};
       if(ks.includes('orcamento') && !eu.orcamentoSolicitado) upd.orcamentoSolicitado = true;
       if(ks.includes('intertravado') && !eu.intertravadoSolicitado) upd.intertravadoSolicitado = true;
       if(indic && !eu.indicadoPor && indic !== codigoDe(uid)) upd.indicadoPor = indic;
       msg('cd-msg', 'Enviando pedido…', 'info');
-      await comPrazo(fs.updateDoc(fs.doc(d, 'usuarios', uid), upd), 20000);
+      await gravar('update', fs.doc(d, 'usuarios', uid), upd);
       await carregarPerfil(fb.a.currentUser);
     }
     sel.clear(); salvarSel(); renderProgramas(); atualizarBarra();
-    mostrarPedido({nome, email, zap, ks, pag, indic});
+    mostrarPedido({nome, email, zap, ks: todosPedidos(ks), pag, plano, indic});
   }catch(e){
     criando = false;
     msg('cd-msg', e && e.mensagem ? e.mensagem : traduzir(e, 'Não foi possível enviar o pedido'), 'erro');
@@ -602,12 +644,14 @@ $('form-cadastro').addEventListener('submit', async ev => {
   }finally{ bt.disabled = false; }
 });
 
+/* pedido completo do cliente (o que já tinha + o novo), sem repetir */
+function todosPedidos(ks){ const antes = eu && Array.isArray(eu.programasPedidos) ? eu.programasPedidos : []; return [...new Set([...antes, ...ks])].filter(k => porKey(k)); }
 function textoPedido(p){
   const v = valores(p.ks);
   return '*Novo pedido Total Civil*\n' +
     'Nome: ' + (p.nome || '') + '\nE-mail: ' + (p.email || '') + (p.zap ? '\nWhatsApp: ' + p.zap : '') +
     '\nProgramas: ' + p.ks.map(k => porKey(k).nome + (porKey(k).disp ? '' : ' (em breve)')).join(', ') +
-    '\nMensalidade após 2 meses grátis: ' + brl(v.mensal) +
+    '\nPlano: ' + nomePlano(p.plano) + ' · ' + brl(valorPlano(v.disp, p.plano)) + sufixoPlano(p.plano) + ' (após 2 meses grátis)' +
     '\nPagamento: ' + nomePag(p.pag) +
     (p.indic ? '\nCódigo de indicação usado: ' + p.indic : '') +
     '\n\nPor favor, confira e libere meu acesso.';
@@ -618,8 +662,10 @@ function mostrarPedido(p){
   $('pedido-corpo').innerHTML =
     '<div class="msg ok">Pedido registrado. Os 2 primeiros meses são grátis: assim que o administrador conferir, os programas são liberados.</div>' +
     '<div class="resumo">' + p.ks.map(k => '<div class="lin"><span>' + esc(porKey(k).nome) + '</span><span>' + (porKey(k).disp ? brl(PRECO) + '/mês' : 'em breve') + '</span></div>').join('') +
-      '<div class="lin tot"><span>A partir do 3º mês</span><span>' + brl(v.mensal) + '/mês</span></div></div>' +
-    '<p class="mini">Pagamento a partir do 3º mês, por <b>Pix</b> ou <b>transferência</b> para a conta Itaú abaixo. Os dados também ficam em “Minha conta”:</p>' + blocoBanco(v.mensal, 'TC' + Date.now().toString(36)) +
+      '<div class="lin"><span>Plano</span><span>' + nomePlano(p.plano) + '</span></div>' +
+      '<div class="lin tot"><span>A partir do 3º mês</span><span>' + brl(valorPlano(v.disp, p.plano)) + sufixoPlano(p.plano) + '</span></div></div>' +
+    '<p class="mini">Pagamento a partir do 3º mês, por <b>Pix</b> ou <b>transferência</b> para a conta Itaú abaixo. Os dados também ficam em “Minha conta”:</p>' + blocoBanco(valorPlano(v.disp, p.plano), 'TC' + Date.now().toString(36)) +
+    botaoCartao(v.disp, p.plano) +
     '<p class="mini" style="margin:12px 0">Toque abaixo para avisar o administrador pelo WhatsApp. A mensagem já vai pronta com o seu pedido.</p>' +
     '<a class="bt pri" style="width:100%" href="' + esc(url) + '" target="_blank" rel="noopener">Avisar pelo WhatsApp</a>';
   abrir('dl-pedido');
@@ -721,26 +767,38 @@ $('bt-conta').onclick = () => {
       (lib && p.url ? ' <a class="bt peq" href="' + p.url + '">Abrir</a>' : '') + '</span></div>';
   }).join('');
   const nLib = PROGRAMAS.filter(p => p.disp && liberado(eu, p) && !eu.admin).length;
+  const nPed = PROGRAMAS.filter(p => p.disp && (liberado(eu, p) || pedidos.includes(p.key) || (p.solic && eu[p.solic]))).length;
+  const nCob = nLib || nPed;
+  const plano = eu.plano === 'anual' ? 'anual' : 'mensal';
+  const valor = valorPlano(nCob, plano);
   $('conta-corpo').innerHTML =
     '<div class="resumo">' + linhas + '</div>' +
     (eu.admin ? '<p class="mini">Você é administrador: tem acesso a todos os programas.</p>' :
-      '<div class="resumo"><div class="lin"><span>Mensalidade</span><b>' + brl(nLib * PRECO) + '</b></div>' +
+      '<div class="resumo"><div class="lin" style="align-items:center"><span>Plano</span><span class="copia">' +
+        '<button class="bt peq" type="button" data-plano="mensal"' + (plano === 'mensal' ? ' style="border-color:var(--accent);color:var(--accent)"' : '') + '>Mensal</button>' +
+        '<button class="bt peq" type="button" data-plano="anual"' + (plano === 'anual' ? ' style="border-color:var(--accent);color:var(--accent)"' : '') + '>Anual · 10% off</button></span></div>' +
+      '<div class="lin"><span>' + (plano === 'anual' ? 'Anuidade' : 'Mensalidade') + ' (' + nCob + ' programa' + (nCob > 1 ? 's' : '') + ')</span><b>' + brl(valor) + sufixoPlano(plano) + '</b></div>' +
       '<div class="lin"><span>Forma de pagamento</span><span>' + nomePag(eu.formaPagamento) + '</span></div></div>' +
-      '<p class="mini">Pague a mensalidade por Pix ou transferência para a conta Itaú:</p>' + blocoBanco(nLib * PRECO, codigoDe(eu.uid)) +
+      '<p class="mini">Pague por Pix ou transferência para a conta Itaú:</p>' + blocoBanco(valor, codigoDe(eu.uid)) + botaoCartao(nCob, plano) +
       '<button class="bt pri" type="button" id="bt-paguei" style="width:100%;margin-top:6px">Já paguei: avisar pelo WhatsApp</button>') +
     '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">' +
       '<button class="bt" type="button" id="bt-alterar-pacote">Contratar mais programas</button>' +
       '<span class="mini" style="align-self:center">Seu código de indicação: <b>' + codigoDe(eu.uid) + '</b></span></div>';
   const bp = $('bt-paguei');
   if(bp) bp.onclick = async () => {
-    const t = '*Pagamento Total Civil*\nNome: ' + (eu.nome || '') + '\nE-mail: ' + eu.email + '\nValor: ' + brl(nLib * PRECO) +
-      '\nForma: ' + nomePag(eu.formaPagamento) + '\n\nAcabei de pagar a mensalidade. Por favor, confira.';
+    const t = '*Pagamento Total Civil*\nNome: ' + (eu.nome || '') + '\nE-mail: ' + eu.email + '\nPlano: ' + nomePlano(plano) + '\nValor: ' + brl(valor) +
+      '\nForma: ' + nomePag(eu.formaPagamento) + '\n\nAcabei de pagar ' + (plano === 'anual' ? 'a anuidade' : 'a mensalidade') + '. Por favor, confira.';
     const aba = reservarAba();
     try{ await fb.fs.updateDoc(fb.fs.doc(fb.d, 'usuarios', eu.uid), {pagamentoAvisadoEm: fb.fs.serverTimestamp()}); }catch(e){}
     if(!enviarAba(aba, linkZap(t))) location.href = linkZap(t);
   };
   $('bt-alterar-pacote').onclick = () => abrirCadastro();
-  abrir('dl-conta');
+  $('conta-corpo').querySelectorAll('[data-plano]').forEach(b => b.onclick = async () => {
+    if(b.dataset.plano === plano) return;
+    try{ await fb.fs.updateDoc(fb.fs.doc(fb.d, 'usuarios', eu.uid), {plano: b.dataset.plano}); eu.plano = b.dataset.plano; $('bt-conta').onclick(); toast('Plano alterado para ' + nomePlano(b.dataset.plano) + '.'); }
+    catch(e){ toast(traduzir(e, 'Não foi possível alterar o plano')); }
+  });
+  if(!$('dl-conta').open) abrir('dl-conta');
 };
 
 /* ---------- programa personalizado ---------- */
@@ -810,7 +868,7 @@ function mostrarAba(a){
   document.querySelectorAll('[data-aba]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.aba === a)));
   a === 'usuarios' ? renderUsuarios() : renderPersonalizados();
 }
-function maisDias(n){ const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+function maisDias(n){ const d = new Date(); d.setDate(d.getDate() + n); return dataISO(d); }
 
 async function renderUsuarios(){
   const corpo = $('us-corpo');
@@ -820,7 +878,8 @@ async function renderUsuarios(){
   const ordem = {adm: -1, pen: 0, ven: 1, ok: 2, rec: 3};
   lista.sort((x, y) => ordem[estado(x)] - ordem[estado(y)] || String(x.nome || x.email).localeCompare(String(y.nome || y.email)));
   const indicacoes = {};
-  lista.forEach(u => { if(u.indicadoPor) indicacoes[u.indicadoPor] = (indicacoes[u.indicadoPor] || 0) + 1; });
+  /* só conta indicação de quem já contratou (tem algum programa liberado) */
+  lista.forEach(u => { if(u.indicadoPor && PROGRAMAS.some(p => u[p.campo])) indicacoes[u.indicadoPor] = (indicacoes[u.indicadoPor] || 0) + 1; });
   const rot = {adm: 'Administrador', rec: 'Recusado', pen: 'Aguardando aprovação', ven: 'Licença vencida', ok: 'Ativo'};
   const cor = {adm: 'adm', rec: 'warn', pen: 'warn', ven: 'warn', ok: 'ok'};
   let h = '<div class="tab-rol"><table class="us"><thead><tr><th>Usuário</th><th>Nome / Empresa</th><th>Programas</th><th>Pedido e pagamento</th><th>Validade</th><th>Situação e ações</th></tr></thead><tbody>';
@@ -844,25 +903,28 @@ async function renderUsuarios(){
     }
     const nAtivos = PROGRAMAS.filter(p => p.disp && (u[p.campo] || (e === 'pen' && pediu(u, p)))).length;
     const nInd = indicacoes[codigoDe(u.uid)] || 0;
+    const plano = u.plano === 'anual' ? 'anual' : 'mensal';
+    const bonusPend = Math.max(0, nInd - (u.indicacoesUsadas || 0));
     const pedidoInfo = e === 'adm' ? '' :
-      '<div class="mini">' + (e === 'pen' ? 'Mensal do pedido' : 'Mensal') + ': <b>' + brl(nAtivos * PRECO) + '</b>' + (nInd ? ' <span class="tag pediu">−10% no próximo mês</span>' : '') + '</div>' +
+      '<div class="mini">Plano ' + nomePlano(plano).toLowerCase() + ': <b>' + brl(valorPlano(nAtivos, plano)) + sufixoPlano(plano) + '</b></div>' +
+      (bonusPend ? '<div class="mini"><span class="tag pediu">' + bonusPend + ' indicação(ões) a creditar: +' + bonusPend * DIAS_INDICACAO[plano] + ' dias</span></div>' : '') +
       '<div class="mini">Pagamento: ' + (u.formaPagamento ? nomePag(u.formaPagamento) : '—') + '</div>' +
       (u.pedidoEm ? '<div class="mini">Pedido em ' + fmtData(u.pedidoEm) + '</div>' : '') +
       (u.pagamentoAvisadoEm ? '<div class="mini"><b>Avisou pagamento em ' + fmtData(u.pagamentoAvisadoEm) + '</b></div>' : '') +
       '<div class="mini">Código: ' + codigoDe(u.uid) + (nInd ? ' · indicou ' + nInd : '') + '</div>' +
       (u.indicadoPor ? '<div class="mini">Indicado por ' + esc(u.indicadoPor) + '</div>' : '');
-    const dt = u.validade ? u.validade.toISOString().slice(0, 10) : (e === 'pen' ? maisDias(MESES_GRATIS * 30) : '');
+    const dt = u.validade ? dataISO(u.validade) : (e === 'pen' ? maisDias(MESES_GRATIS * 30) : '');
     let acoes = '';
     if(e === 'pen') acoes = bt('Aprovar', 'aprovar', true) + bt('Recusar', 'recusar');
     else if(e === 'rec') acoes = bt('Aprovar', 'aprovar', true);
-    else if(e !== 'adm') acoes = bt('+30 dias', 'renovar') + bt('Bloquear', 'bloquear');
+    else if(e !== 'adm') acoes = bt(plano === 'anual' ? '+365 dias' : '+30 dias', 'renovar') + (bonusPend ? bt('+ dias de indicação', 'bonus', true) : '') + bt('Bloquear', 'bloquear');
     h += '<tr' + (e === 'pen' ? ' class="pend"' : '') + '><td>' + contato + '</td>' +
       '<td><input type="text" data-i="' + i + '" data-campo="nome" value="' + esc(u.nome) + '" placeholder="nome"><br><input type="text" data-i="' + i + '" data-campo="empresa" value="' + esc(u.empresa) + '" placeholder="empresa" style="margin-top:4px"></td>' +
       '<td>' + progs + '</td><td>' + pedidoInfo + '</td>' +
       '<td>' + (e === 'adm' ? '<span class="mini">sem prazo</span>' : '<input type="date" data-i="' + i + '" data-campo="validade" value="' + dt + '">' + (e === 'pen' && !u.validade ? '<div class="mini">2 meses grátis</div>' : '')) + '</td>' +
       '<td><span class="st ' + cor[e] + '">' + rot[e] + '</span><div class="acoes" style="margin-top:6px">' + acoes + bt('Redefinir senha', 'redefinir') + bt('Gravar', 'gravar') + '</div></td></tr>';
   });
-  h += '</tbody></table></div><p class="mini" style="margin-top:10px">Um único login por pessoa. “Aprovar” libera os programas marcados até a validade (cadastros novos já vêm com 2 meses grátis). “+30 dias” renova após o pagamento. “Gravar” salva a linha. “Recusar” e “Bloquear” impedem o uso e podem ser desfeitos.</p>';
+  h += '</tbody></table></div><p class="mini" style="margin-top:10px">Um único login por pessoa. “Aprovar” libera os programas marcados até a validade (cadastros novos já vêm com 2 meses grátis). “+30 dias” (mensal) ou “+365 dias” (anual) renova após o pagamento; “+ dias de indicação” credita os dias ganhos por indicação. “Gravar” salva a linha. “Recusar” e “Bloquear” impedem o uso e podem ser desfeitos.</p>';
   corpo.innerHTML = h;
 
   corpo.onclick = async ev => {
@@ -876,7 +938,13 @@ async function renderUsuarios(){
     const campos = {nome: val('nome').slice(0, 120), empresa: val('empresa').slice(0, 120)};
     if(estado(u) !== 'adm'){
       let v = val('validade');
-      if(ac === 'renovar'){ const base = u.validade && u.validade > new Date() ? new Date(u.validade) : new Date(); base.setDate(base.getDate() + 30); v = base.toISOString().slice(0, 10); }
+      if(ac === 'renovar' || ac === 'bonus'){
+        const plano = u.plano === 'anual' ? 'anual' : 'mensal';
+        const nInd = indicacoes[codigoDe(u.uid)] || 0, pend = Math.max(0, nInd - (u.indicacoesUsadas || 0));
+        const dias = ac === 'renovar' ? (plano === 'anual' ? 365 : 30) : pend * DIAS_INDICACAO[plano];
+        const base = u.validade && u.validade > new Date() ? new Date(u.validade) : new Date(); base.setDate(base.getDate() + dias); v = dataISO(base);
+        if(ac === 'bonus') campos.indicacoesUsadas = nInd;
+      }
       campos.validade = v ? new Date(v + 'T23:59:59') : null;
     }
     let marcou = false;
@@ -886,7 +954,7 @@ async function renderUsuarios(){
     b.disabled = true;
     try{
       await comPrazo(fb.fs.updateDoc(fb.fs.doc(fb.d, 'usuarios', u.uid), campos), 20000);
-      toast(ac === 'renovar' ? 'Validade renovada até ' + fmtData(campos.validade) + '.' : 'Usuário atualizado.');
+      toast(ac === 'renovar' || ac === 'bonus' ? 'Validade estendida até ' + fmtData(campos.validade) + '.' : 'Usuário atualizado.');
       renderUsuarios(); contarPendentes();
     }catch(e){ toast(traduzir(e, 'Não foi possível salvar')); b.disabled = false; }
   };
