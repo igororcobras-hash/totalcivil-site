@@ -9,6 +9,7 @@ rules_version = '2';
 //   3. Ninguém se promove a administrador nem se libera sozinho.
 //   4. O próprio usuário só pode fazer pedidos (programas, forma de pagamento, aviso de pagamento).
 //   5. Pedidos de programa personalizado: qualquer visitante envia; só o administrador lê.
+//   6. Pagamentos recebidos: só os administradores registram e consultam.
 
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -58,7 +59,7 @@ service cloud.firestore {
                          'ativo','admin','recusado','validade','criadoEm',
                          'orcamentoSolicitado','orcamentoAtivo','intertravadoSolicitado','intertravadoAtivo',
                          'drenagemAtivo','estruturaAtivo',
-                         'programasPedidos','formaPagamento','plano','pedidoEm','indicadoPor'])
+                         'programasPedidos','formaPagamento','plano','tipoPedido','pedidoEm','indicadoPor'])
                     && request.resource.data.ativo == false
                     && request.resource.data.admin == false
                     && request.resource.data.recusado == false
@@ -75,7 +76,7 @@ service cloud.firestore {
                     || (logado() && uid == request.auth.uid
                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                              'orcamentoSolicitado','intertravadoSolicitado',
-                             'programasPedidos','formaPagamento','plano','pedidoEm','indicadoPor','pagamentoAvisadoEm'])
+                             'programasPedidos','formaPagamento','plano','tipoPedido','pedidoEm','indicadoPor','pagamentoAvisadoEm'])
                         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['orcamentoSolicitado'])
                             || request.resource.data.orcamentoSolicitado == true)
                         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['intertravadoSolicitado'])
@@ -116,6 +117,18 @@ service cloud.firestore {
                     && request.resource.data.descricao is string && request.resource.data.descricao.size() <= 3000;
       allow read, delete: if admin();
       allow update: if false;
+    }
+
+    // Pagamentos recebidos (relatório): somente administradores.
+    // Registro permanente: ninguém edita nem apaga, e cada lançamento leva o e-mail
+    // de quem está logado (um administrador não consegue lançar em nome do outro).
+    match /pagamentos/{id} {
+      allow read: if admin();
+      allow create: if admin()
+                    && request.resource.data.registradoPor == request.auth.token.email
+                    && request.resource.data.criadoEm == request.time
+                    && request.resource.data.valor is number && request.resource.data.valor >= 0;
+      allow update, delete: if false;
     }
 
     // Qualquer outro caminho fica bloqueado.

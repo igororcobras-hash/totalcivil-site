@@ -233,6 +233,10 @@ footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wr
       <li><b>Dias grátis</b> por indicação</li>
       <li>Pix ou transferência Itaú</li>
     </ul>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:-14px 0 30px">
+      <a class="bt pri" href="#lista-programas">Montar meu pacote</a>
+      <button class="bt" type="button" id="bt-teste">Solicitar acesso teste</button>
+    </div>
 
     <ul class="grid" id="lista-programas"></ul>
 
@@ -324,7 +328,7 @@ footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wr
       </div>
       <div class="rot" style="margin-bottom:6px">Programas do pacote</div>
       <div class="opcoes" id="cad-programas"></div>
-      <div class="duas">
+      <div class="duas" id="cad-pagto">
         <div class="campo"><label for="cd-indic">Código de indicação (opcional)</label><input id="cd-indic" maxlength="12" autocapitalize="characters" placeholder="Ex.: TC4F8K2A"></div>
         <div class="campo"><span class="rot">Forma de pagamento</span>
           <div class="opcoes" style="margin:4px 0 0">
@@ -333,11 +337,11 @@ footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wr
           </div>
         </div>
       </div>
-      <span class="rot">Plano</span>
+      <div id="cad-plano"><span class="rot">Plano</span>
       <div class="opcoes duas" style="margin:4px 0 12px;gap:6px 12px">
         <label class="opcao"><input type="radio" name="cd-plano" value="mensal" checked><span class="nm">Mensal</span><span class="vl" id="vl-mensal"></span></label>
         <label class="opcao"><input type="radio" name="cd-plano" value="anual"><span class="nm">Anual · 10% off</span><span class="vl" id="vl-anual"></span></label>
-      </div>
+      </div></div>
       <div class="resumo" id="cad-resumo"></div>
       <div class="msg" id="cd-msg" hidden></div>
       <button class="bt pri" type="submit" id="cd-bt" style="width:100%">Criar conta e enviar pedido</button>
@@ -364,6 +368,7 @@ footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wr
   <div class="dl-corpo">
     <div class="abas">
       <button class="bt peq" type="button" data-aba="usuarios" aria-pressed="true">Usuários</button>
+      <button class="bt peq" type="button" data-aba="relatorio" aria-pressed="false">Relatório de pagamentos</button>
       <button class="bt peq" type="button" data-aba="personalizados" aria-pressed="false">Programas personalizados</button>
     </div>
     <div id="us-corpo"></div>
@@ -474,7 +479,7 @@ async function gravar(tipo, ref, dados){
   const f = () => tipo === 'set' ? fs.setDoc(ref, dados) : fs.updateDoc(ref, dados);
   try{ return await comPrazo(f(), 20000); }
   catch(e){
-    if(/permission-denied/.test(e && e.code || '') && 'plano' in dados){ const d2 = Object.assign({}, dados); delete d2.plano; console.warn('Regras sem o campo plano; gravando sem ele.'); return await comPrazo(tipo === 'set' ? fs.setDoc(ref, d2) : fs.updateDoc(ref, d2), 20000); }
+    if(/permission-denied/.test(e && e.code || '') && ('plano' in dados || 'tipoPedido' in dados)){ const d2 = Object.assign({}, dados); delete d2.plano; delete d2.tipoPedido; console.warn('Regras sem o campo plano; gravando sem ele.'); return await comPrazo(tipo === 'set' ? fs.setDoc(ref, d2) : fs.updateDoc(ref, d2), 20000); }
     throw e;
   }
 }
@@ -528,6 +533,7 @@ document.addEventListener('change', ev => {
 });
 $('bt-limpar').onclick = () => { sel.clear(); salvarSel(); renderProgramas(); atualizarBarra(); };
 $('bt-contratar').onclick = () => abrirCadastro();
+$('bt-teste').onclick = () => abrirCadastro(true);
 
 /* ---------- janelas ---------- */
 document.addEventListener('click', ev => {
@@ -539,15 +545,19 @@ document.addEventListener('click', ev => {
 document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', ev => { if(ev.target === d) d.close(); }));
 
 /* ---------- cadastro / pedido ---------- */
-function abrirCadastro(){
+let modoTeste = false;
+function abrirCadastro(teste){
+  modoTeste = teste === true;
   const logado = !!eu;
   $('cad-dados').hidden = logado;
   $('cad-ja').hidden = logado;
-  $('t-cad').textContent = logado ? 'Contratar ou alterar pacote' : 'Criar conta e contratar';
-  $('cd-bt').textContent = logado ? 'Enviar pedido' : 'Criar conta e enviar pedido';
+  $('cad-pagto').hidden = modoTeste; $('cad-plano').hidden = modoTeste; $('cad-resumo').hidden = modoTeste;
+  $('t-cad').textContent = modoTeste ? 'Solicitar acesso teste' : logado ? 'Contratar ou alterar pacote' : 'Criar conta e contratar';
+  $('t-cad').nextElementSibling.textContent = modoTeste ? 'Escolha os programas que quer testar. O administrador libera o teste e define até quando.' : 'Escolha os programas do seu pacote. Os 2 primeiros meses são grátis.';
+  $('cd-bt').textContent = modoTeste ? (logado ? 'Solicitar teste' : 'Criar conta e solicitar teste') : logado ? 'Enviar pedido' : 'Criar conta e enviar pedido';
   if(logado && eu.indicadoPor) $('cd-indic').value = eu.indicadoPor;
   const pl = document.querySelector('input[name="cd-plano"][value="' + ((eu && eu.plano) || 'mensal') + '"]'); if(pl) pl.checked = true;
-  $('cad-programas').innerHTML = PROGRAMAS.map(p => {
+  $('cad-programas').innerHTML = PROGRAMAS.filter(p => !modoTeste || p.disp).map(p => {
     const lib = p.disp && liberado(eu, p);
     return '<label class="opcao"><input type="checkbox" value="' + p.key + '"' + (sel.has(p.key) || lib ? ' checked' : '') + (lib ? ' disabled' : '') + '>' +
       '<span class="nm">' + esc(p.nome) + '</span><span class="vl">' + (lib ? 'já liberado' : p.disp ? brl(PRECO) + '/mês' : 'em breve') + '</span></label>';
@@ -579,6 +589,7 @@ $('form-cadastro').addEventListener('submit', async ev => {
   const ks = marcadosCadastro().filter(k => !(eu && liberado(eu, porKey(k))));
   const pag = (document.querySelector('input[name="cd-pag"]:checked') || {}).value || 'pix';
   const plano = planoCadastro();
+  const tipoPedido = modoTeste ? 'teste' : 'compra';
   const indic = String($('cd-indic').value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
   if(!ks.length){ msg('cd-msg', 'Marque ao menos um programa.', 'erro'); return; }
   const {a, d, auth, fs} = fb;
@@ -605,7 +616,7 @@ $('form-cadastro').addEventListener('submit', async ev => {
         ativo: false, admin: false, recusado: false, validade: null, criadoEm: fs.serverTimestamp(),
         orcamentoSolicitado: ks.includes('orcamento'), orcamentoAtivo: false,
         intertravadoSolicitado: ks.includes('intertravado'), intertravadoAtivo: false,
-        programasPedidos: ks, formaPagamento: pag, plano, pedidoEm: fs.serverTimestamp()
+        programasPedidos: ks, formaPagamento: pag, plano, tipoPedido, pedidoEm: fs.serverTimestamp()
       };
       if(indic && indic !== codigoDe(uid)) perfil.indicadoPor = indic;
       await gravar('set', fs.doc(d, 'usuarios', uid), perfil);
@@ -618,7 +629,7 @@ $('form-cadastro').addEventListener('submit', async ev => {
         ativo: false, admin: false, recusado: false, validade: null, criadoEm: fs.serverTimestamp(),
         orcamentoSolicitado: ks.includes('orcamento'), orcamentoAtivo: false,
         intertravadoSolicitado: ks.includes('intertravado'), intertravadoAtivo: false,
-        programasPedidos: ks, formaPagamento: pag, plano, pedidoEm: fs.serverTimestamp()};
+        programasPedidos: ks, formaPagamento: pag, plano, tipoPedido, pedidoEm: fs.serverTimestamp()};
       if(indic && indic !== codigoDe(uid)) perfil.indicadoPor = indic;
       msg('cd-msg', 'Enviando pedido…', 'info');
       await gravar('set', fs.doc(d, 'usuarios', uid), perfil);
@@ -627,7 +638,7 @@ $('form-cadastro').addEventListener('submit', async ev => {
       uid = eu.uid; nome = eu.nome; email = eu.email; zap = eu.whatsapp;
       const antes = Array.isArray(eu.programasPedidos) ? eu.programasPedidos : [];
       const todos = [...new Set([...antes, ...ks])];
-      const upd = {programasPedidos: todos, formaPagamento: pag, plano, pedidoEm: fs.serverTimestamp()};
+      const upd = {programasPedidos: todos, formaPagamento: pag, plano, tipoPedido, pedidoEm: fs.serverTimestamp()};
       if(ks.includes('orcamento') && !eu.orcamentoSolicitado) upd.orcamentoSolicitado = true;
       if(ks.includes('intertravado') && !eu.intertravadoSolicitado) upd.intertravadoSolicitado = true;
       if(indic && !eu.indicadoPor && indic !== codigoDe(uid)) upd.indicadoPor = indic;
@@ -636,7 +647,7 @@ $('form-cadastro').addEventListener('submit', async ev => {
       await carregarPerfil(fb.a.currentUser);
     }
     sel.clear(); salvarSel(); renderProgramas(); atualizarBarra();
-    mostrarPedido({nome, email, zap, ks: todosPedidos(ks), pag, plano, indic});
+    mostrarPedido({nome, email, zap, ks: modoTeste ? ks : todosPedidos(ks), pag, plano, indic, teste: modoTeste});
   }catch(e){
     criando = false;
     msg('cd-msg', e && e.mensagem ? e.mensagem : traduzir(e, 'Não foi possível enviar o pedido'), 'erro');
@@ -658,6 +669,17 @@ function textoPedido(p){
 }
 function mostrarPedido(p){
   const v = valores(p.ks);
+  if(p.teste){
+    const t = '*Pedido de acesso teste Total Civil*\nNome: ' + (p.nome || '') + '\nE-mail: ' + (p.email || '') + (p.zap ? '\nWhatsApp: ' + p.zap : '') +
+      '\nProgramas para testar: ' + p.ks.map(k => porKey(k).nome).join(', ') + '\n\nPor favor, libere o teste.';
+    $('t-ped').textContent = 'Pedido de teste enviado';
+    $('pedido-corpo').innerHTML = '<div class="msg ok">Pedido de teste registrado. O administrador libera os programas e define até quando o teste vale.</div>' +
+      '<div class="resumo">' + p.ks.map(k => '<div class="lin"><span>' + esc(porKey(k).nome) + '</span><span>teste</span></div>').join('') + '</div>' +
+      '<p class="mini" style="margin:12px 0">Toque abaixo para avisar o administrador pelo WhatsApp.</p>' +
+      '<a class="bt pri" style="width:100%" href="' + esc(linkZap(t)) + '" target="_blank" rel="noopener">Avisar pelo WhatsApp</a>';
+    abrir('dl-pedido'); return;
+  }
+  $('t-ped').textContent = 'Pedido enviado';
   const url = linkZap(textoPedido(p));
   $('pedido-corpo').innerHTML =
     '<div class="msg ok">Pedido registrado. Os 2 primeiros meses são grátis: assim que o administrador conferir, os programas são liberados.</div>' +
@@ -866,12 +888,13 @@ document.querySelectorAll('[data-aba]').forEach(b => b.onclick = () => mostrarAb
 function mostrarAba(a){
   abaAdmin = a;
   document.querySelectorAll('[data-aba]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.aba === a)));
-  a === 'usuarios' ? renderUsuarios() : renderPersonalizados();
+  a === 'usuarios' ? renderUsuarios() : a === 'relatorio' ? renderRelatorio() : renderPersonalizados();
 }
 function maisDias(n){ const d = new Date(); d.setDate(d.getDate() + n); return dataISO(d); }
 
 async function renderUsuarios(){
   const corpo = $('us-corpo');
+  corpo.oninput = null; corpo.onchange = null;
   corpo.innerHTML = '<p class="mini">Carregando…</p>';
   let lista;
   try{ lista = await listarUsuarios(); }catch(e){ corpo.innerHTML = '<div class="msg erro">' + esc(traduzir(e, 'Falha ao carregar')) + '</div>'; return; }
@@ -882,7 +905,7 @@ async function renderUsuarios(){
   lista.forEach(u => { if(u.indicadoPor && PROGRAMAS.some(p => u[p.campo])) indicacoes[u.indicadoPor] = (indicacoes[u.indicadoPor] || 0) + 1; });
   const rot = {adm: 'Administrador', rec: 'Recusado', pen: 'Aguardando aprovação', ven: 'Licença vencida', ok: 'Ativo'};
   const cor = {adm: 'adm', rec: 'warn', pen: 'warn', ven: 'warn', ok: 'ok'};
-  let h = '<div class="tab-rol"><table class="us"><thead><tr><th>Usuário</th><th>Nome / Empresa</th><th>Programas</th><th>Pedido e pagamento</th><th>Validade</th><th>Situação e ações</th></tr></thead><tbody>';
+  let h = '<div class="tab-rol"><table class="us"><thead><tr><th>Usuário</th><th>Nome / Empresa</th><th>Programas</th><th>Pedido</th><th>Validade</th><th>Situação e ações</th></tr></thead><tbody>';
   lista.forEach((u, i) => {
     const e = estado(u);
     const bt = (t, a, pri) => '<button class="bt peq' + (pri ? ' pri' : '') + '" type="button" data-i="' + i + '" data-acao="' + a + '">' + t + '</button>';
@@ -901,30 +924,34 @@ async function renderUsuarios(){
           (p.disp ? '' : ' <span class="tag breve">em breve</span>') + (pd ? ' <span class="tag pediu">pediu</span>' : '') + '</label>';
       }).join('') + '</div>';
     }
-    const nAtivos = PROGRAMAS.filter(p => p.disp && (u[p.campo] || (e === 'pen' && pediu(u, p)))).length;
-    const nInd = indicacoes[codigoDe(u.uid)] || 0;
     const plano = u.plano === 'anual' ? 'anual' : 'mensal';
+    const nCob = PROGRAMAS.filter(p => p.disp && (u[p.campo] || (e === 'pen' && pediu(u, p)))).length;
+    const nInd = indicacoes[codigoDe(u.uid)] || 0;
     const bonusPend = Math.max(0, nInd - (u.indicacoesUsadas || 0));
     const pedidoInfo = e === 'adm' ? '' :
-      '<div class="mini">Plano ' + nomePlano(plano).toLowerCase() + ': <b>' + brl(valorPlano(nAtivos, plano)) + sufixoPlano(plano) + '</b></div>' +
+      (u.tipoPedido === 'teste' ? '<div><span class="tag pediu">Pediu acesso teste</span></div>' : '') +
+      '<div class="mini">Plano ' + nomePlano(plano).toLowerCase() + ': <b>' + brl(valorPlano(nCob, plano)) + sufixoPlano(plano) + '</b></div>' +
       (bonusPend ? '<div class="mini"><span class="tag pediu">' + bonusPend + ' indicação(ões) a creditar: +' + bonusPend * DIAS_INDICACAO[plano] + ' dias</span></div>' : '') +
       '<div class="mini">Pagamento: ' + (u.formaPagamento ? nomePag(u.formaPagamento) : '—') + '</div>' +
       (u.pedidoEm ? '<div class="mini">Pedido em ' + fmtData(u.pedidoEm) + '</div>' : '') +
       (u.pagamentoAvisadoEm ? '<div class="mini"><b>Avisou pagamento em ' + fmtData(u.pagamentoAvisadoEm) + '</b></div>' : '') +
       '<div class="mini">Código: ' + codigoDe(u.uid) + (nInd ? ' · indicou ' + nInd : '') + '</div>' +
-      (u.indicadoPor ? '<div class="mini">Indicado por ' + esc(u.indicadoPor) + '</div>' : '');
-    const dt = u.validade ? dataISO(u.validade) : (e === 'pen' ? maisDias(MESES_GRATIS * 30) : '');
+      (u.indicadoPor ? '<div class="mini">Indicado por ' + esc(u.indicadoPor) + '</div>' : '') +
+      (u.gratisUsado ? '<div class="mini">2 meses grátis já usados</div>' : '');
+    const cortesia = '<div class="acoes" style="margin-top:6px;align-items:center"><span class="mini">Cortesia até</span><input type="date" data-i="' + i + '" data-campo="cortesia" value="' + maisDias(15) + '" style="width:132px">' + bt(e === 'pen' ? 'Liberar teste' : 'Dar cortesia', 'cortesia') + '</div>';
     let acoes = '';
-    if(e === 'pen') acoes = bt('Aprovar', 'aprovar', true) + bt('Recusar', 'recusar');
-    else if(e === 'rec') acoes = bt('Aprovar', 'aprovar', true);
-    else if(e !== 'adm') acoes = bt(plano === 'anual' ? '+365 dias' : '+30 dias', 'renovar') + (bonusPend ? bt('+ dias de indicação', 'bonus', true) : '') + bt('Bloquear', 'bloquear');
+    if(e === 'pen' || e === 'rec'){
+      acoes = (u.gratisUsado ? bt('Aprovar pago · ' + brl(valorPlano(nCob, plano)), 'aprovar', true) : bt('Aprovar · 2 meses grátis', 'aprovar', true)) + (e === 'pen' ? bt('Recusar', 'recusar') : '');
+    }else if(e !== 'adm'){
+      acoes = bt('Renovar ' + (plano === 'anual' ? '+365' : '+30') + ' dias · ' + brl(valorPlano(nCob, plano)), 'renovar', true) + (bonusPend ? bt('+ dias de indicação', 'bonus') : '') + bt('Bloquear', 'bloquear');
+    }
     h += '<tr' + (e === 'pen' ? ' class="pend"' : '') + '><td>' + contato + '</td>' +
       '<td><input type="text" data-i="' + i + '" data-campo="nome" value="' + esc(u.nome) + '" placeholder="nome"><br><input type="text" data-i="' + i + '" data-campo="empresa" value="' + esc(u.empresa) + '" placeholder="empresa" style="margin-top:4px"></td>' +
       '<td>' + progs + '</td><td>' + pedidoInfo + '</td>' +
-      '<td>' + (e === 'adm' ? '<span class="mini">sem prazo</span>' : '<input type="date" data-i="' + i + '" data-campo="validade" value="' + dt + '">' + (e === 'pen' && !u.validade ? '<div class="mini">2 meses grátis</div>' : '')) + '</td>' +
-      '<td><span class="st ' + cor[e] + '">' + rot[e] + '</span><div class="acoes" style="margin-top:6px">' + acoes + bt('Redefinir senha', 'redefinir') + bt('Gravar', 'gravar') + '</div></td></tr>';
+      '<td>' + (e === 'adm' ? '<span class="mini">sem prazo</span>' : '<b>' + fmtData(u.validade) + '</b>' + (u.cortesia ? '<div class="mini">cortesia</div>' : '')) + '</td>' +
+      '<td><span class="st ' + cor[e] + '">' + rot[e] + '</span><div class="acoes" style="margin-top:6px">' + acoes + bt('Redefinir senha', 'redefinir') + (e !== 'adm' ? bt('Gravar', 'gravar') : '') + '</div>' + (e !== 'adm' ? cortesia : '') + '</td></tr>';
   });
-  h += '</tbody></table></div><p class="mini" style="margin-top:10px">Um único login por pessoa. “Aprovar” libera os programas marcados até a validade (cadastros novos já vêm com 2 meses grátis). “+30 dias” (mensal) ou “+365 dias” (anual) renova após o pagamento; “+ dias de indicação” credita os dias ganhos por indicação. “Gravar” salva a linha. “Recusar” e “Bloquear” impedem o uso e podem ser desfeitos.</p>';
+  h += '</tbody></table></div><p class="mini" style="margin-top:10px">Toda liberação entra sozinha no Relatório de pagamentos, com o valor calculado pelo sistema e o nome de quem liberou: “Aprovar” (1ª vez = 2 meses grátis, R$ 0), “Renovar” (valor do plano), “Cortesia/teste” (R$ 0, até a data escolhida) e alterações de programas feitas em “Gravar”. Esses registros não podem ser editados nem apagados.</p>';
   corpo.innerHTML = h;
 
   corpo.onclick = async ev => {
@@ -934,29 +961,213 @@ async function renderUsuarios(){
       try{ await fb.auth.sendPasswordResetEmail(fb.a, u.email); toast('Link de nova senha enviado para ' + u.email + '.'); }catch(e){ toast(traduzir(e, 'Não foi possível enviar')); }
       return;
     }
+    if(ac === 'renovar'){ formPagamento(u, indicacoes); return; }
     const val = c => { const el = corpo.querySelector('[data-i="' + i + '"][data-campo="' + c + '"]'); return el ? el.value : ''; };
     const campos = {nome: val('nome').slice(0, 120), empresa: val('empresa').slice(0, 120)};
-    if(estado(u) !== 'adm'){
-      let v = val('validade');
-      if(ac === 'renovar' || ac === 'bonus'){
-        const plano = u.plano === 'anual' ? 'anual' : 'mensal';
-        const nInd = indicacoes[codigoDe(u.uid)] || 0, pend = Math.max(0, nInd - (u.indicacoesUsadas || 0));
-        const dias = ac === 'renovar' ? (plano === 'anual' ? 365 : 30) : pend * DIAS_INDICACAO[plano];
-        const base = u.validade && u.validade > new Date() ? new Date(u.validade) : new Date(); base.setDate(base.getDate() + dias); v = dataISO(base);
-        if(ac === 'bonus') campos.indicacoesUsadas = nInd;
+    const marcados = {};
+    PROGRAMAS.forEach((p, k) => { const cb = corpo.querySelector('input[data-i="' + i + '"][data-prog="' + k + '"]'); if(cb) marcados[p.campo] = cb.checked; });
+    const algumMarcado = Object.values(marcados).some(Boolean);
+    const plano = u.plano === 'anual' ? 'anual' : 'mensal';
+    const nDisp = PROGRAMAS.filter(p => p.disp && marcados[p.campo]).length;
+    const hoje = new Date();
+    const fimDia = d => new Date(dataISO(d) + 'T23:59:59');
+    const somaDias = (base, n) => { const x = new Date(base); x.setDate(x.getDate() + n); return x; };
+    const base = u.validade && u.validade > hoje ? u.validade : hoje;
+    let lanc = null;
+    if(ac === 'aprovar'){
+      if(!algumMarcado){ toast('Marque em “Programas” ao menos um programa.'); return; }
+      Object.assign(campos, marcados, {recusado: false, cortesia: false});
+      if(!u.gratisUsado){
+        campos.validade = fimDia(somaDias(hoje, MESES_GRATIS * 30)); campos.gratisUsado = true;
+        lanc = {tipo: 'gratis', valor: 0, forma: '', plano, diasPagos: MESES_GRATIS * 30, bonusDias: 0};
+      }else{
+        const dias = plano === 'anual' ? 365 : 30;
+        campos.validade = fimDia(somaDias(hoje, dias));
+        lanc = {tipo: 'pagamento', valor: valorPlano(nDisp, plano), forma: u.formaPagamento || 'pix', plano, diasPagos: dias, bonusDias: 0};
       }
-      campos.validade = v ? new Date(v + 'T23:59:59') : null;
+    }else if(ac === 'cortesia'){
+      if(!algumMarcado){ toast('Marque em “Programas” o que a pessoa vai testar.'); return; }
+      const v = val('cortesia');
+      if(!v){ toast('Escolha a data de vencimento da cortesia.'); return; }
+      const fim = new Date(v + 'T23:59:59');
+      if(fim <= hoje){ toast('A data da cortesia precisa ser futura.'); return; }
+      Object.assign(campos, marcados, {recusado: false, validade: fim, cortesia: true});
+      lanc = {tipo: 'cortesia', valor: 0, forma: '', plano, diasPagos: Math.max(0, Math.round((fim - base) / 86400000)), bonusDias: 0};
+    }else if(ac === 'bonus'){
+      const nInd = indicacoes[codigoDe(u.uid)] || 0, pend = Math.max(0, nInd - (u.indicacoesUsadas || 0));
+      if(!pend) return;
+      const dias = pend * DIAS_INDICACAO[plano];
+      campos.validade = fimDia(somaDias(base, dias)); campos.indicacoesUsadas = nInd;
+      lanc = {tipo: 'bonus', valor: 0, forma: '', plano, diasPagos: 0, bonusDias: dias, indicacoesCreditadas: pend};
+    }else if(ac === 'recusar' || ac === 'bloquear'){
+      PROGRAMAS.forEach(p => campos[p.campo] = false);
+      if(ac === 'recusar') campos.recusado = true;
+      lanc = {tipo: ac === 'recusar' ? 'recusa' : 'bloqueio', valor: 0, forma: '', plano, diasPagos: 0, bonusDias: 0};
+    }else if(ac === 'gravar'){
+      Object.assign(campos, marcados);
+      const mud = PROGRAMAS.filter(p => p.campo in marcados && !!u[p.campo] !== marcados[p.campo]);
+      if(mud.length) lanc = {tipo: 'ajuste', valor: 0, forma: '', plano, diasPagos: 0, bonusDias: 0,
+        obs: 'Programas: ' + mud.map(p => (marcados[p.campo] ? '+ ' : '− ') + p.nome).join(', ')};
     }
-    let marcou = false;
-    PROGRAMAS.forEach((p, k) => { const cb = corpo.querySelector('input[data-i="' + i + '"][data-prog="' + k + '"]'); if(cb){ campos[p.campo] = cb.checked; if(cb.checked) marcou = true; } });
-    if(ac === 'aprovar'){ if(!marcou){ toast('Marque em “Programas” ao menos um programa.'); return; } campos.recusado = false; }
-    else if(ac === 'recusar' || ac === 'bloquear'){ PROGRAMAS.forEach(p => campos[p.campo] = false); if(ac === 'recusar') campos.recusado = true; }
     b.disabled = true;
     try{
       await comPrazo(fb.fs.updateDoc(fb.fs.doc(fb.d, 'usuarios', u.uid), campos), 20000);
-      toast(ac === 'renovar' || ac === 'bonus' ? 'Validade estendida até ' + fmtData(campos.validade) + '.' : 'Usuário atualizado.');
+      if(lanc){
+        const uDepois = Object.assign({}, u, campos);
+        await registrarLancamento(uDepois, Object.assign({validadeAnterior: u.validade || null, validadeNova: campos.validade || u.validade || null, dataPagamento: new Date()}, lanc));
+      }
+      toast(campos.validade ? 'Liberado até ' + fmtData(campos.validade) + '.' : 'Usuário atualizado.');
       renderUsuarios(); contarPendentes();
     }catch(e){ toast(traduzir(e, 'Não foi possível salvar')); b.disabled = false; }
+  };
+}
+
+/* ============================================================
+   PAGAMENTOS: registro e relatório (somente administradores)
+   ============================================================ */
+const nomesForma = {pix: 'Pix', transferencia: 'Transferência Itaú', cartao: 'Cartão (PicPay)', dinheiro: 'Dinheiro'};
+async function registrarLancamento(u, l){
+  const {d, fs} = fb;
+  const progs = PROGRAMAS.filter(p => u[p.campo]).map(p => p.key);
+  await comPrazo(fs.addDoc(fs.collection(d, 'pagamentos'), Object.assign({
+    uid: u.uid, email: u.email || '', nome: u.nome || '', programas: progs,
+    nProgramas: PROGRAMAS.filter(p => p.disp && u[p.campo]).length,
+    indicadoPor: u.indicadoPor || '', registradoPor: (eu && eu.email) || '', criadoEm: fs.serverTimestamp()
+  }, l)), 20000);
+}
+
+function formPagamento(u, indicacoes){
+  const corpo = $('us-corpo');
+  const plano = u.plano === 'anual' ? 'anual' : 'mensal';
+  const nProg = PROGRAMAS.filter(p => p.disp && u[p.campo]).length;
+  const valor = valorPlano(nProg, plano);
+  const nInd = indicacoes[codigoDe(u.uid)] || 0, pend = Math.max(0, nInd - (u.indicacoesUsadas || 0));
+  const bonus = pend * DIAS_INDICACAO[plano];
+  const dias = plano === 'anual' ? 365 : 30;
+  corpo.onclick = null;
+  corpo.innerHTML =
+    '<div class="painel" style="max-width:560px">' +
+    '<h3>Renovar com pagamento recebido</h3>' +
+    '<p>' + esc(u.nome || u.email) + ' · ' + esc(u.email) + '<br>Plano ' + nomePlano(plano).toLowerCase() + ' · ' + nProg + ' programa' + (nProg === 1 ? '' : 's') + ' · validade atual: ' + fmtData(u.validade) + '</p>' +
+    '<div class="resumo"><div class="lin"><span>Valor (calculado pelo sistema)</span><b>' + brl(valor) + '</b></div><div class="lin"><span>Dias de acesso</span><span>' + dias + '</span></div></div>' +
+    '<div class="duas">' +
+      '<div class="campo"><label for="pg-forma">Forma de pagamento recebida</label><select id="pg-forma">' +
+        Object.keys(nomesForma).map(k => '<option value="' + k + '"' + (k === (u.formaPagamento === 'transferencia' ? 'transferencia' : 'pix') ? ' selected' : '') + '>' + nomesForma[k] + '</option>').join('') + '</select></div>' +
+      '<div class="campo"><label for="pg-obs">Observação (opcional)</label><input id="pg-obs" maxlength="200" placeholder="Ex.: comprovante no WhatsApp"></div>' +
+    '</div>' +
+    (pend ? '<label class="opcao" style="margin-bottom:12px"><input type="checkbox" id="pg-bonus" checked><span class="nm">Creditar também a indicação: ' + pend + ' indicado(s) = +' + bonus + ' dias</span></label>' : '') +
+    '<div class="resumo" id="pg-resumo"></div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="bt pri" type="button" id="pg-ok">Confirmar recebimento de ' + brl(valor) + '</button><button class="bt" type="button" id="pg-cancelar">Cancelar</button></div>' +
+    '</div>';
+  const calc = () => {
+    const bd = $('pg-bonus') && $('pg-bonus').checked ? bonus : 0;
+    const base = u.validade && u.validade > new Date() ? new Date(u.validade) : new Date();
+    base.setDate(base.getDate() + dias + bd);
+    $('pg-resumo').innerHTML = '<div class="lin tot"><span>Nova validade</span><span>' + fmtData(base) + '</span></div>';
+    return {bd, base};
+  };
+  corpo.onchange = calc; calc();
+  corpo.onclick = async ev => {
+    if(ev.target.id === 'pg-cancelar'){ renderUsuarios(); return; }
+    if(ev.target.id !== 'pg-ok') return;
+    const {bd, base} = calc();
+    const validadeNova = new Date(dataISO(base) + 'T23:59:59');
+    ev.target.disabled = true;
+    try{
+      const upd = {validade: validadeNova, cortesia: false};
+      if(bd) upd.indicacoesUsadas = nInd;
+      await comPrazo(fb.fs.updateDoc(fb.fs.doc(fb.d, 'usuarios', u.uid), upd), 20000);
+      await registrarLancamento(u, {tipo: 'pagamento', valor, forma: $('pg-forma').value, plano, diasPagos: dias, bonusDias: bd,
+        indicacoesCreditadas: bd ? pend : 0, dataPagamento: new Date(), validadeAnterior: u.validade || null, validadeNova, obs: $('pg-obs').value.trim().slice(0, 200)});
+      toast('Pagamento de ' + brl(valor) + ' registrado. Validade até ' + fmtData(validadeNova) + '.');
+      renderUsuarios(); contarPendentes();
+    }catch(e){ toast(traduzir(e, 'Não foi possível registrar')); ev.target.disabled = false; }
+  };
+}
+
+const nomeTipo = l => ({pagamento: 'Pagamento ' + (l.plano === 'anual' ? 'anual' : 'mensal'), gratis: 'Aprovação · 2 meses grátis', cortesia: 'Cortesia / teste', bonus: 'Crédito de indicação', ajuste: 'Ajuste manual de programas', bloqueio: 'Bloqueio', recusa: 'Recusa'})[l.tipo] || l.tipo;
+let relFiltro = 'mes:' + dataISO(new Date()).slice(0, 7);
+async function renderRelatorio(){
+  const corpo = $('us-corpo');
+  corpo.onclick = null; corpo.oninput = null; corpo.onchange = null;
+  corpo.innerHTML = '<p class="mini">Carregando…</p>';
+  let lanc, usuarios;
+  try{
+    const {d, fs} = fb;
+    const [s1, lu] = await Promise.all([comPrazo(fs.getDocs(fs.query(fs.collection(d, 'pagamentos'), fs.limit(5000))), 20000), listarUsuarios()]);
+    usuarios = lu;
+    lanc = s1.docs.map(x => { const v = x.data(); return Object.assign({id: x.id}, v, {dataPagamento: paraData(v.dataPagamento) || paraData(v.criadoEm), validadeNova: paraData(v.validadeNova)}); })
+      .filter(l => l.dataPagamento).sort((a, b) => b.dataPagamento - a.dataPagamento);
+  }catch(e){ corpo.innerHTML = '<div class="msg erro">' + esc(traduzir(e, 'Falha ao carregar os pagamentos')) + '</div><p class="mini">Se for “permissão”, publique as regras novas do Firestore (coleção pagamentos).</p>'; return; }
+  const porUid = {}; usuarios.forEach(u => { if(u.uid) porUid[u.uid] = u; });
+  const nomePorCodigo = {}; usuarios.forEach(u => { if(u.uid) nomePorCodigo[codigoDe(u.uid)] = u.nome || u.email; });
+  const meses = [...new Set(lanc.map(l => dataISO(l.dataPagamento).slice(0, 7)))].sort().reverse();
+  const anos = [...new Set(lanc.map(l => String(l.dataPagamento.getFullYear())))].sort().reverse();
+  const mesAtual = dataISO(new Date()).slice(0, 7);
+  if(!meses.includes(mesAtual)) meses.unshift(mesAtual);
+  const nomeMes = ym => { const [y, m] = ym.split('-'); return ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'][+m - 1] + '/' + y; };
+  const sel = l => relFiltro === 'tudo' ? true : relFiltro.startsWith('mes:') ? dataISO(l.dataPagamento).slice(0, 7) === relFiltro.slice(4) : String(l.dataPagamento.getFullYear()) === relFiltro.slice(4);
+  const L = lanc.filter(sel);
+  const pag = L.filter(l => l.tipo === 'pagamento');
+  /* com desconto de indicação = o pagante ganhou dias de bônus por ter indicado alguém */
+  const comBonus = new Set(lanc.filter(l => (l.bonusDias || 0) > 0).map(l => l.uid));
+  const comInd = l => comBonus.has(l.uid);
+  const soma = arr => arr.reduce((s, l) => s + (+l.valor || 0), 0);
+  const total = soma(pag), tCom = soma(pag.filter(comInd)), tSem = total - tCom;
+  // por administrador
+  const porAdm = {};
+  L.forEach(l => { const k = l.registradoPor || '—'; porAdm[k] = porAdm[k] || {n: 0, total: 0, bonus: 0, cort: 0, outros: 0}; if(l.tipo === 'pagamento'){ porAdm[k].n++; porAdm[k].total += +l.valor || 0; } else if(l.tipo === 'cortesia') porAdm[k].cort++; else if(l.tipo !== 'bonus') porAdm[k].outros++; porAdm[k].bonus += l.bonusDias || 0; });
+  // por usuário
+  const porUs = {};
+  L.forEach(l => {
+    const k = l.uid; const u = porUid[k] || {};
+    porUs[k] = porUs[k] || {uid: k, nome: u.nome || l.nome || '', email: u.email || l.email || '', plano: u.plano || l.plano || 'mensal', n: 0, total: 0, bonusDias: 0, indicadoPor: u.indicadoPor || l.indicadoPor || '', ultimo: null, validade: u.validade || l.validadeNova};
+    const r = porUs[k];
+    r.bonusDias += l.bonusDias || 0;
+    if(l.tipo === 'cortesia') r.cort = (r.cort || 0) + 1;
+    if(l.tipo === 'pagamento'){ r.n++; r.total += +l.valor || 0; if(!r.ultimo || l.dataPagamento > r.ultimo) r.ultimo = l.dataPagamento; }
+  });
+  const linhasUs = Object.values(porUs).sort((a, b) => b.total - a.total);
+  const opt = (v, t) => '<option value="' + v + '"' + (relFiltro === v ? ' selected' : '') + '>' + t + '</option>';
+  const card = (t, v, s) => '<div class="painel" style="padding:14px 16px"><div class="mini">' + t + '</div><div style="font-size:1.35rem;font-weight:800;font-variant-numeric:tabular-nums">' + v + '</div>' + (s ? '<div class="mini">' + s + '</div>' : '') + '</div>';
+  const indTxt = r => (comBonus.has(r.uid) ? '<span class="tag pediu">Com desconto' + (r.bonusDias ? ': +' + r.bonusDias + ' dias' : '') + '</span>' : '<span class="mini">Sem desconto</span>') +
+    (r.indicadoPor ? '<div class="mini">Indicado por ' + esc(nomePorCodigo[r.indicadoPor] || r.indicadoPor) + '</div>' : '');
+  corpo.innerHTML =
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">' +
+      '<label class="rot" for="rel-per">Período</label><select id="rel-per" style="padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:var(--field)">' +
+      meses.map(m => opt('mes:' + m, nomeMes(m))).join('') + anos.map(a => opt('ano:' + a, 'Ano ' + a)).join('') + opt('tudo', 'Todo o período') + '</select>' +
+      '<button class="bt peq" type="button" id="rel-csv">Baixar planilha (CSV)</button>' +
+    '</div>' +
+    '<div class="faixa" style="grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:12px;margin:0 0 16px">' +
+      card('Total recebido', brl(total), pag.length + ' pagamento' + (pag.length === 1 ? '' : 's')) +
+      card('Com desconto de indicação', brl(tCom), pag.filter(comInd).length + ' pagamento(s)') +
+      card('Sem desconto de indicação', brl(tSem), pag.filter(l => !comInd(l)).length + ' pagamento(s)') +
+      card('Dias de indicação creditados', L.reduce((s, l) => s + (l.bonusDias || 0), 0) + ' dias', 'equivalem ao desconto de 10%') +
+      card('Cortesias / testes', L.filter(l => l.tipo === 'cortesia').length, 'liberações sem pagamento') +
+      card('Grátis (2 meses) e ajustes', L.filter(l => l.tipo === 'gratis').length + ' / ' + L.filter(l => l.tipo === 'ajuste').length, 'aprovações iniciais / mudanças manuais') +
+    '</div>' +
+    '<h3 style="margin:6px 0 8px;font-size:1rem">Por administrador</h3>' +
+    '<div class="tab-rol"><table class="us"><thead><tr><th>Administrador</th><th>Pagamentos registrados</th><th>Total recebido</th><th>Cortesias</th><th>Outras liberações e ajustes</th><th>Dias de indicação</th></tr></thead><tbody>' +
+      (Object.keys(porAdm).length ? Object.entries(porAdm).map(([k, v]) => '<tr><td>' + esc(k) + '</td><td>' + v.n + '</td><td><b>' + brl(v.total) + '</b></td><td>' + v.cort + '</td><td>' + v.outros + '</td><td>' + v.bonus + '</td></tr>').join('') : '<tr><td colspan="6" class="mini">Nenhum lançamento no período.</td></tr>') +
+    '</tbody></table></div>' +
+    '<h3 style="margin:18px 0 8px;font-size:1rem">Por usuário</h3>' +
+    '<div class="tab-rol"><table class="us"><thead><tr><th>Usuário</th><th>Plano</th><th>Pagamentos</th><th>Total recebido</th><th>Desconto de indicação</th><th>Último pagamento</th><th>Validade</th></tr></thead><tbody>' +
+      (linhasUs.length ? linhasUs.map(r => '<tr><td>' + esc(r.nome) + '<div class="mini">' + esc(r.email) + '</div></td><td>' + (r.plano === 'anual' ? 'Anual' : 'Mensal') + '</td><td>' + r.n + '</td><td><b>' + brl(r.total) + '</b></td><td>' + indTxt(r) + '</td><td>' + fmtData(r.ultimo) + '</td><td>' + fmtData(r.validade) + '</td></tr>').join('') : '<tr><td colspan="7" class="mini">Nenhum pagamento no período.</td></tr>') +
+    '</tbody></table></div>' +
+    '<h3 style="margin:18px 0 8px;font-size:1rem">Lançamentos</h3>' +
+    '<div class="tab-rol"><table class="us"><thead><tr><th>Data</th><th>Usuário</th><th>Tipo</th><th>Forma</th><th>Valor</th><th>Dias</th><th>Desconto de indicação</th><th>Registrado por</th></tr></thead><tbody>' +
+      (L.length ? L.map(l => '<tr' + (l.tipo === 'ajuste' || l.tipo === 'cortesia' ? ' class="pend"' : '') + '><td>' + fmtData(l.dataPagamento) + '</td><td>' + esc(l.nome || l.email) + '</td><td>' + nomeTipo(l) + '</td><td>' + (nomesForma[l.forma] || '—') + '</td><td><b>' + brl(+l.valor || 0) + '</b></td><td>' + ((l.diasPagos || 0) + (l.bonusDias ? ' + ' + l.bonusDias : '')) + '</td><td>' + (comInd(l) ? 'Com' : 'Sem') + '</td><td class="mini">' + esc(l.registradoPor || '') + (l.obs ? '<div>' + esc(l.obs) + '</div>' : '') + '</td></tr>').join('') : '<tr><td colspan="8" class="mini">Nenhum lançamento no período.</td></tr>') +
+    '</tbody></table></div>' +
+    '<p class="mini" style="margin-top:10px">Tudo entra aqui automaticamente: aprovações, renovações (com o valor calculado pelo sistema), cortesias, créditos de indicação e alterações manuais de programas, sempre com o administrador que fez. Os registros não podem ser editados nem apagados. “Com desconto de indicação” = pagamentos de quem já ganhou dias de bônus por indicar alguém (o desconto de 10% é dado em dias de acesso).</p>';
+  $('rel-per').onchange = e => { relFiltro = e.target.value; renderRelatorio(); };
+  $('rel-csv').onclick = () => {
+    const q = s => '"' + String(s == null ? '' : s).replace(/"/g, '""') + '"';
+    const linhas = [['Data','Nome','E-mail','Tipo','Plano','Forma','Valor (R$)','Dias pagos','Dias de indicação','Com indicação','Indicado por','Registrado por','Observação'].map(q).join(';')]
+      .concat(L.map(l => [fmtData(l.dataPagamento), l.nome, l.email, nomeTipo(l), l.plano === 'anual' ? 'Anual' : 'Mensal', nomesForma[l.forma] || '',
+        (+l.valor || 0).toFixed(2).replace('.', ','), l.diasPagos || 0, l.bonusDias || 0, comInd(l) ? 'Sim' : 'Não', l.indicadoPor ? (nomePorCodigo[l.indicadoPor] || l.indicadoPor) : '', l.registradoPor || '', l.obs || ''].map(q).join(';')));
+    const blob = new Blob(['﻿' + linhas.join('\r\n')], {type: 'text/csv;charset=utf-8'});
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pagamentos-total-civil-' + relFiltro.replace(':', '-') + '.csv';
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   };
 }
 
