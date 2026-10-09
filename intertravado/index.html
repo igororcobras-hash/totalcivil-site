@@ -1,0 +1,2148 @@
+<title>Pavimento Intertravado</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<style>
+:root {
+  --bg:#f4f6f9;--bg2:#ffffff;--fg:#1a2130;--fg2:#4a5568;--fg3:#718096;
+  --border:#d1d8e0;--accent:#17365D;--accent2:#2563EB;--accent-fg:#ffffff;
+  --inp:#FFFFF0;--inp-border:#b8a800;--out:#D9EAF7;--out-border:#17365D;
+  --ok:#E2F0D9;--ok-fg:#276024;--ok-border:#5a8a3c;
+  --warn:#FCE4D6;--warn-fg:#7a2e0e;--warn-border:#d9541e;
+  --nav-bg:#17365D;--nav-fg:#ffffff;--tab-hover:#EBF4FF;
+  --shadow:0 2px 8px rgba(0,0,0,.10);color-scheme:light;
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520;--bg2:#1a2235;--fg:#e2e8f0;--fg2:#a0aec0;--fg3:#718096;
+  --border:#2d3748;--accent2:#60a5fa;
+  --inp:#2d2a00;--inp-border:#a08000;--out:#0f2340;--out-border:#2563EB;
+  --ok:#0f2a10;--ok-fg:#86efac;--ok-border:#276024;
+  --warn:#2d0f00;--warn-fg:#fca572;--warn-border:#d9541e;
+  --nav-bg:#0f1c2e;--tab-hover:#1e2d45;color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0f1520;--bg2:#1a2235;--fg:#e2e8f0;--fg2:#a0aec0;--fg3:#718096;
+  --border:#2d3748;--accent2:#60a5fa;
+  --inp:#2d2a00;--inp-border:#a08000;--out:#0f2340;--out-border:#2563EB;
+  --ok:#0f2a10;--ok-fg:#86efac;--ok-border:#276024;
+  --warn:#2d0f00;--warn-fg:#fca572;--warn-border:#d9541e;
+  --nav-bg:#0f1c2e;--tab-hover:#1e2d45;color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:'Inter',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;font-size:14px;line-height:1.5;background:var(--bg);color:var(--fg);display:flex;flex-direction:column}
+input,select,textarea{font-family:inherit}
+
+/* ── HEADER ── */
+#hdr{background:var(--nav-bg);color:var(--nav-fg);padding:8px 16px;display:flex;align-items:center;gap:10px;box-shadow:0 2px 6px rgba(0,0,0,.25);flex-shrink:0;position:sticky;top:env(safe-area-inset-top,0px);z-index:100}
+#hdr-title{font-size:14px;font-weight:700;letter-spacing:.3px;flex:1}
+#hdr-title small{display:block;font-size:10px;opacity:.7;font-weight:400}
+.hdr-btn{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:var(--nav-fg);border-radius:4px;padding:3px 8px;font-size:11px;cursor:pointer;white-space:nowrap}
+.hdr-btn:hover{background:rgba(255,255,255,.25)}
+
+/* ── TOOLBAR ── */
+#toolbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:5px 12px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex-shrink:0}
+.tb-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:var(--fg3)}
+.tb-sep{width:1px;height:18px;background:var(--border);flex-shrink:0}
+.tb-btn{background:var(--bg);border:1px solid var(--border);border-radius:4px;padding:3px 9px;font-size:11px;font-weight:500;cursor:pointer;color:var(--fg);white-space:nowrap}
+.tb-btn:hover{opacity:.85}
+.tb-btn-save{background:var(--accent);color:#fff;border-color:var(--accent)}
+.tb-btn-excel{background:#1d6f42;color:#fff;border-color:#1d6f42}
+.tb-btn-word{background:#1f5096;color:#fff;border-color:#1f5096}
+.tb-btn-pdf{background:#b30b00;color:#fff;border-color:#b30b00}
+#logradouro-inp{background:var(--inp);border:1px solid var(--inp-border);border-radius:4px;padding:3px 7px;font-size:12px;color:var(--fg);flex:1;min-width:240px;max-width:500px}
+
+/* ── TABS ── */
+#tabs-bar{background:var(--bg2);border-bottom:1px solid var(--border);display:flex;overflow-x:auto;flex-shrink:0}
+.tab{padding:8px 16px;font-size:12px;font-weight:500;color:var(--fg2);cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;flex-shrink:0;user-select:none}
+.tab:hover{background:var(--tab-hover)}
+.tab.active{color:var(--accent2);border-bottom-color:var(--accent2);font-weight:600}
+
+/* ── TAB CONTENT ── */
+#tabs-content{flex:1;overflow-y:auto}
+.tab-pane{display:none;padding:12px}
+.tab-pane.active{display:block}
+.tab-export-bar{background:var(--bg);border-top:1px solid var(--border);padding:6px 12px;display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin-top:12px;border-radius:0 0 8px 8px}
+
+/* ── SECTION ── */
+.sec{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:12px;box-shadow:var(--shadow)}
+.sec-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--fg3);border-bottom:1px solid var(--border);padding-bottom:5px;margin-bottom:10px}
+
+/* ── COMPACT GRIDS ── */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px}
+.g5{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.g6{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+@media(max-width:700px){.g2,.g3,.g4,.g5,.g6{grid-template-columns:1fr 1fr}}
+@media(max-width:420px){.g2,.g3,.g4,.g5,.g6{grid-template-columns:1fr}}
+
+/* ── FIELD ── */
+.f{display:flex;flex-direction:column;gap:2px;position:relative}
+.f label{font-size:10px;font-weight:600;color:var(--fg2);cursor:help;display:inline-flex;align-items:center;gap:3px}
+.f label:hover{color:var(--accent2)}
+.f .hint{font-size:9px;color:var(--fg3)}
+/* Tooltip ao passar no label */
+.f[data-tip] label::after{content:'ⓘ';font-size:9px;opacity:.55;font-style:normal}
+.f .f-tooltip{display:none;position:absolute;top:100%;left:0;z-index:500;background:var(--accent);color:#fff;border-radius:6px;padding:8px 11px;font-size:11px;line-height:1.55;width:260px;box-shadow:0 4px 14px rgba(0,0,0,.28);pointer-events:none;margin-top:3px}
+.f .f-tooltip::before{content:'';position:absolute;top:-5px;left:14px;border:5px solid transparent;border-bottom-color:var(--accent);border-top:none}
+.f[data-tip]:hover .f-tooltip,.f[data-tip] label:focus+.f-tooltip{display:block}
+.f input[type=number],.f input[type=text],.f select{background:var(--inp);border:1px solid var(--inp-border);border-radius:4px;padding:4px 6px;font-size:12px;color:var(--fg);width:100%}
+.f input:focus,.f select:focus{outline:2px solid var(--accent2);outline-offset:1px}
+.f .oc{background:var(--out);border:1px solid var(--out-border);border-radius:4px;padding:4px 6px;font-size:12px;font-weight:700;color:var(--fg);font-variant-numeric:tabular-nums;min-height:28px}
+
+/* ── STATUS ── */
+.vbar{border-radius:6px;padding:6px 10px;font-size:12px;font-weight:600;margin-bottom:8px;border:1px solid transparent}
+.vbar.ok{background:var(--ok);color:var(--ok-fg);border-color:var(--ok-border)}
+.vbar.warn{background:var(--warn);color:var(--warn-fg);border-color:var(--warn-border)}
+.vbar.info{background:var(--out);color:var(--accent2);border-color:var(--out-border)}
+
+/* ── N CARD ── */
+.n-card{background:var(--out);border:1px solid var(--out-border);border-radius:8px;padding:10px 14px;text-align:center}
+.n-card .nv{font-size:26px;font-weight:800;color:var(--accent2);font-variant-numeric:tabular-nums}
+.n-card .nl{font-size:10px;color:var(--fg2);margin-top:2px}
+
+/* ── TABLE ── */
+.tw{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:12px}
+thead tr{background:var(--accent);color:#fff}
+thead th{padding:5px 8px;font-weight:600;font-size:10px;letter-spacing:.4px;text-align:left}
+tbody tr:hover{background:var(--tab-hover)}
+tbody td{padding:5px 8px;border-top:1px solid var(--border);vertical-align:middle}
+.to{background:var(--out);color:var(--fg);font-weight:700;font-variant-numeric:tabular-nums}
+.tok{background:var(--ok);color:var(--ok-fg);font-weight:700;text-align:center}
+.twarn{background:var(--warn);color:var(--warn-fg);font-weight:700;text-align:center}
+.ti{background:var(--inp)}
+
+/* ── BUTTONS ── */
+.btn-add{background:var(--ok);color:var(--ok-fg);border:1px solid var(--ok-border);border-radius:4px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer}
+.btn-rem{background:var(--warn);color:var(--warn-fg);border:1px solid var(--warn-border);border-radius:4px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer}
+
+/* ── TOPO ── */
+.topo-totals{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px;margin-bottom:10px}
+.ttcard{background:var(--out);border:1px solid var(--out-border);border-radius:6px;padding:7px 10px}
+.ttcard .tv{font-size:17px;font-weight:800;color:var(--accent2);font-variant-numeric:tabular-nums}
+.ttcard .tl{font-size:9px;color:var(--fg2)}
+
+/* ── MEMO ── */
+.ms{margin-bottom:16px}
+.ms h3{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--accent2);border-bottom:1px solid var(--border);padding-bottom:4px;margin-bottom:8px}
+.mkv{display:flex;gap:6px;font-size:12px;margin-bottom:3px}
+.mkv .mk{color:var(--fg2);flex:0 0 230px;min-width:0}
+.mkv .mv{font-weight:600}
+.mfml{font-size:12px;background:var(--tab-hover);border-radius:4px;padding:6px 10px;margin:4px 0;font-family:monospace}
+.mexp{font-size:12px;color:var(--fg2);margin:6px 0 4px 0;line-height:1.5}
+
+/* ── SVG ── */
+#svg-corte{display:block;width:100%;max-width:720px;margin:0 auto}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:var(--fg);color:var(--bg);border-radius:6px;padding:6px 16px;font-size:12px;font-weight:600;z-index:9999;opacity:0;pointer-events:none;transition:opacity .3s;white-space:nowrap}
+#toast.show{opacity:1}
+
+/* ── MODAL ── */
+#modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:8000;display:none;align-items:center;justify-content:center}
+#modal-bg.open{display:flex}
+#modal{background:var(--bg2);border-radius:10px;padding:20px;width:340px;max-width:92vw;box-shadow:0 8px 32px rgba(0,0,0,.3)}
+#modal h2{font-size:14px;font-weight:700;margin-bottom:12px;color:var(--fg)}
+#modal .m-btn{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:8px 12px;font-size:12px;cursor:pointer;color:var(--fg);width:100%;text-align:left;margin-bottom:6px}
+#modal .m-btn:hover{background:var(--tab-hover)}
+#modal .m-close{background:none;border:none;font-size:18px;cursor:pointer;color:var(--fg3);float:right;line-height:1}
+
+/* ── LOGIN ── */
+#login{position:fixed;top:0;right:0;bottom:0;left:0;z-index:9998;overflow-y:auto;
+  background:linear-gradient(135deg,#17365D 0%,#0f1e35 100%);
+  display:flex;align-items:flex-start;justify-content:center;padding:40px 16px 32px;}
+#login .cx{width:100%;max-width:420px;margin:auto;}
+#login .norma{font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.62);}
+#login h2{font-size:24px;font-weight:700;line-height:1.2;margin:6px 0 4px;text-wrap:balance;color:#fff;}
+#login .sub{font-size:13.5px;color:rgba(255,255,255,.78);margin-bottom:24px;}
+#login label{display:block;font-size:12px;font-weight:600;color:rgba(255,255,255,.85);margin-bottom:5px;}
+#login input{width:100%;padding:11px 12px;border-radius:6px;border:1px solid rgba(255,255,255,.3);
+  background:rgba(255,255,255,.1);color:#fff;font-size:14px;margin-bottom:14px;font-family:inherit;}
+#login input:focus{outline:2px solid #9cc3ff;outline-offset:1px;}
+#login input::placeholder{color:rgba(255,255,255,.45);}
+#login button{width:100%;padding:12px;border-radius:6px;border:none;background:#2563EB;color:#fff;
+  font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;}
+#login button:hover{background:#1d4ed8;}
+#login button[disabled]{opacity:.6;cursor:default;}
+#login .msg{margin-top:14px;padding:10px 12px;border-radius:6px;font-size:13px;line-height:1.5;display:none;}
+#login .msg.erro{display:block;background:#7a2e0e;color:#ffd9c7;}
+#login .msg.info{display:block;background:rgba(255,255,255,.12);color:rgba(255,255,255,.9);}
+#login .alt{background:none;border:none;color:#9cc3ff;font-weight:600;font-size:13.5px;min-height:44px;width:auto;padding:8px 4px;text-decoration:underline;cursor:pointer;}
+#login .alt:hover{background:none;color:#fff;}
+#login .linha-alt{margin-top:10px;text-align:center;font-size:13px;color:rgba(255,255,255,.7);}
+#login .esqueci{text-align:right;margin:-6px 0 10px;}
+#login .esqueci .alt{font-size:12.5px;min-height:32px;padding:4px 0;}
+#login .dica{font-size:11.5px;color:rgba(255,255,255,.6);margin:-8px 0 14px;}
+#login .rodape{font-size:11.5px;color:rgba(255,255,255,.55);margin-top:22px;line-height:1.5;}
+
+/* ── ADMIN PAINEL ── */
+.lista-nuvem{width:100%;border-collapse:collapse;font-size:12.5px;margin-top:12px;}
+.lista-nuvem th{background:var(--bg);color:var(--fg2);padding:6px 8px;text-align:left;font-size:11px;border-bottom:1px solid var(--border);}
+.lista-nuvem td{padding:6px 8px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.lista-nuvem .acoes{display:flex;flex-wrap:wrap;gap:4px;}
+.lista-nuvem .progs{display:flex;flex-direction:column;gap:3px;font-size:12px;white-space:nowrap;}
+.lista-nuvem .progs label{display:flex;align-items:center;gap:5px;cursor:pointer;}
+.lista-nuvem .progs .pediu{font-size:10px;font-weight:700;color:var(--warn-fg);background:var(--warn);border:1px solid var(--warn-border);border-radius:8px;padding:0 5px;}
+.badge-info{background:var(--out);color:var(--accent);}
+.lista-nuvem .badge{white-space:nowrap;display:inline-block;padding:2px 8px;border-radius:999px;font-size:10px;font-weight:700;}
+.badge-ok{background:var(--ok);color:var(--ok-fg);}
+.badge-pend{background:var(--warn);color:var(--warn-fg);}
+.badge-admin{background:var(--accent);color:#fff;}
+.lista-nuvem input[type=date],.lista-nuvem input[type=text]{padding:4px 6px;border:1px solid var(--inp-border);
+  border-radius:4px;background:var(--inp);font-size:11px;color:var(--fg);}
+.btn-adm{padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--fg);font-size:11px;font-weight:600;cursor:pointer;}
+.btn-adm:hover{opacity:.8;}
+.btn-adm.ok{background:var(--ok);border-color:var(--ok-border);color:var(--ok-fg);}
+.btn-adm.rec{background:var(--warn);border-color:var(--warn-border);color:var(--warn-fg);}
+
+/* ── SESSAO BAR ── */
+#sessao-bar{display:none;align-items:center;gap:6px;font-size:11px;color:var(--nav-fg)}
+#sessao-bar.vis{display:flex}
+.sessao-nome{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.85}
+.sessao-admin{background:rgba(255,255,255,.25);border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700}
+</style>
+
+<!-- LOGIN -->
+<div id="login" hidden>
+  <div class="cx">
+    <div class="norma">IP-06/2004 · ABNT NBR 9781 · ABNT NBR 15953</div>
+    <h2>Pavimento Intertravado</h2>
+    <div class="sub" id="login-sub">Acesso restrito. Informe seu e-mail e a senha.</div>
+    <form id="form-login" autocomplete="on">
+      <label for="log_usuario">E-mail</label>
+      <input type="email" id="log_usuario" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="seu e-mail">
+      <label for="log_senha">Senha</label>
+      <input type="password" id="log_senha" autocomplete="current-password" placeholder="sua senha">
+      <div class="esqueci"><button type="button" class="alt" id="btn-esqueci">Esqueci minha senha</button></div>
+      <button type="submit" id="btn-entrar">Entrar</button>
+      <div class="linha-alt">Ainda não tem conta? <button type="button" class="alt" id="ir-cadastro">Criar conta</button></div>
+    </form>
+    <form id="form-cadastro" autocomplete="on" hidden>
+      <label for="cad_nome">Nome completo</label>
+      <input type="text" id="cad_nome" autocomplete="name" maxlength="120" placeholder="seu nome">
+      <label for="cad_empresa">Empresa ou órgão</label>
+      <input type="text" id="cad_empresa" autocomplete="organization" maxlength="120" placeholder="onde você trabalha">
+      <label for="cad_email">E-mail</label>
+      <input type="email" id="cad_email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="seu e-mail">
+      <label for="cad_senha">Senha</label>
+      <input type="password" id="cad_senha" autocomplete="new-password" placeholder="mínimo de 8 caracteres">
+      <label for="cad_senha2">Repita a senha</label>
+      <input type="password" id="cad_senha2" autocomplete="new-password" placeholder="repita a senha">
+      <div class="dica">Seu acesso só é liberado depois que o administrador aprovar o cadastro.</div>
+      <button type="submit" id="btn-cadastrar">Solicitar acesso</button>
+      <div class="linha-alt">Já tem conta? <button type="button" class="alt" id="ir-login">Entrar</button></div>
+    </form>
+    <div id="login-espera" hidden>
+      <p style="color:rgba(255,255,255,.85);font-size:14px;margin-bottom:16px;">Seu cadastro está em análise pelo administrador. Você receberá acesso assim que for aprovado.</p>
+      <button type="button" id="btn-sair-espera">Sair</button>
+    </div>
+    <div class="msg" id="login-msg"></div>
+    <div class="rodape">
+      Seu cadastro é analisado pelo administrador antes da liberação.<br>
+      Pavimento Intertravado · Total Civil
+    </div>
+  </div>
+</div>
+
+<!-- PAINEL ADMIN (modal) -->
+<div id="admin-bg" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9000;overflow-y:auto;padding:20px 12px;">
+  <div style="background:var(--bg2);border-radius:10px;max-width:1100px;margin:auto;padding:20px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+      <h2 style="font-size:15px;font-weight:700;">Usuários</h2>
+      <button onclick="fecharAdmin()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--fg3);">×</button>
+    </div>
+    <div id="admin-corpo">Carregando…</div>
+  </div>
+</div>
+
+<!-- HEADER -->
+<div id="hdr">
+  <div id="hdr-title">Pavimento Intertravado<small>IP-06/2004 · ABNT NBR 9781 · ABNT NBR 15953:2026</small></div>
+  <span id="sessao-bar">
+    <span class="sessao-nome" id="sessao-nome"></span>
+    <span class="sessao-admin" id="sessao-admin" hidden>Admin</span>
+  </span>
+  <button class="hdr-btn" id="btn-usuarios" onclick="abrirAdmin()" hidden>Usuários</button>
+  <button class="hdr-btn" id="btn-sair" onclick="confirmarSair()" hidden>Sair</button>
+  <button class="hdr-btn" onclick="toggleTheme()">☀ Tema</button>
+  <button class="hdr-btn" onclick="ajusteFont(-1)">A−</button>
+  <button class="hdr-btn" onclick="ajusteFont(1)">A+</button>
+</div>
+
+<!-- APP (oculto até login ser validado) -->
+<div id="app-content" hidden>
+
+<!-- TOOLBAR -->
+<div id="toolbar">
+  <span class="tb-label">Obra:</span>
+  <input type="text" id="logradouro-inp" placeholder="Logradouro / obra" oninput="atualizarLogradouro()">
+  <input type="text" id="resp-inp" placeholder="Responsável técnico" style="background:var(--inp);border:1px solid var(--inp-border);border-radius:4px;padding:3px 7px;font-size:12px;color:var(--fg);width:160px">
+  <div class="tb-sep"></div>
+  <button class="tb-btn tb-btn-save" onclick="salvarProjeto()">💾 Salvar</button>
+  <button class="tb-btn" onclick="abrirProjetoClick()">📂 Abrir</button>
+  <input type="file" id="imp" accept=".json" style="display:none" onchange="importarArquivo(event)">
+  <div class="tb-sep"></div>
+  <span class="tb-label">Exportar memória:</span>
+  <button class="tb-btn tb-btn-excel" onclick="exportarExcel()">Excel</button>
+  <button class="tb-btn tb-btn-word" onclick="exportarWord()">Word</button>
+  <button class="tb-btn tb-btn-pdf" onclick="exportarPDF()">PDF</button>
+</div>
+
+<!-- TABS -->
+<div id="tabs-bar">
+  <div class="tab active" data-tab="dim">Dimensionamento</div>
+  <div class="tab" data-tab="corte">Corte 2D</div>
+  <div class="tab" data-tab="topo">Topografia</div>
+  <div class="tab" data-tab="memo">Memória de Cálculo</div>
+</div>
+
+<div id="tabs-content">
+
+<!-- ══ ABA DIMENSIONAMENTO ══ -->
+<div class="tab-pane active" id="pane-dim">
+  <div id="status-bar" class="vbar info">Preencha N e CBR do subleito para dimensionar.</div>
+
+  <!-- Dados de projeto — linha compacta -->
+  <div class="sec">
+    <div class="sec-title">Dados de Projeto · IP-06/2004</div>
+    <div class="g3" style="margin-bottom:8px">
+      <div class="f">
+        <label>Número N (eixos padrão 8,2 t)</label>
+        <select id="n-sel" onchange="atualizarN()">
+          <option value="1e5">10⁵ — Local residencial (Leve)</option>
+          <option value="5e5">5×10⁵ — Coletora secundária (Médio)</option>
+          <option value="2e6">2×10⁶ — Coletora principal (Meio pesado)</option>
+          <option value="2e7">2×10⁷ — Arterial (Pesado)</option>
+          <option value="5e7">5×10⁷ — Arterial/Expressa (Muito pesado)</option>
+          <option value="custom">Informar manualmente…</option>
+        </select>
+      </div>
+      <div class="f" id="n-custom-field" hidden>
+        <label>N manual (eixos padrão)</label>
+        <input type="number" id="n-custom" min="1000" step="1000" placeholder="ex: 300000" oninput="calcular()">
+      </div>
+      <div class="f">
+        <label>Material da base</label>
+        <select id="base-mat" onchange="calcular()">
+          <option value="GRAN">Granular (Proc. B)</option>
+          <option value="CCR">CCR — Concreto Compactado (Proc. B)</option>
+          <option value="PROCA">Granular s/ base (Proc. A — N &lt; 1,5×10⁶)</option>
+        </select>
+      </div>
+    </div>
+    <div class="g4">
+      <div class="f" data-tip>
+        <label>CBR subleito (%)</label>
+        <div class="f-tooltip">
+          <strong>CBR do Subleito</strong><br>
+          Índice de Suporte Califórnia — mede a capacidade de suporte do solo de fundação.<br>
+          <strong>Limites IP-06/2004:</strong><br>
+          • &lt; 2% → subleito muito fraco, exige estudo geotécnico<br>
+          • 2–5% → fraco, reforço geralmente necessário<br>
+          • 5–20% → médio a bom<br>
+          • &gt; 20% → excelente<br>
+          <em>Ensaio DNIT 172/2016 na cota de formação do pavimento.</em>
+        </div>
+        <input type="number" id="cbr-sub" min="1" max="100" step="0.5" placeholder="ex: 5" oninput="calcular()">
+        <span class="hint">Faixa típica: 2–20% · ensaio na cota de formação</span>
+      </div>
+      <div class="f" data-tip>
+        <label>Expansão subleito (%)</label>
+        <div class="f-tooltip">
+          <strong>Expansão do Subleito</strong><br>
+          Expansão volumétrica do solo por absorção de água (ensaio CBR imersão 96 h).<br>
+          <strong>Limites IP-06/2004:</strong><br>
+          • &lt; 0,5% → sem restrição<br>
+          • 0,5–2,0% → atenção ao sistema de drenagem<br>
+          • ≥ 2,0% → exige estabilização ou substituição do subleito<br>
+          <em>Valor zero indica solo não expansivo.</em>
+        </div>
+        <input type="number" id="exp-sub" min="0" max="20" step="0.1" placeholder="ex: 0.5" oninput="calcular()">
+        <span class="hint">≥ 2%: estudo de estabilização (IP-06 §6.3)</span>
+      </div>
+      <div class="f" data-tip>
+        <label>Lençol freático abaixo form. (m)</label>
+        <div class="f-tooltip">
+          <strong>Profundidade do Lençol Freático</strong><br>
+          Distância vertical da cota de formação do pavimento ao nível d'água.<br>
+          <strong>Limites IP-06/2004 §6.3:</strong><br>
+          • ≥ 1,50 m → sem restrição<br>
+          • &lt; 1,50 m → exige sistema de drenagem profunda ou elevação do greide<br>
+          • &lt; 0,60 m → situação crítica, risco de bombeamento<br>
+          <em>Deixe vazio se não houver levantamento.</em>
+        </div>
+        <input type="number" id="lencol" min="0" max="10" step="0.1" placeholder="ex: 2.0" oninput="calcular()">
+        <span class="hint">Mínimo 1,50 m abaixo da formação (IP-06 §6.3)</span>
+      </div>
+      <div class="f" data-tip>
+        <label>Areia de assentamento (cm)</label>
+        <div class="f-tooltip">
+          <strong>Camada de Areia de Assentamento</strong><br>
+          Leito de areia média sobre o qual os blocos são assentados e vibrados.<br>
+          <strong>Limites IP-06/2004 §7.2 · NBR 15953:</strong><br>
+          • Mínimo: 3 cm<br>
+          • Máximo: 5 cm (pós-compactação)<br>
+          • Recomendado: 4–5 cm antes da vibração<br>
+          • Granulometria: areia média (D50 = 0,3–1,0 mm)<br>
+          <em>Não compactar a areia antes da colocação dos blocos.</em>
+        </div>
+        <input type="number" id="areia-cm" min="3" max="5" step="0.5" value="5" oninput="calcular()">
+        <span class="hint">3 a 5 cm pós-compactação (IP-06 §7.2)</span>
+      </div>
+      <div class="f" data-tip>
+        <label>fpk blocos (MPa)</label>
+        <div class="f-tooltip">
+          <strong>Resistência Característica dos Blocos (fpk)</strong><br>
+          Resistência à compressão axial dos blocos (ABNT NBR 9781:2013 §5.3).<br>
+          <strong>Limites por faixa de tráfego:</strong><br>
+          • N &lt; 10⁷ → fpk ≥ 35 MPa (classe C35)<br>
+          • N ≥ 10⁷ → fpk ≥ 50 MPa (classe C50)<br>
+          • Vias de pedestres → fpk ≥ 25 MPa admissível<br>
+          <em>Verificar em nota fiscal/CCP do fabricante.</em>
+        </div>
+        <input type="number" id="fpk" min="35" max="100" step="5" value="35" oninput="calcular()">
+        <span class="hint">≥ 35 MPa (C35) ou ≥ 50 MPa se N ≥ 10⁷ (NBR 9781)</span>
+      </div>
+      <div class="f" data-tip>
+        <label>Sub-base adotada p/ CCR (cm)</label>
+        <div class="f-tooltip">
+          <strong>Sub-base Granular Sob a Camada CCR</strong><br>
+          Espessura da camada granular que fica abaixo do CCR no Procedimento B com CCR.<br>
+          <strong>Limites IP-06/2004 §6.2.2:</strong><br>
+          • Mínimo: 15 cm<br>
+          • Recomendado: 15–20 cm<br>
+          • Máximo típico: 30 cm (acima disso, verificar alternativas)<br>
+          • CBR exigido: ≥ 20% (N &lt; 5×10⁵) ou ≥ 30% (N ≥ 5×10⁵)<br>
+          <em>Só é usado quando o material da base for CCR.</em>
+        </div>
+        <input type="number" id="sub-ccr" min="0" max="60" step="5" value="15" oninput="calcular()">
+        <span class="hint">Mínimo 15 cm · granular CBR ≥ 20 ou 30% (IP-06 §6.2.2)</span>
+      </div>
+      <div class="f" data-tip>
+        <label>Reforço do subleito (cm)</label>
+        <div class="f-tooltip">
+          <strong>Reforço do Subleito</strong><br>
+          Camada de material melhorado (solo-brita, solo-cal, solo-cimento etc.) inserida acima do subleito quando o CBR é insuficiente.<br>
+          <strong>Quando aplicar (IP-06/2004 §6.4):</strong><br>
+          • CBR subleito &lt; 2% → fortemente recomendado<br>
+          • CBR &lt; 5% + N &gt; 10⁶ → considerar reforço<br>
+          • Espessura mínima usual: 15 cm (múltiplo de 5 cm)<br>
+          <em>Dimensionar por projeto geotécnico específico.</em>
+        </div>
+        <input type="number" id="reforco" min="0" max="100" step="5" value="0" oninput="calcular()">
+        <span class="hint">0 = dispensado · múltiplo de 5 cm (projeto geotécnico)</span>
+      </div>
+      <div class="f" data-tip>
+        <label>H conferido na figura (cm)</label>
+        <div class="f-tooltip">
+          <strong>H Lido Diretamente na Figura</strong><br>
+          Permite substituir o valor interpolado pela calculadora pelo valor lido manualmente nas Figuras 6.1 ou 6.3 da IP-06/2004.<br>
+          <strong>Quando usar:</strong><br>
+          • Quando o projetista faz a leitura gráfica direta<br>
+          • Para arredondar o H interpolado para valor comercial<br>
+          • Para padronizar com projetos anteriores da empresa<br>
+          <em>Deixe vazio para usar o H calculado automaticamente.</em>
+        </div>
+        <input type="number" id="h-conf" min="0" max="200" step="1" placeholder="Vazio = automático" oninput="calcular()">
+        <span class="hint">Opcional — sobrepõe o H interpolado se preenchido</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="g2">
+    <!-- Resultados principais -->
+    <div>
+      <div class="sec">
+        <div class="sec-title">N Adotado</div>
+        <div class="n-card">
+          <div class="nv" id="res-n">—</div>
+          <div class="nl" id="res-n-via">Informe N e CBR</div>
+        </div>
+      </div>
+      <div class="sec">
+        <div class="sec-title">Leituras e Verificação</div>
+        <div class="g2">
+          <div class="f"><label>H estimado fig. (cm)</label><div class="oc" id="r-h-est">—</div></div>
+          <div class="f"><label>H usado cálculo (cm)</label><div class="oc" id="r-h-usado">—</div></div>
+          <div class="f"><label>CBR mín. sub-base (%)</label><div class="oc" id="r-cbr-min-sb">—</div></div>
+          <div class="f"><label>fpk mín. blocos (MPa)</label><div class="oc" id="r-fpk-min">—</div></div>
+          <div class="f"><label>Procedimento</label><div class="oc" id="r-proc">—</div></div>
+          <div class="f"><label>Condição estrutural</label><div class="oc" id="r-cond">—</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabela de camadas -->
+    <div class="sec">
+      <div class="sec-title">Camadas Dimensionadas</div>
+      <div class="tw">
+        <table id="tbl-camadas">
+          <thead><tr><th>Camada</th><th>Teórica (cm)</th><th>Adotada (cm)</th><th>Situação</th></tr></thead>
+          <tbody>
+            <tr><td>Blocos de concreto</td><td class="to" id="tc-blocos-teo">—</td><td class="to" id="tc-blocos-adot">—</td><td class="to" id="tc-blocos-sit">—</td></tr>
+            <tr><td>Areia de assentamento</td><td class="to" id="tc-areia-teo">—</td><td class="to" id="tc-areia-adot">—</td><td class="to">3–5 cm</td></tr>
+            <tr><td id="tc-base-label">Base granular</td><td class="to" id="tc-base-teo">—</td><td class="to" id="tc-base-adot">—</td><td class="to" id="tc-base-sit">—</td></tr>
+            <tr><td>Sub-base granular</td><td class="to" id="tc-sb-teo">—</td><td class="to" id="tc-sb-adot">—</td><td class="to">CBR ≥ mínimo</td></tr>
+            <tr><td>Reforço subleito</td><td class="to" id="tc-ref-teo">—</td><td class="to" id="tc-ref-adot">—</td><td class="to">Se aplicável</td></tr>
+          </tbody>
+          <tfoot>
+            <tr style="font-weight:700;background:var(--tab-hover)">
+              <td>Total físico</td><td></td><td class="to" id="tc-total">—</td><td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div style="margin-top:8px;font-size:10px;color:var(--fg3)">
+        Proc. A: sub-base da Fig. 6.1; base dispensada para N &lt; 1,5×10⁶.<br>
+        Proc. B: HBG da Fig. 6.3; CCR usa fator de equivalência K=1,65.
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-export-bar">
+    <span class="tb-label">Exportar dimensionamento:</span>
+    <button class="tb-btn tb-btn-excel" onclick="exportarTabExcel('dim')">Excel</button>
+    <button class="tb-btn tb-btn-word" onclick="exportarTabWord('dim')">Word</button>
+    <button class="tb-btn tb-btn-pdf" onclick="exportarTabPDF('dim')">PDF</button>
+  </div>
+</div>
+
+<!-- ══ ABA CORTE 2D ══ -->
+<div class="tab-pane" id="pane-corte">
+  <div class="sec">
+    <div class="sec-title">Seção Transversal · Corte Esquemático</div>
+    <div id="corte-status" class="vbar info">Aguardando dimensionamento.</div>
+    <svg id="svg-corte" viewBox="0 0 720 400" xmlns="http://www.w3.org/2000/svg"></svg>
+    <div style="font-size:10px;color:var(--fg3);text-align:center;margin-top:6px">Modelo ilustrativo com espessuras proporcionais</div>
+  </div>
+  <div class="sec">
+    <div class="sec-title">Legenda</div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;font-size:11px">
+      <div style="display:flex;align-items:center;gap:5px"><span style="width:22px;height:12px;background:#c8b9a0;border:1px solid #888;display:inline-block"></span>Blocos</div>
+      <div style="display:flex;align-items:center;gap:5px"><span style="width:22px;height:12px;background:#f5e8b0;border:1px solid #888;display:inline-block"></span>Areia assentamento</div>
+      <div style="display:flex;align-items:center;gap:5px"><span style="width:22px;height:12px;background:#a8c8a0;border:1px solid #888;display:inline-block"></span>Base granular/CCR</div>
+      <div style="display:flex;align-items:center;gap:5px"><span style="width:22px;height:12px;background:#d0b090;border:1px solid #888;display:inline-block"></span>Sub-base</div>
+      <div style="display:flex;align-items:center;gap:5px"><span style="width:22px;height:12px;background:#c0a878;border:1px solid #888;display:inline-block"></span>Reforço</div>
+      <div style="display:flex;align-items:center;gap:5px"><span style="width:22px;height:12px;background:#d4c4a0;border:1px solid #888;display:inline-block"></span>Subleito</div>
+    </div>
+  </div>
+  <div class="tab-export-bar">
+    <span class="tb-label">Exportar seção:</span>
+    <button class="tb-btn tb-btn-excel" onclick="exportarTabExcel('corte')">Excel</button>
+    <button class="tb-btn tb-btn-word" onclick="exportarTabWord('corte')">Word</button>
+    <button class="tb-btn tb-btn-pdf" onclick="exportarTabPDF('corte')">PDF</button>
+  </div>
+</div>
+
+<!-- ══ ABA TOPOGRAFIA ══ -->
+<div class="tab-pane" id="pane-topo">
+  <div class="sec">
+    <div class="sec-title">Topografia · Corte, Aterro e Volumes de Pavimento</div>
+    <div class="g4" style="margin-bottom:8px">
+      <div class="f"><label>Caimento transversal esq. (%)</label><input type="number" id="cai-esq" min="0" max="10" step="0.5" value="3" oninput="calcTopo()"></div>
+      <div class="f"><label>Caimento transversal dir. (%)</label><input type="number" id="cai-dir" min="0" max="10" step="0.5" value="3" oninput="calcTopo()"></div>
+      <div class="f"><label>Largura da pista (m) — padrão</label><input type="number" id="larg-pad" min="1" max="30" step="0.5" value="6" oninput="calcTopo()"></div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <button class="btn-add" onclick="addEstaca()">+ Estaca</button>
+      <button class="btn-rem" onclick="remEstaca()">− Remover</button>
+      <button class="tb-btn tb-btn-save" onclick="calcTopo()">Recalcular</button>
+    </div>
+    <div id="topo-totals" class="topo-totals"></div>
+    <div class="tw">
+      <table id="tbl-topo">
+        <thead><tr>
+          <th>#</th><th>Estaca (m)</th>
+          <th>Terreno esq. (m)</th><th>Terreno eixo (m)</th><th>Terreno dir. (m)</th>
+          <th>Greide eixo (m)</th><th>Largura (m)</th>
+          <th>Corte (m²)</th><th>Aterro (m²)</th>
+        </tr></thead>
+        <tbody id="topo-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+  <div class="sec" id="sec-volumes" hidden>
+    <div class="sec-title">Volumes e Quantitativos por Camada</div>
+    <div class="tw">
+      <table id="tbl-vols">
+        <thead><tr><th>Camada</th><th>Esp. (cm)</th><th>Área (m²)</th><th>Volume (m³)</th><th>Material</th></tr></thead>
+        <tbody id="vols-tbody"></tbody>
+      </table>
+    </div>
+    <div style="margin-top:6px;font-size:10px;color:var(--fg3)">Volumes compactados · sem empolamento · sem perdas.</div>
+  </div>
+  <div class="tab-export-bar">
+    <span class="tb-label">Exportar topografia:</span>
+    <button class="tb-btn tb-btn-excel" onclick="exportarTabExcel('topo')">Excel</button>
+    <button class="tb-btn tb-btn-word" onclick="exportarTabWord('topo')">Word</button>
+    <button class="tb-btn tb-btn-pdf" onclick="exportarTabPDF('topo')">PDF</button>
+  </div>
+</div>
+
+<!-- ══ ABA MEMÓRIA ══ -->
+<div class="tab-pane" id="pane-memo">
+  <div class="sec">
+    <div class="sec-title">Memória de Cálculo · Pavimento Intertravado · IP-06/2004</div>
+    <div id="memo-header" style="font-size:12px;color:var(--fg2);margin-bottom:10px"></div>
+    <div id="memo-status" class="vbar info">Preencha N e CBR e calcule.</div>
+    <div id="memo-content"></div>
+    <div style="margin-top:14px;font-size:10px;color:var(--fg3);border-top:1px solid var(--border);padding-top:8px">
+      <strong>Referências:</strong> IP-06/2004 (SIURB/PMSP) · ABCP ET-27 4ª ed. · ABNT NBR 9781:2013 · ABNT NBR 15953:2026
+    </div>
+  </div>
+  <div class="tab-export-bar">
+    <span class="tb-label">Exportar memória:</span>
+    <button class="tb-btn tb-btn-excel" onclick="exportarTabExcel('memo')">Excel</button>
+    <button class="tb-btn tb-btn-word" onclick="exportarTabWord('memo')">Word</button>
+    <button class="tb-btn tb-btn-pdf" onclick="exportarTabPDF('memo')">PDF</button>
+  </div>
+</div>
+
+</div><!-- /tabs-content -->
+
+<div id="toast"></div>
+<div id="modal-bg"><div id="modal"></div></div>
+
+<script>
+'use strict';
+/* ══════════════════════════════════════════════════════
+   MATRIZES IP-06/2004
+══════════════════════════════════════════════════════ */
+// Procedimento B · Figura 6.3 · HBG (cm)
+const HBG_N  = [1e3,2e3,4e3,8e3,1e4,2e4,4e4,8e4,1e5,2e5,4e5,8e5,1e6,2e6,4e6,8e6,1e7];
+const HBG_CBR= [2,2.5,3,3.5,4,5,6,8,10,15,20];
+const HBG_TAB= [
+  [27,24,21,19,17,15,13,11, 9, 7, 6],// 1e3
+  [29,27,24,22,20,17,14,12,10, 8, 6],// 2e3
+  [33,30,27,25,23,19,16,14,12, 9, 7],// 4e3
+  [36,33,30,27,25,22,19,16,14,10, 8],// 8e3
+  [37,34,31,28,26,23,20,17,14,11, 8],// 1e4
+  [41,37,34,31,29,25,22,18,16,12, 9],// 2e4
+  [44,40,37,34,32,28,24,20,17,13,10],// 4e4
+  [48,44,40,37,35,30,27,22,19,14,11],// 8e4
+  [49,45,41,38,36,31,28,22,19,15,11],// 1e5
+  [52,48,44,40,38,33,30,24,21,16,12],// 2e5
+  [56,51,47,43,41,36,32,26,23,17,13],// 4e5
+  [59,54,50,46,43,38,34,28,25,18,14],// 8e5
+  [60,55,51,47,44,39,35,29,25,19,15],// 1e6
+  [64,58,54,50,47,41,37,30,26,20,16],// 2e6
+  [68,62,57,53,50,44,39,32,28,21,17],// 4e6
+  [71,65,60,56,52,46,41,34,29,22,17],// 8e6
+  [72,66,61,57,53,47,42,34,30,23,18],// 1e7
+];
+
+// Procedimento A · Figura 6.1 · espessura sub-base (cm)
+const HSB_N  = [1e3,1e4,1e5,5e5,1e6,1.5e6,2e6,5e6,1e7];
+const HSB_CBR= [2,3,4,5,6,8,10,15,20];
+const HSB_TAB= [
+  [18,14,11, 9, 8, 6, 5, 0, 0],// 1e3
+  [22,17,14,11, 9, 7, 6, 0, 0],// 1e4
+  [28,22,18,15,12, 9, 7, 0, 0],// 1e5
+  [32,26,21,17,14,11, 9, 5, 0],// 5e5
+  [35,28,23,19,16,12,10, 6, 0],// 1e6
+  [36,29,24,20,17,13,10, 6, 0],// 1.5e6
+  [38,30,25,21,18,14,11, 7, 0],// 2e6
+  [42,34,28,23,20,15,12, 8, 5],// 5e6
+  [45,36,30,25,21,16,13, 9, 6],// 1e7
+];
+
+/* ══════════════════════════════════════════════════════
+   ESTADO GLOBAL
+══════════════════════════════════════════════════════ */
+let logradouro='', responsavel='', resultado=null, topoRows=[];
+
+/* ══════════════════════════════════════════════════════
+   UTILITÁRIOS
+══════════════════════════════════════════════════════ */
+function interp2D(tabN,tabCBR,tab,N,CBR){
+  let ni=tabN.length-2;
+  for(let i=0;i<tabN.length-1;i++){if(N<=tabN[i+1]){ni=i;break;}}
+  if(N<=tabN[0])ni=0;
+  let ci=tabCBR.length-2;
+  for(let i=0;i<tabCBR.length-1;i++){if(CBR<=tabCBR[i+1]){ci=i;break;}}
+  if(CBR<=tabCBR[0])ci=0;
+  const tN=Math.max(0,Math.min(1,(Math.log10(N)-Math.log10(tabN[ni]))/(Math.log10(tabN[ni+1])-Math.log10(tabN[ni]))));
+  const tC=Math.max(0,Math.min(1,(Math.log10(CBR)-Math.log10(tabCBR[ci]))/(Math.log10(tabCBR[ci+1])-Math.log10(tabCBR[ci]))));
+  return tab[ni][ci]*(1-tN)*(1-tC)+tab[ni][ci+1]*(1-tN)*tC+tab[ni+1][ci]*tN*(1-tC)+tab[ni+1][ci+1]*tN*tC;
+}
+function fmt(v,d=1){return v==null?'—':Number(v).toFixed(d).replace('.',',')}
+function fmtN(n){
+  if(!n)return'—';
+  const e=Math.floor(Math.log10(n)),m=n/Math.pow(10,e);
+  const sup={'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+  const se=String(e).split('').map(c=>sup[c]||c).join('');
+  if(Math.abs(m-1)<0.01)return'10'+se;
+  return fmt(m,1).replace(',','.')+'×10'+se;
+}
+function s(id){const e=document.getElementById(id);return e?e.value.trim():''}
+function v(id){const e=document.getElementById(id);return e?parseFloat(e.value):NaN}
+function carimbo(){const d=new Date(),z=n=>String(n).padStart(2,'0');return`${d.getFullYear()}${z(d.getMonth()+1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}`}
+
+function toast(msg,err=false){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.style.background=err?'#9C2B0E':'';
+  el.classList.add('show');clearTimeout(el._t);
+  el._t=setTimeout(()=>el.classList.remove('show'),2800);
+}
+
+async function triggerDownload(blob,filename){
+  try{
+    let dl=null;
+    try{dl=await window.claude.use('downloads');}catch(e){dl=null;}
+    if(dl){await dl.save({filename,data:blob});return;}
+  }catch(e){}
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url);a.remove();},1000);
+}
+
+/* ══════════════════════════════════════════════════════
+   N E LOGRADOURO
+══════════════════════════════════════════════════════ */
+const N_MAP={'1e5':1e5,'5e5':5e5,'2e6':2e6,'2e7':2e7,'5e7':5e7};
+const VIA_MAP={
+  '1e5':'Via local residencial · Leve',
+  '5e5':'Coletora secundária · Médio',
+  '2e6':'Coletora principal · Meio Pesado',
+  '2e7':'Arterial · Pesado',
+  '5e7':'Arterial principal / Expressa · Muito Pesado',
+  custom:'N informado manualmente'
+};
+function atualizarN(){
+  document.getElementById('n-custom-field').hidden=document.getElementById('n-sel').value!=='custom';
+  calcular();
+}
+function getNAdotado(){
+  const sel=document.getElementById('n-sel').value;
+  if(sel==='custom'){const vv=parseFloat(document.getElementById('n-custom').value);return isNaN(vv)?null:vv;}
+  return N_MAP[sel]||null;
+}
+function atualizarLogradouro(){
+  logradouro=document.getElementById('logradouro-inp').value;
+  responsavel=document.getElementById('resp-inp').value;
+}
+
+/* ══════════════════════════════════════════════════════
+   CALCULAR
+══════════════════════════════════════════════════════ */
+function calcular(){
+  const N  =getNAdotado();
+  const sel=document.getElementById('n-sel').value;
+  const CBR=v('cbr-sub');
+  const exp=v('exp-sub')||0;
+  const len=v('lencol');
+  const mat=s('base-mat');
+  const fpkI=v('fpk')||35;
+  const areia=v('areia-cm')||5;
+  const subCCR=v('sub-ccr')||15;
+  const ref=v('reforco')||0;
+  const hConf=v('h-conf');
+  const sb=document.getElementById('status-bar');
+
+  if(!N||isNaN(CBR)){
+    sb.textContent='Preencha N e CBR do subleito para dimensionar.';sb.className='vbar info';
+    document.getElementById('corte-status').textContent='Aguardando dimensionamento.';
+    document.getElementById('corte-status').className='vbar info';
+    return;
+  }
+
+  // Alertas geotécnicos
+  const alertas=[];
+  if(CBR<2) alertas.push('CBR < 2%: subleito muito fraco — exige estudo geotécnico específico.');
+  if(exp>=2) alertas.push('Expansão ≥ 2%: avaliar sobrecarga e solução de estabilização.');
+  if(!isNaN(len)&&len<1.5) alertas.push('Lençol freático a menos de 1,50 m da formação — providenciar drenagem.');
+
+  // Blocos — Quadro 6.3
+  let bloco_teo,fpk_min;
+  if(N<=5e5){bloco_teo=6;fpk_min=35;}
+  else if(N<1e7){bloco_teo=8;fpk_min=35;}
+  else{bloco_teo=10;fpk_min=50;}
+
+  // CBR mínimo sub-base
+  const cbr_min_sb=N<5e5?20:30;
+
+  // Procedimento e espessuras
+  let proc,h_est,h_base_teo=0,h_sb_teo=0;
+  if(mat==='PROCA'){
+    proc='A (sub-base da Fig. 6.1, sem base)';
+    if(N>1.5e6) alertas.push('Proc. A sem base: aplicável apenas N < 1,5×10⁶ — revise a escolha.');
+    h_est=Math.round(interp2D(HSB_N,HSB_CBR,HSB_TAB,N,CBR));
+    h_sb_teo=h_est; h_base_teo=0;
+  }else if(mat==='CCR'){
+    proc='B (base CCR, Figura 6.3)';
+    h_est=Math.round(interp2D(HBG_N,HBG_CBR,HBG_TAB,N,CBR));
+    const hBGliq=Math.max(0,h_est-subCCR);
+    h_base_teo=Math.max(10,Math.ceil(hBGliq/1.65));
+    h_sb_teo=subCCR;
+  }else{
+    proc='B (base granular, Figura 6.3)';
+    h_est=Math.round(interp2D(HBG_N,HBG_CBR,HBG_TAB,N,CBR));
+    h_sb_teo=15;
+    h_base_teo=Math.max(15,h_est-15);
+  }
+
+  const h_base_adot=h_base_teo>0?Math.ceil(h_base_teo/5)*5:0;
+  const h_sb_adot  =h_sb_teo>0 ?Math.ceil(h_sb_teo/5)*5:0;
+  const h_usado=!isNaN(hConf)&&hConf>0?hConf:h_est;
+  const total=bloco_teo+areia+h_base_adot+h_sb_adot+ref;
+  const ok_fpk=fpkI>=fpk_min;
+  const cond=!ok_fpk?`⚠ fpk ${fpkI} MPa < mínimo ${fpk_min} MPa`:
+    alertas.length>0?'⚠ Verificar alertas geotécnicos':
+    '✓ Seção estruturalmente válida';
+
+  resultado={N,sel,CBR,exp,len:isNaN(len)?null:len,mat,fpkI,areia,subCCR,ref,hConf:isNaN(hConf)?null:hConf,
+    proc,h_est,h_usado,bloco_teo,areia_adot:areia,
+    h_base_teo,h_base_adot,h_sb_teo,h_sb_adot,total,
+    fpk_min,cbr_min_sb,cond,alertas};
+
+  atualizarResultados();
+  atualizarCorte();
+  atualizarMemoria();
+  calcTopo();
+}
+
+function atualizarResultados(){
+  const r=resultado;if(!r)return;
+  document.getElementById('res-n').textContent=fmtN(r.N);
+  document.getElementById('res-n-via').textContent=VIA_MAP[r.sel]||'N Manual';
+  document.getElementById('r-h-est').textContent=fmt(r.h_est,0)+' cm';
+  document.getElementById('r-h-usado').textContent=fmt(r.h_usado,0)+' cm';
+  document.getElementById('r-cbr-min-sb').textContent=r.cbr_min_sb+' %';
+  document.getElementById('r-fpk-min').textContent=r.fpk_min+' MPa';
+  document.getElementById('r-proc').textContent=r.proc;
+  document.getElementById('r-cond').textContent=r.cond;
+
+  document.getElementById('tc-blocos-teo').textContent=r.bloco_teo+' cm';
+  document.getElementById('tc-blocos-adot').textContent=r.bloco_teo+' cm';
+  document.getElementById('tc-blocos-sit').textContent=r.fpkI>=r.fpk_min?'fpk OK':'⚠ Revisar fpk';
+  document.getElementById('tc-blocos-sit').className=r.fpkI>=r.fpk_min?'to tok':'to twarn';
+  document.getElementById('tc-areia-teo').textContent=r.areia+' cm';
+  document.getElementById('tc-areia-adot').textContent=r.areia+' cm';
+
+  const baseLbl={'GRAN':'Base granular','CCR':'Base CCR','PROCA':'Base (dispensada)'};
+  document.getElementById('tc-base-label').textContent=baseLbl[r.mat]||'Base';
+  document.getElementById('tc-base-teo').textContent=r.h_base_teo>0?r.h_base_teo+' cm':'Dispensada';
+  document.getElementById('tc-base-adot').textContent=r.h_base_adot>0?r.h_base_adot+' cm':'Dispensada';
+  document.getElementById('tc-base-sit').textContent=r.h_base_adot>=15||r.h_base_adot===0?'OK':'⚠ < 15 cm';
+  document.getElementById('tc-sb-teo').textContent=r.h_sb_teo>0?r.h_sb_teo+' cm':'—';
+  document.getElementById('tc-sb-adot').textContent=r.h_sb_adot>0?r.h_sb_adot+' cm':'—';
+  document.getElementById('tc-ref-teo').textContent=r.ref>0?r.ref+' cm':'—';
+  document.getElementById('tc-ref-adot').textContent=r.ref>0?r.ref+' cm':'—';
+  document.getElementById('tc-total').textContent=r.total+' cm';
+
+  const sb=document.getElementById('status-bar');
+  if(r.alertas.length>0){sb.textContent=r.alertas.join(' · ');sb.className='vbar warn';}
+  else if(!r.cond.startsWith('✓')){sb.textContent=r.cond;sb.className='vbar warn';}
+  else{sb.textContent='✓ Dimensionamento concluído · '+r.proc+' · Espessura total: '+r.total+' cm';sb.className='vbar ok';}
+}
+
+/* ══════════════════════════════════════════════════════
+   CORTE 2D
+══════════════════════════════════════════════════════ */
+function atualizarCorte(){
+  const r=resultado;
+  const svg=document.getElementById('svg-corte');
+  const sc=document.getElementById('corte-status');
+  if(!r)return;
+  sc.textContent='Seção dimensionada · '+r.proc+' · Total: '+r.total+' cm';
+  sc.className='vbar ok';
+
+  const W=720,H=380,mL=120,mR=110,mT=46,mB=30;
+  const drawW=W-mL-mR,drawH=H-mT-mB;
+  const camadas=[
+    {nome:'Blocos de concreto',h:r.bloco_teo,fill:'#c8b9a0',stroke:'#8a7055',pat:'blk'},
+    {nome:'Areia de assentamento',h:r.areia,fill:'#f5e8b0',stroke:'#b8a050'},
+    {nome:'Base '+(r.mat==='CCR'?'CCR':'granular'),h:r.h_base_adot,fill:'#a8c8a0',stroke:'#5a8a4a'},
+    {nome:'Sub-base granular',h:r.h_sb_adot,fill:'#d0b090',stroke:'#9a7050',pat:'gran'},
+    {nome:'Reforço do subleito',h:r.ref,fill:'#c0a878',stroke:'#886030'},
+    {nome:'Subleito',h:20,fill:'#d4c4a0',stroke:'#a09060'},
+  ].filter(c=>c.h>0||c.nome==='Subleito');
+
+  const totH=camadas.reduce((a,c)=>a+c.h,0);
+  const scale=drawH/totH;
+
+  let out=`<defs>
+    <pattern id="blk" width="20" height="10" patternUnits="userSpaceOnUse">
+      <rect width="20" height="10" fill="#c8b9a0"/>
+      <rect x="0" y="0" width="10" height="5" fill="none" stroke="#8a7055" stroke-width=".6"/>
+      <rect x="10" y="0" width="10" height="5" fill="none" stroke="#8a7055" stroke-width=".6"/>
+      <rect x="5" y="5" width="10" height="5" fill="none" stroke="#8a7055" stroke-width=".6"/>
+    </pattern>
+    <pattern id="gran" width="6" height="6" patternUnits="userSpaceOnUse">
+      <rect width="6" height="6" fill="#d0b090"/>
+      <circle cx="1.5" cy="1.5" r="1" fill="#b09060" opacity=".5"/>
+      <circle cx="4.5" cy="4" r=".8" fill="#b09060" opacity=".4"/>
+    </pattern>
+  </defs>`;
+
+  out+=`<text x="${W/2}" y="16" font-size="11" font-weight="700" text-anchor="middle" fill="var(--fg)">${logradouro||'Pavimento Intertravado'}</text>`;
+  out+=`<text x="${W/2}" y="30" font-size="9" text-anchor="middle" fill="var(--fg3)">Seção transversal esquemática · Espessura total: ${r.total} cm · Proc. ${r.mat}</text>`;
+
+  let yAcc=mT;
+  for(const c of camadas){
+    const hPx=Math.max(c.h*scale,10);
+    const fill=c.pat?`url(#${c.pat})`:c.fill;
+    out+=`<rect x="${mL}" y="${yAcc}" width="${drawW}" height="${hPx}" fill="${fill}" stroke="${c.stroke}" stroke-width="1"/>`;
+    const midY=yAcc+hPx/2;
+    out+=`<text x="${mL-6}" y="${midY+4}" font-size="9" text-anchor="end" fill="var(--fg2)">${c.h} cm</text>`;
+    out+=`<line x1="${mL-4}" y1="${midY}" x2="${mL}" y2="${midY}" stroke="var(--border)" stroke-width=".5"/>`;
+    const label=c.nome+(c.h>0&&c.nome!=='Subleito'?' · '+c.h+' cm':'');
+    out+=`<text x="${mL+drawW+6}" y="${midY+4}" font-size="9" fill="var(--fg2)">${label}</text>`;
+    yAcc+=hPx;
+  }
+  svg.innerHTML=out;
+}
+
+/* ══════════════════════════════════════════════════════
+   TOPOGRAFIA
+══════════════════════════════════════════════════════ */
+function addEstaca(){
+  const n=topoRows.length,prev=n>0?topoRows[n-1]:null;
+  const lp=v('larg-pad')||6;
+  topoRows.push({est:prev?prev.est+20:0,tEsq:prev?prev.tEsq:100,tEixo:prev?prev.tEixo:100,tDir:prev?prev.tDir:100,greide:prev?prev.greide:100,larg:lp});
+  renderTopoTable();calcTopo();
+}
+function remEstaca(){if(topoRows.length>0){topoRows.pop();renderTopoTable();calcTopo();}}
+function renderTopoTable(){
+  const tbody=document.getElementById('topo-tbody');
+  tbody.innerHTML=topoRows.map((r,i)=>`<tr>
+    <td>${i+1}</td>
+    <td class="ti"><input type="number" step="0.5" value="${r.est}" onchange="topoVal(${i},'est',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="ti"><input type="number" step="0.01" value="${r.tEsq}" onchange="topoVal(${i},'tEsq',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="ti"><input type="number" step="0.01" value="${r.tEixo}" onchange="topoVal(${i},'tEixo',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="ti"><input type="number" step="0.01" value="${r.tDir}" onchange="topoVal(${i},'tDir',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="ti"><input type="number" step="0.01" value="${r.greide}" onchange="topoVal(${i},'greide',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="ti"><input type="number" step="0.5" value="${r.larg}" onchange="topoVal(${i},'larg',this.value)" style="width:50px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="to" id="tco-${i}">—</td>
+    <td class="to" id="tat-${i}">—</td>
+  </tr>`).join('');
+}
+function topoVal(i,k,val){topoRows[i][k]=parseFloat(val)||0;calcTopo();}
+function calcTopo(){
+  if(topoRows.length<2){document.getElementById('topo-totals').innerHTML='';document.getElementById('sec-volumes').hidden=true;return;}
+  const r=resultado;
+  const struct=r?r.total/100:0;
+  const cE=v('cai-esq')/100||0,cD=v('cai-dir')/100||0;
+  let totC=0,totA=0,totArea=0;
+  for(let i=0;i<topoRows.length-1;i++){
+    const a=topoRows[i],b=topoRows[i+1];
+    const d=b.est-a.est;if(d<=0)continue;
+    function secCorteAtero(row){
+      const fm=row.greide-struct,hm=row.larg/2;
+      const bE=fm-hm*cE,bD=fm-hm*cD;
+      return{
+        c:Math.max(0,row.tEixo-fm)*row.larg*.5+Math.max(0,row.tEsq-bE)*hm*.5+Math.max(0,row.tDir-bD)*hm*.5,
+        a:Math.max(0,fm-row.tEixo)*row.larg*.5+Math.max(0,bE-row.tEsq)*hm*.5+Math.max(0,bD-row.tDir)*hm*.5
+      };
+    }
+    const sA=secCorteAtero(a),sB=secCorteAtero(b);
+    const cT=((sA.c+sB.c)/2)*d,aT=((sA.a+sB.a)/2)*d,arT=((a.larg+b.larg)/2)*d;
+    totC+=cT;totA+=aT;totArea+=arT;
+    document.getElementById('tco-'+i).textContent=fmt(cT,2)+' m³';
+    document.getElementById('tat-'+i).textContent=fmt(aT,2)+' m³';
+  }
+  const bf=Math.max(0,totC-totA);
+  document.getElementById('topo-totals').innerHTML=[
+    {v:fmt(totC,2),l:'Corte caixa (m³)'},{v:fmt(totA,2),l:'Aterro (m³)'},
+    {v:fmt(totArea,2),l:'Área pavimentada (m²)'},{v:fmt(bf,2),l:'Bota-fora saldo (m³)'},
+  ].map(c=>`<div class="ttcard"><div class="tv">${c.v}</div><div class="tl">${c.l}</div></div>`).join('');
+  if(r&&totArea>0){
+    document.getElementById('sec-volumes').hidden=false;
+    const cams=[
+      {n:'Blocos de concreto',h:r.bloco_teo,m:'Blocos de concreto (ABNT NBR 9781)'},
+      {n:'Areia de assentamento',h:r.areia,m:'Areia selecionada'},
+      {n:'Base',h:r.h_base_adot,m:r.mat==='CCR'?'CCR (concreto compactado com rolo)':'Granular compactado'},
+      {n:'Sub-base',h:r.h_sb_adot,m:'Material granular, CBR controlado'},
+      {n:'Reforço',h:r.ref,m:'Solução geotécnica'},
+    ].filter(c=>c.h>0);
+    document.getElementById('vols-tbody').innerHTML=cams.map(c=>{
+      const vol=(c.h/100)*totArea;
+      return`<tr><td>${c.n}</td><td class="to">${c.h}</td><td class="to">${fmt(totArea,2)}</td><td class="to">${fmt(vol,2)}</td><td>${c.m}</td></tr>`;
+    }).join('');
+  }
+}
+
+/* ══════════════════════════════════════════════════════
+   MEMÓRIA DE CÁLCULO (detalhada como pavimento flexível)
+══════════════════════════════════════════════════════ */
+function atualizarMemoria(){
+  const r=resultado;if(!r)return;
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  const logr=logradouro||'(não informado)';
+  const resp=document.getElementById('resp-inp').value||'(não informado)';
+  document.getElementById('memo-header').innerHTML=
+    `<strong>Logradouro:</strong> ${logr} &nbsp;·&nbsp; <strong>Responsável:</strong> ${resp} &nbsp;·&nbsp; <strong>Data:</strong> ${hoje}`;
+  const ms=document.getElementById('memo-status');
+  if(r.alertas.length>0){ms.textContent=r.alertas.join(' · ');ms.className='vbar warn';}
+  else{ms.textContent=r.cond;ms.className=r.cond.startsWith('✓')?'vbar ok':'vbar warn';}
+
+  // Classificação do N
+  let classN='';
+  if(r.N<=5e5)classN='Baixo volume de tráfego — N ≤ 5×10⁵';
+  else if(r.N<=5e6)classN='Médio volume de tráfego — 5×10⁵ < N ≤ 5×10⁶';
+  else classN='Alto volume de tráfego — N > 5×10⁶';
+
+  const baseTxt={GRAN:'Brita graduada ou macadame seco (granular)',CCR:'Concreto Compactado com Rolo (CCR)',PROCA:'Sub-base granular (base dispensada — Proc. A)'};
+  const procDesc=r.mat==='PROCA'
+    ?"Procedimento A (IP-06/2004 §6.1): determina a espessura de sub-base diretamente a partir da Figura 6.1, dispensando camada de base para N &lt; 1,5×10⁶."
+    :r.mat==='CCR'
+    ?"Procedimento B com CCR (IP-06/2004 §6.2): determina HBG total da Figura 6.3. A parte CCR é convertida usando fator de equivalência K = 1,65."
+    :"Procedimento B granular (IP-06/2004 §6.2): determina HBG total na Figura 6.3 e distribui entre base e sub-base (sub-base mínima 15 cm).";
+
+  // Interpolation detail strings
+  const figRef=r.mat==='PROCA'?'Figura 6.1':'Figura 6.3';
+  const hbgLiq=r.mat==='CCR'?Math.max(0,r.h_est-(r.subCCR||r.h_sb_adot)):0;
+  const ccr_calc=r.mat==='CCR'?`
+    <p class="mexp">Com o procedimento B + CCR, o HBG total interpolado é dividido em:</p>
+    <div class="mfml">HBG_total (interpolado) = ${fmt(r.h_est,0)} cm</div>
+    <div class="mfml">Sub-base granular sob CCR (mínimo 15 cm) = ${r.subCCR||r.h_sb_adot} cm</div>
+    <div class="mfml">HBG_líquido = HBG_total − H_sub-base = ${fmt(r.h_est,0)} − ${r.subCCR||r.h_sb_adot} = ${fmt(hbgLiq,0)} cm</div>
+    <p class="mexp">O CCR é convertido pelo fator de equivalência estrutural K = 1,65 (IP-06/2004 §6.2.2):</p>
+    <div class="mfml">h_CCR = HBG_líquido / K = ${fmt(hbgLiq,0)} / 1,65 = ${fmt(hbgLiq/1.65,1)} cm → adotado ${r.h_base_adot} cm (múltiplo de 5 cm)</div>
+  `:'';
+  const sbCalc=r.mat==='GRAN'?`
+    <p class="mexp">No Procedimento B granular, o HBG total é distribuído em base + sub-base, com sub-base mínima de 15 cm (IP-06/2004 §6.2.1):</p>
+    <div class="mfml">HBG_total (interpolado) = ${fmt(r.h_est,0)} cm</div>
+    <div class="mfml">H_base (teórico) = HBG_total − H_sub-base_mín = ${fmt(r.h_est,0)} − ${r.h_sb_teo||15} = ${fmt(Math.max(0,r.h_est-(r.h_sb_teo||15)),0)} cm</div>
+    <div class="mfml">H_sub-base (adotado) = ${r.h_sb_adot} cm (mínimo 15 cm)</div>
+    <div class="mfml">H_base (adotado) = ${r.h_base_adot>0?r.h_base_adot:'0'} cm (arredondado para múltiplo de 5 cm)</div>
+  `:r.mat==='PROCA'?`
+    <p class="mexp">No Procedimento A, a espessura da sub-base é lida diretamente na Figura 6.1 em função de N e CBR do subleito. A camada de base é dispensada quando N &lt; 1,5×10⁶ (IP-06/2004 §6.1.2).</p>
+    <div class="mfml">H_sub-base (interpolado) = ${fmt(r.h_est,0)} cm</div>
+    <div class="mfml">H_base = dispensada (N = ${fmtN(r.N)} ${r.N<1.5e6?'< 1,5×10⁶':'≥ 1,5×10⁶ — verificar'})</div>
+  `:'';
+
+  document.getElementById('memo-content').innerHTML=`
+  <div class="ms">
+    <h3>1 · Identificação</h3>
+    <div class="mkv"><span class="mk">Logradouro / obra:</span><span class="mv">${logr}</span></div>
+    <div class="mkv"><span class="mk">Responsável técnico:</span><span class="mv">${resp}</span></div>
+    <div class="mkv"><span class="mk">Data do cálculo:</span><span class="mv">${hoje}</span></div>
+    <div class="mkv"><span class="mk">Norma de dimensionamento:</span><span class="mv">IP-06/2004 (SIURB/PMSP) — Instrução de Projeto: Pavimento Intertravado de Blocos de Concreto</span></div>
+    <div class="mkv"><span class="mk">Normas complementares:</span><span class="mv">ABNT NBR 9781:2013 (blocos) · ABNT NBR 15953:2026 (execução)</span></div>
+  </div>
+
+  <div class="ms">
+    <h3>2 · Dados de Tráfego</h3>
+    <p class="mexp">O número N representa a quantidade acumulada de repetições do eixo padrão de 8,2 tf (80 kN) durante a vida útil do pavimento. Segundo a IP-06/2004 §5, a vida de projeto típica é de 10 a 12 anos. O valor de N é determinado a partir do Volume Médio Diário (VMD) de veículos comerciais, do fator de crescimento de tráfego, do fator veículo e do fator climático regional.</p>
+    <div class="mkv"><span class="mk">Tipo de via / tráfego:</span><span class="mv">${VIA_MAP[r.sel]||'N informado manualmente'}</span></div>
+    <div class="mkv"><span class="mk">Número N adotado:</span><span class="mv">${fmtN(r.N)} eixos padrão de 8,2 tf</span></div>
+    <p class="mexp">Classificação do tráfego segundo IP-06/2004 §5.2:</p>
+    <div class="mfml">${r.N<=5e5?'N = '+fmtN(r.N)+' <= 5x10^5  =>  Baixo volume de tráfego':r.N<=5e6?'N = '+fmtN(r.N)+' in (5x10^5 ; 5x10^6]  =>  Médio volume de tráfego':'N = '+fmtN(r.N)+' > 5x10^6  =>  Alto volume de tráfego'}</div>
+    <div class="mkv"><span class="mk">Classificação IP-06:</span><span class="mv">${classN}</span></div>
+    <div class="mkv"><span class="mk">Vida de projeto típica:</span><span class="mv">10 a 12 anos (IP-06/2004 §5)</span></div>
+  </div>
+
+  <div class="ms">
+    <h3>3 · Parâmetros do Subleito</h3>
+    <p class="mexp">O CBR (California Bearing Ratio) do subleito é obtido em ensaio de laboratório (DNIT 172/2016) em amostras representativas da cota de formação do pavimento. A expansão e o nível do lençol freático são parâmetros complementares que podem indicar necessidade de reforço do subleito.</p>
+    <div class="mkv"><span class="mk">CBR do subleito:</span><span class="mv">${fmt(r.CBR,1)} % (ensaio representativo na cota de formação)</span></div>
+    <div class="mkv"><span class="mk">Expansão do subleito:</span><span class="mv">${r.exp>0?fmt(r.exp,1)+' %':'não informada'}</span></div>
+    <div class="mkv"><span class="mk">Lençol freático:</span><span class="mv">${r.len!=null?fmt(r.len,1)+' m abaixo da formação':'não informado'}</span></div>
+    <p class="mexp">O CBR mínimo exigido para a sub-base é definido em função de N (IP-06/2004 §6, Quadro 6.2):</p>
+    <div class="mfml">${r.N<5e5?'N = '+fmtN(r.N)+' < 5x10^5  =>  CBR_sub-base >= 20 %':'N = '+fmtN(r.N)+' >= 5x10^5  =>  CBR_sub-base >= 30 %'}</div>
+    <div class="mkv"><span class="mk">CBR mínimo da sub-base:</span><span class="mv">${r.cbr_min_sb} %</span></div>
+    ${r.alertas.length>0?'<div class="mkv"><span class="mk">Alertas geotécnicos:</span><span class="mv" style="color:var(--warn-fg)">'+r.alertas.join('<br>')+'</span></div>':''}
+  </div>
+
+  <div class="ms">
+    <h3>4 · Procedimento de Dimensionamento</h3>
+    <p class="mexp">A IP-06/2004 prevê dois procedimentos de dimensionamento do reforço estrutural sob os blocos:</p>
+    <p class="mexp"><strong>Procedimento A (§6.1):</strong> Aplica-se apenas quando N &lt; 1,5×10⁶. Lê-se a espessura da sub-base diretamente na Figura 6.1 em função de N e CBR do subleito. A camada de base é dispensada, reduzindo o custo da obra.</p>
+    <p class="mexp"><strong>Procedimento B (§6.2):</strong> Aplica-se para qualquer N. Determina o HBG (Hespessura de Base Granular equivalente) total a partir da Figura 6.3. O HBG pode ser executado em base granular ou CCR, distribuído entre as camadas de base e sub-base.</p>
+    <div class="mkv"><span class="mk">Procedimento adotado:</span><span class="mv">${r.proc}</span></div>
+    <div class="mkv"><span class="mk">Descrição:</span><span class="mv">${procDesc}</span></div>
+    <div class="mkv"><span class="mk">Material da base:</span><span class="mv">${baseTxt[r.mat]||r.mat}</span></div>
+  </div>
+
+  <div class="ms">
+    <h3>5 · Determinação da Espessura H</h3>
+    <p class="mexp">A leitura das Figuras 6.1 e 6.3 da IP-06/2004 é realizada por interpolação bilinear em escala log-log. Dados os valores de N e CBR do subleito, localizam-se as curvas (ou valores tabelados) imediatamente inferiores e superiores a cada parâmetro, e aplica-se interpolação logarítmica dupla conforme:</p>
+    <div class="mfml">t = (log N - log N1) / (log N2 - log N1)</div>
+    <div class="mfml">u = (log CBR - log CBR1) / (log CBR2 - log CBR1)</div>
+    <div class="mfml">H = H11·(1-t)·(1-u) + H21·t·(1-u) + H12·(1-t)·u + H22·t·u</div>
+    <p class="mexp">onde H11, H12, H21, H22 são os valores tabelados nos quatro vértices da célula da matriz, N1≤N≤N2 e CBR1≤CBR≤CBR2.</p>
+    <div class="mkv"><span class="mk">Figura utilizada:</span><span class="mv">${figRef} da IP-06/2004</span></div>
+    <div class="mkv"><span class="mk">N de entrada:</span><span class="mv">${fmtN(r.N)} eixos padrão</span></div>
+    <div class="mkv"><span class="mk">CBR de entrada:</span><span class="mv">${fmt(r.CBR,1)} %</span></div>
+    <div class="mkv"><span class="mk">H estimado (resultado da interpolação):</span><span class="mv">${fmt(r.h_est,0)} cm</span></div>
+    <div class="mkv"><span class="mk">H conferido na figura:</span><span class="mv">${r.hConf?fmt(r.hConf,0)+' cm (valor informado manualmente — prevalece sobre interpolação)':'Não informado — adotado H interpolado'}</span></div>
+    <div class="mkv"><span class="mk">H adotado no cálculo:</span><span class="mv">${fmt(r.h_usado,0)} cm</span></div>
+    ${sbCalc}
+    ${ccr_calc}
+  </div>
+
+  <div class="ms">
+    <h3>6 · Dimensionamento dos Blocos (Quadro 6.3 — IP-06/2004)</h3>
+    <p class="mexp">A espessura dos blocos de concreto é determinada pelo Quadro 6.3 da IP-06/2004 em função do número N acumulado de projeto:</p>
+    <div class="mfml">N <= 5x10^5  =>  espessura = 6 cm</div>
+    <div class="mfml">5x10^5 < N < 10^7  =>  espessura = 8 cm</div>
+    <div class="mfml">N >= 10^7  =>  espessura = 10 cm</div>
+    <p class="mexp">Verificação para o projeto:</p>
+    <div class="mfml">N adotado = ${fmtN(r.N)}  =>  espessura dos blocos = ${r.bloco_teo} cm</div>
+    <p class="mexp">A resistência característica à compressão (fpk) dos blocos é especificada conforme ABNT NBR 9781:2013, Tabela 2:</p>
+    <div class="mfml">${r.N>=1e7?'N >= 10^7  =>  fpk_min = '+r.fpk_min+' MPa (classe C50 ou superior)':'N < 10^7  =>  fpk_min = '+r.fpk_min+' MPa (classe C35)'}</div>
+    <div class="mkv"><span class="mk">fpk mínimo exigido (NBR 9781):</span><span class="mv">${r.fpk_min} MPa</span></div>
+    <div class="mkv"><span class="mk">fpk especificado em projeto:</span><span class="mv">${r.fpkI} MPa</span></div>
+    <div class="mkv"><span class="mk">Verificação:</span><span class="mv">${r.fpkI} >= ${r.fpk_min} MPa → ${r.fpkI>=r.fpk_min?'✓ Atende à NBR 9781:2013':'⚠ NÃO atende — revisar especificação'}</span></div>
+  </div>
+
+  <div class="ms">
+    <h3>7 · Pacote Estrutural Dimensionado</h3>
+    <p class="mexp">O pacote estrutural é composto pelas camadas a seguir, da superfície ao subleito. As espessuras teóricas resultam diretamente do dimensionamento; as espessuras adotadas são arredondadas para múltiplos de 5 cm e respeitam os valores mínimos normativos.</p>
+    <div class="tw">
+      <table>
+        <thead><tr><th>Camada</th><th>Material</th><th>Teórica (cm)</th><th>Adotada (cm)</th><th>Critério</th><th>Situação</th></tr></thead>
+        <tbody>
+          <tr><td>Blocos de concreto</td><td>ABNT NBR 9781 — ${r.fpkI} MPa</td><td class="to">${r.bloco_teo}</td><td class="to">${r.bloco_teo}</td><td>IP-06 Quadro 6.3</td><td class="${r.fpkI>=r.fpk_min?'tok':'twarn'}">${r.fpkI>=r.fpk_min?'✓ OK':'⚠ Revisar'}</td></tr>
+          <tr><td>Areia de assentamento</td><td>Areia selecionada</td><td class="to">${r.areia}</td><td class="to">${r.areia}</td><td>IP-06 §7 — 3 a 5 cm</td><td class="${r.areia>=3&&r.areia<=5?'tok':'twarn'}">${r.areia>=3&&r.areia<=5?'✓ OK':'⚠ Fora do limite'}</td></tr>
+          <tr><td>${r.mat==='CCR'?'Base CCR':r.mat==='PROCA'?'Base (disp.)':'Base granular'}</td><td>${baseTxt[r.mat]}</td><td class="to">${r.h_base_teo>0?r.h_base_teo:'—'}</td><td class="to">${r.h_base_adot>0?r.h_base_adot:'Dispensada'}</td><td>IP-06 Fig. ${r.mat==='PROCA'?'6.1':'6.3'}</td><td class="tok">✓ OK</td></tr>
+          <tr><td>Sub-base granular</td><td>Granular, CBR ≥ ${r.cbr_min_sb}%</td><td class="to">${r.h_sb_teo>0?r.h_sb_teo:'—'}</td><td class="to">${r.h_sb_adot>0?r.h_sb_adot:'—'}</td><td>CBR ≥ ${r.cbr_min_sb}%</td><td class="tok">✓ OK</td></tr>
+          ${r.ref>0?`<tr><td>Reforço do subleito</td><td>Solução geotécnica</td><td class="to">${r.ref}</td><td class="to">${r.ref}</td><td>Projeto específico</td><td class="tok">✓ OK</td></tr>`:''}
+        </tbody>
+        <tfoot>
+          <tr style="font-weight:700;background:var(--tab-hover)">
+            <td colspan="3">Espessura física total</td>
+            <td class="to">${r.total} cm</td><td colspan="2"></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+    <p class="mexp" style="margin-top:8px">Espessura física total = blocos + areia + base + sub-base${r.ref>0?' + reforço':''}:</p>
+    <div class="mfml">${r.bloco_teo} + ${r.areia} + ${r.h_base_adot>0?r.h_base_adot:0} + ${r.h_sb_adot>0?r.h_sb_adot:0}${r.ref>0?' + '+r.ref:''} = ${r.total} cm</div>
+  </div>
+
+  <div class="ms">
+    <h3>8 · Recomendações Construtivas (IP-06/2004 §7 e NBR 15953:2026)</h3>
+    <p class="mexp">As recomendações a seguir são extraídas da IP-06/2004 §7 e da ABNT NBR 15953:2026 e devem constar nas especificações de serviço do projeto executivo:</p>
+    <div class="mkv"><span class="mk">Contenção lateral:</span><span class="mv">Obrigatória e contínua (meio-fio, barra-guia ou similar) — impede deslocamento lateral dos blocos e manutenção do intertravamento</span></div>
+    <div class="mkv"><span class="mk">Leito de assentamento (areia):</span><span class="mv">Espessura de ${r.areia} cm de areia média (D50 entre 0,3 e 1,0 mm), espalhada após compactação final da sub-base; não compactar a areia antes da colocação dos blocos</span></div>
+    <div class="mkv"><span class="mk">Padrão de assentamento:</span><span class="mv">Espinha de peixe a 45° obrigatória em vias com tráfego veicular; fileiras retas aceitáveis apenas em passeios de pedestres (IP-06/2004 §7.3)</span></div>
+    <div class="mkv"><span class="mk">Compactação dos blocos:</span><span class="mv">Placa vibratória mínima 75 kg, passadas cruzadas; mínimo 3 passadas após assentamento; verificar planeza com régua de 3 m (tolerância ± 5 mm)</span></div>
+    <div class="mkv"><span class="mk">Preenchimento de juntas:</span><span class="mv">Areia fina (módulo de finura &lt; 2,2) varrida sobre a superfície após compactação; repassar pelo menos 2 vezes com intervalo de 24 h após vibração</span></div>
+    <div class="mkv"><span class="mk">Drenagem superficial:</span><span class="mv">Declividade transversal mínima 2% e longitudinal mínima 0,5% (IP-06/2004 §4.3); prever caixas de inspeção e grelhas conforme projeto de drenagem</span></div>
+    <div class="mkv"><span class="mk">Tolerâncias (NBR 15953:2026 §8.5):</span><span class="mv">Acabamento superficial ± 5 mm/3 m; largura de juntas 2 a 5 mm; alinhamento de juntas ± 10 mm/10 m</span></div>
+    <div class="mkv"><span class="mk">Sub-base (critério geotécnico):</span><span class="mv">CBR ≥ ${r.cbr_min_sb}%, expansão ≤ 2%, grau de compactação ≥ 100% PN (IP-06/2004 §6.4)</span></div>
+  </div>
+  `;
+}
+
+/* ══════════════════════════════════════════════════════
+   EXPORTAÇÃO — HELPERS
+══════════════════════════════════════════════════════ */
+function pdfTexto(t){
+  const sup={'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};
+  return String(t).replace(/[⁰-⁹]/g,c=>'^'+(sup[c]||c))
+    .replace(/×/g,'x').replace(/≥/g,'>=').replace(/≤/g,'<=').replace(/✓/g,'OK').replace(/⚠/g,'!')
+    .replace(/[—–]/g,'-').replace(/[""]/g,'"').replace(/[^\x00-\xFF]/g,'');
+}
+
+function getMemoriaRows(){
+  const r=resultado;if(!r)return[];
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  const logr=logradouro||'—';const resp=document.getElementById('resp-inp').value||'—';
+  const baseTxt={GRAN:'Granular compactado (HBG)',CCR:'CCR — Concreto Compactado com Rolo',PROCA:'Sub-base granular (base dispensada)'};
+  const classN=r.N<=5e5?'Baixo volume de tráfego (N ≤ 5×10⁵)':r.N<=5e6?'Médio volume de tráfego (5×10⁵ < N ≤ 5×10⁶)':'Alto volume de tráfego (N > 5×10⁶)';
+  const procDesc=r.mat==='PROCA'?'Procedimento A (IP-06/2004 §6.1): sub-base lida na Figura 6.1; base dispensada para N < 1,5×10⁶.':r.mat==='CCR'?'Procedimento B com CCR (IP-06/2004 §6.2): HBG total convertido para CCR com fator K = 1,65.':'Procedimento B granular (IP-06/2004 §6.2): HBG total distribuído em base + sub-base granular.';
+  const figRef=r.mat==='PROCA'?'Figura 6.1':'Figura 6.3';
+  const hbgLiq=r.mat==='CCR'?Math.max(0,r.h_est-(r.subCCR||r.h_sb_adot)):0;
+  // Incremento construtivo: diferença entre espessura adotada (arredondada) e teórica
+  const inc_base = r.h_base_teo>0 ? (r.h_base_adot - r.h_base_teo) : 0;
+  const inc_sb   = r.h_sb_teo>0   ? (r.h_sb_adot   - r.h_sb_teo)   : 0;
+  const inc_total= inc_base + inc_sb;
+  const rows=[];
+  const sec=(t)=>{rows.push(['','']);rows.push([t,'']);};
+  const kv=(k,v2)=>rows.push([k,v2]);
+  const fm=(f)=>rows.push(['    '+f,'']);
+  const ex=(t)=>rows.push(['  > '+t,'']);
+
+  rows.push(['DIMENSIONAMENTO DE PAVIMENTO INTERTRAVADO — IP-06/2004','']);
+  rows.push(['Normas: IP-06/2004 (SIURB/PMSP), ABNT NBR 9781:2013, ABNT NBR 15953:2026','']);
+
+  sec('1. IDENTIFICAÇÃO');
+  kv('Logradouro / obra:',logr);
+  kv('Responsável técnico:',resp);
+  kv('Data do cálculo:',hoje);
+  kv('Norma de dimensionamento:','IP-06/2004 — SIURB/PMSP — Instrução de Projeto: Pavimento Intertravado de Blocos de Concreto');
+  kv('Normas complementares:','ABNT NBR 9781:2013 (blocos) | ABNT NBR 15953:2026 (execução)');
+
+  sec('2. DADOS DE TRÁFEGO');
+  ex('O número N representa a quantidade acumulada de repetições do eixo padrão de 8,2 tf (80 kN) durante a vida útil do pavimento. Vida de projeto típica: 10 a 12 anos (IP-06/2004 §5).');
+  kv('Tipo de via / tráfego:',VIA_MAP[r.sel]||'N informado manualmente');
+  kv('Número N adotado (eixos padrão de 8,2 tf):',fmtN(r.N));
+  ex('Classificação do tráfego segundo IP-06/2004 §5.2:');
+  fm('N ≤ 5×10⁵  =>  Baixo volume de tráfego');
+  fm('5×10⁵ < N ≤ 5×10⁶  =>  Médio volume de tráfego');
+  fm('N > 5×10⁶  =>  Alto volume de tráfego');
+  kv('Classificação do tráfego:',classN);
+  kv('Vida de projeto típica:','10 a 12 anos (IP-06/2004 §5)');
+
+  sec('3. PARÂMETROS DO SUBLEITO');
+  ex('O CBR (California Bearing Ratio) do subleito é obtido em ensaio de laboratório (DNIT 172/2016) em amostras representativas da cota de formação do pavimento. A expansão e o nível do lençol freático são parâmetros complementares que podem indicar necessidade de reforço do subleito.');
+  kv('CBR do subleito (%):',fmt(r.CBR,1)+' %');
+  kv('Expansão do subleito (%):',r.exp>0?fmt(r.exp,1)+' %':'não informada');
+  kv('Lençol freático abaixo da formação (m):',r.len!=null?fmt(r.len,1)+' m':'não informado');
+  ex('O CBR mínimo exigido para a sub-base é definido em função de N (IP-06/2004 §6, Quadro 6.2):');
+  fm(r.N<5e5?'N = '+fmtN(r.N)+' < 5×10⁵  =>  CBR_sub-base ≥ 20 %':'N = '+fmtN(r.N)+' ≥ 5×10⁵  =>  CBR_sub-base ≥ 30 %');
+  kv('CBR mínimo exigido para a sub-base (%):',r.cbr_min_sb+' %');
+  if(r.alertas.length>0){ex('Alertas geotécnicos:');r.alertas.forEach(a=>fm('! '+a));}
+
+  sec('4. PROCEDIMENTO DE DIMENSIONAMENTO');
+  ex('A IP-06/2004 prevê dois procedimentos de dimensionamento do reforço estrutural sob os blocos:');
+  ex('  Procedimento A (§6.1): Aplica-se apenas quando N < 1,5×10⁶. Lê-se a espessura da sub-base diretamente na Figura 6.1 em função de N e CBR do subleito. A camada de base é dispensada.');
+  ex('  Procedimento B (§6.2): Aplica-se para qualquer N. Determina o HBG (Espessura de Base Granular equivalente) total a partir da Figura 6.3. O HBG pode ser executado em base granular ou CCR, distribuído entre as camadas de base e sub-base.');
+  kv('Procedimento adotado:',r.proc);
+  kv('Descrição:',procDesc);
+  kv('Material da base:',baseTxt[r.mat]||r.mat);
+
+  sec('5. DETERMINAÇÃO DA ESPESSURA H — INTERPOLAÇÃO BILINEAR');
+  ex('A leitura das Figuras 6.1 e 6.3 da IP-06/2004 é realizada por interpolação bilinear em escala log-log. Dados os valores de N e CBR do subleito, localizam-se as curvas (ou valores tabelados) imediatamente inferiores e superiores a cada parâmetro, e aplica-se interpolação logarítmica dupla:');
+  fm('t = (log N - log N1) / (log N2 - log N1)');
+  fm('u = (log CBR - log CBR1) / (log CBR2 - log CBR1)');
+  fm('H = H11·(1-t)·(1-u) + H21·t·(1-u) + H12·(1-t)·u + H22·t·u');
+  ex('onde H11, H12, H21, H22 são os valores tabelados nos quatro vértices da célula da matriz, N1 ≤ N ≤ N2 e CBR1 ≤ CBR ≤ CBR2.');
+  kv('Figura utilizada:',figRef+' da IP-06/2004');
+  kv('N de entrada (eixos padrão):',fmtN(r.N));
+  kv('CBR de entrada (%):',fmt(r.CBR,1)+' %');
+  kv('H estimado — resultado da interpolação (cm):',fmt(r.h_est,0)+' cm');
+  kv('H conferido na figura (cm):',r.hConf?fmt(r.hConf,0)+' cm (valor informado manualmente — prevalece sobre interpolação)':'Não informado — adotado H interpolado');
+  kv('H adotado no cálculo (cm):',fmt(r.h_usado,0)+' cm');
+  if(r.mat==='CCR'){
+    ex('Com o Procedimento B + CCR, o HBG total interpolado é dividido em:');
+    fm('HBG_total (interpolado) = '+fmt(r.h_est,0)+' cm');
+    fm('Sub-base granular sob CCR (mínimo 15 cm) = '+(r.subCCR||r.h_sb_adot)+' cm');
+    fm('HBG_líquido = HBG_total − H_sub-base = '+fmt(r.h_est,0)+' − '+(r.subCCR||r.h_sb_adot)+' = '+fmt(hbgLiq,0)+' cm');
+    ex('O CCR é convertido pelo fator de equivalência estrutural K = 1,65 (IP-06/2004 §6.2.2):');
+    fm('h_CCR = HBG_líquido / K = '+fmt(hbgLiq,0)+' / 1,65 = '+fmt(hbgLiq/1.65,1)+' cm  =>  adotado '+r.h_base_adot+' cm (múltiplo de 5 cm)');
+  }else if(r.mat==='GRAN'){
+    ex('No Procedimento B granular, o HBG total é distribuído em base + sub-base, com sub-base mínima de 15 cm (IP-06/2004 §6.2.1):');
+    fm('HBG_total (interpolado) = '+fmt(r.h_est,0)+' cm');
+    fm('H_base (teórico) = HBG_total − H_sub-base_mín = '+fmt(r.h_est,0)+' − '+(r.h_sb_teo||15)+' = '+fmt(Math.max(0,r.h_est-(r.h_sb_teo||15)),0)+' cm');
+    fm('H_sub-base (adotado) = '+r.h_sb_adot+' cm (mínimo 15 cm)');
+    fm('H_base (adotado) = '+(r.h_base_adot>0?r.h_base_adot:0)+' cm (arredondado para múltiplo de 5 cm)');
+  }else if(r.mat==='PROCA'){
+    ex('No Procedimento A, a espessura da sub-base é lida diretamente na Figura 6.1 em função de N e CBR do subleito. A camada de base é dispensada quando N < 1,5×10⁶ (IP-06/2004 §6.1.2).');
+    fm('H_sub-base (interpolado) = '+fmt(r.h_est,0)+' cm');
+    fm('H_base = dispensada (N = '+fmtN(r.N)+' '+(r.N<1.5e6?'< 1,5×10⁶':'≥ 1,5×10⁶ — verificar')+')');
+  }
+
+  sec('6. DIMENSIONAMENTO DOS BLOCOS — QUADRO 6.3 (IP-06/2004)');
+  ex('A espessura dos blocos de concreto é determinada pelo Quadro 6.3 da IP-06/2004 em função do número N acumulado de projeto:');
+  fm('N ≤ 5×10⁵  =>  espessura = 6 cm');
+  fm('5×10⁵ < N < 10⁷  =>  espessura = 8 cm');
+  fm('N ≥ 10⁷  =>  espessura = 10 cm');
+  ex('Verificação para o projeto:');
+  fm('N adotado = '+fmtN(r.N)+'  =>  espessura dos blocos = '+r.bloco_teo+' cm');
+  ex('A resistência característica à compressão (fpk) dos blocos é especificada conforme ABNT NBR 9781:2013, Tabela 2:');
+  fm(r.N>=1e7?'N ≥ 10⁷  =>  fpk_mín = '+r.fpk_min+' MPa (classe C50 ou superior)':'N < 10⁷  =>  fpk_mín = '+r.fpk_min+' MPa (classe C35)');
+  kv('fpk mínimo exigido — NBR 9781:2013 (MPa):',r.fpk_min+' MPa');
+  kv('fpk especificado em projeto (MPa):',r.fpkI+' MPa');
+  kv('Verificação NBR 9781:2013:',r.fpkI+' ≥ '+r.fpk_min+' MPa  =>  '+(r.fpkI>=r.fpk_min?'ATENDE':'NÃO ATENDE — revisar especificação'));
+
+  sec('7. PACOTE ESTRUTURAL DIMENSIONADO');
+  ex('O pacote estrutural é composto pelas camadas a seguir, da superfície ao subleito. As espessuras teóricas resultam diretamente do dimensionamento; as espessuras adotadas são arredondadas para múltiplos de 5 cm e respeitam os valores mínimos normativos.');
+  rows.push(['Camada','Esp. teórica (cm)','Esp. adotada (cm)','Material / critério']);
+  rows.push(['Blocos de concreto',r.bloco_teo,r.bloco_teo,'ABNT NBR 9781 — fpk '+r.fpkI+' MPa | IP-06 Quadro 6.3']);
+  rows.push(['Areia de assentamento',r.areia,r.areia,'Areia selecionada | IP-06 §7: 3 a 5 cm']);
+  rows.push([r.mat==='CCR'?'Base CCR':r.mat==='PROCA'?'Base (dispensada)':'Base granular',r.h_base_teo>0?r.h_base_teo+' cm':'—',r.h_base_adot>0?r.h_base_adot+' cm':'Dispensada','IP-06 Fig. '+(r.mat==='PROCA'?'6.1':'6.3')]);
+  rows.push(['Sub-base granular',r.h_sb_teo>0?r.h_sb_teo+' cm':'—',r.h_sb_adot>0?r.h_sb_adot+' cm':'—','Granular — CBR ≥ '+r.cbr_min_sb+'%']);
+  if(r.ref>0)rows.push(['Reforço do subleito',r.ref+' cm',r.ref+' cm','Solução geotécnica — projeto específico']);
+  rows.push(['ESPESSURA FÍSICA TOTAL','',r.total+' cm','']);
+  ex('Fórmula da espessura física total:');
+  fm(r.bloco_teo+' (blocos) + '+r.areia+' (areia) + '+(r.h_base_adot>0?r.h_base_adot:0)+' (base) + '+(r.h_sb_adot>0?r.h_sb_adot:0)+' (sub-base)'+(r.ref>0?' + '+r.ref+' (reforço)':'')+' = '+r.total+' cm');
+  rows.push(['','']);
+  ex('Incremento construtivo — diferença entre espessura teórica e adotada (arredondamento para múltiplo de 5 cm):');
+  fm('Incremento na base:     '+( r.h_base_teo>0?r.h_base_adot+' − '+r.h_base_teo+' = '+inc_base+' cm':'base dispensada'));
+  fm('Incremento na sub-base: '+( r.h_sb_teo>0?r.h_sb_adot+' − '+r.h_sb_teo+' = '+inc_sb+' cm':'sub-base não aplicável'));
+  kv('Incremento construtivo total (cm):', (inc_total >= 0 ? '+' : '')+inc_total+' cm (arredondamento conservador, a favor da segurança)');
+
+  sec('8. RECOMENDAÇÕES CONSTRUTIVAS (IP-06/2004 §7 e NBR 15953:2026)');
+  kv('Contenção lateral:','Obrigatória e contínua (meio-fio, barra-guia ou similar) — impede deslocamento lateral dos blocos e manutenção do intertravamento');
+  kv('Leito de assentamento (areia):','Espessura de '+r.areia+' cm de areia média (D50 entre 0,3 e 1,0 mm), espalhada após compactação final da sub-base; não compactar a areia antes da colocação dos blocos');
+  kv('Padrão de assentamento:','Espinha de peixe a 45° obrigatória em vias com tráfego veicular; fileiras retas aceitáveis apenas em passeios de pedestres (IP-06/2004 §7.3)');
+  kv('Compactação dos blocos:','Placa vibratória mínima 75 kg, passadas cruzadas; mínimo 3 passadas após assentamento; verificar planeza com régua de 3 m (tolerância ±5 mm)');
+  kv('Preenchimento de juntas:','Areia fina (módulo de finura < 2,2) varrida sobre a superfície após compactação; repassar pelo menos 2 vezes com intervalo de 24 h após vibração');
+  kv('Drenagem superficial:','Declividade transversal mínima 2% e longitudinal mínima 0,5% (IP-06/2004 §4.3); prever caixas de inspeção e grelhas conforme projeto de drenagem');
+  kv('Tolerâncias (NBR 15953:2026 §8.5):','Acabamento superficial ±5 mm/3 m; largura de juntas 2 a 5 mm; alinhamento de juntas ±10 mm/10 m');
+  kv('Sub-base — critério geotécnico:','CBR ≥ '+r.cbr_min_sb+'%, expansão ≤ 2%, grau de compactação ≥ 100% PN (IP-06/2004 §6.4)');
+
+  if(r.alertas.length>0){sec('ALERTAS GEOTÉCNICOS');r.alertas.forEach(a=>kv('',a));}
+
+  sec('REFERÊNCIAS NORMATIVAS');
+  kv('','IP-06/2004 — SIURB/PMSP — Instrução de Projeto: Pavimento Intertravado de Blocos de Concreto');
+  kv('','ABNT NBR 9781:2013 — Peças de concreto para pavimentação intertravada');
+  kv('','ABNT NBR 15953:2026 — Execução de pavimentos com peças de concreto');
+  kv('','ABCP ET-27 (4ª ed.) — Pavimento Intertravado de Blocos de Concreto');
+  return rows;
+}
+
+function exportarExcel(){
+  if(typeof XLSX==='undefined'){toast('Biblioteca não carregada. Verifique a internet e recarregue.',true);return;}
+  if(!resultado){toast('Calcule primeiro.',true);return;}
+  const ws=XLSX.utils.aoa_to_sheet(getMemoriaRows());
+  ws['!cols']=[{wch:42},{wch:20},{wch:18},{wch:40}];
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,'Memória de Cálculo',ws);
+  const buf=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  triggerDownload(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),'intertravado_memoria_'+carimbo()+'.xlsx');
+}
+
+/* ── Word (DOCX nativo, sem biblioteca) ── */
+const _XMLH='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+const _W='xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+function _xml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function _p(txt,bold=false,sz=20){
+  const b=bold?'<w:b/>':'';
+  return`<w:p><w:pPr><w:spacing w:after="80"/></w:pPr><w:r><w:rPr>${b}<w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/></w:rPr><w:t xml:space="preserve">${_xml(txt)}</w:t></w:r></w:p>`;
+}
+function _h(txt,lvl=1){
+  const sz=lvl===1?28:22;
+  return`<w:p><w:pPr><w:pStyle w:val="Titulo${lvl}"/><w:spacing w:before="160" w:after="80"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="${sz}"/><w:color w:val="${lvl===1?'17365D':'2563EB'}"/></w:rPr><w:t>${_xml(txt)}</w:t></w:r></w:p>`;
+}
+function _kv(k,v2){
+  return`<w:p><w:pPr><w:spacing w:after="40"/></w:pPr><w:r><w:rPr><w:b/><w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">${_xml(k)}  </w:t></w:r><w:r><w:rPr><w:sz w:val="18"/></w:rPr><w:t>${_xml(v2)}</w:t></w:r></w:p>`;
+}
+
+function _zipCRC(data){
+  let c=0xFFFFFFFF;
+  const t=new Uint32Array(256);
+  for(let i=0;i<256;i++){let v2=i;for(let j=0;j<8;j++)v2=v2&1?(0xEDB88320^(v2>>>1)):v2>>>1;t[i]=v2;}
+  for(let i=0;i<data.length;i++)c=t[(c^data[i])&0xFF]^(c>>>8);
+  return(c^0xFFFFFFFF)>>>0;
+}
+function _zip(files,mimeOverride){
+  const enc=s=>new TextEncoder().encode(s);
+  let pos=0;const partes=[],central=[];
+  for(const f of files){
+    const data=enc(f.texto);const name=enc(f.nome);
+    const crc=_zipCRC(data),csz=data.length,usz=data.length;
+    const lh=new ArrayBuffer(30+name.length);const lv=new DataView(lh);
+    lv.setUint32(0,0x04034b50,true);lv.setUint16(4,20,true);lv.setUint16(6,0,true);
+    lv.setUint16(8,0,true);lv.setUint16(10,0,true);lv.setUint16(12,0,true);
+    lv.setUint32(14,crc,true);lv.setUint32(18,csz,true);lv.setUint32(22,usz,true);
+    lv.setUint16(26,name.length,true);lv.setUint16(28,0,true);
+    new Uint8Array(lh,30).set(name);
+    const ce=new ArrayBuffer(46+name.length);const cv=new DataView(ce);
+    cv.setUint32(0,0x02014b50,true);cv.setUint16(4,20,true);cv.setUint16(6,20,true);
+    cv.setUint16(8,0,true);cv.setUint16(10,0,true);cv.setUint16(12,0,true);cv.setUint16(14,0,true);
+    cv.setUint32(16,crc,true);cv.setUint32(20,csz,true);cv.setUint32(24,usz,true);
+    cv.setUint16(28,name.length,true);cv.setUint16(30,0,true);cv.setUint16(32,0,true);
+    cv.setUint16(34,0,true);cv.setUint16(36,0,true);cv.setUint32(38,0,true);
+    cv.setUint32(42,pos,true);new Uint8Array(ce,46).set(name);
+    partes.push(new Uint8Array(lh),data);
+    central.push(new Uint8Array(ce));
+    pos+=30+name.length+csz;
+  }
+  const tam=central.reduce((a,c)=>a+c.length,0);
+  const eoc=new ArrayBuffer(22);const e=new DataView(eoc);
+  e.setUint32(0,0x06054b50,true);e.setUint16(4,0,true);e.setUint16(6,0,true);
+  e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);
+  e.setUint32(12,tam,true);e.setUint32(16,pos,true);e.setUint16(20,0,true);
+  const tipo=mimeOverride||'application/zip';
+  return new Blob([...partes,...central,new Uint8Array(eoc)],{type:tipo});
+}
+
+function exportarWord(){
+  if(!resultado){toast('Calcule primeiro.',true);return;}
+  const r=resultado;
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  const logr=logradouro||'(não informado)';const resp=document.getElementById('resp-inp').value||'(não informado)';
+  const CT='application/vnd.openxmlformats-officedocument.wordprocessingml';
+  const R='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const baseTxt={GRAN:'Granular compactado (HBG)',CCR:'CCR — Concreto Compactado com Rolo',PROCA:'Sub-base granular (base dispensada)'};
+  const classN=r.N<=5e5?'Baixo volume de tráfego (N ≤ 5×10⁵)':r.N<=5e6?'Médio volume de tráfego (5×10⁵ < N ≤ 5×10⁶)':'Alto volume de tráfego (N > 5×10⁶)';
+  const procDesc=r.mat==='PROCA'?'Procedimento A (IP-06/2004 §6.1): sub-base lida na Figura 6.1; base dispensada para N < 1,5×10⁶.':r.mat==='CCR'?'Procedimento B com CCR (IP-06/2004 §6.2): HBG total convertido para CCR com fator K = 1,65.':'Procedimento B granular (IP-06/2004 §6.2): HBG total distribuído em base + sub-base granular.';
+  const figRef=r.mat==='PROCA'?'Figura 6.1':'Figura 6.3';
+  const hbgLiq=r.mat==='CCR'?Math.max(0,r.h_est-(r.subCCR||r.h_sb_adot)):0;
+  const inc_base=r.h_base_teo>0?(r.h_base_adot-r.h_base_teo):0;
+  const inc_sb=r.h_sb_teo>0?(r.h_sb_adot-r.h_sb_teo):0;
+  const inc_total=inc_base+inc_sb;
+  let body='';
+  body+=_h('DIMENSIONAMENTO DE PAVIMENTO INTERTRAVADO',1);
+  body+=_h('IP-06/2004 (SIURB/PMSP) | ABNT NBR 9781:2013 | ABNT NBR 15953:2026',2);
+  body+=_p('');
+  body+=_h('1. Identificação',2);
+  body+=_kv('Logradouro / obra:',logr);
+  body+=_kv('Responsável técnico:',resp);
+  body+=_kv('Data do cálculo:',hoje);
+  body+=_kv('Norma de dimensionamento:','IP-06/2004 — SIURB/PMSP — Instrução de Projeto: Pavimento Intertravado de Blocos de Concreto');
+  body+=_kv('Normas complementares:','ABNT NBR 9781:2013 (blocos) | ABNT NBR 15953:2026 (execução)');
+  body+=_p('');
+  body+=_h('2. Dados de Tráfego',2);
+  body+=_p('O número N representa a quantidade acumulada de repetições do eixo padrão de 8,2 tf (80 kN) durante a vida útil do pavimento. Vida de projeto típica: 10 a 12 anos (IP-06/2004 §5).');
+  body+=_kv('Tipo de via / tráfego:',VIA_MAP[r.sel]||'N informado manualmente');
+  body+=_kv('Número N adotado (eixos padrão de 8,2 tf):',fmtN(r.N));
+  body+=_p('Classificação do tráfego segundo IP-06/2004 §5.2:');
+  body+=_p('    N ≤ 5×10⁵  =>  Baixo volume de tráfego');
+  body+=_p('    5×10⁵ < N ≤ 5×10⁶  =>  Médio volume de tráfego');
+  body+=_p('    N > 5×10⁶  =>  Alto volume de tráfego');
+  body+=_kv('Classificação do tráfego:',classN);
+  body+=_p('');
+  body+=_h('3. Parâmetros do Subleito',2);
+  body+=_p('O CBR (California Bearing Ratio) do subleito é obtido em ensaio de laboratório (DNIT 172/2016) em amostras representativas da cota de formação do pavimento. A expansão e o nível do lençol freático são parâmetros complementares que podem indicar necessidade de reforço do subleito.');
+  body+=_kv('CBR do subleito (%):',fmt(r.CBR,1)+' %');
+  body+=_kv('Expansão do subleito (%):',r.exp>0?fmt(r.exp,1)+' %':'não informada');
+  body+=_kv('Lençol freático abaixo da formação (m):',r.len!=null?fmt(r.len,1)+' m':'não informado');
+  body+=_p('CBR mínimo exigido para a sub-base — IP-06/2004 §6, Quadro 6.2:');
+  body+=_p('    '+( r.N<5e5?'N = '+fmtN(r.N)+' < 5×10⁵  =>  CBR_sub-base ≥ 20 %':'N = '+fmtN(r.N)+' ≥ 5×10⁵  =>  CBR_sub-base ≥ 30 %'));
+  body+=_kv('CBR mínimo exigido para a sub-base (%):',r.cbr_min_sb+' %');
+  if(r.alertas.length>0){body+=_p('Alertas geotécnicos:');r.alertas.forEach(a=>body+=_p('    ! '+a));}
+  body+=_p('');
+  body+=_h('4. Procedimento de Dimensionamento',2);
+  body+=_p('A IP-06/2004 prevê dois procedimentos de dimensionamento do reforço estrutural sob os blocos:');
+  body+=_p('  Procedimento A (§6.1): Aplica-se apenas quando N < 1,5×10⁶. Lê-se a espessura da sub-base diretamente na Figura 6.1 em função de N e CBR do subleito. A camada de base é dispensada.');
+  body+=_p('  Procedimento B (§6.2): Aplica-se para qualquer N. Determina o HBG (Espessura de Base Granular equivalente) total a partir da Figura 6.3. O HBG pode ser executado em base granular ou CCR, distribuído entre as camadas de base e sub-base.');
+  body+=_kv('Procedimento adotado:',r.proc);
+  body+=_kv('Descrição:',procDesc);
+  body+=_kv('Material da base:',baseTxt[r.mat]||r.mat);
+  body+=_p('');
+  body+=_h('5. Determinação da Espessura H — Interpolação Bilinear',2);
+  body+=_p('A leitura das Figuras 6.1 e 6.3 da IP-06/2004 é realizada por interpolação bilinear em escala log-log. Dados os valores de N e CBR do subleito, localizam-se as curvas (ou valores tabelados) imediatamente inferiores e superiores a cada parâmetro, e aplica-se interpolação logarítmica dupla:');
+  body+=_p('    t = (log N - log N1) / (log N2 - log N1)',false,18);
+  body+=_p('    u = (log CBR - log CBR1) / (log CBR2 - log CBR1)',false,18);
+  body+=_p('    H = H11*(1-t)*(1-u) + H21*t*(1-u) + H12*(1-t)*u + H22*t*u',false,18);
+  body+=_p('onde H11, H12, H21, H22 são os valores tabelados nos quatro vértices da célula da matriz, N1≤N≤N2 e CBR1≤CBR≤CBR2.');
+  body+=_kv('Figura utilizada:',figRef+' da IP-06/2004');
+  body+=_kv('N de entrada (eixos padrão):',fmtN(r.N));
+  body+=_kv('CBR de entrada (%):',fmt(r.CBR,1)+' %');
+  body+=_kv('H estimado — resultado da interpolação (cm):',fmt(r.h_est,0)+' cm');
+  body+=_kv('H conferido na figura (cm):',r.hConf?fmt(r.hConf,0)+' cm (valor informado manualmente — prevalece sobre interpolação)':'Não informado — adotado H interpolado');
+  body+=_kv('H adotado no cálculo (cm):',fmt(r.h_usado,0)+' cm');
+  if(r.mat==='CCR'){
+    body+=_p('Com o Procedimento B + CCR, o HBG total interpolado é dividido em:');
+    body+=_p('    HBG_total (interpolado) = '+fmt(r.h_est,0)+' cm');
+    body+=_p('    Sub-base granular sob CCR (mínimo 15 cm) = '+(r.subCCR||r.h_sb_adot)+' cm');
+    body+=_p('    HBG_líquido = HBG_total - H_sub-base = '+fmt(r.h_est,0)+' - '+(r.subCCR||r.h_sb_adot)+' = '+fmt(hbgLiq,0)+' cm');
+    body+=_p('O CCR é convertido pelo fator de equivalência estrutural K = 1,65 (IP-06/2004 §6.2.2):');
+    body+=_p('    h_CCR = HBG_líquido / K = '+fmt(hbgLiq,0)+' / 1,65 = '+fmt(hbgLiq/1.65,1)+' cm  =>  adotado '+r.h_base_adot+' cm (múltiplo de 5 cm)');
+  }else if(r.mat==='GRAN'){
+    body+=_p('No Procedimento B granular, o HBG total é distribuído em base + sub-base, com sub-base mínima de 15 cm (IP-06/2004 §6.2.1):');
+    body+=_p('    HBG_total (interpolado) = '+fmt(r.h_est,0)+' cm');
+    body+=_p('    H_base (teórico) = HBG_total - H_sub-base_min = '+fmt(r.h_est,0)+' - '+(r.h_sb_teo||15)+' = '+fmt(Math.max(0,r.h_est-(r.h_sb_teo||15)),0)+' cm');
+    body+=_p('    H_sub-base (adotado) = '+r.h_sb_adot+' cm (mínimo 15 cm)');
+    body+=_p('    H_base (adotado) = '+(r.h_base_adot>0?r.h_base_adot:0)+' cm (arredondado para múltiplo de 5 cm)');
+  }else if(r.mat==='PROCA'){
+    body+=_p('No Procedimento A, a espessura da sub-base é lida diretamente na Figura 6.1 em função de N e CBR do subleito. A camada de base é dispensada quando N < 1,5×10⁶ (IP-06/2004 §6.1.2).');
+    body+=_p('    H_sub-base (interpolado) = '+fmt(r.h_est,0)+' cm');
+    body+=_p('    H_base = dispensada (N = '+fmtN(r.N)+' '+(r.N<1.5e6?'< 1,5×10⁶':'>= 1,5×10⁶ — verificar')+')');
+  }
+  body+=_p('');
+  body+=_h('6. Dimensionamento dos Blocos — Quadro 6.3 (IP-06/2004)',2);
+  body+=_p('A espessura dos blocos de concreto é determinada pelo Quadro 6.3 da IP-06/2004 em função do número N acumulado de projeto:');
+  body+=_p('    N ≤ 5×10⁵  =>  espessura = 6 cm');
+  body+=_p('    5×10⁵ < N < 10⁷  =>  espessura = 8 cm');
+  body+=_p('    N ≥ 10⁷  =>  espessura = 10 cm');
+  body+=_p('Verificação para o projeto:');
+  body+=_p('    N adotado = '+fmtN(r.N)+'  =>  espessura dos blocos = '+r.bloco_teo+' cm');
+  body+=_p('A resistência característica à compressão (fpk) dos blocos é especificada conforme ABNT NBR 9781:2013, Tabela 2:');
+  body+=_p('    '+(r.N>=1e7?'N ≥ 10⁷  =>  fpk_min = '+r.fpk_min+' MPa (classe C50 ou superior)':'N < 10⁷  =>  fpk_min = '+r.fpk_min+' MPa (classe C35)'));
+  body+=_kv('fpk mínimo exigido — NBR 9781:2013 (MPa):',r.fpk_min+' MPa');
+  body+=_kv('fpk especificado em projeto (MPa):',r.fpkI+' MPa');
+  body+=_kv('Verificação NBR 9781:2013:',r.fpkI+' >= '+r.fpk_min+' MPa  =>  '+(r.fpkI>=r.fpk_min?'ATENDE':'NÃO ATENDE — revisar especificação'));
+  body+=_p('');
+  body+=_h('7. Pacote Estrutural Dimensionado',2);
+  body+=_p('O pacote estrutural é composto pelas camadas a seguir, da superfície ao subleito. As espessuras teóricas resultam diretamente do dimensionamento; as espessuras adotadas são arredondadas para múltiplos de 5 cm e respeitam os valores mínimos normativos.');
+  body+=_kv('Blocos de concreto (cm):',r.bloco_teo+' cm  |  fpk: '+r.fpkI+' MPa  |  fpk_min: '+r.fpk_min+' MPa  |  NBR 9781 — IP-06 Quadro 6.3');
+  body+=_kv('Areia de assentamento (cm):',r.areia+' cm  |  Areia selecionada D50 0,3-1,0 mm  |  IP-06 §7: 3 a 5 cm');
+  body+=_kv('Base ('+baseTxt[r.mat]+') (cm):',r.h_base_adot>0?r.h_base_adot+' cm':'Dispensada');
+  body+=_kv('Sub-base granular (CBR ≥ '+r.cbr_min_sb+'%) (cm):',r.h_sb_adot>0?r.h_sb_adot+' cm':'—');
+  if(r.ref>0)body+=_kv('Reforço do subleito (cm):',r.ref+' cm');
+  body+=_p('Fórmula da espessura física total:');
+  body+=_p('    '+r.bloco_teo+' (blocos) + '+r.areia+' (areia) + '+(r.h_base_adot>0?r.h_base_adot:0)+' (base) + '+(r.h_sb_adot>0?r.h_sb_adot:0)+' (sub-base)'+(r.ref>0?' + '+r.ref+' (reforço)':'')+' = '+r.total+' cm');
+  body+=_kv('Espessura física total (cm):',r.total+' cm');
+  body+=_p('');
+  body+=_p('Incremento construtivo — diferença entre espessura teórica e adotada (arredondamento para múltiplo de 5 cm):');
+  body+=_p('    Incremento na base:     '+(r.h_base_teo>0?r.h_base_adot+' − '+r.h_base_teo+' = '+inc_base+' cm':'base dispensada'));
+  body+=_p('    Incremento na sub-base: '+(r.h_sb_teo>0?r.h_sb_adot+' − '+r.h_sb_teo+' = '+inc_sb+' cm':'sub-base não aplicável'));
+  body+=_kv('Incremento construtivo total (cm):',(inc_total>=0?'+':'')+inc_total+' cm (arredondamento conservador, a favor da segurança)');
+  body+=_p('');
+  body+=_h('8. Recomendações Construtivas (IP-06/2004 §7 e NBR 15953:2026)',2);
+  body+=_kv('Contenção lateral:','Obrigatória e contínua (meio-fio, barra-guia ou similar) — impede deslocamento lateral dos blocos e manutenção do intertravamento');
+  body+=_kv('Leito de assentamento:','Espessura de '+r.areia+' cm de areia média (D50 entre 0,3 e 1,0 mm), espalhada após compactação final da sub-base; não compactar a areia antes da colocação dos blocos');
+  body+=_kv('Padrão de assentamento:','Espinha de peixe a 45 graus obrigatória em vias com tráfego veicular; fileiras retas aceitáveis apenas em passeios de pedestres (IP-06/2004 §7.3)');
+  body+=_kv('Compactação dos blocos:','Placa vibratória mínima 75 kg, passadas cruzadas; mínimo 3 passadas após assentamento; verificar planeza com régua de 3 m (tolerância +/- 5 mm)');
+  body+=_kv('Preenchimento de juntas:','Areia fina (módulo de finura < 2,2) varrida sobre a superfície após compactação; repassar pelo menos 2 vezes com intervalo de 24 h após vibração');
+  body+=_kv('Drenagem superficial:','Declividade transversal mínima 2% e longitudinal mínima 0,5% (IP-06/2004 §4.3); prever caixas de inspeção e grelhas conforme projeto de drenagem');
+  body+=_kv('Tolerâncias (NBR 15953:2026 §8.5):','Acabamento superficial +/-5 mm/3 m; largura de juntas 2 a 5 mm; alinhamento de juntas +/-10 mm/10 m');
+  body+=_kv('Sub-base — critério geotécnico:','CBR ≥ '+r.cbr_min_sb+'%, expansão ≤ 2%, grau de compactação ≥ 100% PN (IP-06/2004 §6.4)');
+  if(r.alertas.length>0){body+=_p('');body+=_h('Alertas Geotécnicos',2);r.alertas.forEach(a=>body+=_p('! '+a));}
+  body+=_p('');
+  body+=_h('Referências Normativas',2);
+  body+=_p('IP-06/2004 — SIURB/PMSP — Instrução de Projeto: Pavimento Intertravado de Blocos de Concreto');
+  body+=_p('ABNT NBR 9781:2013 — Peças de concreto para pavimentação intertravada');
+  body+=_p('ABNT NBR 15953:2026 — Execução de pavimentos com peças de concreto');
+  body+=_p('ABCP ET-27 (4ª ed.) — Pavimento Intertravado de Blocos de Concreto');
+
+  const styles=_XMLH+`<w:styles ${_W}><w:style w:type="paragraph" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="80"/></w:pPr><w:rPr><w:sz w:val="20"/></w:rPr></w:style></w:styles>`;
+  const doc=_XMLH+`<w:document ${_W}><w:body>${body}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1701" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+  const blob=_zip([
+    {nome:'[Content_Types].xml',texto:_XMLH+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="'+CT+'.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="'+CT+'.styles+xml"/></Types>'},
+    {nome:'_rels/.rels',texto:_XMLH+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="'+R+'/officeDocument" Target="word/document.xml"/></Relationships>'},
+    {nome:'word/_rels/document.xml.rels',texto:_XMLH+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rIdEstilos" Type="'+R+'/styles" Target="styles.xml"/></Relationships>'},
+    {nome:'word/document.xml',texto:doc},
+    {nome:'word/styles.xml',texto:styles},
+  ],CT+'.document');
+  triggerDownload(blob,'intertravado_memoria_'+carimbo()+'.docx');
+}
+
+async function exportarPDF(){
+  if(!resultado){toast('Calcule primeiro.',true);return;}
+  const lib=typeof window.jspdf!=='undefined'?window.jspdf:(typeof jsPDF!=='undefined'?{jsPDF}:null);
+  if(!lib){toast('Biblioteca PDF não carregada. Verifique a internet.',true);return;}
+  const{jsPDF:J}=lib;
+  const doc=new J({unit:'mm',format:'a4'});
+  const r=resultado;
+  const hoje=new Date().toLocaleDateString('pt-BR');
+  const logr=logradouro||'—';const resp=document.getElementById('resp-inp').value||'—';
+  let y=18,lm=20,pw=170;
+  const nl=()=>{y+=5;if(y>280){doc.addPage();y=18;}};
+  const pt=t=>pdfTexto(t);
+  function pdfTexto(t){return String(t||'').replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g,c=>{const m={'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};return'^'+(m[c]||c)}).replace(/×/g,'x').replace(/≥/g,'>=').replace(/≤/g,'<=').replace(/✓/g,'OK').replace(/⚠/g,'!').replace(/[—–]/g,'-').replace(/[^\x00-\xFF]/g,'');}
+  doc.setFontSize(14);doc.setFont('helvetica','bold');
+  doc.text('DIMENSIONAMENTO DE PAVIMENTO INTERTRAVADO',lm,y);y+=7;
+  doc.setFontSize(9);doc.setFont('helvetica','normal');
+  doc.text('IP-06/2004 (SIURB/PMSP) · ABNT NBR 9781:2013 · ABNT NBR 15953:2026',lm,y);y+=8;
+  const rows=getMemoriaRows();
+  for(const row of rows){
+    if(y>280){doc.addPage();y=18;}
+    const k=row[0]||'';const v2=row[1]!=null?row[1]:'';
+    // 4-column table rows (structural package)
+    if(row.length>=4){
+      const cols=[pt(String(k)),pt(String(row[1]||'')),pt(String(row[2]||'')),pt(String(row[3]||''))];
+      const ws=[50,22,22,76];const xs=[lm,lm+50,lm+72,lm+94];
+      let maxL=1;
+      const splits=cols.map((c,i)=>{const l=doc.splitTextToSize(c,ws[i]);maxL=Math.max(maxL,l.length);return l;});
+      const isHeader=row[0]==='Camada';
+      doc.setFont('helvetica',isHeader?'bold':'normal');doc.setFontSize(8);
+      splits.forEach((l,i)=>doc.text(l,xs[i],y));
+      doc.setFont('helvetica','normal');doc.setFontSize(9);
+      y+=maxL*4.5;continue;
+    }
+    if(!k&&!v2){y+=3;continue;}
+    if(!v2&&k){doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text(pt(String(k)),lm,y);doc.setFont('helvetica','normal');doc.setFontSize(9);y+=5;continue;}
+    doc.setFont('helvetica','bold');
+    const kLines=doc.splitTextToSize(pt(String(k)),65);
+    doc.text(kLines,lm,y);
+    doc.setFont('helvetica','normal');
+    const vLines=doc.splitTextToSize(pt(String(v2)),pw-67);
+    doc.text(vLines,lm+67,y);
+    y+=Math.max(kLines.length,vLines.length)*5;
+  }
+  doc.save('intertravado_memoria_'+carimbo()+'.pdf');
+}
+
+/* ── Exportação por aba ── */
+function exportarTabExcel(tab){
+  if(typeof XLSX==='undefined'){toast('Biblioteca não carregada.',true);return;}
+  if(!resultado){toast('Calcule primeiro.',true);return;}
+  const r=resultado;let rows=[],fname='',sheet='';
+  if(tab==='dim'){
+    sheet='Dimensionamento';fname='intertravado_dimensionamento_'+carimbo()+'.xlsx';
+    rows=[
+      ['DIMENSIONAMENTO DE PAVIMENTO INTERTRAVADO — IP-06/2004',''],
+      ['N acumulado:',fmtN(r.N)],['Tipo de via:',VIA_MAP[r.sel]||'N manual'],
+      ['CBR subleito (%):',fmt(r.CBR,1)],['Procedimento:',r.proc],
+      ['H estimado (cm):',fmt(r.h_est,0)],['H adotado (cm):',fmt(r.h_usado,0)],['',''],
+      ['Camada','Teórica (cm)','Adotada (cm)','Material'],
+      ['Blocos de concreto',r.bloco_teo,r.bloco_teo,'ABNT NBR 9781 — '+r.fpkI+' MPa'],
+      ['Areia de assentamento',r.areia,r.areia,'Areia selecionada'],
+      ['Base',r.h_base_teo||'—',r.h_base_adot||'Dispensada',r.mat],
+      ['Sub-base',r.h_sb_teo||'—',r.h_sb_adot||'—','Granular CBR>='+r.cbr_min_sb+'%'],
+      r.ref>0?['Reforço',r.ref,r.ref,'Geotécnico']:['','','',''],
+      ['Total físico','',r.total,'cm'],
+    ];
+  }else if(tab==='corte'){
+    sheet='Secao Transversal';fname='intertravado_secao_'+carimbo()+'.xlsx';
+    rows=[['SEÇÃO TRANSVERSAL — CAMADAS'],['Camada','Espessura adotada (cm)','Material'],
+      ['Blocos',r.bloco_teo,'Concreto NBR 9781'],
+      ['Areia',r.areia,'Areia selecionada'],
+      ['Base',r.h_base_adot||'—',r.mat],['Sub-base',r.h_sb_adot||'—','Granular'],
+      r.ref>0?['Reforço',r.ref,'Geotécnico']:['','',''],
+      ['TOTAL',r.total,'cm']];
+  }else if(tab==='topo'){
+    sheet='Topografia';fname='intertravado_topografia_'+carimbo()+'.xlsx';
+    rows=[['TOPOGRAFIA — CORTE E ATERRO'],['Estaca','Terreno esq.','Terreno eixo','Terreno dir.','Greide eixo','Largura','Corte (m²)','Aterro (m²)'],
+      ...topoRows.map(row=>[row.est,row.tEsq,row.tEixo,row.tDir,row.greide,row.larg,'ver cálculo','ver cálculo'])];
+  }else{
+    return exportarExcel();
+  }
+  const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:36},{wch:20},{wch:20},{wch:28}];
+  const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,sheet);
+  const buf=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  triggerDownload(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),fname);
+}
+
+function exportarTabWord(tab){
+  if(tab==='memo')return exportarWord();
+  if(!resultado){toast('Calcule primeiro.',true);return;}
+  exportarWord();
+}
+async function exportarTabPDF(tab){
+  if(tab==='memo')return exportarPDF();
+  if(!resultado){toast('Calcule primeiro.',true);return;}
+  exportarPDF();
+}
+
+/* ══════════════════════════════════════════════════════
+   SALVAR / ABRIR PROJETO
+══════════════════════════════════════════════════════ */
+function projetoParaJSON(){
+  return{
+    v:1,
+    ident:{logradouro:document.getElementById('logradouro-inp').value,responsavel:document.getElementById('resp-inp').value},
+    numN:{sel:document.getElementById('n-sel').value,custom:document.getElementById('n-custom').value},
+    subleito:{cbr:document.getElementById('cbr-sub').value,exp:document.getElementById('exp-sub').value,lencol:document.getElementById('lencol').value},
+    base:{mat:document.getElementById('base-mat').value,areia:document.getElementById('areia-cm').value,fpk:document.getElementById('fpk').value,subCCR:document.getElementById('sub-ccr').value,reforco:document.getElementById('reforco').value,hConf:document.getElementById('h-conf').value},
+    topo:{caiEsq:document.getElementById('cai-esq').value,caiDir:document.getElementById('cai-dir').value,largPad:document.getElementById('larg-pad').value,rows:topoRows},
+  };
+}
+function aplicarProjeto(p){
+  function set(id,val){const e=document.getElementById(id);if(e&&val!=null&&val!=='')e.value=val;}
+  if(p.ident){set('logradouro-inp',p.ident.logradouro);set('resp-inp',p.ident.responsavel);}
+  if(p.numN){set('n-sel',p.numN.sel||'1e5');set('n-custom',p.numN.custom);}
+  if(p.subleito){set('cbr-sub',p.subleito.cbr);set('exp-sub',p.subleito.exp);set('lencol',p.subleito.lencol);}
+  if(p.base){set('base-mat',p.base.mat);set('areia-cm',p.base.areia);set('fpk',p.base.fpk);set('sub-ccr',p.base.subCCR);set('reforco',p.base.reforco);set('h-conf',p.base.hConf);}
+  if(p.topo){set('cai-esq',p.topo.caiEsq);set('cai-dir',p.topo.caiDir);set('larg-pad',p.topo.largPad);if(p.topo.rows){topoRows=[...p.topo.rows];renderTopoTable();}}
+  document.getElementById('n-custom-field').hidden=(document.getElementById('n-sel').value!=='custom');
+  atualizarLogradouro();calcular();
+  toast('Projeto aberto com sucesso.');
+}
+function salvarProjeto(){
+  const proj=projetoParaJSON();
+  const logr=(document.getElementById('logradouro-inp').value||'intertravado').replace(/[^a-zA-Z0-9_\-]/g,'_').substring(0,30);
+  const blob=new Blob([JSON.stringify(proj,null,2)],{type:'application/json'});
+  triggerDownload(blob,'intertravado_'+logr+'_'+carimbo()+'.json');
+  toast('Projeto salvo!');
+}
+function abrirProjetoClick(){document.getElementById('imp').click();}
+function importarArquivo(ev){
+  const file=ev.target.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{try{aplicarProjeto(JSON.parse(e.target.result));}catch(err){toast('Erro ao abrir: '+err.message,true);}};
+  reader.readAsText(file);ev.target.value='';
+}
+
+/* ══════════════════════════════════════════════════════
+   TEMA E FONTE
+══════════════════════════════════════════════════════ */
+let fontSize=14;
+function ajusteFont(d){fontSize=Math.max(11,Math.min(20,fontSize+d));document.body.style.fontSize=fontSize+'px';try{localStorage.setItem('pint_fs',fontSize);}catch(e){}}
+function toggleTheme(){const root=document.documentElement,cur=root.getAttribute('data-theme');root.setAttribute('data-theme',cur==='dark'?'light':'dark');try{localStorage.setItem('pint_theme',root.getAttribute('data-theme'));}catch(e){}}
+
+/* ══════════════════════════════════════════════════════
+   TABS
+══════════════════════════════════════════════════════ */
+document.querySelectorAll('.tab').forEach(t=>{
+  t.addEventListener('click',()=>{
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(x=>x.classList.remove('active'));
+    t.classList.add('active');
+    document.getElementById('pane-'+t.dataset.tab).classList.add('active');
+  });
+});
+
+/* ══════════════════════════════════════════════════════
+   INIT
+══════════════════════════════════════════════════════ */
+(function init(){
+  try{const th=localStorage.getItem('pint_theme');if(th)document.documentElement.setAttribute('data-theme',th);const fs=localStorage.getItem('pint_fs');if(fs){fontSize=+fs;document.body.style.fontSize=fontSize+'px';}}catch(e){}
+  topoRows=[{est:0,tEsq:100,tEixo:100,tDir:100,greide:100,larg:6},{est:20,tEsq:100,tEixo:100,tDir:100,greide:100,larg:6}];
+  renderTopoTable();
+})();
+</script>
+
+</div><!-- /#app-content -->
+
+<script src="firebase-config.js"></script>
+
+<script type="module">
+/* ============================================================
+   NUVEM — autenticação Firebase com aprovação de administrador
+   Sem firebase-config.js válido, o programa segue em modo local (sem login).
+   ============================================================ */
+const SDK = 'https://www.gstatic.com/firebasejs/12.19.0/';
+
+const Nuvem = {
+  disponivel: false,
+  motivo: '',
+  usuario: null,
+  _fb: null,
+  aoMudarSessao: null
+};
+window.Nuvem = Nuvem;
+
+/* Definir aoMudarSessao imediatamente, antes de qualquer async */
+Nuvem.aoMudarSessao = function(u){
+  const loginEl = document.getElementById('login');
+  const appEl   = document.getElementById('app-content');
+  const barEl   = document.getElementById('sessao-bar');
+  const nomeEl  = document.getElementById('sessao-nome');
+  const admEl   = document.getElementById('sessao-admin');
+  const btnUsr  = document.getElementById('btn-usuarios');
+  const btnSair = document.getElementById('btn-sair');
+
+  if(!u){
+    if(Nuvem.disponivel && location.hostname.replace(/^www\./,'') === 'totalcivil.com.br'){ location.replace('/?entrar=1&voltar=' + encodeURIComponent(location.pathname)); return; } // login único na página principal
+    if(Nuvem.disponivel){ loginEl.hidden = false; appEl.hidden = true; }
+    barEl.classList.remove('vis');
+    if(btnSair) btnSair.hidden = true;
+    if(btnUsr)  btnUsr.hidden = true;
+    irParaLogin();
+    return;
+  }
+  if(u.erro){
+    irParaLogin(); loginEl.hidden = false; appEl.hidden = true;
+    mostrarMsgLogin('Erro ao carregar perfil: '+u.erro,'erro'); setLoginBusy(false); return;
+  }
+  if(u.recusado && !u.admin){
+    irParaEspera();
+    const p = document.querySelector('#login-espera p');
+    if(p) p.textContent = 'Seu acesso foi recusado pelo administrador. Entre em contato para mais informações.';
+    loginEl.hidden = false; appEl.hidden = true; setLoginBusy(false); return;
+  }
+  if(!u.liberado){
+    irParaEspera();
+    const p = document.querySelector('#login-espera p');
+    if(p) p.textContent = u.vencida
+      ? 'Seu acesso ao Pavimento Intertravado venceu. Fale com o administrador para renovar.'
+      : 'Seu acesso ao Pavimento Intertravado ainda não foi liberado. Contrate ou acompanhe o pedido em totalcivil.com.br.';
+    loginEl.hidden = false; appEl.hidden = true; setLoginBusy(false); return;
+  }
+  // Acesso liberado
+  loginEl.hidden = true; appEl.hidden = false;
+  barEl.classList.add('vis');
+  nomeEl.textContent = u.nome || u.usuario || u.email;
+  if(admEl) admEl.hidden = !u.admin;
+  if(btnSair) btnSair.hidden = false;
+  if(btnUsr)  btnUsr.hidden = !u.admin;
+  if(u.admin && window.atualizarSeloPendentes) window.atualizarSeloPendentes();
+  setLoginBusy(false);
+};
+
+function cfgValida(c){
+  return c && typeof c.apiKey === 'string' && c.apiKey.length > 10
+      && !/COLE_AQUI|SUA_CHAVE|xxxx/i.test(c.apiKey)
+      && typeof c.projectId === 'string' && c.projectId.length > 0;
+}
+
+(async function iniciar(){
+  const cfg = window.FIREBASE_CONFIG;
+  if(!cfgValida(cfg)){
+    Nuvem.motivo = 'sem_configuracao';
+    document.dispatchEvent(new CustomEvent('nuvem-pronta'));
+    return;
+  }
+  try{
+    const [{initializeApp}, auth, fs] = await Promise.all([
+      import(SDK+'firebase-app.js'),
+      import(SDK+'firebase-auth.js'),
+      import(SDK+'firebase-firestore.js')
+    ]);
+    const app = initializeApp(cfg);
+    const a = auth.getAuth(app);
+    let d;
+    try{ d = fs.initializeFirestore(app, {experimentalAutoDetectLongPolling: true}); }
+    catch(_){ d = fs.getFirestore(app); }
+    await auth.setPersistence(a, auth.browserLocalPersistence).catch(()=>{});
+    Nuvem._fb = {a, d, auth, fs};
+    Nuvem.disponivel = true;
+    auth.onAuthStateChanged(a, async (u)=>{
+      if(!u){ Nuvem.usuario = null; if(Nuvem.aoMudarSessao) Nuvem.aoMudarSessao(null); return; }
+      try{ Nuvem.usuario = await comPrazo(carregarPerfil(u), 20000, 'o servidor não respondeu (tempo esgotado). Recarregue a página e tente de novo.'); }
+      catch(e){ console.error('Perfil:', e); Nuvem.usuario = {uid:u.uid, usuario:nomeDeEmail(u.email), erro:(e&&e.message)||String(e)}; }
+      if(Nuvem.aoMudarSessao) Nuvem.aoMudarSessao(Nuvem.usuario);
+    });
+  }catch(e){
+    Nuvem.motivo = 'falha_sdk';
+    Nuvem.detalhe = (e && e.message) || String(e);
+  }
+  document.dispatchEvent(new CustomEvent('nuvem-pronta'));
+})();
+
+function nomeDeEmail(email){ return String(email||'').split('@')[0]; }
+function paraData(v){
+  if(!v) return null;
+  if(typeof v.toDate === 'function') return v.toDate();
+  const d = (v instanceof Date) ? v : new Date(v);
+  return isNaN(d.getTime()) ? null : d;
+}
+function listaAdmins(){ return (window.ADMINS || []).map(x => String(x).toLowerCase()); }
+function emailDeUsuario(u){ return String(u||'').trim().toLowerCase(); }
+
+async function carregarPerfil(u){
+  const {d, fs} = Nuvem._fb;
+  const ref = fs.doc(d, 'usuarios', u.uid);
+  let snap = await fs.getDoc(ref);
+  const ehAdmin0 = listaAdmins().indexOf(String(u.email||'').toLowerCase()) >= 0;
+  if(!snap.exists()){
+    /* Conta nova criada pelo Intertravado: NÃO libera o Pavimento Flexível (ativo:false)
+       e registra o pedido de acesso só ao Intertravado. */
+    const pend = Nuvem._pendente || {nome:'', empresa:''};
+    await fs.setDoc(ref, {
+      usuario: nomeDeEmail(u.email), email: u.email || '',
+      nome: pend.nome, empresa: pend.empresa, ativo: false, admin: false, recusado: false,
+      validade: null, criadoEm: fs.serverTimestamp(),
+      intertravadoSolicitado: true, intertravadoAtivo: false
+    });
+    Nuvem._pendente = null;
+    snap = await fs.getDoc(ref);
+  } else if(!ehAdmin0){
+    /* Conta que já existia (ex.: do Pavimento Flexível): pede acesso ao Intertravado */
+    const v = snap.data() || {};
+    if(!v.intertravadoSolicitado && !v.intertravadoAtivo){
+      try{ await fs.updateDoc(ref, {intertravadoSolicitado: true}); snap = await fs.getDoc(ref); }
+      catch(e){ console.warn('Pedido de acesso ao Intertravado não registrado:', e); }
+    }
+  }
+  const p = snap.data() || {};
+  /* Acesso ao Intertravado é independente do Pavimento Flexível e do Orçamento */
+  const venc = paraData(p.validade);
+  const ehAdmin = ehAdmin0 || !!p.admin;
+  return {
+    uid: u.uid, email: u.email || '',
+    usuario: p.usuario || nomeDeEmail(u.email),
+    nome: p.nome || '', empresa: p.empresa || '',
+    admin: ehAdmin, ativo: !!p.intertravadoAtivo, recusado: !!p.recusado, validade: venc,
+    vencida: !!(venc && venc.getTime() < Date.now()),
+    get liberado(){ return this.admin || (this.ativo && !this.vencida); }
+  };
+}
+
+/* Evita ficar preso em "Entrando…" se o servidor não responder */
+function comPrazo(promessa, ms, msg){
+  return Promise.race([promessa, new Promise((_,rej)=>setTimeout(()=>rej(new Error(msg)), ms))]);
+}
+
+Nuvem.entrar = async function(usuario, senha){
+  if(!Nuvem.disponivel) throw new Error('Nuvem não configurada.');
+  const {a, auth} = Nuvem._fb;
+  try{
+    await auth.signInWithEmailAndPassword(a, emailDeUsuario(usuario), senha);
+  }catch(e){
+    const c = (e && e.code) || '';
+    if(/invalid-credential|wrong-password|user-not-found|invalid-email/.test(c))
+      throw new Error('Usuário ou senha incorretos.');
+    if(/too-many-requests/.test(c))
+      throw new Error('Muitas tentativas. Aguarde alguns minutos e tente de novo.');
+    if(/network/.test(c))
+      throw new Error('Sem conexão com o servidor. Verifique a internet.');
+    if(/operation-not-allowed/.test(c))
+      throw new Error('Login por usuário e senha não está ativado no Firebase.');
+    if(/unauthorized-domain/.test(c))
+      throw new Error('Este endereço não está autorizado no Firebase (Authentication › Settings › Authorized domains).');
+    throw new Error('Não foi possível entrar: ' + (e.message || c));
+  }
+};
+
+Nuvem.cadastrar = async function(nome, empresa, email, senha){
+  if(!Nuvem.disponivel) throw new Error('Nuvem não configurada.');
+  const {a, auth} = Nuvem._fb;
+  nome = String(nome||'').trim().slice(0,120);
+  empresa = String(empresa||'').trim().slice(0,120);
+  if(nome.length < 3) throw new Error('Informe seu nome completo.');
+  if(!empresa) throw new Error('Informe a empresa ou o órgão.');
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(email||'').trim())) throw new Error('Informe um e-mail válido.');
+  if(String(senha||'').length < 8) throw new Error('A senha deve ter ao menos 8 caracteres.');
+  Nuvem._pendente = {nome, empresa};
+  try{
+    await auth.createUserWithEmailAndPassword(a, emailDeUsuario(email), senha);
+  }catch(e){
+    Nuvem._pendente = null;
+    const c = (e && e.code) || '';
+    if(/email-already-in-use/.test(c)) throw new Error('Este e-mail já tem cadastro. Use "Entrar" ou peça ao administrador.');
+    if(/weak-password/.test(c)) throw new Error('Senha fraca. Use ao menos 8 caracteres.');
+    if(/invalid-email/.test(c)) throw new Error('E-mail inválido.');
+    if(/too-many-requests/.test(c)) throw new Error('Muitas tentativas. Aguarde alguns minutos e tente de novo.');
+    if(/network/.test(c)) throw new Error('Sem conexão com o servidor. Verifique a internet.');
+    if(/operation-not-allowed/.test(c)) throw new Error('Cadastro por e-mail e senha não está ativado no Firebase.');
+    if(/unauthorized-domain/.test(c)) throw new Error('Este endereço não está autorizado no Firebase (Authentication › Settings › Authorized domains).');
+    throw new Error('Não foi possível criar a conta: ' + (e.message || c));
+  }
+};
+
+Nuvem.redefinirSenha = async function(email){
+  if(!Nuvem.disponivel) throw new Error('Nuvem não configurada.');
+  const {a, auth} = Nuvem._fb;
+  const em = emailDeUsuario(email);
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) throw new Error('Digite seu e-mail no campo acima e toque em "Esqueci minha senha".');
+  try{
+    await auth.sendPasswordResetEmail(a, em);
+  }catch(e){
+    const c = (e && e.code) || '';
+    if(/user-not-found/.test(c)) return;
+    if(/invalid-email/.test(c)) throw new Error('E-mail inválido.');
+    if(/too-many-requests/.test(c)) throw new Error('Muitas tentativas. Aguarde alguns minutos e tente de novo.');
+    if(/network/.test(c)) throw new Error('Sem conexão com o servidor. Verifique a internet.');
+    throw new Error('Não foi possível enviar o e-mail: ' + (e.message || c));
+  }
+};
+
+Nuvem.sair = async function(){
+  if(!Nuvem.disponivel) return;
+  const {a, auth} = Nuvem._fb;
+  await auth.signOut(a);
+};
+
+/* ---- Administração ---- */
+Nuvem.listarUsuarios = async function(){
+  const {d, fs} = Nuvem._fb, u = Nuvem.usuario;
+  if(!u || !u.admin) throw new Error('Somente administradores.');
+  const snap = await fs.getDocs(fs.query(fs.collection(d,'usuarios'), fs.limit(500)));
+  const admins = listaAdmins();
+  const lista = snap.docs.map(x=>{
+    const v = x.data();
+    const venc = paraData(v.validade);
+    return {uid:x.id, usuario:v.usuario||'', nome:v.nome||'', empresa:v.empresa||'',
+            email:v.email||'', ativo:!!v.ativo, recusado:!!v.recusado,
+            orcamentoAtivo:!!v.orcamentoAtivo, intertravadoAtivo:!!v.intertravadoAtivo,
+            orcamentoSolicitado:!!v.orcamentoSolicitado, intertravadoSolicitado:!!v.intertravadoSolicitado,
+            criadoEm: paraData(v.criadoEm), validade:venc,
+            admin: admins.indexOf(String(v.email||'').toLowerCase()) >= 0 || !!v.admin,
+            vencida: !!(venc && venc.getTime() < Date.now())};
+  });
+  admins.forEach(em => {
+    if(!lista.some(x => String(x.email||'').toLowerCase() === em))
+      lista.push({uid:null, usuario:nomeDeEmail(em), nome:'', empresa:'', email:em, ativo:true, recusado:false,
+                  criadoEm:null, validade:null, admin:true, vencida:false, nuncaEntrou:true});
+  });
+  return lista;
+};
+
+Nuvem.atualizarUsuario = async function(uid, campos){
+  const {d, fs} = Nuvem._fb, u = Nuvem.usuario;
+  if(!u || !u.admin) throw new Error('Somente administradores.');
+  const corpo = {};
+  ['ativo','orcamentoAtivo','intertravadoAtivo','recusado'].forEach(k => { if(k in campos) corpo[k] = !!campos[k]; });
+  if('nome'     in campos) corpo.nome     = String(campos.nome||'').slice(0,120);
+  if('empresa'  in campos) corpo.empresa  = String(campos.empresa||'').slice(0,120);
+  if('validade' in campos) corpo.validade = campos.validade ? new Date(campos.validade+'T23:59:59') : null;
+  await fs.updateDoc(fs.doc(d,'usuarios',uid), corpo);
+};
+
+/* ============================================================
+   UI DE LOGIN
+   ============================================================ */
+function mostrarMsgLogin(txt, tipo){
+  const el = document.getElementById('login-msg');
+  el.textContent = txt;
+  el.className = 'msg ' + (tipo||'info');
+}
+
+function setLoginBusy(busy){
+  document.querySelectorAll('#login button').forEach(b=>b.disabled=busy);
+}
+
+function irParaLogin(){
+  document.getElementById('form-login').hidden = false;
+  document.getElementById('form-cadastro').hidden = true;
+  document.getElementById('login-espera').hidden = true;
+  document.getElementById('login-sub').textContent = 'Acesso restrito. Informe seu e-mail e a senha.';
+  mostrarMsgLogin('','');
+}
+function irParaCadastro(){
+  document.getElementById('form-login').hidden = true;
+  document.getElementById('form-cadastro').hidden = false;
+  document.getElementById('login-espera').hidden = true;
+  document.getElementById('login-sub').textContent = 'Crie sua conta para solicitar acesso.';
+  mostrarMsgLogin('','');
+}
+function irParaEspera(){
+  document.getElementById('form-login').hidden = true;
+  document.getElementById('form-cadastro').hidden = true;
+  document.getElementById('login-espera').hidden = false;
+  document.getElementById('login-sub').textContent = 'Cadastro em análise pelo administrador.';
+  mostrarMsgLogin('','');
+}
+
+document.getElementById('ir-cadastro').addEventListener('click', irParaCadastro);
+document.getElementById('ir-login').addEventListener('click', irParaLogin);
+
+document.getElementById('btn-esqueci').addEventListener('click', async ()=>{
+  const em = document.getElementById('log_usuario').value.trim();
+  setLoginBusy(true);
+  try{
+    await Nuvem.redefinirSenha(em);
+    mostrarMsgLogin('Se o e-mail estiver cadastrado, você receberá um link para redefinir a senha.','info');
+  }catch(e){ mostrarMsgLogin(e.message,'erro'); }
+  setLoginBusy(false);
+});
+
+document.getElementById('form-login').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const usuario = document.getElementById('log_usuario').value.trim();
+  const senha   = document.getElementById('log_senha').value;
+  if(!usuario||!senha){ mostrarMsgLogin('Preencha o e-mail e a senha.','erro'); return; }
+  setLoginBusy(true);
+  mostrarMsgLogin('Entrando…','info');
+  try{
+    await comPrazo(Nuvem.entrar(usuario, senha), 20000, 'O servidor não respondeu. Verifique a internet e tente de novo.');
+    // aoMudarSessao cuidará do restante
+  }catch(e){ mostrarMsgLogin(e.message,'erro'); setLoginBusy(false); }
+});
+
+document.getElementById('form-cadastro').addEventListener('submit', async e=>{
+  e.preventDefault();
+  const nome    = document.getElementById('cad_nome').value.trim();
+  const empresa = document.getElementById('cad_empresa').value.trim();
+  const email   = document.getElementById('cad_email').value.trim();
+  const senha   = document.getElementById('cad_senha').value;
+  const senha2  = document.getElementById('cad_senha2').value;
+  if(senha !== senha2){ mostrarMsgLogin('As senhas não coincidem.','erro'); return; }
+  setLoginBusy(true);
+  mostrarMsgLogin('Criando conta…','info');
+  try{
+    await Nuvem.cadastrar(nome, empresa, email, senha);
+  }catch(e){ mostrarMsgLogin(e.message,'erro'); setLoginBusy(false); }
+});
+
+document.getElementById('btn-sair-espera').addEventListener('click', async ()=>{
+  await Nuvem.sair();
+});
+
+/* ---- Sair ---- */
+window.confirmarSair = async function(){
+  if(!confirm('Deseja encerrar a sessão?')) return;
+  await Nuvem.sair();
+};
+
+/* ---- Init: aguarda nuvem-pronta ---- */
+document.addEventListener('nuvem-pronta', ()=>{
+  if(!Nuvem.disponivel){
+    // Modo local — não exige login
+    document.getElementById('login').hidden = true;
+    document.getElementById('app-content').hidden = false;
+    console.info('Pavimento Intertravado: modo local (firebase-config.js não encontrado).');
+  }
+  // Se disponível, onAuthStateChanged já vai chamar aoMudarSessao
+});
+
+/* ============================================================
+   PAINEL DE ADMINISTRAÇÃO — igual ao do Pavimento Flexível.
+   Um login por usuário; em "Programas" o administrador marca
+   o que cada pessoa pode usar.
+   ============================================================ */
+const PROGRAMAS = [
+  { campo: 'ativo',             nome: 'Pavimento Flexível',     pedido: null },
+  { campo: 'orcamentoAtivo',    nome: 'Orçamento',              pedido: 'orcamentoSolicitado' },
+  { campo: 'intertravadoAtivo', nome: 'Pavimento Intertravado', pedido: 'intertravadoSolicitado' }
+];
+function pediuPrograma(u, p){
+  if(p.pedido) return !!u[p.pedido];
+  return !(u.orcamentoSolicitado || u.intertravadoSolicitado);
+}
+function esc(t){
+  return String(t == null ? '' : t).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+window.abrirAdmin = async function(){
+  if(location.hostname.replace(/^www\./,'') === 'totalcivil.com.br'){ location.href = '/#usuarios'; return; } // painel único na página principal
+  const bg = document.getElementById('admin-bg');
+  const corpo = document.getElementById('admin-corpo');
+  bg.style.display = 'flex';
+  corpo.innerHTML = '<p style="font-size:13px;color:var(--fg2)">Carregando…</p>';
+  try{ renderAdmin(await Nuvem.listarUsuarios()); }
+  catch(e){ corpo.innerHTML = '<p style="color:var(--warn-fg)">'+esc(e.message)+'</p>'; }
+};
+window.fecharAdmin = function(){ document.getElementById('admin-bg').style.display = 'none'; };
+
+function atualizarSeloPendentes(){
+  const b = document.getElementById('btn-usuarios');
+  if(!b || !Nuvem.usuario || !Nuvem.usuario.admin) return;
+  Nuvem.listarUsuarios().then(l=>{
+    const n = l.filter(x => !x.admin && !x.recusado && !PROGRAMAS.some(p => x[p.campo])).length;
+    b.textContent = n ? 'Usuários ('+n+')' : 'Usuários';
+  }).catch(()=>{});
+}
+window.atualizarSeloPendentes = atualizarSeloPendentes;
+
+function renderAdmin(lista){
+  const corpo = document.getElementById('admin-corpo');
+  if(!lista.length){ corpo.innerHTML = '<p style="color:var(--fg2);font-size:13px">Nenhum usuário cadastrado ainda. Quem criar conta na tela de login aparece aqui.</p>'; return; }
+  const algum  = u => PROGRAMAS.some(p => u[p.campo]);
+  const estado = u => u.admin ? 'adm' : u.recusado ? 'rec' : !algum(u) ? 'pen' : u.vencida ? 'ven' : 'ok';
+  const ordem  = {adm:-1, pen:0, ven:1, ok:2, rec:3};
+  lista.sort((x,y)=> ordem[estado(x)] - ordem[estado(y)] || (x.nome||x.usuario).localeCompare(y.nome||y.usuario));
+  const rotulo = {adm:'Administrador', rec:'Recusado', pen:'Aguardando aprovação', ven:'Licença vencida', ok:'Ativo'};
+  const cor    = {adm:'badge-admin', rec:'badge-pend', pen:'badge-pend', ven:'badge-pend', ok:'badge-ok'};
+  let h = '<p style="font-size:12px;color:var(--fg2);margin-bottom:6px">Administradores no topo, depois os cadastros pendentes. Marque em “Programas” o que cada pessoa pode usar. “Redefinir senha” envia ao e-mail da pessoa um link para criar nova senha.</p>'+
+          '<div style="overflow-x:auto"><table class="lista-nuvem"><thead><tr><th>E-mail</th><th>Nome / Empresa</th><th>Programas</th><th>Validade</th><th>Situação</th><th></th></tr></thead><tbody>';
+  lista.forEach((u,i)=>{
+    const e = estado(u);
+    const bt = (txt, acao, cls) => '<button class="btn-adm '+(cls||'')+'" data-i="'+i+'" data-acao="'+acao+'">'+txt+'</button>';
+    const redef = '<button class="btn-adm" data-i="'+i+'" data-acao="redefinir" title="Envia ao e-mail da pessoa um link para criar nova senha">Redefinir senha</button>';
+    if(!u.uid){
+      h += '<tr><td>'+esc(u.email)+'</td><td style="color:var(--fg3)">Administrador da lista oficial</td><td style="color:var(--fg3)">todos</td><td></td>'+
+           '<td><span class="badge badge-admin">Administrador · nunca entrou</span></td><td><div class="acoes">'+redef+'</div></td></tr>';
+      return;
+    }
+    let acoes = '';
+    if(e === 'pen') acoes = bt('Aprovar','aprovar','ok') + bt('Recusar','recusar','rec');
+    else if(e === 'rec') acoes = bt('Aprovar','aprovar','ok');
+    else if(e !== 'adm') acoes = bt('Bloquear','bloquear','rec');
+    let progs;
+    if(e === 'adm') progs = '<span style="color:var(--fg3)">todos</span>';
+    else{
+      progs = '<div class="progs">';
+      PROGRAMAS.forEach((p,k)=>{
+        const pediu = pediuPrograma(u,p) && !u[p.campo];
+        const marcado = u[p.campo] || (e === 'pen' && pediu);
+        progs += '<label><input type="checkbox" data-i="'+i+'" data-prog="'+k+'"'+(marcado?' checked':'')+'> '+p.nome+
+                 (pediu ? ' <span class="pediu" title="A pessoa pediu acesso a este programa">pediu</span>' : '')+'</label>';
+      });
+      progs += '</div>';
+    }
+    const dt = u.validade ? u.validade.toISOString().slice(0,10) : '';
+    h += '<tr'+(e==='pen'?' style="background:var(--warn)"':'')+'><td>'+esc(u.email||u.usuario)+'</td>'+
+      '<td><input type="text" data-i="'+i+'" data-campo="nome" value="'+esc(u.nome)+'" placeholder="nome" style="width:110px"> '+
+      '<input type="text" data-i="'+i+'" data-campo="empresa" value="'+esc(u.empresa)+'" placeholder="empresa" style="width:110px"></td>'+
+      '<td>'+progs+'</td>'+
+      '<td>'+(e==='adm' ? '<span style="color:var(--fg3)">sem prazo</span>' : '<input type="date" data-i="'+i+'" data-campo="validade" value="'+dt+'">')+'</td>'+
+      '<td><span class="badge '+cor[e]+'">'+rotulo[e]+'</span></td>'+
+      '<td><div class="acoes">'+acoes+redef+bt('Gravar','gravar')+'</div></td></tr>';
+  });
+  h += '</tbody></table></div><p style="font-size:11.5px;color:var(--fg3);margin-top:10px">'+
+    'Um único login por pessoa: o mesmo e-mail e senha servem para todos os programas, mas ela só abre os que estiverem marcados em “Programas”. '+
+    'Os cadastros novos chegam sozinhos, pela tela de login de qualquer programa, já com o programa pedido marcado (“pediu”). '+
+    '“Aprovar” libera os programas marcados (com a validade da linha, se houver); “Gravar” salva as mudanças da linha; '+
+    '“Recusar” e “Bloquear” impedem o uso e podem ser desfeitos a qualquer momento.</p>';
+  corpo.innerHTML = h;
+
+  corpo.onclick = async ev=>{
+    const btn = ev.target.closest('button[data-acao]');
+    if(!btn) return;
+    const i = +btn.dataset.i, u = lista[i], acao = btn.dataset.acao;
+    if(acao === 'redefinir'){
+      try{ await Nuvem.redefinirSenha(u.email); toast('Link de nova senha enviado para '+u.email+'.'); }
+      catch(e){ toast('Erro: '+e.message, true); }
+      return;
+    }
+    const val = c => { const el = corpo.querySelector('[data-i="'+i+'"][data-campo="'+c+'"]'); return el ? el.value : ''; };
+    const campos = { nome: val('nome'), empresa: val('empresa') };
+    if(estado(u) !== 'adm') campos.validade = val('validade') || null;
+    let marcou = false;
+    PROGRAMAS.forEach((p,k)=>{
+      const cb = corpo.querySelector('input[data-i="'+i+'"][data-prog="'+k+'"]');
+      if(cb){ campos[p.campo] = cb.checked; if(cb.checked) marcou = true; }
+    });
+    if(acao === 'aprovar'){
+      if(!marcou){ toast('Marque em “Programas” ao menos um programa para liberar.', true); return; }
+      campos.recusado = false;
+    }else if(acao === 'recusar' || acao === 'bloquear'){
+      PROGRAMAS.forEach(p => { campos[p.campo] = false; });
+      if(acao === 'recusar') campos.recusado = true;
+    }
+    btn.disabled = true;
+    try{
+      await Nuvem.atualizarUsuario(u.uid, campos);
+      toast('Usuário atualizado.');
+      renderAdmin(await Nuvem.listarUsuarios());
+      atualizarSeloPendentes();
+    }catch(e){ toast('Erro: '+e.message, true); btn.disabled = false; }
+  };
+}
+</script>

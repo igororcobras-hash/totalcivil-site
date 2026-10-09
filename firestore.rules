@@ -1,0 +1,126 @@
+rules_version = '2';
+
+// Regras de segurança do Firestore — Total Civil (todos os programas)
+// Cole este conteúdo em: Firebase › Firestore Database › Regras › Publicar.
+//
+// O que estas regras garantem, no servidor (não dá para burlar pelo navegador):
+//   1. Um único cadastro por pessoa para todos os programas.
+//   2. Só os administradores liberam programas, definem validade e veem todos os cadastros.
+//   3. Ninguém se promove a administrador nem se libera sozinho.
+//   4. O próprio usuário só pode fazer pedidos (programas, forma de pagamento, aviso de pagamento).
+//   5. Pedidos de programa personalizado: qualquer visitante envia; só o administrador lê.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function logado() {
+      return request.auth != null;
+    }
+
+    // Administradores: lista fixa, conferida no servidor (igual à do firebase-config.js).
+    function admin() {
+      return logado() && request.auth.token.email in [
+        'wfajardoeng@gmail.com',
+        'igororcobras@gmail.com'
+      ];
+    }
+
+    function perfil() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function temPerfil() {
+      return exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
+    }
+
+    // Licença do Pavimento Flexível (projetos na nuvem): ativo e dentro da validade.
+    function liberado() {
+      return admin() || (
+        logado() && temPerfil() &&
+        perfil().ativo == true &&
+        (perfil().validade == null || perfil().validade > request.time)
+      );
+    }
+
+    function falsoOuAusente(d, campo) {
+      return !(campo in d) || d[campo] == false;
+    }
+
+    match /usuarios/{uid} {
+      // Cada um lê o próprio cadastro; o administrador lê todos.
+      allow read: if logado() && (uid == request.auth.uid || admin());
+
+      // Cadastro novo: o próprio usuário cria seu perfil, sempre sem nenhum programa liberado.
+      allow create: if logado()
+                    && uid == request.auth.uid
+                    && request.resource.data.keys().hasOnly([
+                         'usuario','email','nome','empresa','whatsapp',
+                         'ativo','admin','recusado','validade','criadoEm',
+                         'orcamentoSolicitado','orcamentoAtivo','intertravadoSolicitado','intertravadoAtivo',
+                         'drenagemAtivo','estruturaAtivo',
+                         'programasPedidos','formaPagamento','pedidoEm','indicadoPor'])
+                    && request.resource.data.ativo == false
+                    && request.resource.data.admin == false
+                    && request.resource.data.recusado == false
+                    && request.resource.data.validade == null
+                    && falsoOuAusente(request.resource.data, 'orcamentoAtivo')
+                    && falsoOuAusente(request.resource.data, 'intertravadoAtivo')
+                    && falsoOuAusente(request.resource.data, 'drenagemAtivo')
+                    && falsoOuAusente(request.resource.data, 'estruturaAtivo')
+                    && request.resource.data.email == request.auth.token.email;
+
+      // Liberar programas, validade, recusa: somente administrador.
+      // O próprio usuário pode apenas fazer pedidos e avisar o pagamento.
+      allow update: if admin()
+                    || (logado() && uid == request.auth.uid
+                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                             'orcamentoSolicitado','intertravadoSolicitado',
+                             'programasPedidos','formaPagamento','pedidoEm','indicadoPor','pagamentoAvisadoEm'])
+                        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['orcamentoSolicitado'])
+                            || request.resource.data.orcamentoSolicitado == true)
+                        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['intertravadoSolicitado'])
+                            || request.resource.data.intertravadoSolicitado == true));
+      allow delete: if admin();
+    }
+
+    // Apelido -> e-mail (login do Orçamento com apelido).
+    match /apelidos/{apelido} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if logado()
+                    && request.resource.data.keys().hasOnly(['email','uid','criadoEm'])
+                    && request.resource.data.uid == request.auth.uid
+                    && request.resource.data.email == request.auth.token.email;
+      allow update, delete: if admin();
+    }
+
+    // Projetos salvos na nuvem (Pavimento Flexível).
+    match /projetos/{projetoId} {
+      allow read: if liberado()
+                  && (resource.data.uid == request.auth.uid || admin());
+      allow create: if liberado()
+                    && request.resource.data.uid == request.auth.uid;
+      allow update: if liberado()
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == request.auth.uid;
+      allow delete: if liberado()
+                    && (resource.data.uid == request.auth.uid || admin());
+    }
+
+    // Pedidos de programa personalizado (quadro da página principal).
+    match /solicitacoes/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['nome','contato','email','descricao','uid','criadoEm'])
+                    && request.resource.data.nome is string && request.resource.data.nome.size() <= 120
+                    && request.resource.data.contato is string && request.resource.data.contato.size() <= 30
+                    && request.resource.data.email is string && request.resource.data.email.size() <= 120
+                    && request.resource.data.descricao is string && request.resource.data.descricao.size() <= 3000;
+      allow read, delete: if admin();
+      allow update: if false;
+    }
+
+    // Qualquer outro caminho fica bloqueado.
+    match /{documento=**} {
+      allow read, write: if false;
+    }
+  }
+}

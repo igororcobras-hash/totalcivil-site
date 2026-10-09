@@ -4,181 +4,899 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Total Civil</title>
-<meta name="description" content="Programas de engenharia civil: pavimento flexível, pavimento intertravado, drenagem pluvial, orçamento de obras e estruturas de concreto armado.">
+<meta name="description" content="Programas de engenharia civil: pavimento flexível, pavimento intertravado, drenagem pluvial, orçamento de obras e estruturas de concreto armado. Monte seu pacote.">
 <style>
 :root{
   --bg:#f3f2ee; --ink:#14202e; --muted:#5a6573; --card:#ffffff; --line:#d9d6cc;
-  --grid:rgba(20,32,46,.055); --accent:#c2410c; --accent-ink:#ffffff; --navy:#12263f;
+  --grid:rgba(20,32,46,.055); --accent:#c2410c; --accent-ink:#ffffff; --accent-soft:#fdeee5; --navy:#12263f;
   --ok-bg:#dcefe2; --ok-ink:#1b5e35; --soon-bg:#ecebe5; --soon-ink:#5a6573;
+  --warn-bg:#fdecd8; --warn-ink:#8a3a0a; --err:#b42318; --field:#ffffff;
   --shadow:0 1px 2px rgba(20,32,46,.06), 0 8px 24px rgba(20,32,46,.06);
+  --shadow-lg:0 20px 60px rgba(20,32,46,.22);
   color-scheme:light;
 }
 @media (prefers-color-scheme:dark){
   :root:not([data-theme="light"]){
     --bg:#0f1620; --ink:#e8ecf1; --muted:#9aa6b5; --card:#17212e; --line:#263344;
-    --grid:rgba(232,236,241,.045); --accent:#fb923c; --accent-ink:#1a0f06; --navy:#e8ecf1;
+    --grid:rgba(232,236,241,.045); --accent:#fb923c; --accent-ink:#1a0f06; --accent-soft:#2b1d12; --navy:#e8ecf1;
     --ok-bg:#16382a; --ok-ink:#8fe0b0; --soon-bg:#202c3b; --soon-ink:#9aa6b5;
+    --warn-bg:#3a2412; --warn-ink:#fbbf8a; --err:#f97066; --field:#101923;
     --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+    --shadow-lg:0 20px 60px rgba(0,0,0,.55);
     color-scheme:dark;
   }
 }
 :root[data-theme="dark"]{
   --bg:#0f1620; --ink:#e8ecf1; --muted:#9aa6b5; --card:#17212e; --line:#263344;
-  --grid:rgba(232,236,241,.045); --accent:#fb923c; --accent-ink:#1a0f06; --navy:#e8ecf1;
+  --grid:rgba(232,236,241,.045); --accent:#fb923c; --accent-ink:#1a0f06; --accent-soft:#2b1d12; --navy:#e8ecf1;
   --ok-bg:#16382a; --ok-ink:#8fe0b0; --soon-bg:#202c3b; --soon-ink:#9aa6b5;
+  --warn-bg:#3a2412; --warn-ink:#fbbf8a; --err:#f97066; --field:#101923;
   --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+  --shadow-lg:0 20px 60px rgba(0,0,0,.55);
   color-scheme:dark;
 }
 *{box-sizing:border-box}
-html{-webkit-text-size-adjust:100%}
+html{-webkit-text-size-adjust:100%;scroll-behavior:smooth}
 body{
   margin:0; min-height:100vh; display:flex; flex-direction:column;
   background-color:var(--bg);
   background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);
-  background-size:32px 32px;
-  color:var(--ink);
-  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-  line-height:1.5;
+  background-size:32px 32px; color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; line-height:1.5;
 }
-.wrap{width:100%; max-width:1040px; margin:0 auto; padding-inline:20px}
-header{padding-block:28px 8px}
+[hidden]{display:none!important}
+.wrap{width:100%; max-width:1080px; margin:0 auto; padding-inline:20px}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--accent)}
+
+/* Cabeçalho */
+header{padding-block:22px 8px; position:relative; z-index:5}
+.topo{display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap}
 .marca{display:flex; align-items:center; gap:12px; text-decoration:none; color:var(--ink)}
 .marca-sq{width:34px; height:34px; border-radius:6px; background:var(--accent); display:grid; place-items:center; flex:none}
 .marca-sq svg{width:20px; height:20px; stroke:var(--accent-ink); fill:none; stroke-width:2.4; stroke-linecap:round; stroke-linejoin:round}
 .marca-nome{font-size:1.25rem; font-weight:800; letter-spacing:.14em; text-transform:uppercase}
 .marca-nome span{color:var(--accent)}
-main{flex:1; padding-block:40px 56px}
+.acesso{display:flex; align-items:center; gap:8px; flex-wrap:wrap}
+.quem{font-size:.9rem; color:var(--muted); margin-right:4px}
+.quem b{color:var(--ink)}
+
+/* Botões */
+.bt{display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:9px 16px; border-radius:9px; border:1px solid var(--line);
+  background:var(--card); color:var(--ink); font-weight:650; font-size:.92rem; cursor:pointer; text-decoration:none; white-space:nowrap;
+  transition:border-color .15s, background .15s, transform .1s}
+.bt:hover{border-color:var(--accent)}
+.bt:active{transform:translateY(1px)}
+.bt.pri{background:var(--accent); border-color:var(--accent); color:var(--accent-ink)}
+.bt.pri:hover{filter:brightness(1.06)}
+.bt.peq{padding:5px 11px; font-size:.82rem; border-radius:7px}
+.bt:disabled{opacity:.55; cursor:not-allowed}
+.bt .badge-n{background:var(--accent); color:var(--accent-ink); border-radius:999px; padding:0 7px; font-size:.75rem}
+
+main{flex:1; padding-block:34px 40px}
 .eyebrow{margin:0 0 10px; font-size:.78rem; font-weight:700; letter-spacing:.16em; text-transform:uppercase; color:var(--accent)}
-h1{margin:0 0 14px; font-size:clamp(1.9rem,5.2vw,3rem); line-height:1.1; letter-spacing:-.02em; font-weight:800; text-wrap:balance; max-width:20ch}
-.lead{margin:0 0 40px; max-width:56ch; font-size:1.06rem; color:var(--muted)}
-.grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,290px),1fr)); gap:18px; padding:0; margin:0; list-style:none}
-.card{
-  position:relative; display:flex; flex-direction:column; gap:12px; height:100%;
-  padding:22px 22px 20px; border-radius:14px; background:var(--card);
-  border:1px solid var(--line); box-shadow:var(--shadow);
-  color:inherit; text-decoration:none;
-}
-a.card{transition:transform .15s ease, border-color .15s ease, box-shadow .15s ease}
-a.card:hover,a.card:focus-visible{transform:translateY(-3px); border-color:var(--accent)}
-a.card:focus-visible{outline:3px solid var(--accent); outline-offset:3px}
-.card.breve{background:transparent; box-shadow:none; border-style:dashed}
+h1{margin:0 0 14px; font-size:clamp(1.9rem,5.2vw,3rem); line-height:1.1; letter-spacing:-.02em; font-weight:800; text-wrap:balance; max-width:22ch}
+.lead{margin:0 0 18px; max-width:60ch; font-size:1.06rem; color:var(--muted)}
+.selos{display:flex; flex-wrap:wrap; gap:8px; margin:0 0 34px; padding:0; list-style:none}
+.selos li{display:flex; align-items:center; gap:7px; padding:6px 12px; border-radius:999px; background:var(--card); border:1px solid var(--line); font-size:.86rem; font-weight:600}
+.selos li b{color:var(--accent)}
+h2.sec{font-size:1.45rem; margin:56px 0 6px; letter-spacing:-.01em; text-wrap:balance}
+.sec-sub{margin:0 0 22px; color:var(--muted); max-width:62ch}
+
+/* Cartões de programa */
+.grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr)); gap:18px; padding:0; margin:0; list-style:none}
+.card{position:relative; display:flex; flex-direction:column; gap:12px; height:100%; padding:22px 22px 18px; border-radius:14px;
+  background:var(--card); border:1px solid var(--line); box-shadow:var(--shadow); transition:border-color .15s, box-shadow .15s}
+.card.breve{border-style:dashed}
+.card.sel{border-color:var(--accent); box-shadow:0 0 0 2px var(--accent) inset, var(--shadow)}
 .ico{width:46px; height:46px; color:var(--accent)}
 .ico svg{width:100%; height:100%; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round}
 .card.breve .ico{color:var(--muted)}
-.card h2{margin:0; font-size:1.15rem; line-height:1.25; font-weight:750}
+.card h3{margin:0; font-size:1.15rem; line-height:1.25; font-weight:750}
 .card p{margin:0; font-size:.94rem; color:var(--muted); flex:1}
-.rodape-card{display:flex; align-items:center; justify-content:space-between; gap:10px; min-height:30px}
-.chip{display:inline-block; padding:3px 10px; border-radius:999px; font-size:.74rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase}
+.chip{display:inline-block; padding:3px 10px; border-radius:999px; font-size:.72rem; font-weight:700; letter-spacing:.04em; text-transform:uppercase}
 .chip.ok{background:var(--ok-bg); color:var(--ok-ink)}
 .chip.soon{background:var(--soon-bg); color:var(--soon-ink)}
-.abrir{font-size:.9rem; font-weight:700; color:var(--accent); white-space:nowrap}
-.aviso{margin:36px 0 0; max-width:62ch; font-size:.9rem; color:var(--muted)}
+.chip.lib{background:var(--accent-soft); color:var(--accent)}
+.card .topo-card{display:flex; justify-content:space-between; align-items:flex-start; gap:10px}
+.preco{font-size:.95rem; color:var(--muted)}
+.preco b{font-size:1.25rem; color:var(--ink); letter-spacing:-.01em}
+.card .rodape-card{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding-top:12px; border-top:1px solid var(--line)}
+.incluir{display:flex; align-items:center; gap:8px; font-weight:650; font-size:.9rem; cursor:pointer; user-select:none}
+.incluir input{width:18px; height:18px; accent-color:var(--accent); cursor:pointer}
+.abrir{font-size:.9rem; font-weight:700; color:var(--accent); text-decoration:none; white-space:nowrap}
+.abrir:hover{text-decoration:underline}
+
+/* Como funciona */
+.passos{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:14px; counter-reset:p; padding:0; margin:0; list-style:none}
+.passos li{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px 16px 14px; counter-increment:p}
+.passos li::before{content:counter(p); display:grid; place-items:center; width:28px; height:28px; border-radius:50%; background:var(--accent); color:var(--accent-ink); font-weight:800; font-size:.9rem; margin-bottom:8px}
+.passos b{display:block; margin-bottom:2px}
+.passos span{font-size:.9rem; color:var(--muted)}
+
+/* Faixas */
+.faixa{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:18px; margin-top:22px}
+.painel{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:22px; box-shadow:var(--shadow); min-width:0}
+.painel h3{margin:0 0 6px; font-size:1.15rem}
+.painel p{margin:0 0 12px; color:var(--muted); font-size:.95rem}
+.painel.destaque{background:linear-gradient(135deg,var(--accent-soft),var(--card) 70%)}
+
+/* Formulários */
+.campo{display:flex; flex-direction:column; gap:4px; margin-bottom:12px; min-width:0}
+.campo label,.rot{font-size:.82rem; font-weight:650; color:var(--muted)}
+.campo input,.campo textarea,.campo select{width:100%; padding:10px 12px; border-radius:9px; border:1px solid var(--line); background:var(--field); font-size:.95rem}
+.campo textarea{min-height:110px; resize:vertical}
+.campo input:focus,.campo textarea:focus{outline:2px solid var(--accent); outline-offset:0; border-color:var(--accent)}
+.duas{display:grid; grid-template-columns:1fr 1fr; gap:0 12px}
+@media (max-width:560px){.duas{grid-template-columns:1fr}}
+.opcoes{display:grid; gap:6px; margin-bottom:12px}
+.opcao{display:flex; align-items:center; gap:10px; padding:9px 12px; border:1px solid var(--line); border-radius:9px; cursor:pointer; background:var(--field)}
+.opcao:has(input:checked){border-color:var(--accent); background:var(--accent-soft)}
+.opcao input{accent-color:var(--accent); width:17px; height:17px; flex:none}
+.opcao .nm{flex:1; font-weight:600; font-size:.92rem}
+.opcao .vl{font-size:.82rem; color:var(--muted); white-space:nowrap}
+.msg{font-size:.9rem; padding:9px 12px; border-radius:9px; margin:4px 0 12px}
+.msg.erro{background:var(--warn-bg); color:var(--err)}
+.msg.ok{background:var(--ok-bg); color:var(--ok-ink)}
+.msg.info{background:var(--soon-bg); color:var(--ink)}
+.link{background:none; border:0; padding:0; color:var(--accent); font-weight:650; cursor:pointer; text-decoration:underline; font-size:.88rem}
+.resumo{border:1px solid var(--line); border-radius:10px; padding:12px 14px; margin:4px 0 14px; font-size:.92rem; background:var(--bg)}
+.resumo .lin{display:flex; justify-content:space-between; gap:10px; padding:2px 0}
+.resumo .tot{border-top:1px solid var(--line); margin-top:6px; padding-top:8px; font-weight:800}
+.dados-banco{font-variant-numeric:tabular-nums; border:1px dashed var(--accent); border-radius:10px; padding:12px 14px; margin:10px 0; background:var(--accent-soft)}
+.dados-banco div{display:flex; justify-content:space-between; gap:10px}
+.copia{display:flex; gap:8px; align-items:center}
+.codigo{font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:800; letter-spacing:.08em; font-size:1.1rem; padding:6px 12px; border-radius:8px; background:var(--bg); border:1px solid var(--line)}
+
+/* Barra do pacote */
+.barra{position:fixed; left:0; right:0; bottom:0; z-index:20; padding:12px 16px calc(12px + env(safe-area-inset-bottom,0px));
+  background:var(--card); border-top:1px solid var(--line); box-shadow:0 -10px 30px rgba(20,32,46,.12); transform:translateY(110%); transition:transform .25s}
+.barra.vis{transform:none}
+.barra .in{max-width:1080px; margin:0 auto; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap}
+.barra .txt{font-size:.95rem}
+.barra .txt b{font-size:1.1rem}
+body.com-barra main{padding-bottom:110px}
+
+/* Janelas */
+dialog{border:0; padding:0; border-radius:16px; background:var(--card); color:var(--ink); box-shadow:var(--shadow-lg); width:min(560px,calc(100% - 24px)); max-height:calc(100% - 24px)}
+dialog.larga{width:min(1180px,calc(100% - 24px))}
+dialog::backdrop{background:rgba(10,16,24,.55); backdrop-filter:blur(2px)}
+.dl-cab{display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:20px 22px 6px}
+.dl-cab h3{margin:0; font-size:1.25rem}
+.dl-cab p{margin:4px 0 0; color:var(--muted); font-size:.9rem}
+.fechar{background:none; border:0; font-size:1.6rem; line-height:1; color:var(--muted); cursor:pointer; padding:0 4px}
+.dl-corpo{padding:10px 22px 22px}
+
+/* Tabela de usuários */
+.tab-rol{overflow-x:auto}
+table.us{width:100%; border-collapse:collapse; font-size:.84rem}
+table.us th{background:var(--bg); color:var(--muted); text-align:left; padding:8px; font-size:.76rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; white-space:nowrap}
+table.us td{padding:8px; border-bottom:1px solid var(--line); vertical-align:top}
+table.us tr.pend td{background:var(--warn-bg)}
+table.us input[type=text],table.us input[type=date]{padding:5px 7px; border:1px solid var(--line); background:var(--field); border-radius:6px; font-size:.82rem; width:120px}
+.progs{display:flex; flex-direction:column; gap:3px; white-space:nowrap}
+.progs label{display:flex; align-items:center; gap:6px; cursor:pointer}
+.progs input{accent-color:var(--accent)}
+.tag{font-size:.68rem; font-weight:700; border-radius:8px; padding:0 6px; white-space:nowrap}
+.tag.pediu{color:var(--warn-ink); background:var(--warn-bg); border:1px solid var(--accent)}
+.tag.breve{color:var(--soon-ink); background:var(--soon-bg)}
+.st{display:inline-block; padding:2px 9px; border-radius:10px; font-size:.74rem; font-weight:700; white-space:nowrap}
+.st.adm{background:var(--soon-bg); color:var(--ink); border:1px solid var(--line)}
+.st.ok{background:var(--ok-bg); color:var(--ok-ink)}
+.st.warn{background:var(--warn-bg); color:var(--warn-ink)}
+.acoes{display:flex; flex-wrap:wrap; gap:4px; max-width:230px}
+.mini{font-size:.76rem; color:var(--muted); line-height:1.35}
+.abas{display:flex; gap:6px; margin-bottom:12px; flex-wrap:wrap}
+.abas .bt[aria-pressed="true"]{background:var(--accent); color:var(--accent-ink); border-color:var(--accent)}
+
+.toast{position:fixed; left:50%; bottom:24px; transform:translateX(-50%); z-index:100; background:var(--ink); color:var(--bg); padding:10px 16px; border-radius:10px; font-size:.9rem; box-shadow:var(--shadow-lg); max-width:calc(100% - 32px)}
 footer{border-top:1px solid var(--line); padding-block:22px; font-size:.85rem; color:var(--muted)}
-@media (prefers-reduced-motion:reduce){a.card{transition:none} a.card:hover{transform:none}}
+footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap}
+@media (prefers-reduced-motion:reduce){*{transition:none!important; scroll-behavior:auto!important}}
 </style>
 </head>
 <body>
 
 <header>
-  <div class="wrap">
+  <div class="wrap topo">
     <a class="marca" href="/" aria-label="Total Civil, página inicial">
-      <span class="marca-sq" aria-hidden="true">
-        <svg viewBox="0 0 24 24"><path d="M3 20h18M6 20V9l6-5 6 5v11M10 20v-6h4v6"/></svg>
-      </span>
+      <span class="marca-sq" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 20h18M6 20V9l6-5 6 5v11M10 20v-6h4v6"/></svg></span>
       <span class="marca-nome">Total <span>Civil</span></span>
     </a>
+    <div class="acesso" id="acesso-fora">
+      <button class="bt" type="button" data-abrir="dl-entrar">Entrar</button>
+      <button class="bt pri" type="button" data-abrir="dl-cadastro">Criar conta</button>
+    </div>
+    <div class="acesso" id="acesso-dentro" hidden>
+      <span class="quem">Olá, <b id="quem-nome"></b></span>
+      <button class="bt" type="button" id="bt-conta">Minha conta</button>
+      <button class="bt" type="button" id="bt-usuarios" hidden>Usuários <span class="badge-n" id="n-pend" hidden></span></button>
+      <button class="bt" type="button" id="bt-sair">Sair</button>
+    </div>
   </div>
 </header>
 
 <main>
   <div class="wrap">
     <p class="eyebrow">Programas de engenharia civil</p>
-    <h1>Escolha o programa que você precisa</h1>
-    <p class="lead">Ferramentas de cálculo, dimensionamento e orçamento para obras civis. Cada programa abre em seu próprio endereço.</p>
-
-    <ul class="grid">
-
-      <!-- ATIVO: Pavimento Flexível -->
-      <li>
-        <a class="card" href="https://pavimento.totalcivil.com.br/">
-          <span class="ico" aria-hidden="true">
-            <svg viewBox="0 0 46 46"><path d="M4 13Q23 7 42 13"/><path d="M4 21h38M4 29h38M4 37h38"/></svg>
-          </span>
-          <h2>Pavimento Flexível</h2>
-          <p>Dimensionamento pelo método do CBR, com topografia, seções transversais, volumes e memória de cálculo.</p>
-          <span class="rodape-card"><span class="chip ok">Disponível</span><span class="abrir">Abrir →</span></span>
-        </a>
-      </li>
-
-      <!-- ATIVO: Orçamento -->
-      <li>
-        <a class="card" href="https://orcamento.totalcivil.com.br/">
-          <span class="ico" aria-hidden="true">
-            <svg viewBox="0 0 46 46"><rect x="7" y="6" width="32" height="34" rx="3.5"/><path d="M7 16h32M7 27h32M19 16v24"/></svg>
-          </span>
-          <h2>Orçamento de Obras</h2>
-          <p>Orçamento analítico com bancos EMOP, SINAPI e SCO, composições, BDI e exportação para planilha.</p>
-          <span class="rodape-card"><span class="chip ok">Disponível</span><span class="abrir">Abrir →</span></span>
-        </a>
-      </li>
-
-      <!-- ATIVO: Pavimento Intertravado (intertravado.totalcivil.com.br) -->
-      <li>
-        <a class="card" href="https://intertravado.totalcivil.com.br/">
-          <span class="ico" aria-hidden="true">
-            <svg viewBox="0 0 46 46"><rect x="5" y="10" width="15" height="8" rx="1.5"/><rect x="24" y="10" width="17" height="8" rx="1.5"/><rect x="5" y="22" width="9" height="8" rx="1.5"/><rect x="18" y="22" width="15" height="8" rx="1.5"/><rect x="37" y="22" width="4" height="8" rx="1"/><rect x="5" y="34" width="15" height="6" rx="1.5"/><rect x="24" y="34" width="17" height="6" rx="1.5"/></svg>
-          </span>
-          <h2>Pavimento Intertravado</h2>
-          <p>Dimensionamento de pavimentos de blocos de concreto intertravados conforme IP-06/2004 e ABNT NBR 9781:2013.</p>
-          <span class="rodape-card"><span class="chip ok">Disponível</span><span class="abrir">Abrir →</span></span>
-        </a>
-      </li>
-
-      <!-- EM BREVE: Drenagem Pluvial (drenagempluvial.totalcivil.com.br) -->
-      <li>
-        <div class="card breve" aria-disabled="true">
-          <span class="ico" aria-hidden="true">
-            <svg viewBox="0 0 46 46"><path d="M23 5C23 5 11 19 11 28a12 12 0 0 0 24 0C35 19 23 5 23 5Z"/><path d="M17 29a6 6 0 0 0 6 6"/></svg>
-          </span>
-          <h2>Drenagem Pluvial</h2>
-          <p>Cálculo de vazões, sarjetas, bocas de lobo e redes de águas pluviais.</p>
-          <span class="rodape-card"><span class="chip soon">Em breve</span></span>
-        </div>
-      </li>
-
-      <!-- EM BREVE: Estrutura em Concreto Armado (endereço a confirmar) -->
-      <li>
-        <div class="card breve" aria-disabled="true">
-          <span class="ico" aria-hidden="true">
-            <svg viewBox="0 0 46 46"><path d="M10 6v34M36 6v34M4 14h38M4 32h38"/><circle cx="10" cy="14" r="1.6"/><circle cx="36" cy="14" r="1.6"/><circle cx="10" cy="32" r="1.6"/><circle cx="36" cy="32" r="1.6"/></svg>
-          </span>
-          <h2>Estrutura em Concreto Armado</h2>
-          <p>Dimensionamento e detalhamento de elementos estruturais de concreto armado.</p>
-          <span class="rodape-card"><span class="chip soon">Em breve</span></span>
-        </div>
-      </li>
-
-      <!-- EM BREVE: novos programas -->
-      <li>
-        <div class="card breve" aria-disabled="true">
-          <span class="ico" aria-hidden="true">
-            <svg viewBox="0 0 46 46"><circle cx="23" cy="23" r="16"/><path d="M23 15v16M15 23h16"/></svg>
-          </span>
-          <h2>Outros programas</h2>
-          <p>Novas ferramentas de engenharia civil serão adicionadas aqui.</p>
-          <span class="rodape-card"><span class="chip soon">Em breve</span></span>
-        </div>
-      </li>
-
+    <h1>Escolha seu pacote de programas</h1>
+    <p class="lead">Monte o pacote com os programas de cálculo, dimensionamento e orçamento que você usa. Um único login abre todos os programas do seu pacote.</p>
+    <ul class="selos">
+      <li><b>R$ 55</b> por programa ao mês</li>
+      <li><b>2 meses</b> grátis para começar</li>
+      <li><b>10% de desconto</b> por indicação</li>
+      <li>Pix ou cartão de crédito</li>
     </ul>
 
-    <p class="aviso">O acesso aos programas é feito por cadastro e liberação de cada usuário.</p>
+    <ul class="grid" id="lista-programas"></ul>
+
+    <h2 class="sec">Como funciona</h2>
+    <p class="sec-sub">Do cadastro ao primeiro cálculo, sem instalar nada: tudo funciona no navegador, no computador, no Android ou no iPhone.</p>
+    <ol class="passos">
+      <li><b>Escolha os programas</b><span>Marque “Incluir no pacote” nos programas que você quer usar.</span></li>
+      <li><b>Crie sua conta</b><span>Um único e-mail e senha para todos os programas.</span></li>
+      <li><b>Pague por Pix ou cartão</b><span>Os 2 primeiros meses são grátis. Depois, R$ 55 por programa ao mês.</span></li>
+      <li><b>Acesso liberado</b><span>O administrador confere o pedido e libera os programas escolhidos.</span></li>
+    </ol>
+
+    <div class="faixa">
+      <section class="painel destaque" id="indique">
+        <h3>Indique e ganhe 10%</h3>
+        <p>Cada conta tem um código de indicação. Quando alguém se cadastra com o seu código, você ganha 10% de desconto na mensalidade do mês seguinte.</p>
+        <div id="indique-fora"><button class="bt" type="button" data-abrir="dl-entrar">Entrar para ver meu código</button></div>
+        <div id="indique-dentro" hidden>
+          <div class="rot" style="margin-bottom:6px">Seu código de indicação</div>
+          <div class="copia"><span class="codigo" id="meu-codigo"></span><button class="bt peq" type="button" id="bt-copiar-codigo">Copiar convite</button></div>
+        </div>
+      </section>
+
+      <section class="painel" id="personalizado">
+        <h3>Programa personalizado</h3>
+        <p>Precisa de um cálculo específico para a sua obra ou empresa? Descreva a ideia e o Diretor do Setor de Webdesign entra em contato com uma proposta.</p>
+        <form id="form-personalizado" novalidate>
+          <div class="duas">
+            <div class="campo"><label for="pp-nome">Nome</label><input id="pp-nome" autocomplete="name" maxlength="120" required></div>
+            <div class="campo"><label for="pp-zap">WhatsApp</label><input id="pp-zap" type="tel" autocomplete="tel" maxlength="30" placeholder="(22) 99999-9999" required></div>
+          </div>
+          <div class="campo"><label for="pp-email">E-mail</label><input id="pp-email" type="email" autocomplete="email" maxlength="120"></div>
+          <div class="campo"><label for="pp-desc">O que o programa deve fazer?</label><textarea id="pp-desc" maxlength="3000" placeholder="Ex.: dimensionamento de muro de arrimo com memória de cálculo em Word" required></textarea></div>
+          <div class="msg" id="pp-msg" hidden></div>
+          <button class="bt pri" type="submit" id="pp-enviar">Enviar ao Diretor de Webdesign</button>
+        </form>
+      </section>
+    </div>
   </div>
 </main>
 
+<div class="barra" id="barra" role="region" aria-label="Seu pacote">
+  <div class="in">
+    <div class="txt" id="barra-txt"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="bt" type="button" id="bt-limpar">Limpar</button>
+      <button class="bt pri" type="button" id="bt-contratar">Contratar pacote</button>
+    </div>
+  </div>
+</div>
+
 <footer>
-  <div class="wrap">© 2026 Total Civil. Todos os direitos reservados.</div>
+  <div class="wrap"><span>© 2026 Total Civil. Todos os direitos reservados.</span><span>Pagamentos: Pix ou cartão de crédito · Banco Itaú</span></div>
 </footer>
 
+<!-- ===== Janela: Entrar ===== -->
+<dialog id="dl-entrar" aria-labelledby="t-entrar">
+  <div class="dl-cab"><div><h3 id="t-entrar">Entrar</h3><p>Use o mesmo e-mail e senha em todos os programas.</p></div><button class="fechar" type="button" data-fechar aria-label="Fechar">×</button></div>
+  <div class="dl-corpo">
+    <form id="form-entrar" novalidate>
+      <div class="campo"><label for="en-email">E-mail</label><input id="en-email" type="email" autocomplete="username" autocapitalize="none" spellcheck="false" required></div>
+      <div class="campo"><label for="en-senha">Senha</label><input id="en-senha" type="password" autocomplete="current-password" required></div>
+      <div style="text-align:right;margin:-4px 0 10px"><button class="link" type="button" id="bt-esqueci">Esqueci minha senha</button></div>
+      <div class="msg" id="en-msg" hidden></div>
+      <button class="bt pri" type="submit" id="en-bt" style="width:100%">Entrar</button>
+      <p class="mini" style="text-align:center;margin:14px 0 0">Ainda não tem conta? <button class="link" type="button" data-abrir="dl-cadastro">Criar conta</button></p>
+    </form>
+  </div>
+</dialog>
+
+<!-- ===== Janela: Criar conta / contratar ===== -->
+<dialog id="dl-cadastro" aria-labelledby="t-cad">
+  <div class="dl-cab"><div><h3 id="t-cad">Criar conta e contratar</h3><p>Escolha os programas do seu pacote. Os 2 primeiros meses são grátis.</p></div><button class="fechar" type="button" data-fechar aria-label="Fechar">×</button></div>
+  <div class="dl-corpo">
+    <form id="form-cadastro" novalidate>
+      <div id="cad-dados">
+        <div class="duas">
+          <div class="campo"><label for="cd-nome">Nome completo</label><input id="cd-nome" autocomplete="name" maxlength="120" required></div>
+          <div class="campo"><label for="cd-empresa">Empresa ou órgão</label><input id="cd-empresa" autocomplete="organization" maxlength="120" required></div>
+        </div>
+        <div class="duas">
+          <div class="campo"><label for="cd-zap">WhatsApp</label><input id="cd-zap" type="tel" autocomplete="tel" maxlength="30" placeholder="(22) 99999-9999" required></div>
+          <div class="campo"><label for="cd-email">E-mail</label><input id="cd-email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" required></div>
+        </div>
+        <div class="duas">
+          <div class="campo"><label for="cd-senha">Senha</label><input id="cd-senha" type="password" autocomplete="new-password" placeholder="mínimo de 8 caracteres" required></div>
+          <div class="campo"><label for="cd-senha2">Repita a senha</label><input id="cd-senha2" type="password" autocomplete="new-password" required></div>
+        </div>
+      </div>
+      <div class="rot" style="margin-bottom:6px">Programas do pacote</div>
+      <div class="opcoes" id="cad-programas"></div>
+      <div class="duas">
+        <div class="campo"><label for="cd-indic">Código de indicação (opcional)</label><input id="cd-indic" maxlength="12" autocapitalize="characters" placeholder="Ex.: TC4F8K2A"></div>
+        <div class="campo"><span class="rot">Forma de pagamento</span>
+          <div class="opcoes" style="margin:4px 0 0">
+            <label class="opcao"><input type="radio" name="cd-pag" value="pix" checked><span class="nm">Pix</span></label>
+            <label class="opcao"><input type="radio" name="cd-pag" value="cartao"><span class="nm">Cartão de crédito</span></label>
+          </div>
+        </div>
+      </div>
+      <div class="resumo" id="cad-resumo"></div>
+      <div class="msg" id="cd-msg" hidden></div>
+      <button class="bt pri" type="submit" id="cd-bt" style="width:100%">Criar conta e enviar pedido</button>
+      <p class="mini" style="text-align:center;margin:14px 0 0" id="cad-ja">Já tem conta? <button class="link" type="button" data-abrir="dl-entrar">Entrar</button></p>
+    </form>
+  </div>
+</dialog>
+
+<!-- ===== Janela: Pedido enviado / pagamento ===== -->
+<dialog id="dl-pedido" aria-labelledby="t-ped">
+  <div class="dl-cab"><div><h3 id="t-ped">Pedido enviado</h3><p>Falta só avisar o administrador.</p></div><button class="fechar" type="button" data-fechar aria-label="Fechar">×</button></div>
+  <div class="dl-corpo" id="pedido-corpo"></div>
+</dialog>
+
+<!-- ===== Janela: Minha conta ===== -->
+<dialog id="dl-conta" aria-labelledby="t-conta">
+  <div class="dl-cab"><div><h3 id="t-conta">Minha conta</h3><p id="conta-email"></p></div><button class="fechar" type="button" data-fechar aria-label="Fechar">×</button></div>
+  <div class="dl-corpo" id="conta-corpo"></div>
+</dialog>
+
+<!-- ===== Janela: Usuários (administrador) ===== -->
+<dialog id="dl-usuarios" class="larga" aria-labelledby="t-us">
+  <div class="dl-cab"><div><h3 id="t-us">Usuários</h3><p>Pendentes no topo. Marque em “Programas” o que cada pessoa pode usar; “Aprovar” e “Gravar” salvam a linha.</p></div><button class="fechar" type="button" data-fechar aria-label="Fechar">×</button></div>
+  <div class="dl-corpo">
+    <div class="abas">
+      <button class="bt peq" type="button" data-aba="usuarios" aria-pressed="true">Usuários</button>
+      <button class="bt peq" type="button" data-aba="personalizados" aria-pressed="false">Programas personalizados</button>
+    </div>
+    <div id="us-corpo"></div>
+  </div>
+</dialog>
+
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="firebase-config.js"></script>
+<script type="module">
+/* ============================================================
+   TOTAL CIVIL — login único, pacotes, pagamento e administração
+   ============================================================ */
+const SDK = 'https://www.gstatic.com/firebasejs/12.19.0/';
+const PRECO = 55;                       // R$ por programa ao mês
+const MESES_GRATIS = 2;
+const WHATSAPP = '5522981343392';       // avisos de compra e pedidos personalizados
+const BANCO = {banco: 'Itaú', agencia: '4261', conta: '61789-0'};
+
+/* Programas. campo = permissão no cadastro (Firestore); solic = pedido antigo usado pelos programas */
+const PROGRAMAS = [
+  {key:'pavimento',    campo:'ativo',             solic:null,                     nome:'Pavimento Flexível',          url:'/pavimento/',    disp:true,
+   desc:'Dimensionamento pelo método do CBR, com topografia, seções transversais, volumes e memória de cálculo.',
+   ico:'<path d="M4 13Q23 7 42 13"/><path d="M4 21h38M4 29h38M4 37h38"/>'},
+  {key:'orcamento',    campo:'orcamentoAtivo',    solic:'orcamentoSolicitado',    nome:'Orçamento de Obras',          url:'/orcamento/',    disp:true,
+   desc:'Orçamento analítico com bancos EMOP, SINAPI e SCO, composições, BDI e exportação para planilha.',
+   ico:'<rect x="7" y="6" width="32" height="34" rx="3.5"/><path d="M7 16h32M7 27h32M19 16v24"/>'},
+  {key:'intertravado', campo:'intertravadoAtivo', solic:'intertravadoSolicitado', nome:'Pavimento Intertravado',      url:'/intertravado/', disp:true,
+   desc:'Dimensionamento de pavimentos de blocos de concreto intertravados conforme IP-06/2004 e ABNT NBR 9781.',
+   ico:'<rect x="5" y="10" width="15" height="8" rx="1.5"/><rect x="24" y="10" width="17" height="8" rx="1.5"/><rect x="5" y="22" width="9" height="8" rx="1.5"/><rect x="18" y="22" width="15" height="8" rx="1.5"/><rect x="37" y="22" width="4" height="8" rx="1"/><rect x="5" y="34" width="15" height="6" rx="1.5"/><rect x="24" y="34" width="17" height="6" rx="1.5"/>'},
+  {key:'drenagem',     campo:'drenagemAtivo',     solic:null,                     nome:'Drenagem Pluvial',            url:null,             disp:false,
+   desc:'Cálculo de vazões, sarjetas, bocas de lobo e redes de águas pluviais.',
+   ico:'<path d="M23 5C23 5 11 19 11 28a12 12 0 0 0 24 0C35 19 23 5 23 5Z"/><path d="M17 29a6 6 0 0 0 6 6"/>'},
+  {key:'estrutura',    campo:'estruturaAtivo',    solic:null,                     nome:'Estrutura em Concreto Armado', url:null,            disp:false,
+   desc:'Dimensionamento e detalhamento de elementos estruturais de concreto armado.',
+   ico:'<path d="M10 6v34M36 6v34M4 14h38M4 32h38"/><circle cx="10" cy="14" r="1.6"/><circle cx="36" cy="14" r="1.6"/><circle cx="10" cy="32" r="1.6"/><circle cx="36" cy="32" r="1.6"/>'}
+];
+const porKey = k => PROGRAMAS.find(p => p.key === k);
+
+/* ---------- utilidades ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const brl = v => 'R$ ' + v.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const fmtData = d => d ? d.toLocaleDateString('pt-BR') : '—';
+const paraData = v => { if(!v) return null; if(typeof v.toDate === 'function') return v.toDate(); const d = new Date(v); return isNaN(d) ? null : d; };
+const codigoDe = uid => 'TC' + String(uid || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase();
+const soDigitos = s => String(s || '').replace(/\D/g, '');
+const emailOk = s => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(s || '').trim());
+const listaAdmins = () => (window.ADMINS || []).map(x => String(x).toLowerCase());
+function toast(t){ const el = $('toast'); el.textContent = t; el.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => el.hidden = true, 3800); }
+function msg(id, texto, tipo){ const el = $(id); if(!texto){ el.hidden = true; return; } el.textContent = texto; el.className = 'msg ' + (tipo || 'info'); el.hidden = false; }
+function linkZap(texto){ return 'https://wa.me/' + WHATSAPP + '?text=' + encodeURIComponent(texto); }
+/* abre o WhatsApp numa aba já reservada no clique (evita bloqueio de pop-up) */
+function reservarAba(){ try{ return window.open('', '_blank'); }catch(e){ return null; } }
+function enviarAba(aba, url){ if(aba && !aba.closed){ try{ aba.location.href = url; return true; }catch(e){} } return false; }
+function abrir(id){ const d = $(id); document.querySelectorAll('dialog[open]').forEach(x => { if(x !== d) x.close(); }); if(!d.open) d.showModal(); }
+function fechar(id){ const d = $(id); if(d.open) d.close(); }
+function traduzir(e, padrao){
+  const c = (e && e.code) || '';
+  if(/invalid-credential|wrong-password|user-not-found|invalid-email/.test(c)) return 'E-mail ou senha incorretos.';
+  if(/email-already-in-use/.test(c)) return 'Este e-mail já tem cadastro. Use “Entrar” (ou “Esqueci minha senha”).';
+  if(/weak-password/.test(c)) return 'Senha fraca. Use ao menos 8 caracteres.';
+  if(/too-many-requests/.test(c)) return 'Muitas tentativas. Aguarde alguns minutos e tente de novo.';
+  if(/network|unavailable/.test(c)) return 'Sem conexão com o servidor. Verifique a internet.';
+  if(/permission-denied/.test(c)) return 'O servidor recusou a operação (regras do Firestore desatualizadas?).';
+  return (padrao || 'Não foi possível concluir') + (e && e.message ? ': ' + e.message : '.');
+}
+function comPrazo(p, ms){ return Promise.race([p, new Promise((_, r) => setTimeout(() => r(new Error('o servidor não respondeu a tempo. Tente de novo.')), ms))]); }
+
+/* ---------- estado ---------- */
+let fb = null;          // {a, d, auth, fs}
+let eu = null;          // perfil do usuário logado
+const sel = new Set();  // programas marcados no pacote
+try{ JSON.parse(sessionStorage.getItem('tc_pacote') || '[]').forEach(k => porKey(k) && sel.add(k)); }catch(e){}
+function salvarSel(){ try{ sessionStorage.setItem('tc_pacote', JSON.stringify([...sel])); }catch(e){} }
+
+/* ---------- cartões ---------- */
+function liberado(u, p){ if(!u) return false; if(u.admin) return true; return !!u[p.campo] && !u.recusado && !u.vencida; }
+function renderProgramas(){
+  $('lista-programas').innerHTML = PROGRAMAS.map(p => {
+    const lib = p.disp && liberado(eu, p);
+    const chip = !p.disp ? '<span class="chip soon">Em breve</span>' : lib ? '<span class="chip lib">No seu pacote</span>' : '<span class="chip ok">Disponível</span>';
+    const abrirLink = p.disp ? '<a class="abrir" href="' + p.url + '">Abrir →</a>' : '<span class="mini">Reserve: cobrança só após o lançamento</span>';
+    return '<li><article class="card' + (p.disp ? '' : ' breve') + (sel.has(p.key) ? ' sel' : '') + '" data-card="' + p.key + '">' +
+      '<div class="topo-card"><span class="ico" aria-hidden="true"><svg viewBox="0 0 46 46">' + p.ico + '</svg></span>' + chip + '</div>' +
+      '<h3>' + esc(p.nome) + '</h3><p>' + esc(p.desc) + '</p>' +
+      '<div class="preco"><b>' + brl(PRECO).replace(',00', '') + '</b> /mês' + (p.disp ? ' · 2 meses grátis' : '') + '</div>' +
+      '<div class="rodape-card">' +
+        (lib ? '<span class="mini">Liberado para você</span>' :
+         '<label class="incluir"><input type="checkbox" data-incluir="' + p.key + '"' + (sel.has(p.key) ? ' checked' : '') + '> Incluir no pacote</label>') +
+        abrirLink + '</div></article></li>';
+  }).join('');
+}
+function valores(chaves){
+  const disp = chaves.filter(k => porKey(k) && porKey(k).disp).length;
+  const breve = chaves.filter(k => porKey(k) && !porKey(k).disp).length;
+  return {disp, breve, mensal: disp * PRECO};
+}
+function atualizarBarra(){
+  const v = valores([...sel]);
+  const n = sel.size;
+  $('barra').classList.toggle('vis', n > 0);
+  document.body.classList.toggle('com-barra', n > 0);
+  $('barra-txt').innerHTML = n ? '<b>' + n + ' programa' + (n > 1 ? 's' : '') + '</b> no pacote · ' +
+    (v.disp ? '<b>' + brl(v.mensal) + '</b>/mês após os 2 meses grátis' : 'reserva dos lançamentos') +
+    (v.breve ? ' · ' + v.breve + ' em breve' : '') : '';
+}
+document.addEventListener('change', ev => {
+  const k = ev.target && ev.target.dataset && ev.target.dataset.incluir;
+  if(!k) return;
+  ev.target.checked ? sel.add(k) : sel.delete(k);
+  salvarSel();
+  const card = document.querySelector('[data-card="' + k + '"]'); if(card) card.classList.toggle('sel', ev.target.checked);
+  atualizarBarra();
+});
+$('bt-limpar').onclick = () => { sel.clear(); salvarSel(); renderProgramas(); atualizarBarra(); };
+$('bt-contratar').onclick = () => abrirCadastro();
+
+/* ---------- janelas ---------- */
+document.addEventListener('click', ev => {
+  const a = ev.target.closest('[data-abrir]');
+  if(a){ ev.preventDefault(); a.dataset.abrir === 'dl-cadastro' ? abrirCadastro() : abrir(a.dataset.abrir); return; }
+  const f = ev.target.closest('[data-fechar]');
+  if(f){ const d = f.closest('dialog'); if(d) d.close(); }
+});
+document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', ev => { if(ev.target === d) d.close(); }));
+
+/* ---------- cadastro / pedido ---------- */
+function abrirCadastro(){
+  const logado = !!eu;
+  $('cad-dados').hidden = logado;
+  $('cad-ja').hidden = logado;
+  $('t-cad').textContent = logado ? 'Contratar ou alterar pacote' : 'Criar conta e contratar';
+  $('cd-bt').textContent = logado ? 'Enviar pedido' : 'Criar conta e enviar pedido';
+  if(logado && eu.indicadoPor) $('cd-indic').value = eu.indicadoPor;
+  $('cad-programas').innerHTML = PROGRAMAS.map(p => {
+    const lib = p.disp && liberado(eu, p);
+    return '<label class="opcao"><input type="checkbox" value="' + p.key + '"' + (sel.has(p.key) || lib ? ' checked' : '') + (lib ? ' disabled' : '') + '>' +
+      '<span class="nm">' + esc(p.nome) + '</span><span class="vl">' + (lib ? 'já liberado' : p.disp ? brl(PRECO) + '/mês' : 'em breve') + '</span></label>';
+  }).join('');
+  msg('cd-msg', '');
+  resumoCadastro();
+  abrir('dl-cadastro');
+}
+function marcadosCadastro(){ return [...$('cad-programas').querySelectorAll('input:checked')].map(i => i.value); }
+function resumoCadastro(){
+  const ks = marcadosCadastro();
+  const v = valores(ks);
+  $('cad-resumo').innerHTML =
+    '<div class="lin"><span>Programas disponíveis</span><span>' + v.disp + ' × ' + brl(PRECO) + '</span></div>' +
+    (v.breve ? '<div class="lin"><span>Lançamentos reservados</span><span>' + v.breve + ' (sem cobrança agora)</span></div>' : '') +
+    '<div class="lin"><span>1º e 2º mês</span><span>grátis</span></div>' +
+    '<div class="lin tot"><span>A partir do 3º mês</span><span>' + brl(v.mensal) + '/mês</span></div>';
+}
+$('cad-programas').addEventListener('change', resumoCadastro);
+
+$('form-cadastro').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  if(!fb){ msg('cd-msg', 'Conectando ao servidor… tente de novo em instantes.', 'erro'); return; }
+  const ks = marcadosCadastro().filter(k => !(eu && liberado(eu, porKey(k))));
+  const pag = (document.querySelector('input[name="cd-pag"]:checked') || {}).value || 'pix';
+  const indic = String($('cd-indic').value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+  if(!ks.length){ msg('cd-msg', 'Marque ao menos um programa.', 'erro'); return; }
+  const {a, d, auth, fs} = fb;
+  const bt = $('cd-bt'); bt.disabled = true;
+  try{
+    let uid, nome, email, zap;
+    if(!eu){
+      nome = $('cd-nome').value.trim(); const empresa = $('cd-empresa').value.trim();
+      zap = $('cd-zap').value.trim(); email = $('cd-email').value.trim().toLowerCase();
+      const s1 = $('cd-senha').value, s2 = $('cd-senha2').value;
+      if(nome.length < 3){ throw {mensagem: 'Informe seu nome completo.'}; }
+      if(!empresa){ throw {mensagem: 'Informe a empresa ou o órgão.'}; }
+      if(soDigitos(zap).length < 10){ throw {mensagem: 'Informe o WhatsApp com DDD.'}; }
+      if(!emailOk(email)){ throw {mensagem: 'Informe um e-mail válido.'}; }
+      if(s1.length < 8){ throw {mensagem: 'A senha deve ter ao menos 8 caracteres.'}; }
+      if(s1 !== s2){ throw {mensagem: 'As senhas não conferem.'}; }
+      if(indic && indic.length < 4){ throw {mensagem: 'Código de indicação inválido.'}; }
+      msg('cd-msg', 'Criando sua conta…', 'info');
+      criando = true;
+      const cred = await comPrazo(auth.createUserWithEmailAndPassword(a, email, s1), 20000);
+      uid = cred.user.uid;
+      const perfil = {
+        usuario: email.split('@')[0], email, nome: nome.slice(0, 120), empresa: empresa.slice(0, 120), whatsapp: zap.slice(0, 30),
+        ativo: false, admin: false, recusado: false, validade: null, criadoEm: fs.serverTimestamp(),
+        orcamentoSolicitado: ks.includes('orcamento'), orcamentoAtivo: false,
+        intertravadoSolicitado: ks.includes('intertravado'), intertravadoAtivo: false,
+        programasPedidos: ks, formaPagamento: pag, pedidoEm: fs.serverTimestamp()
+      };
+      if(indic && indic !== codigoDe(uid)) perfil.indicadoPor = indic;
+      await comPrazo(fs.setDoc(fs.doc(d, 'usuarios', uid), perfil), 20000);
+      criando = false;
+      await carregarPerfil(cred.user);
+    }else if(eu.semPerfil){
+      /* conta antiga sem cadastro no banco: cria o cadastro agora */
+      uid = eu.uid; nome = eu.nome; email = eu.email; zap = '';
+      const perfil = {usuario: email.split('@')[0], email, nome: String(nome || '').slice(0, 120), empresa: '',
+        ativo: false, admin: false, recusado: false, validade: null, criadoEm: fs.serverTimestamp(),
+        orcamentoSolicitado: ks.includes('orcamento'), orcamentoAtivo: false,
+        intertravadoSolicitado: ks.includes('intertravado'), intertravadoAtivo: false,
+        programasPedidos: ks, formaPagamento: pag, pedidoEm: fs.serverTimestamp()};
+      if(indic && indic !== codigoDe(uid)) perfil.indicadoPor = indic;
+      msg('cd-msg', 'Enviando pedido…', 'info');
+      await comPrazo(fs.setDoc(fs.doc(d, 'usuarios', uid), perfil), 20000);
+      await carregarPerfil(fb.a.currentUser);
+    }else{
+      uid = eu.uid; nome = eu.nome; email = eu.email; zap = eu.whatsapp;
+      const antes = Array.isArray(eu.programasPedidos) ? eu.programasPedidos : [];
+      const todos = [...new Set([...antes, ...ks])];
+      const upd = {programasPedidos: todos, formaPagamento: pag, pedidoEm: fs.serverTimestamp()};
+      if(ks.includes('orcamento') && !eu.orcamentoSolicitado) upd.orcamentoSolicitado = true;
+      if(ks.includes('intertravado') && !eu.intertravadoSolicitado) upd.intertravadoSolicitado = true;
+      if(indic && !eu.indicadoPor && indic !== codigoDe(uid)) upd.indicadoPor = indic;
+      msg('cd-msg', 'Enviando pedido…', 'info');
+      await comPrazo(fs.updateDoc(fs.doc(d, 'usuarios', uid), upd), 20000);
+      await carregarPerfil(fb.a.currentUser);
+    }
+    sel.clear(); salvarSel(); renderProgramas(); atualizarBarra();
+    mostrarPedido({nome, email, zap, ks, pag, indic});
+  }catch(e){
+    criando = false;
+    msg('cd-msg', e && e.mensagem ? e.mensagem : traduzir(e, 'Não foi possível enviar o pedido'), 'erro');
+    if(fb.a.currentUser && !eu){ try{ await carregarPerfil(fb.a.currentUser); }catch(_){} }
+  }finally{ bt.disabled = false; }
+});
+
+function textoPedido(p){
+  const v = valores(p.ks);
+  return '*Novo pedido Total Civil*\n' +
+    'Nome: ' + (p.nome || '') + '\nE-mail: ' + (p.email || '') + (p.zap ? '\nWhatsApp: ' + p.zap : '') +
+    '\nProgramas: ' + p.ks.map(k => porKey(k).nome + (porKey(k).disp ? '' : ' (em breve)')).join(', ') +
+    '\nMensalidade após 2 meses grátis: ' + brl(v.mensal) +
+    '\nPagamento: ' + (p.pag === 'cartao' ? 'cartão de crédito' : 'Pix') +
+    (p.indic ? '\nCódigo de indicação usado: ' + p.indic : '') +
+    '\n\nPor favor, confira e libere meu acesso.';
+}
+function mostrarPedido(p){
+  const v = valores(p.ks);
+  const url = linkZap(textoPedido(p));
+  $('pedido-corpo').innerHTML =
+    '<div class="msg ok">Pedido registrado. Os 2 primeiros meses são grátis: assim que o administrador conferir, os programas são liberados.</div>' +
+    '<div class="resumo">' + p.ks.map(k => '<div class="lin"><span>' + esc(porKey(k).nome) + '</span><span>' + (porKey(k).disp ? brl(PRECO) + '/mês' : 'em breve') + '</span></div>').join('') +
+      '<div class="lin tot"><span>A partir do 3º mês</span><span>' + brl(v.mensal) + '/mês</span></div></div>' +
+    (p.pag === 'cartao'
+      ? '<p class="mini">Pagamento por <b>cartão de crédito</b>: o administrador envia o link de pagamento pelo WhatsApp.</p>'
+      : '<p class="mini">Pagamento por <b>Pix</b> (por dados bancários), a partir do 3º mês:</p>' + blocoBanco()) +
+    '<p class="mini" style="margin:12px 0">Toque abaixo para avisar o administrador pelo WhatsApp. A mensagem já vai pronta com o seu pedido.</p>' +
+    '<a class="bt pri" style="width:100%" href="' + esc(url) + '" target="_blank" rel="noopener">Avisar pelo WhatsApp</a>';
+  abrir('dl-pedido');
+}
+function blocoBanco(){
+  return '<div class="dados-banco"><div><span>Banco</span><b>' + BANCO.banco + '</b></div><div><span>Agência</span><b>' + BANCO.agencia + '</b></div><div><span>Conta corrente</span><b>' + BANCO.conta + '</b></div></div>';
+}
+
+/* ---------- entrar / sair ---------- */
+let criando = false;
+$('form-entrar').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  if(!fb){ msg('en-msg', 'Conectando ao servidor… tente de novo em instantes.', 'erro'); return; }
+  const email = $('en-email').value.trim().toLowerCase(), senha = $('en-senha').value;
+  if(!emailOk(email) || !senha){ msg('en-msg', 'Informe o e-mail e a senha.', 'erro'); return; }
+  const bt = $('en-bt'); bt.disabled = true; msg('en-msg', 'Entrando…', 'info');
+  try{
+    await comPrazo(fb.auth.signInWithEmailAndPassword(fb.a, email, senha), 20000);
+    $('en-senha').value = '';
+    msg('en-msg', '');
+    fechar('dl-entrar');
+    const volta = new URLSearchParams(location.search).get('voltar');
+    if(volta && /^\/[a-z]+\/?$/.test(volta)) location.href = volta;
+  }catch(e){ msg('en-msg', traduzir(e, 'Não foi possível entrar'), 'erro'); }
+  finally{ bt.disabled = false; }
+});
+$('bt-esqueci').onclick = async () => {
+  const email = $('en-email').value.trim().toLowerCase();
+  if(!emailOk(email)){ msg('en-msg', 'Digite seu e-mail no campo acima e toque em “Esqueci minha senha”.', 'erro'); return; }
+  try{ await fb.auth.sendPasswordResetEmail(fb.a, email); msg('en-msg', 'Se o e-mail estiver cadastrado, você receberá um link para criar nova senha.', 'ok'); }
+  catch(e){ if(/user-not-found/.test(e && e.code || '')) msg('en-msg', 'Se o e-mail estiver cadastrado, você receberá um link para criar nova senha.', 'ok'); else msg('en-msg', traduzir(e, 'Não foi possível enviar'), 'erro'); }
+};
+$('bt-sair').onclick = async () => { try{ await fb.auth.signOut(fb.a); }catch(e){} toast('Você saiu da conta.'); };
+
+/* ---------- sessão ---------- */
+async function carregarPerfil(u){
+  if(!u){ eu = null; aplicarSessao(); return; }
+  const {d, fs} = fb;
+  const snap = await comPrazo(fs.getDoc(fs.doc(d, 'usuarios', u.uid)), 20000);
+  const p = snap.exists() ? snap.data() : {};
+  const venc = paraData(p.validade);
+  eu = Object.assign({}, p, {
+    uid: u.uid, email: u.email || p.email || '', nome: p.nome || String(u.email || '').split('@')[0],
+    admin: listaAdmins().includes(String(u.email || '').toLowerCase()) || p.admin === true,
+    validade: venc, vencida: !!(venc && venc.getTime() < Date.now()), semPerfil: !snap.exists()
+  });
+  aplicarSessao();
+}
+function aplicarSessao(){
+  $('acesso-fora').hidden = !!eu; $('acesso-dentro').hidden = !eu;
+  $('indique-fora').hidden = !!eu; $('indique-dentro').hidden = !eu;
+  if(eu){
+    $('quem-nome').textContent = String(eu.nome || '').split(' ')[0] || eu.email;
+    $('meu-codigo').textContent = codigoDe(eu.uid);
+    $('bt-usuarios').hidden = !eu.admin;
+    if(eu.admin) contarPendentes();
+  }
+  renderProgramas(); atualizarBarra();
+}
+$('bt-copiar-codigo').onclick = async () => {
+  const t = 'Use meu código ' + codigoDe(eu.uid) + ' ao criar sua conta na Total Civil (programas de engenharia civil): https://totalcivil.com.br/';
+  try{ await navigator.clipboard.writeText(t); toast('Convite copiado. É só colar no WhatsApp.'); }
+  catch(e){ toast('Seu código: ' + codigoDe(eu.uid)); }
+};
+
+/* ---------- minha conta ---------- */
+$('bt-conta').onclick = () => {
+  if(!eu) return;
+  $('conta-email').textContent = eu.email;
+  const pedidos = Array.isArray(eu.programasPedidos) ? eu.programasPedidos : [];
+  const linhas = PROGRAMAS.map(p => {
+    const lib = liberado(eu, p);
+    const st = lib ? '<span class="st ok">Liberado' + (eu.validade && !eu.admin ? ' até ' + fmtData(eu.validade) : '') + '</span>'
+      : (eu[p.campo] && eu.vencida) ? '<span class="st warn">Vencido em ' + fmtData(eu.validade) + '</span>'
+      : (pedidos.includes(p.key) || (p.solic && eu[p.solic])) ? '<span class="st warn">Aguardando liberação</span>'
+      : '<span class="mini">Não contratado</span>';
+    return '<div class="lin" style="align-items:center"><span>' + esc(p.nome) + (p.disp ? '' : ' <span class="tag breve">em breve</span>') + '</span><span style="display:flex;gap:8px;align-items:center">' + st +
+      (lib && p.url ? ' <a class="bt peq" href="' + p.url + '">Abrir</a>' : '') + '</span></div>';
+  }).join('');
+  const nLib = PROGRAMAS.filter(p => p.disp && liberado(eu, p) && !eu.admin).length;
+  $('conta-corpo').innerHTML =
+    '<div class="resumo">' + linhas + '</div>' +
+    (eu.admin ? '<p class="mini">Você é administrador: tem acesso a todos os programas.</p>' :
+      '<div class="resumo"><div class="lin"><span>Mensalidade</span><b>' + brl(nLib * PRECO) + '</b></div>' +
+      '<div class="lin"><span>Forma de pagamento</span><span>' + (eu.formaPagamento === 'cartao' ? 'Cartão de crédito' : 'Pix') + '</span></div></div>' +
+      '<p class="mini">Pagamento por Pix (dados bancários):</p>' + blocoBanco() +
+      '<button class="bt pri" type="button" id="bt-paguei" style="width:100%;margin-top:6px">Já paguei: avisar pelo WhatsApp</button>') +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">' +
+      '<button class="bt" type="button" id="bt-alterar-pacote">Contratar mais programas</button>' +
+      '<span class="mini" style="align-self:center">Seu código de indicação: <b>' + codigoDe(eu.uid) + '</b></span></div>';
+  const bp = $('bt-paguei');
+  if(bp) bp.onclick = async () => {
+    const t = '*Pagamento Total Civil*\nNome: ' + (eu.nome || '') + '\nE-mail: ' + eu.email + '\nValor: ' + brl(nLib * PRECO) +
+      '\nForma: ' + (eu.formaPagamento === 'cartao' ? 'cartão de crédito' : 'Pix') + '\n\nAcabei de pagar a mensalidade. Por favor, confira.';
+    const aba = reservarAba();
+    try{ await fb.fs.updateDoc(fb.fs.doc(fb.d, 'usuarios', eu.uid), {pagamentoAvisadoEm: fb.fs.serverTimestamp()}); }catch(e){}
+    if(!enviarAba(aba, linkZap(t))) location.href = linkZap(t);
+  };
+  $('bt-alterar-pacote').onclick = () => abrirCadastro();
+  abrir('dl-conta');
+};
+
+/* ---------- programa personalizado ---------- */
+$('form-personalizado').addEventListener('submit', async ev => {
+  ev.preventDefault();
+  const nome = $('pp-nome').value.trim(), zap = $('pp-zap').value.trim(), email = $('pp-email').value.trim(), desc = $('pp-desc').value.trim();
+  if(nome.length < 2){ msg('pp-msg', 'Informe seu nome.', 'erro'); return; }
+  if(soDigitos(zap).length < 10){ msg('pp-msg', 'Informe o WhatsApp com DDD.', 'erro'); return; }
+  if(email && !emailOk(email)){ msg('pp-msg', 'E-mail inválido.', 'erro'); return; }
+  if(desc.length < 10){ msg('pp-msg', 'Descreva o que o programa deve fazer.', 'erro'); return; }
+  const t = '*Pedido de programa personalizado*\nPara: Diretor do Setor de Webdesign\nNome: ' + nome + '\nWhatsApp: ' + zap + (email ? '\nE-mail: ' + email : '') + '\n\n' + desc;
+  const aba = reservarAba();
+  const bt = $('pp-enviar'); bt.disabled = true;
+  let gravou = false;
+  if(fb){
+    try{
+      await comPrazo(fb.fs.addDoc(fb.fs.collection(fb.d, 'solicitacoes'), {
+        nome: nome.slice(0, 120), contato: zap.slice(0, 30), email: email.slice(0, 120), descricao: desc.slice(0, 3000),
+        uid: (fb.a.currentUser && fb.a.currentUser.uid) || '', criadoEm: fb.fs.serverTimestamp()
+      }), 15000);
+      gravou = true;
+    }catch(e){ console.warn('Pedido personalizado não gravado:', e); }
+  }
+  bt.disabled = false;
+  const url = linkZap(t);
+  const foi = enviarAba(aba, url);
+  msg('pp-msg', (gravou ? 'Pedido registrado. ' : '') + (foi ? 'Conclua o envio na conversa do WhatsApp que abriu.' : 'Toque no link para enviar pelo WhatsApp.'), 'ok');
+  if(!foi){ const el = $('pp-msg'); el.innerHTML += ' <a href="' + esc(url) + '" target="_blank" rel="noopener">Enviar pelo WhatsApp</a>'; }
+  $('form-personalizado').reset();
+});
+
+/* ============================================================
+   ADMINISTRAÇÃO
+   ============================================================ */
+async function listarUsuarios(){
+  const {d, fs} = fb;
+  const snap = await comPrazo(fs.getDocs(fs.query(fs.collection(d, 'usuarios'), fs.limit(1000))), 20000);
+  const admins = listaAdmins();
+  const l = snap.docs.map(x => {
+    const v = x.data() || {}, venc = paraData(v.validade);
+    return Object.assign({}, v, {uid: x.id, email: v.email || '', nome: v.nome || '', empresa: v.empresa || '',
+      validade: venc, vencida: !!(venc && venc.getTime() < Date.now()), criadoEm: paraData(v.criadoEm), pedidoEm: paraData(v.pedidoEm),
+      pagamentoAvisadoEm: paraData(v.pagamentoAvisadoEm),
+      admin: v.admin === true || admins.includes(String(v.email || '').toLowerCase())});
+  });
+  admins.forEach(em => { if(!l.some(x => String(x.email).toLowerCase() === em)) l.push({uid: null, email: em, admin: true, nome: ''}); });
+  return l;
+}
+const algum = u => PROGRAMAS.some(p => u[p.campo]);
+const estado = u => u.admin ? 'adm' : u.recusado ? 'rec' : !algum(u) ? 'pen' : u.vencida ? 'ven' : 'ok';
+function pediu(u, p){
+  if(Array.isArray(u.programasPedidos)) return u.programasPedidos.includes(p.key);
+  if(p.solic) return !!u[p.solic];
+  return p.key === 'pavimento' && !(u.orcamentoSolicitado || u.intertravadoSolicitado);
+}
+async function contarPendentes(){
+  try{
+    const n = (await listarUsuarios()).filter(u => estado(u) === 'pen').length;
+    $('n-pend').textContent = n; $('n-pend').hidden = !n;
+  }catch(e){}
+}
+let abaAdmin = 'usuarios';
+$('bt-usuarios').onclick = () => { abrir('dl-usuarios'); mostrarAba(abaAdmin); };
+document.querySelectorAll('[data-aba]').forEach(b => b.onclick = () => mostrarAba(b.dataset.aba));
+function mostrarAba(a){
+  abaAdmin = a;
+  document.querySelectorAll('[data-aba]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.aba === a)));
+  a === 'usuarios' ? renderUsuarios() : renderPersonalizados();
+}
+function maisDias(n){ const d = new Date(); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+
+async function renderUsuarios(){
+  const corpo = $('us-corpo');
+  corpo.innerHTML = '<p class="mini">Carregando…</p>';
+  let lista;
+  try{ lista = await listarUsuarios(); }catch(e){ corpo.innerHTML = '<div class="msg erro">' + esc(traduzir(e, 'Falha ao carregar')) + '</div>'; return; }
+  const ordem = {adm: -1, pen: 0, ven: 1, ok: 2, rec: 3};
+  lista.sort((x, y) => ordem[estado(x)] - ordem[estado(y)] || String(x.nome || x.email).localeCompare(String(y.nome || y.email)));
+  const indicacoes = {};
+  lista.forEach(u => { if(u.indicadoPor) indicacoes[u.indicadoPor] = (indicacoes[u.indicadoPor] || 0) + 1; });
+  const rot = {adm: 'Administrador', rec: 'Recusado', pen: 'Aguardando aprovação', ven: 'Licença vencida', ok: 'Ativo'};
+  const cor = {adm: 'adm', rec: 'warn', pen: 'warn', ven: 'warn', ok: 'ok'};
+  let h = '<div class="tab-rol"><table class="us"><thead><tr><th>Usuário</th><th>Nome / Empresa</th><th>Programas</th><th>Pedido e pagamento</th><th>Validade</th><th>Situação e ações</th></tr></thead><tbody>';
+  lista.forEach((u, i) => {
+    const e = estado(u);
+    const bt = (t, a, pri) => '<button class="bt peq' + (pri ? ' pri' : '') + '" type="button" data-i="' + i + '" data-acao="' + a + '">' + t + '</button>';
+    const zap = soDigitos(u.whatsapp);
+    const contato = esc(u.email) + (zap ? '<div class="mini"><a href="https://wa.me/' + (zap.length <= 11 ? '55' : '') + zap + '" target="_blank" rel="noopener">WhatsApp ' + esc(u.whatsapp) + '</a></div>' : '');
+    if(!u.uid){
+      h += '<tr><td>' + contato + '</td><td class="mini">Administrador da lista oficial</td><td class="mini">todos</td><td></td><td></td><td><span class="st adm">Administrador · nunca entrou</span><div class="acoes" style="margin-top:6px">' + bt('Redefinir senha', 'redefinir') + '</div></td></tr>';
+      return;
+    }
+    let progs = '<span class="mini">todos</span>';
+    if(e !== 'adm'){
+      progs = '<div class="progs">' + PROGRAMAS.map((p, k) => {
+        const pd = pediu(u, p) && !u[p.campo];
+        const marc = u[p.campo] || (e === 'pen' && pd);
+        return '<label><input type="checkbox" data-i="' + i + '" data-prog="' + k + '"' + (marc ? ' checked' : '') + '> ' + esc(p.nome) +
+          (p.disp ? '' : ' <span class="tag breve">em breve</span>') + (pd ? ' <span class="tag pediu">pediu</span>' : '') + '</label>';
+      }).join('') + '</div>';
+    }
+    const nAtivos = PROGRAMAS.filter(p => p.disp && (u[p.campo] || (e === 'pen' && pediu(u, p)))).length;
+    const nInd = indicacoes[codigoDe(u.uid)] || 0;
+    const pedidoInfo = e === 'adm' ? '' :
+      '<div class="mini">' + (e === 'pen' ? 'Mensal do pedido' : 'Mensal') + ': <b>' + brl(nAtivos * PRECO) + '</b>' + (nInd ? ' <span class="tag pediu">−10% no próximo mês</span>' : '') + '</div>' +
+      '<div class="mini">Pagamento: ' + (u.formaPagamento === 'cartao' ? 'cartão' : u.formaPagamento === 'pix' ? 'Pix' : '—') + '</div>' +
+      (u.pedidoEm ? '<div class="mini">Pedido em ' + fmtData(u.pedidoEm) + '</div>' : '') +
+      (u.pagamentoAvisadoEm ? '<div class="mini"><b>Avisou pagamento em ' + fmtData(u.pagamentoAvisadoEm) + '</b></div>' : '') +
+      '<div class="mini">Código: ' + codigoDe(u.uid) + (nInd ? ' · indicou ' + nInd : '') + '</div>' +
+      (u.indicadoPor ? '<div class="mini">Indicado por ' + esc(u.indicadoPor) + '</div>' : '');
+    const dt = u.validade ? u.validade.toISOString().slice(0, 10) : (e === 'pen' ? maisDias(MESES_GRATIS * 30) : '');
+    let acoes = '';
+    if(e === 'pen') acoes = bt('Aprovar', 'aprovar', true) + bt('Recusar', 'recusar');
+    else if(e === 'rec') acoes = bt('Aprovar', 'aprovar', true);
+    else if(e !== 'adm') acoes = bt('+30 dias', 'renovar') + bt('Bloquear', 'bloquear');
+    h += '<tr' + (e === 'pen' ? ' class="pend"' : '') + '><td>' + contato + '</td>' +
+      '<td><input type="text" data-i="' + i + '" data-campo="nome" value="' + esc(u.nome) + '" placeholder="nome"><br><input type="text" data-i="' + i + '" data-campo="empresa" value="' + esc(u.empresa) + '" placeholder="empresa" style="margin-top:4px"></td>' +
+      '<td>' + progs + '</td><td>' + pedidoInfo + '</td>' +
+      '<td>' + (e === 'adm' ? '<span class="mini">sem prazo</span>' : '<input type="date" data-i="' + i + '" data-campo="validade" value="' + dt + '">' + (e === 'pen' && !u.validade ? '<div class="mini">2 meses grátis</div>' : '')) + '</td>' +
+      '<td><span class="st ' + cor[e] + '">' + rot[e] + '</span><div class="acoes" style="margin-top:6px">' + acoes + bt('Redefinir senha', 'redefinir') + bt('Gravar', 'gravar') + '</div></td></tr>';
+  });
+  h += '</tbody></table></div><p class="mini" style="margin-top:10px">Um único login por pessoa. “Aprovar” libera os programas marcados até a validade (cadastros novos já vêm com 2 meses grátis). “+30 dias” renova após o pagamento. “Gravar” salva a linha. “Recusar” e “Bloquear” impedem o uso e podem ser desfeitos.</p>';
+  corpo.innerHTML = h;
+
+  corpo.onclick = async ev => {
+    const b = ev.target.closest('button[data-acao]'); if(!b) return;
+    const i = +b.dataset.i, u = lista[i], ac = b.dataset.acao;
+    if(ac === 'redefinir'){
+      try{ await fb.auth.sendPasswordResetEmail(fb.a, u.email); toast('Link de nova senha enviado para ' + u.email + '.'); }catch(e){ toast(traduzir(e, 'Não foi possível enviar')); }
+      return;
+    }
+    const val = c => { const el = corpo.querySelector('[data-i="' + i + '"][data-campo="' + c + '"]'); return el ? el.value : ''; };
+    const campos = {nome: val('nome').slice(0, 120), empresa: val('empresa').slice(0, 120)};
+    if(estado(u) !== 'adm'){
+      let v = val('validade');
+      if(ac === 'renovar'){ const base = u.validade && u.validade > new Date() ? new Date(u.validade) : new Date(); base.setDate(base.getDate() + 30); v = base.toISOString().slice(0, 10); }
+      campos.validade = v ? new Date(v + 'T23:59:59') : null;
+    }
+    let marcou = false;
+    PROGRAMAS.forEach((p, k) => { const cb = corpo.querySelector('input[data-i="' + i + '"][data-prog="' + k + '"]'); if(cb){ campos[p.campo] = cb.checked; if(cb.checked) marcou = true; } });
+    if(ac === 'aprovar'){ if(!marcou){ toast('Marque em “Programas” ao menos um programa.'); return; } campos.recusado = false; }
+    else if(ac === 'recusar' || ac === 'bloquear'){ PROGRAMAS.forEach(p => campos[p.campo] = false); if(ac === 'recusar') campos.recusado = true; }
+    b.disabled = true;
+    try{
+      await comPrazo(fb.fs.updateDoc(fb.fs.doc(fb.d, 'usuarios', u.uid), campos), 20000);
+      toast(ac === 'renovar' ? 'Validade renovada até ' + fmtData(campos.validade) + '.' : 'Usuário atualizado.');
+      renderUsuarios(); contarPendentes();
+    }catch(e){ toast(traduzir(e, 'Não foi possível salvar')); b.disabled = false; }
+  };
+}
+
+async function renderPersonalizados(){
+  const corpo = $('us-corpo');
+  corpo.innerHTML = '<p class="mini">Carregando…</p>';
+  try{
+    const {d, fs} = fb;
+    const snap = await comPrazo(fs.getDocs(fs.query(fs.collection(d, 'solicitacoes'), fs.limit(300))), 20000);
+    const l = snap.docs.map(x => Object.assign({id: x.id}, x.data(), {criadoEm: paraData(x.data().criadoEm)}))
+      .sort((a, b) => (b.criadoEm || 0) - (a.criadoEm || 0));
+    if(!l.length){ corpo.innerHTML = '<p class="mini">Nenhum pedido de programa personalizado ainda.</p>'; return; }
+    corpo.innerHTML = '<div class="tab-rol"><table class="us"><thead><tr><th>Data</th><th>Nome</th><th>Contato</th><th>Pedido</th><th></th></tr></thead><tbody>' +
+      l.map(s => { const z = soDigitos(s.contato); return '<tr><td>' + fmtData(s.criadoEm) + '</td><td>' + esc(s.nome) + '</td><td>' +
+        (z ? '<a href="https://wa.me/' + (z.length <= 11 ? '55' : '') + z + '" target="_blank" rel="noopener">' + esc(s.contato) + '</a>' : esc(s.contato)) +
+        (s.email ? '<div class="mini">' + esc(s.email) + '</div>' : '') + '</td><td style="white-space:pre-wrap;min-width:260px">' + esc(s.descricao) + '</td>' +
+        '<td><button class="bt peq" type="button" data-excluir="' + esc(s.id) + '">Excluir</button></td></tr>'; }).join('') + '</tbody></table></div>';
+    corpo.onclick = async ev => {
+      const b = ev.target.closest('[data-excluir]'); if(!b) return;
+      if(b.dataset.conf !== '1'){ b.dataset.conf = '1'; b.textContent = 'Confirmar exclusão'; return; }
+      try{ await fs.deleteDoc(fs.doc(d, 'solicitacoes', b.dataset.excluir)); toast('Pedido excluído.'); renderPersonalizados(); }catch(e){ toast(traduzir(e, 'Não foi possível excluir')); }
+    };
+  }catch(e){ corpo.innerHTML = '<div class="msg erro">' + esc(traduzir(e, 'Falha ao carregar')) + '</div>'; }
+}
+
+/* ============================================================
+   INÍCIO
+   ============================================================ */
+renderProgramas(); atualizarBarra();
+(async function iniciar(){
+  const cfg = window.FIREBASE_CONFIG;
+  if(!cfg || !cfg.apiKey){ toast('Configuração do servidor não encontrada.'); return; }
+  try{
+    const [{initializeApp}, auth, fs] = await Promise.all([import(SDK + 'firebase-app.js'), import(SDK + 'firebase-auth.js'), import(SDK + 'firebase-firestore.js')]);
+    const app = initializeApp(cfg);
+    const a = auth.getAuth(app);
+    let d; try{ d = fs.initializeFirestore(app, {experimentalAutoDetectLongPolling: true}); }catch(_){ d = fs.getFirestore(app); }
+    await auth.setPersistence(a, auth.browserLocalPersistence).catch(() => {});
+    fb = {a, d, auth, fs};
+    window.__tc = fb;
+    auth.onAuthStateChanged(a, async u => {
+      if(criando) return;                       // o cadastro carrega o perfil quando terminar
+      try{ await carregarPerfil(u); }catch(e){ console.error(e); eu = null; aplicarSessao(); if(u) toast(traduzir(e, 'Não foi possível ler seu cadastro')); }
+      const q = new URLSearchParams(location.search);
+      if(!u && q.get('entrar')) abrir('dl-entrar');
+      if(eu && q.get('voltar') && /^\/[a-z]+\/?$/.test(q.get('voltar'))) location.href = q.get('voltar');
+      if(eu && eu.admin && location.hash === '#usuarios'){ abrir('dl-usuarios'); mostrarAba('usuarios'); }
+    });
+  }catch(e){ console.error(e); toast('Não foi possível conectar ao servidor. Recarregue a página.'); }
+})();
+</script>
 </body>
 </html>
