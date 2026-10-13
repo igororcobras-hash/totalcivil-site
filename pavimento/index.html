@@ -267,6 +267,9 @@ body.mode-android .field input,body.mode-android .field select{font-size:15px;pa
 body.mode-ios .field input,body.mode-ios .field select,body.mode-ios #topo_tbody input,body.mode-ios textarea{font-size:16px;padding:8px 10px;}
 body.mode-ios .tabs-nav{-webkit-overflow-scrolling:touch;}
 body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
+
+/* Login único: os formulários de login e cadastro ficam só na página principal */
+#form-login,#form-cadastro,.esqueci,#ir-cadastro,#ir-login{display:none!important}
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -4538,7 +4541,7 @@ function decidirEntrada() {
 
   const u = N.usuario;
   if (!u) {// ninguém logado
-    if (location.hostname.replace(/^www\./,'') === 'totalcivil.com.br') { location.replace('/?entrar=1&voltar=' + encodeURIComponent(location.pathname)); return; } // login único na página principal
+    location.replace((location.hostname.replace(/^www\./,'') === 'totalcivil.com.br' ? '' : 'https://totalcivil.com.br') + '/?entrar=1&voltar=' + encodeURIComponent('/pavimento/')); return; // login único na página principal
     if (login) login.hidden = false;
     mostrarFormLogin('login');msgLogin('');
     const campo = document.getElementById('log_usuario');
@@ -4547,7 +4550,7 @@ function decidirEntrada() {
   }
   if (!u.liberado) {// logado, mas sem licença válida
     if (login) login.hidden = false;
-    msgLogin(u.recusado ?
+    msgLogin(u.erro ? 'Não foi possível abrir seu cadastro agora (' + u.erro + '). Recarregue a página para tentar de novo.' : u.recusado ?
     'Seu cadastro não foi aprovado. Em caso de dúvida, fale com o administrador.' :
     u.vencida ?
     'Sua licença venceu em ' + fmtData(u.validade) + '. Procure o administrador para renovar.' :

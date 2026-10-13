@@ -204,6 +204,9 @@ tbody td{padding:5px 8px;border-top:1px solid var(--border);vertical-align:middl
 #sessao-bar.vis{display:flex}
 .sessao-nome{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.85}
 .sessao-admin{background:rgba(255,255,255,.25);border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700}
+
+/* Login único: os formulários de login e cadastro ficam só na página principal */
+#form-login,#form-cadastro,.esqueci,#ir-cadastro,#ir-login{display:none!important}
 </style>
 
 <!-- LOGIN -->
@@ -1687,8 +1690,7 @@ Nuvem.aoMudarSessao = function(u){
   const btnSair = document.getElementById('btn-sair');
 
   if(!u){
-    if(Nuvem.disponivel && location.hostname.replace(/^www\./,'') === 'totalcivil.com.br'){ location.replace('/?entrar=1&voltar=' + encodeURIComponent(location.pathname)); return; } // login único na página principal
-    if(Nuvem.disponivel){ loginEl.hidden = false; appEl.hidden = true; }
+    if(Nuvem.disponivel){ location.replace((location.hostname.replace(/^www\./,'') === 'totalcivil.com.br' ? '' : 'https://totalcivil.com.br') + '/?entrar=1&voltar=' + encodeURIComponent('/intertravado/')); return; } // login único na página principal
     barEl.classList.remove('vis');
     if(btnSair) btnSair.hidden = true;
     if(btnUsr)  btnUsr.hidden = true;
@@ -1696,8 +1698,20 @@ Nuvem.aoMudarSessao = function(u){
     return;
   }
   if(u.erro){
-    irParaLogin(); loginEl.hidden = false; appEl.hidden = true;
-    mostrarMsgLogin('Erro ao carregar perfil: '+u.erro,'erro'); setLoginBusy(false); return;
+    /* sem formulário de senha: mostra o erro real e oferece tentar de novo */
+    irParaEspera(); loginEl.hidden = false; appEl.hidden = true;
+    const p = document.querySelector('#login-espera p');
+    if(p) p.innerHTML = 'Não foi possível abrir seu cadastro agora.<br><small style="opacity:.8">Detalhe: ' + String(u.erro).replace(/[<>&]/g,'') + '</small>';
+    const box = document.getElementById('login-espera');
+    if(box && !document.getElementById('btn-tentar')){
+      const bt = document.createElement('button'); bt.type = 'button'; bt.id = 'btn-tentar'; bt.textContent = 'Tentar de novo'; bt.style.marginRight = '8px';
+      bt.onclick = () => location.reload(); box.insertBefore(bt, box.querySelector('#btn-sair-espera'));
+      const a = document.createElement('a'); a.href = 'https://totalcivil.com.br/'; a.textContent = 'Página principal'; a.style.cssText = 'margin-left:10px;color:#9fd0ff';
+      box.appendChild(a);
+    }
+    document.getElementById('login-sub').textContent = 'Erro de conexão';
+    console.error('Intertravado – erro ao carregar o cadastro:', u.erro);
+    return;
   }
   if(u.recusado && !u.admin){
     irParaEspera();
