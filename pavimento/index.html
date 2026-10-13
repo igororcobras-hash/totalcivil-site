@@ -268,8 +268,6 @@ body.mode-ios .field input,body.mode-ios .field select,body.mode-ios #topo_tbody
 body.mode-ios .tabs-nav{-webkit-overflow-scrolling:touch;}
 body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
 
-/* Login único: os formulários de login e cadastro ficam só na página principal */
-#form-login,#form-cadastro,.esqueci,#ir-cadastro,#ir-login{display:none!important}
 </style>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -312,29 +310,6 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
     <div class="norma">Método Empírico do CBR · IP-06/2004 · IPR-719</div>
     <h2>Calculadora de Pavimento Flexível</h2>
     <div class="sub" id="login-sub">Acesso restrito. Informe seu e-mail e a senha.</div>
-    <form id="form-login" autocomplete="on">
-      <label for="log_usuario">E-mail</label>
-      <input type="email" id="log_usuario" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="seu e-mail">
-      <label for="log_senha">Senha</label>
-      <input type="password" id="log_senha" autocomplete="current-password" placeholder="sua senha">
-      <div class="esqueci"><button type="button" class="alt" id="btn-esqueci">Esqueci minha senha</button></div>
-      <button type="submit" id="btn-entrar">Entrar</button>
-      <div class="linha-alt">Ainda não tem conta? <button type="button" class="alt" id="ir-cadastro">Criar conta</button></div>
-    </form>
-    <form id="form-cadastro" autocomplete="on" hidden>
-      <label for="cad_nome">Nome completo</label>
-      <input type="text" id="cad_nome" autocomplete="name" maxlength="120" placeholder="seu nome">
-      <label for="cad_empresa">Empresa ou órgão</label>
-      <input type="text" id="cad_empresa" autocomplete="organization" maxlength="120" placeholder="onde você trabalha">
-      <label for="cad_email">E-mail</label>
-      <input type="email" id="cad_email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="seu e-mail">
-      <label for="cad_senha">Senha</label>
-      <input type="password" id="cad_senha" autocomplete="new-password" placeholder="mínimo de 8 caracteres">
-      <label for="cad_senha2">Repita a senha</label>
-      <input type="password" id="cad_senha2" autocomplete="new-password" placeholder="repita a senha">
-      <div class="dica">Seu acesso só é liberado depois que o administrador aprovar o cadastro.</div>
-      <button type="submit" id="btn-cadastrar">Solicitar acesso</button>
-      <div class="linha-alt">Já tem conta? <button type="button" class="alt" id="ir-login">Entrar</button></div>
     </form>
     <div id="login-espera" hidden><button type="button" id="btn-sair-espera">Sair</button></div>
     <div class="msg" id="login-msg"></div>
@@ -4544,7 +4519,7 @@ function decidirEntrada() {
     location.replace((location.hostname.replace(/^www\./,'') === 'totalcivil.com.br' ? '' : 'https://totalcivil.com.br') + '/?entrar=1&voltar=' + encodeURIComponent('/pavimento/')); return; // login único na página principal
     if (login) login.hidden = false;
     mostrarFormLogin('login');msgLogin('');
-    const campo = document.getElementById('log_usuario');
+    const campo = null;
     if (campo && _deviceMode === 'desktop') campo.focus();
     return;
   }
@@ -4626,47 +4601,9 @@ document.addEventListener('nuvem-pronta', () => {
   decidirEntrada();
 });
 
-document.addEventListener('submit', (ev) => {
-  if (!ev.target || ev.target.id !== 'form-login') return;
-  ev.preventDefault();
-  const btn = document.getElementById('btn-entrar');
-  const usuario = (document.getElementById('log_usuario') || {}).value || '';
-  const senha = (document.getElementById('log_senha') || {}).value || '';
-  if (!usuario.trim() || !senha) {msgLogin('Informe usuário e senha.', 'erro');return;}
-  if (btn) {btn.disabled = true;btn.textContent = 'Entrando…';}
-  msgLogin('');
-  window.Nuvem.entrar(usuario, senha).
-  catch((e) => msgLogin(e && e.message || 'Não foi possível entrar.', 'erro')).
-  then(() => {if (btn) {btn.disabled = false;btn.textContent = 'Entrar';}
-    const sn = document.getElementById('log_senha');if (sn) sn.value = '';});
-});
-
-document.addEventListener('submit', (ev) => {
-  if (!ev.target || ev.target.id !== 'form-cadastro') return;
-  ev.preventDefault();
-  const v = (id) => (document.getElementById(id) || {}).value || '';
-  const btn = document.getElementById('btn-cadastrar');
-  if (v('cad_senha') !== v('cad_senha2')) {msgLogin('As senhas não conferem.', 'erro');return;}
-  if (btn) {btn.disabled = true;btn.textContent = 'Enviando…';}
-  msgLogin('');
-  window.Nuvem.cadastrar(v('cad_nome'), v('cad_empresa'), v('cad_email'), v('cad_senha')).
-  catch((e) => msgLogin(e && e.message || 'Não foi possível criar a conta.', 'erro')).
-  then(() => {if (btn) {btn.disabled = false;btn.textContent = 'Solicitar acesso';}
-    ['cad_senha', 'cad_senha2'].forEach((id) => {const el = document.getElementById(id);if (el) el.value = '';});});
-});
-
+/* Login único: entrar e criar conta ficam só na página principal (totalcivil.com.br) */
 document.addEventListener('click', (ev) => {
-  const t = ev.target && ev.target.id;
-  if (t === 'ir-cadastro') {msgLogin('');mostrarFormLogin('cadastro');const c = document.getElementById('cad_nome');if (c && _deviceMode === 'desktop') c.focus();} else
-  if (t === 'ir-login') {msgLogin('');mostrarFormLogin('login');} else
-  if (t === 'btn-sair-espera') {sairDaConta();} else
-  if (t === 'btn-esqueci') {
-    const em = (document.getElementById('log_usuario') || {}).value || '';
-    msgLogin('Enviando…', 'info');
-    window.Nuvem.redefinirSenha(em).
-    then(() => msgLogin('Se este e-mail tem cadastro, enviamos um link para criar uma nova senha. Confira também a caixa de spam.', 'info')).
-    catch((e) => msgLogin(e && e.message || 'Não foi possível enviar o e-mail.', 'erro'));
-  }
+  if (ev.target && ev.target.id === 'btn-sair-espera') sairDaConta();
 });
 
 /* ---------------- Janela auxiliar ---------------- */

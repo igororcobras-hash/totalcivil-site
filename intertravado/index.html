@@ -205,8 +205,6 @@ tbody td{padding:5px 8px;border-top:1px solid var(--border);vertical-align:middl
 .sessao-nome{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.85}
 .sessao-admin{background:rgba(255,255,255,.25);border-radius:3px;padding:1px 5px;font-size:10px;font-weight:700}
 
-/* Login único: os formulários de login e cadastro ficam só na página principal */
-#form-login,#form-cadastro,.esqueci,#ir-cadastro,#ir-login{display:none!important}
 </style>
 
 <!-- LOGIN -->
@@ -215,29 +213,6 @@ tbody td{padding:5px 8px;border-top:1px solid var(--border);vertical-align:middl
     <div class="norma">IP-06/2004 · ABNT NBR 9781 · ABNT NBR 15953</div>
     <h2>Pavimento Intertravado</h2>
     <div class="sub" id="login-sub">Acesso restrito. Informe seu e-mail e a senha.</div>
-    <form id="form-login" autocomplete="on">
-      <label for="log_usuario">E-mail</label>
-      <input type="email" id="log_usuario" autocomplete="username" autocapitalize="none" spellcheck="false" placeholder="seu e-mail">
-      <label for="log_senha">Senha</label>
-      <input type="password" id="log_senha" autocomplete="current-password" placeholder="sua senha">
-      <div class="esqueci"><button type="button" class="alt" id="btn-esqueci">Esqueci minha senha</button></div>
-      <button type="submit" id="btn-entrar">Entrar</button>
-      <div class="linha-alt">Ainda não tem conta? <button type="button" class="alt" id="ir-cadastro">Criar conta</button></div>
-    </form>
-    <form id="form-cadastro" autocomplete="on" hidden>
-      <label for="cad_nome">Nome completo</label>
-      <input type="text" id="cad_nome" autocomplete="name" maxlength="120" placeholder="seu nome">
-      <label for="cad_empresa">Empresa ou órgão</label>
-      <input type="text" id="cad_empresa" autocomplete="organization" maxlength="120" placeholder="onde você trabalha">
-      <label for="cad_email">E-mail</label>
-      <input type="email" id="cad_email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="seu e-mail">
-      <label for="cad_senha">Senha</label>
-      <input type="password" id="cad_senha" autocomplete="new-password" placeholder="mínimo de 8 caracteres">
-      <label for="cad_senha2">Repita a senha</label>
-      <input type="password" id="cad_senha2" autocomplete="new-password" placeholder="repita a senha">
-      <div class="dica">Seu acesso só é liberado depois que o administrador aprovar o cadastro.</div>
-      <button type="submit" id="btn-cadastrar">Solicitar acesso</button>
-      <div class="linha-alt">Já tem conta? <button type="button" class="alt" id="ir-login">Entrar</button></div>
     </form>
     <div id="login-espera" hidden>
       <p style="color:rgba(255,255,255,.85);font-size:14px;margin-bottom:16px;">Seu cadastro está em análise pelo administrador. Você receberá acesso assim que for aprovado.</p>
@@ -1951,68 +1926,16 @@ function setLoginBusy(busy){
   document.querySelectorAll('#login button').forEach(b=>b.disabled=busy);
 }
 
+/* Login único: entrar e criar conta ficam só na página principal (totalcivil.com.br) */
 function irParaLogin(){
-  document.getElementById('form-login').hidden = false;
-  document.getElementById('form-cadastro').hidden = true;
   document.getElementById('login-espera').hidden = true;
-  document.getElementById('login-sub').textContent = 'Acesso restrito. Informe seu e-mail e a senha.';
-  mostrarMsgLogin('','');
-}
-function irParaCadastro(){
-  document.getElementById('form-login').hidden = true;
-  document.getElementById('form-cadastro').hidden = false;
-  document.getElementById('login-espera').hidden = true;
-  document.getElementById('login-sub').textContent = 'Crie sua conta para solicitar acesso.';
   mostrarMsgLogin('','');
 }
 function irParaEspera(){
-  document.getElementById('form-login').hidden = true;
-  document.getElementById('form-cadastro').hidden = true;
   document.getElementById('login-espera').hidden = false;
   document.getElementById('login-sub').textContent = 'Cadastro em análise pelo administrador.';
   mostrarMsgLogin('','');
 }
-
-document.getElementById('ir-cadastro').addEventListener('click', irParaCadastro);
-document.getElementById('ir-login').addEventListener('click', irParaLogin);
-
-document.getElementById('btn-esqueci').addEventListener('click', async ()=>{
-  const em = document.getElementById('log_usuario').value.trim();
-  setLoginBusy(true);
-  try{
-    await Nuvem.redefinirSenha(em);
-    mostrarMsgLogin('Se o e-mail estiver cadastrado, você receberá um link para redefinir a senha.','info');
-  }catch(e){ mostrarMsgLogin(e.message,'erro'); }
-  setLoginBusy(false);
-});
-
-document.getElementById('form-login').addEventListener('submit', async e=>{
-  e.preventDefault();
-  const usuario = document.getElementById('log_usuario').value.trim();
-  const senha   = document.getElementById('log_senha').value;
-  if(!usuario||!senha){ mostrarMsgLogin('Preencha o e-mail e a senha.','erro'); return; }
-  setLoginBusy(true);
-  mostrarMsgLogin('Entrando…','info');
-  try{
-    await comPrazo(Nuvem.entrar(usuario, senha), 20000, 'O servidor não respondeu. Verifique a internet e tente de novo.');
-    // aoMudarSessao cuidará do restante
-  }catch(e){ mostrarMsgLogin(e.message,'erro'); setLoginBusy(false); }
-});
-
-document.getElementById('form-cadastro').addEventListener('submit', async e=>{
-  e.preventDefault();
-  const nome    = document.getElementById('cad_nome').value.trim();
-  const empresa = document.getElementById('cad_empresa').value.trim();
-  const email   = document.getElementById('cad_email').value.trim();
-  const senha   = document.getElementById('cad_senha').value;
-  const senha2  = document.getElementById('cad_senha2').value;
-  if(senha !== senha2){ mostrarMsgLogin('As senhas não coincidem.','erro'); return; }
-  setLoginBusy(true);
-  mostrarMsgLogin('Criando conta…','info');
-  try{
-    await Nuvem.cadastrar(nome, empresa, email, senha);
-  }catch(e){ mostrarMsgLogin(e.message,'erro'); setLoginBusy(false); }
-});
 
 document.getElementById('btn-sair-espera').addEventListener('click', async ()=>{
   await Nuvem.sair();
