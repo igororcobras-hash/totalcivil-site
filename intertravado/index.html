@@ -112,6 +112,34 @@ input,select,textarea{font-family:inherit}
 .f input:focus,.f select:focus{outline:2px solid var(--accent2);outline-offset:1px}
 .f .oc{background:var(--out);border:1px solid var(--out-border);border-radius:4px;padding:4px 6px;font-size:12px;font-weight:700;color:var(--fg);font-variant-numeric:tabular-nums;min-height:28px}
 
+
+/* ── EXPLICAÇÕES, MENSAGENS E AVISOS ── */
+[data-ajuda]{cursor:help}
+.ajuda-i{display:inline-flex;align-items:center;justify-content:center;margin-left:4px;font-size:11px;line-height:1;opacity:.6;cursor:pointer;font-style:normal;font-weight:400;padding:2px}
+.ajuda-i:hover{opacity:1}
+#ajuda-pop{position:fixed;z-index:3000;background:var(--accent);color:#fff;border-radius:8px;padding:10px 12px;font-size:12px;line-height:1.55;box-shadow:0 8px 24px rgba(0,0,0,.3);max-height:70vh;overflow:auto}
+#ajuda-pop b{color:#ffe08a}
+:root[data-theme="dark"] #ajuda-pop{background:#22324d}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) #ajuda-pop{background:#22324d}}
+.sec-dica{float:right;font-weight:400;text-transform:none;letter-spacing:0;font-size:10px;color:var(--fg3)}
+@media(max-width:700px){.sec-dica{float:none;display:block;margin-top:2px}}
+.fmsg{font-size:10px;line-height:1.35;color:var(--fg3);min-height:0}
+.fmsg:empty{display:none}
+.fmsg.ok{color:var(--ok-fg)}
+.fmsg.warn{color:var(--warn-fg);font-weight:600}
+.fmsg.err{color:#c0262d;font-weight:700}
+:root[data-theme="dark"] .fmsg.err{color:#ff8a8a}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .fmsg.err{color:#ff8a8a}}
+.f input.campo-warn,.f select.campo-warn{border-color:var(--warn-border);box-shadow:0 0 0 1px var(--warn-border)}
+.f input.campo-err,.f select.campo-err{border-color:#c0262d;box-shadow:0 0 0 1px #c0262d}
+.f input.campo-ok,.f select.campo-ok{border-color:var(--ok-border)}
+.avisos{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.aviso{border-radius:6px;padding:6px 10px;font-size:12px;border:1px solid var(--border);background:var(--bg2)}
+.aviso.err{background:var(--warn);color:var(--warn-fg);border-color:#c0262d;font-weight:600}
+.aviso.warn{background:var(--warn);color:var(--warn-fg);border-color:var(--warn-border)}
+.aviso.info{background:var(--out);color:var(--fg);border-color:var(--out-border)}
+.aviso.sug{background:var(--ok);color:var(--ok-fg);border-color:var(--ok-border)}
+#tbl-camadas td:last-child{font-size:11px}
 /* ── STATUS ── */
 .vbar{border-radius:6px;padding:6px 10px;font-size:12px;font-weight:600;margin-bottom:8px;border:1px solid transparent}
 .vbar.ok{background:var(--ok);color:var(--ok-fg);border-color:var(--ok-border)}
@@ -366,7 +394,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
 
 <!-- HEADER -->
 <div id="hdr">
-  <div id="hdr-title">Pavimento Intertravado<small>IP-06/2004 · ABNT NBR 9781 · ABNT NBR 15953:2026</small></div>
+  <div id="hdr-title">Pavimento Intertravado<small>IP-06/2004 · ABNT NBR 9781 · ABNT NBR 15953</small></div>
   <span id="sessao-bar">
     <span class="sessao-nome" id="sessao-nome"></span>
     <span class="sessao-admin" id="sessao-admin" hidden>Admin</span>
@@ -411,200 +439,166 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
 <!-- ══ ABA DIMENSIONAMENTO ══ -->
 <div class="tab-pane active" id="pane-dim">
   <div id="status-bar" class="vbar info">Preencha N e CBR do subleito para dimensionar.</div>
+  <div id="avisos" class="avisos" hidden></div>
 
-  <!-- Dados de projeto — linha compacta -->
   <div class="sec">
-    <div class="sec-title">Dados de Projeto · IP-06/2004</div>
-    <div class="g3" style="margin-bottom:8px">
-      <div class="f">
-        <label>Número N (eixos padrão 8,2 t)</label>
+    <div class="sec-title">Tráfego e procedimento · IP-06/2004 <span class="sec-dica">passe o mouse (ou toque no ⓘ) sobre cada item para ver a explicação</span></div>
+    <div class="g3">
+      <div class="f" data-ajuda="n">
+        <label for="n-sel">Tráfego · número N (Quadro 6.1)</label>
         <select id="n-sel" onchange="atualizarN()">
-          <option value="1e5">10⁵ — Local residencial (Leve)</option>
-          <option value="5e5">5×10⁵ — Coletora secundária (Médio)</option>
-          <option value="2e6">2×10⁶ — Coletora principal (Meio pesado)</option>
-          <option value="2e7">2×10⁷ — Arterial (Pesado)</option>
-          <option value="5e7">5×10⁷ — Arterial/Expressa (Muito pesado)</option>
-          <option value="custom">Informar manualmente…</option>
+          <option value="1e5">Leve · via local · N = 10⁵</option>
+          <option value="5e5">Médio · via local e coletora · N = 5×10⁵</option>
+          <option value="2e6">Meio pesado · vias coletoras · N = 2×10⁶</option>
+          <option value="2e7">Pesado · coletoras e estruturais · N = 2×10⁷</option>
+          <option value="5e7">Muito pesado · vias estruturais · N = 5×10⁷</option>
+          <option value="bus1e7">Faixa exclusiva de ônibus · volume médio · N = 10⁷</option>
+          <option value="bus5e7">Faixa exclusiva de ônibus · volume pesado · N = 5×10⁷</option>
+          <option value="custom">Informar N calculado…</option>
         </select>
+        <div class="fmsg" id="m-n-sel"></div>
       </div>
-      <div class="f" id="n-custom-field" hidden>
-        <label>N manual (eixos padrão)</label>
-        <input type="number" id="n-custom" min="1000" step="1000" placeholder="ex: 300000" oninput="calcular()">
+      <div class="f" id="n-custom-field" data-ajuda="ncustom" hidden>
+        <label for="n-custom">N calculado (solicitações do eixo padrão)</label>
+        <input type="number" id="n-custom" min="1000" step="any" placeholder="ex: 300000 ou 3e5" oninput="calcular()">
+        <div class="fmsg" id="m-n-custom"></div>
       </div>
-      <div class="f">
-        <label>Material da base</label>
+      <div class="f" data-ajuda="proc">
+        <label for="base-mat">Procedimento de dimensionamento</label>
         <select id="base-mat" onchange="calcular()">
-          <option value="GRAN">Granular (Proc. B)</option>
-          <option value="CCR">CCR — Concreto Compactado (Proc. B)</option>
-          <option value="PROCA">Granular s/ base (Proc. A — N &lt; 1,5×10⁶)</option>
+          <option value="PROCA">Proc. A (ABCP ET-27) · sub-base + base cimentada quando exigida</option>
+          <option value="GRAN">Proc. B (PCA) · base granular única (HBG)</option>
+          <option value="CCR">Proc. B (PCA) · sub-base granular + base cimentada (K = 1,65)</option>
         </select>
+        <div class="fmsg" id="m-base-mat"></div>
       </div>
     </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">Subleito · §5 e §8.1</div>
     <div class="g4">
-      <div class="f" data-tip>
-        <label>CBR subleito (%)</label>
-        <div class="f-tooltip">
-          <strong>CBR do Subleito</strong><br>
-          Índice de Suporte Califórnia — mede a capacidade de suporte do solo de fundação.<br>
-          <strong>Limites IP-06/2004:</strong><br>
-          • &lt; 2% → subleito muito fraco, exige estudo geotécnico<br>
-          • 2–5% → fraco, reforço geralmente necessário<br>
-          • 5–20% → médio a bom<br>
-          • &gt; 20% → excelente<br>
-          <em>Ensaio DNIT 172/2016 na cota de formação do pavimento.</em>
-        </div>
-        <input type="number" id="cbr-sub" min="1" max="100" step="0.5" placeholder="ex: 5" oninput="calcular()">
-        <span class="hint">Faixa típica: 2–20% · ensaio na cota de formação</span>
+      <div class="f" data-ajuda="cbr">
+        <label for="cbr-sub">CBR do subleito (%)</label>
+        <input type="number" id="cbr-sub" min="0" max="100" step="0.1" placeholder="ex: 5" oninput="calcular()">
+        <div class="fmsg" id="m-cbr-sub"></div>
       </div>
-      <div class="f" data-tip>
-        <label>Expansão subleito (%)</label>
-        <div class="f-tooltip">
-          <strong>Expansão do Subleito</strong><br>
-          Expansão volumétrica do solo por absorção de água (ensaio CBR imersão 96 h).<br>
-          <strong>Limites IP-06/2004:</strong><br>
-          • &lt; 0,5% → sem restrição<br>
-          • 0,5–2,0% → atenção ao sistema de drenagem<br>
-          • ≥ 2,0% → exige estabilização ou substituição do subleito<br>
-          <em>Valor zero indica solo não expansivo.</em>
-        </div>
-        <input type="number" id="exp-sub" min="0" max="20" step="0.1" placeholder="ex: 0.5" oninput="calcular()">
-        <span class="hint">≥ 2%: estudo de estabilização (IP-06 §6.3)</span>
+      <div class="f" data-ajuda="exp">
+        <label for="exp-sub">Expansão do subleito (%)</label>
+        <input type="number" id="exp-sub" min="0" max="20" step="0.1" placeholder="ex: 0,5" oninput="calcular()">
+        <div class="fmsg" id="m-exp-sub"></div>
       </div>
-      <div class="f" data-tip>
-        <label>Lençol freático abaixo form. (m)</label>
-        <div class="f-tooltip">
-          <strong>Profundidade do Lençol Freático</strong><br>
-          Distância vertical da cota de formação do pavimento ao nível d'água.<br>
-          <strong>Limites IP-06/2004 §6.3:</strong><br>
-          • ≥ 1,50 m → sem restrição<br>
-          • &lt; 1,50 m → exige sistema de drenagem profunda ou elevação do greide<br>
-          • &lt; 0,60 m → situação crítica, risco de bombeamento<br>
-          <em>Deixe vazio se não houver levantamento.</em>
-        </div>
-        <input type="number" id="lencol" min="0" max="10" step="0.1" placeholder="ex: 2.0" oninput="calcular()">
-        <span class="hint">Mínimo 1,50 m abaixo da formação (IP-06 §6.3)</span>
+      <div class="f" id="sobrecarga-field" data-ajuda="sobrecarga" hidden>
+        <label for="sobrecarga">Sobrecarga p/ expansão &lt; 2% (kPa)</label>
+        <input type="number" id="sobrecarga" min="0" max="200" step="0.1" placeholder="do ensaio de laboratório" oninput="calcular()">
+        <div class="fmsg" id="m-sobrecarga"></div>
       </div>
-      <div class="f" data-tip>
-        <label>Areia de assentamento (cm)</label>
-        <div class="f-tooltip">
-          <strong>Camada de Areia de Assentamento</strong><br>
-          Leito de areia média sobre o qual os blocos são assentados e vibrados.<br>
-          <strong>Limites IP-06/2004 §7.2 · NBR 15953:</strong><br>
-          • Mínimo: 3 cm<br>
-          • Máximo: 5 cm (pós-compactação)<br>
-          • Recomendado: 4–5 cm antes da vibração<br>
-          • Granulometria: areia média (D50 = 0,3–1,0 mm)<br>
-          <em>Não compactar a areia antes da colocação dos blocos.</em>
-        </div>
-        <input type="number" id="areia-cm" min="3" max="5" step="0.5" value="5" oninput="calcular()">
-        <span class="hint">3 a 5 cm pós-compactação (IP-06 §7.2)</span>
+      <div class="f" data-ajuda="lencol">
+        <label for="lencol">Lençol d'água abaixo do greide de terraplenagem (m)</label>
+        <input type="number" id="lencol" min="0" max="20" step="0.05" placeholder="ex: 2,0" oninput="calcular()">
+        <div class="fmsg" id="m-lencol"></div>
       </div>
-      <div class="f" data-tip>
-        <label>fpk blocos (MPa)</label>
-        <div class="f-tooltip">
-          <strong>Resistência Característica dos Blocos (fpk)</strong><br>
-          Resistência à compressão axial dos blocos (ABNT NBR 9781:2013 §5.3).<br>
-          <strong>Limites por faixa de tráfego:</strong><br>
-          • N &lt; 10⁷ → fpk ≥ 35 MPa (classe C35)<br>
-          • N ≥ 10⁷ → fpk ≥ 50 MPa (classe C50)<br>
-          • Vias de pedestres → fpk ≥ 25 MPa admissível<br>
-          <em>Verificar em nota fiscal/CCP do fabricante.</em>
-        </div>
-        <input type="number" id="fpk" min="35" max="100" step="5" value="35" oninput="calcular()">
-        <span class="hint">≥ 35 MPa (C35) ou ≥ 50 MPa se N ≥ 10⁷ (NBR 9781)</span>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">Reforço ou substituição do subleito</div>
+    <div class="g4">
+      <div class="f" data-ajuda="cbrref">
+        <label for="cbr-ref">CBR do material do reforço (%)</label>
+        <input type="number" id="cbr-ref" min="0" max="100" step="0.1" placeholder="Vazio = sem reforço" oninput="calcular()">
+        <div class="fmsg" id="m-cbr-ref"></div>
       </div>
-      <div class="f" data-tip>
-        <label>Sub-base adotada p/ CCR (cm)</label>
-        <div class="f-tooltip">
-          <strong>Sub-base Granular Sob a Camada CCR</strong><br>
-          Espessura da camada granular que fica abaixo do CCR no Procedimento B com CCR.<br>
-          <strong>Limites IP-06/2004 §6.2.2:</strong><br>
-          • Mínimo: 15 cm<br>
-          • Recomendado: 15–20 cm<br>
-          • Máximo típico: 30 cm (acima disso, verificar alternativas)<br>
-          • CBR exigido: ≥ 20% (N &lt; 5×10⁵) ou ≥ 30% (N ≥ 5×10⁵)<br>
-          <em>Só é usado quando o material da base for CCR.</em>
-        </div>
-        <input type="number" id="sub-ccr" min="0" max="60" step="5" value="15" oninput="calcular()">
-        <span class="hint">Mínimo 15 cm · granular CBR ≥ 20 ou 30% (IP-06 §6.2.2)</span>
+      <div class="f" data-ajuda="reforco">
+        <label for="reforco">Espessura do reforço (cm)</label>
+        <input type="number" id="reforco" min="0" max="150" step="1" placeholder="Vazio = automática" oninput="calcular()">
+        <div class="fmsg" id="m-reforco"></div>
       </div>
-      <div class="f" data-tip>
-        <label>Reforço do subleito (cm)</label>
-        <div class="f-tooltip">
-          <strong>Reforço do Subleito</strong><br>
-          Camada de material melhorado (solo-brita, solo-cal, solo-cimento etc.) inserida acima do subleito quando o CBR é insuficiente.<br>
-          <strong>Quando aplicar (IP-06/2004 §6.4):</strong><br>
-          • CBR subleito &lt; 2% → fortemente recomendado<br>
-          • CBR &lt; 5% + N &gt; 10⁶ → considerar reforço<br>
-          • Espessura mínima usual: 15 cm (múltiplo de 5 cm)<br>
-          <em>Dimensionar por projeto geotécnico específico.</em>
-        </div>
-        <input type="number" id="reforco" min="0" max="100" step="5" value="0" oninput="calcular()">
-        <span class="hint">0 = dispensado · múltiplo de 5 cm (projeto geotécnico)</span>
+    </div>
+  </div>
+
+  <div class="sec">
+    <div class="sec-title">Camadas e materiais · §7 e §8</div>
+    <div class="g4">
+      <div class="f" data-ajuda="areia">
+        <label for="areia-cm">Areia de assentamento (cm)</label>
+        <input type="number" id="areia-cm" min="2" max="8" step="0.5" value="5" oninput="calcular()">
+        <div class="fmsg" id="m-areia-cm"></div>
       </div>
-      <div class="f" data-tip>
-        <label>H conferido na figura (cm)</label>
-        <div class="f-tooltip">
-          <strong>H Lido Diretamente na Figura</strong><br>
-          Permite substituir o valor interpolado pela calculadora pelo valor lido manualmente nas Figuras 6.1 ou 6.3 da IP-06/2004.<br>
-          <strong>Quando usar:</strong><br>
-          • Quando o projetista faz a leitura gráfica direta<br>
-          • Para arredondar o H interpolado para valor comercial<br>
-          • Para padronizar com projetos anteriores da empresa<br>
-          <em>Deixe vazio para usar o H calculado automaticamente.</em>
-        </div>
-        <input type="number" id="h-conf" min="0" max="200" step="1" placeholder="Vazio = automático" oninput="calcular()">
-        <span class="hint">Opcional — sobrepõe o H interpolado se preenchido</span>
+      <div class="f" data-ajuda="fpk">
+        <label for="fpk">Resistência dos blocos fpk (MPa)</label>
+        <input type="number" id="fpk" min="20" max="100" step="5" value="35" oninput="calcular()">
+        <div class="fmsg" id="m-fpk"></div>
+      </div>
+      <div class="f" id="sub-ccr-field" data-ajuda="subccr">
+        <label for="sub-ccr">Sub-base granular sob a base cimentada (cm)</label>
+        <input type="number" id="sub-ccr" min="0" max="80" step="1" value="15" oninput="calcular()">
+        <div class="fmsg" id="m-sub-ccr"></div>
+      </div>
+      <div class="f" data-ajuda="hconf">
+        <label for="h-conf">Leitura própria do gráfico (cm)</label>
+        <input type="number" id="h-conf" min="0" max="120" step="0.5" placeholder="Vazio = automático" oninput="calcular()">
+        <div class="fmsg" id="m-h-conf"></div>
+      </div>
+      <div class="f" data-ajuda="arred">
+        <label for="arred">Arredondamento das camadas</label>
+        <select id="arred" onchange="calcular()">
+          <option value="1">Para cima, ao centímetro (como nos exemplos da IP-06)</option>
+          <option value="5">Para cima, múltiplo de 5 cm</option>
+        </select>
       </div>
     </div>
   </div>
 
   <div class="g2">
-    <!-- Resultados principais -->
     <div>
       <div class="sec">
-        <div class="sec-title">N Adotado</div>
-        <div class="n-card">
+        <div class="sec-title">N adotado</div>
+        <div class="n-card" data-ajuda="r-n">
           <div class="nv" id="res-n">—</div>
           <div class="nl" id="res-n-via">Informe N e CBR</div>
         </div>
       </div>
       <div class="sec">
-        <div class="sec-title">Leituras e Verificação</div>
+        <div class="sec-title">Leituras e verificações</div>
         <div class="g2">
-          <div class="f"><label>H estimado fig. (cm)</label><div class="oc" id="r-h-est">—</div></div>
-          <div class="f"><label>H usado cálculo (cm)</label><div class="oc" id="r-h-usado">—</div></div>
-          <div class="f"><label>CBR mín. sub-base (%)</label><div class="oc" id="r-cbr-min-sb">—</div></div>
-          <div class="f"><label>fpk mín. blocos (MPa)</label><div class="oc" id="r-fpk-min">—</div></div>
-          <div class="f"><label>Procedimento</label><div class="oc" id="r-proc">—</div></div>
-          <div class="f"><label>Condição estrutural</label><div class="oc" id="r-cond">—</div></div>
+          <div class="f" data-ajuda="r-h-est"><label>Leitura do gráfico (cm)</label><div class="oc" id="r-h-est">—</div></div>
+          <div class="f" data-ajuda="r-h-usado"><label>Valor usado no cálculo (cm)</label><div class="oc" id="r-h-usado">—</div></div>
+          <div class="f" data-ajuda="r-cbr-min-sb"><label>CBR mínimo da sub-base (%)</label><div class="oc" id="r-cbr-min-sb">—</div></div>
+          <div class="f" data-ajuda="r-fpk-min"><label>fpk mínimo dos blocos (MPa)</label><div class="oc" id="r-fpk-min">—</div></div>
+          <div class="f" data-ajuda="r-proc"><label>Procedimento</label><div class="oc" id="r-proc">—</div></div>
+          <div class="f" data-ajuda="r-cond"><label>Condição</label><div class="oc" id="r-cond">—</div></div>
         </div>
       </div>
     </div>
 
-    <!-- Tabela de camadas -->
     <div class="sec">
-      <div class="sec-title">Camadas Dimensionadas</div>
+      <div class="sec-title">Camadas dimensionadas</div>
       <div class="tw">
         <table id="tbl-camadas">
-          <thead><tr><th>Camada</th><th>Teórica (cm)</th><th>Adotada (cm)</th><th>Situação</th></tr></thead>
+          <thead><tr>
+            <th data-ajuda="col-camada">Camada</th>
+            <th data-ajuda="col-teo">Calculada (cm)</th>
+            <th data-ajuda="col-adot">Adotada (cm)</th>
+            <th data-ajuda="col-sit">Situação</th>
+          </tr></thead>
           <tbody>
-            <tr><td>Blocos de concreto</td><td class="to" id="tc-blocos-teo">—</td><td class="to" id="tc-blocos-adot">—</td><td class="to" id="tc-blocos-sit">—</td></tr>
-            <tr><td>Areia de assentamento</td><td class="to" id="tc-areia-teo">—</td><td class="to" id="tc-areia-adot">—</td><td class="to">3–5 cm</td></tr>
-            <tr><td id="tc-base-label">Base granular</td><td class="to" id="tc-base-teo">—</td><td class="to" id="tc-base-adot">—</td><td class="to" id="tc-base-sit">—</td></tr>
-            <tr><td>Sub-base granular</td><td class="to" id="tc-sb-teo">—</td><td class="to" id="tc-sb-adot">—</td><td class="to">CBR ≥ mínimo</td></tr>
-            <tr><td>Reforço subleito</td><td class="to" id="tc-ref-teo">—</td><td class="to" id="tc-ref-adot">—</td><td class="to">Se aplicável</td></tr>
+            <tr data-ajuda="l-blocos"><td>Blocos de concreto</td><td class="to" id="tc-blocos-teo">—</td><td class="to" id="tc-blocos-adot">—</td><td class="to" id="tc-blocos-sit">—</td></tr>
+            <tr data-ajuda="l-areia"><td>Areia de assentamento</td><td class="to" id="tc-areia-teo">—</td><td class="to" id="tc-areia-adot">—</td><td class="to" id="tc-areia-sit">—</td></tr>
+            <tr data-ajuda="l-base"><td id="tc-base-label">Base</td><td class="to" id="tc-base-teo">—</td><td class="to" id="tc-base-adot">—</td><td class="to" id="tc-base-sit">—</td></tr>
+            <tr data-ajuda="l-sb"><td id="tc-sb-label">Sub-base granular</td><td class="to" id="tc-sb-teo">—</td><td class="to" id="tc-sb-adot">—</td><td class="to" id="tc-sb-sit">—</td></tr>
+            <tr data-ajuda="l-ref"><td>Reforço do subleito</td><td class="to" id="tc-ref-teo">—</td><td class="to" id="tc-ref-adot">—</td><td class="to" id="tc-ref-sit">—</td></tr>
           </tbody>
           <tfoot>
-            <tr style="font-weight:700;background:var(--tab-hover)">
-              <td>Total físico</td><td></td><td class="to" id="tc-total">—</td><td></td>
+            <tr style="font-weight:700;background:var(--tab-hover)" data-ajuda="l-total">
+              <td>Espessura total</td><td></td><td class="to" id="tc-total">—</td><td class="to" id="tc-peso">—</td>
             </tr>
           </tfoot>
         </table>
       </div>
-      <div style="margin-top:8px;font-size:10px;color:var(--fg3)">
-        Proc. A: sub-base da Fig. 6.1; base dispensada para N &lt; 1,5×10⁶.<br>
-        Proc. B: HBG da Fig. 6.3; CCR usa fator de equivalência K=1,65.
+      <div style="margin-top:8px;font-size:10px;color:var(--fg3)" id="nota-camadas">
+        Proc. A: sub-base pela Figura 6.1 e base cimentada pela Figura 6.2 (N ≥ 1,5×10⁶).<br>
+        Proc. B: espessura granular HBG pela Figura 6.3; base cimentada com K = 1,65.
       </div>
     </div>
   </div>
@@ -697,7 +691,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
     <div id="memo-status" class="vbar info">Preencha N e CBR e calcule.</div>
     <div id="memo-content"></div>
     <div style="margin-top:14px;font-size:10px;color:var(--fg3);border-top:1px solid var(--border);padding-top:8px">
-      <strong>Referências:</strong> IP-06/2004 (SIURB/PMSP) · ABCP ET-27 4ª ed. · ABNT NBR 9781:2013 · ABNT NBR 15953:2026
+      <strong>Referências:</strong> IP-06/2004 (SIURB/PMSP) · ABCP ET-27 4ª ed. · ABNT NBR 9781:2013 · ABNT NBR 15953
     </div>
   </div>
   <div class="tab-export-bar">
@@ -716,45 +710,59 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
 <script>
 'use strict';
 /* ══════════════════════════════════════════════════════
-   MATRIZES IP-06/2004
+   ÁBACOS DA IP-06/2004 (SIURB/PMSP)
 ══════════════════════════════════════════════════════ */
-// Procedimento B · Figura 6.3 · HBG (cm)
+// Figura 6.3 · Procedimento B · espessura de base puramente granular HBG (cm).
+// Valores transcritos do quadro da própria Figura 6.3. Células em branco = mínimo de 15 cm.
 const HBG_N  = [1e3,2e3,4e3,8e3,1e4,2e4,4e4,8e4,1e5,2e5,4e5,8e5,1e6,2e6,4e6,8e6,1e7];
 const HBG_CBR= [2,2.5,3,3.5,4,5,6,8,10,15,20];
 const HBG_TAB= [
-  [27,24,21,19,17,15,13,11, 9, 7, 6],// 1e3
-  [29,27,24,22,20,17,14,12,10, 8, 6],// 2e3
-  [33,30,27,25,23,19,16,14,12, 9, 7],// 4e3
-  [36,33,30,27,25,22,19,16,14,10, 8],// 8e3
-  [37,34,31,28,26,23,20,17,14,11, 8],// 1e4
-  [41,37,34,31,29,25,22,18,16,12, 9],// 2e4
-  [44,40,37,34,32,28,24,20,17,13,10],// 4e4
-  [48,44,40,37,35,30,27,22,19,14,11],// 8e4
-  [49,45,41,38,36,31,28,22,19,15,11],// 1e5
-  [52,48,44,40,38,33,30,24,21,16,12],// 2e5
-  [56,51,47,43,41,36,32,26,23,17,13],// 4e5
-  [59,54,50,46,43,38,34,28,25,18,14],// 8e5
-  [60,55,51,47,44,39,35,29,25,19,15],// 1e6
-  [64,58,54,50,47,41,37,30,26,20,16],// 2e6
-  [68,62,57,53,50,44,39,32,28,21,17],// 4e6
-  [71,65,60,56,52,46,41,34,29,22,17],// 8e6
-  [72,66,61,57,53,47,42,34,30,23,18],// 1e7
+  [27,21,17,15,15,15,15,15,15,15,15],// 10³
+  [29,24,20,17,15,15,15,15,15,15,15],// 2×10³
+  [33,27,23,19,17,15,15,15,15,15,15],// 4×10³
+  [36,30,25,22,19,15,15,15,15,15,15],// 8×10³
+  [37,31,26,23,20,15,15,15,15,15,15],// 10⁴
+  [41,34,29,25,22,17,15,15,15,15,15],// 2×10⁴
+  [44,37,32,28,24,19,15,15,15,15,15],// 4×10⁴
+  [48,40,35,30,27,21,17,15,15,15,15],// 8×10⁴
+  [49,41,36,31,28,22,18,15,15,15,15],// 10⁵
+  [52,44,38,34,30,24,19,15,15,15,15],// 2×10⁵
+  [56,47,41,36,32,26,21,15,15,15,15],// 4×10⁵
+  [59,51,44,39,34,28,23,15,15,15,15],// 8×10⁵
+  [60,52,45,40,35,29,23,16,15,15,15],// 10⁶
+  [64,55,47,42,38,30,25,17,15,15,15],// 2×10⁶
+  [68,58,50,45,40,33,27,19,15,15,15],// 4×10⁶
+  [71,61,53,47,42,34,29,20,15,15,15],// 8×10⁶
+  [72,62,54,48,43,35,30,21,15,15,15],// 10⁷
+];
+const HBG_MIN=15;
+
+// Figura 6.1 · Procedimento A · espessura necessária de sub-base (cm), curvas CBR 2 a 7 %.
+// Leitura digital das curvas do gráfico (erro de leitura ≈ 0,1 cm). Confere com o exemplo
+// §7.1.2 (N = 10⁵, CBR 5 % → 17,5 → 18 cm).
+const HSB_N  = [1e4,2e4,5e4,1e5,2e5,5e5,1e6,2e6,5e6,1e7,2e7,5e7,1e8];
+const HSB_CBR= [2,3,4,5,6,7];
+const HSB_TAB= [
+  [32.9,24.3,18.3,14.7,10.7, 8.0],// 10⁴
+  [34.3,25.4,19.2,15.5,11.3, 8.5],// 2×10⁴
+  [36.4,27.1,20.5,16.6,12.2, 9.1],// 5×10⁴
+  [38.1,28.4,21.6,17.5,13.0, 9.6],// 10⁵
+  [39.9,29.8,22.8,18.5,13.9,10.1],// 2×10⁵
+  [42.4,31.8,24.5,19.9,15.1,11.2],// 5×10⁵
+  [44.4,33.4,25.8,21.0,16.2,12.1],// 10⁶
+  [46.5,35.1,27.2,22.2,17.3,13.2],// 2×10⁶
+  [49.4,37.5,29.2,23.9,18.8,14.6],// 5×10⁶
+  [51.8,39.4,30.8,25.3,20.1,15.8],// 10⁷
+  [54.2,41.3,32.5,26.7,21.4,17.1],// 2×10⁷
+  [57.6,44.1,34.8,28.7,23.3,18.9],// 5×10⁷
+  [60.3,46.2,36.6,30.2,24.8,20.4],// 10⁸
 ];
 
-// Procedimento A · Figura 6.1 · espessura sub-base (cm)
-const HSB_N  = [1e3,1e4,1e5,5e5,1e6,1.5e6,2e6,5e6,1e7];
-const HSB_CBR= [2,3,4,5,6,8,10,15,20];
-const HSB_TAB= [
-  [18,14,11, 9, 8, 6, 5, 0, 0],// 1e3
-  [22,17,14,11, 9, 7, 6, 0, 0],// 1e4
-  [28,22,18,15,12, 9, 7, 0, 0],// 1e5
-  [32,26,21,17,14,11, 9, 5, 0],// 5e5
-  [35,28,23,19,16,12,10, 6, 0],// 1e6
-  [36,29,24,20,17,13,10, 6, 0],// 1.5e6
-  [38,30,25,21,18,14,11, 7, 0],// 2e6
-  [42,34,28,23,20,15,12, 8, 5],// 5e6
-  [45,36,30,25,21,16,13, 9, 6],// 1e7
-];
+// Figura 6.2 · base cimentada (cm): 10 cm até ≈1,35×10⁷ e reta semilog até 18,8 cm em 8×10⁷.
+function baseFig62(N){ return Math.max(10, 12 + 11.357*Math.log10(N/2e7)); }
+
+const K_CIM=1.65;              // fator de equivalência estrutural da base cimentada (§7.2)
+const GAMA={blocos:22,areia:17,baseGran:21,baseCim:23,sub:21,ref:20}; // kN/m³ típicos
 
 /* ══════════════════════════════════════════════════════
    ESTADO GLOBAL
@@ -765,28 +773,29 @@ let logradouro='', responsavel='', resultado=null, topoRows=[];
    UTILITÁRIOS
 ══════════════════════════════════════════════════════ */
 function interp2D(tabN,tabCBR,tab,N,CBR){
-  let ni=tabN.length-2;
-  for(let i=0;i<tabN.length-1;i++){if(N<=tabN[i+1]){ni=i;break;}}
-  if(N<=tabN[0])ni=0;
-  let ci=tabCBR.length-2;
-  for(let i=0;i<tabCBR.length-1;i++){if(CBR<=tabCBR[i+1]){ci=i;break;}}
-  if(CBR<=tabCBR[0])ci=0;
-  const tN=Math.max(0,Math.min(1,(Math.log10(N)-Math.log10(tabN[ni]))/(Math.log10(tabN[ni+1])-Math.log10(tabN[ni]))));
-  const tC=Math.max(0,Math.min(1,(Math.log10(CBR)-Math.log10(tabCBR[ci]))/(Math.log10(tabCBR[ci+1])-Math.log10(tabCBR[ci]))));
-  return tab[ni][ci]*(1-tN)*(1-tC)+tab[ni][ci+1]*(1-tN)*tC+tab[ni+1][ci]*tN*(1-tC)+tab[ni+1][ci+1]*tN*tC;
+  const lN=Math.log10(Math.min(Math.max(N,tabN[0]),tabN[tabN.length-1]));
+  const lC=Math.log10(Math.min(Math.max(CBR,tabCBR[0]),tabCBR[tabCBR.length-1]));
+  let ni=tabN.length-2; for(let i=0;i<tabN.length-1;i++){ if(lN<=Math.log10(tabN[i+1])){ni=i;break;} }
+  let ci=tabCBR.length-2; for(let i=0;i<tabCBR.length-1;i++){ if(lC<=Math.log10(tabCBR[i+1])){ci=i;break;} }
+  const t=(lN-Math.log10(tabN[ni]))/(Math.log10(tabN[ni+1])-Math.log10(tabN[ni]));
+  const u=(lC-Math.log10(tabCBR[ci]))/(Math.log10(tabCBR[ci+1])-Math.log10(tabCBR[ci]));
+  const H=tab[ni][ci]*(1-t)*(1-u)+tab[ni+1][ci]*t*(1-u)+tab[ni][ci+1]*(1-t)*u+tab[ni+1][ci+1]*t*u;
+  return {H,N1:tabN[ni],N2:tabN[ni+1],C1:tabCBR[ci],C2:tabCBR[ci+1],t,u,
+          H11:tab[ni][ci],H21:tab[ni+1][ci],H12:tab[ni][ci+1],H22:tab[ni+1][ci+1]};
 }
-function fmt(v,d=1){return v==null?'—':Number(v).toFixed(d).replace('.',',')}
+function fmt(v,d=1){return v==null||isNaN(v)?'—':Number(v).toFixed(d).replace('.',',')}
 function fmtN(n){
   if(!n)return'—';
-  const e=Math.floor(Math.log10(n)),m=n/Math.pow(10,e);
-  const sup={'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+  const e=Math.floor(Math.log10(n)+1e-9),m=n/Math.pow(10,e);
+  const sup={'0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹','-':'⁻'};
   const se=String(e).split('').map(c=>sup[c]||c).join('');
-  if(Math.abs(m-1)<0.01)return'10'+se;
-  return fmt(m,1).replace(',','.')+'×10'+se;
+  if(Math.abs(m-1)<0.005)return'10'+se;
+  return fmt(m,m===Math.round(m)?0:1)+'×10'+se;
 }
 function s(id){const e=document.getElementById(id);return e?e.value.trim():''}
-function v(id){const e=document.getElementById(id);return e?parseFloat(e.value):NaN}
+function v(id){const e=document.getElementById(id);if(!e)return NaN;const t=String(e.value).trim().replace(',','.');return t===''?NaN:parseFloat(t)}
 function carimbo(){const d=new Date(),z=n=>String(n).padStart(2,'0');return`${d.getFullYear()}${z(d.getMonth()+1)}${z(d.getDate())}_${z(d.getHours())}${z(d.getMinutes())}`}
+function esc(t){return String(t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
 
 function toast(msg,err=false){
   const el=document.getElementById('toast');
@@ -808,24 +817,102 @@ async function triggerDownload(blob,filename){
 }
 
 /* ══════════════════════════════════════════════════════
+   EXPLICAÇÕES (ao passar o mouse ou tocar no ⓘ)
+══════════════════════════════════════════════════════ */
+const AJUDA={
+  n:`<b>Número N</b> — total de passagens do eixo simples padrão previstas na vida de projeto (10 anos para tráfego leve a meio pesado; 12 anos para pesado e muito pesado).<br><b>Quadro 6.1 da IP-06/2004 (N característico):</b><br>• Leve (via local): 10⁵<br>• Médio (local e coletora): 5×10⁵<br>• Meio pesado (coletoras): 2×10⁶<br>• Pesado (coletoras e estruturais): 2×10⁷<br>• Muito pesado (estruturais): 5×10⁷<br>• Faixa de ônibus: 10⁷ (volume médio) ou 5×10⁷ (volume pesado)<br><i>Se você calculou o N do seu tráfego, escolha "Informar N calculado".</i>`,
+  ncustom:`<b>N calculado</b> — número acumulado de solicitações do eixo padrão obtido do estudo de tráfego (classificação conforme IP-02 da PMSP).<br>Pode digitar por extenso (300000) ou em notação científica (3e5).<br><b>Faixas dos gráficos:</b> Figura 6.1 de 10⁴ a 10⁸; Figura 6.3 de 10³ a 10⁷.`,
+  proc:`<b>Procedimento de dimensionamento (§6 e Quadro 6.2)</b><br><b>Proc. A</b> (ABCP ET-27): sub-base pela Figura 6.1; base cimentada só quando N ≥ 1,5×10⁶ (10 cm até 10⁷; acima, Figura 6.2). Recomendado para N até 10⁵ e para N acima de 1,5×10⁶.<br><b>Proc. B</b> (PCA/USACE): espessura granular HBG pela Figura 6.3. Pode ser executada toda em base granular ou dividida em sub-base granular + base cimentada (HBG − sub-base)/1,65. Recomendado para N entre 10⁵ e 1,5×10⁶. Blocos de no mínimo 8 cm.<br><b>Prioridade (Quadro 6.2):</b> Leve A · Médio B · Meio pesado A ou B · Pesado A.`,
+  cbr:`<b>CBR do subleito</b> — Índice de Suporte Califórnia representativo do solo de fundação, com energia do Ensaio Normal (§5). Pode ser medido "in situ" em vias existentes.<br><b>Como o programa usa:</b><br>• abaixo de 2% → fora dos gráficos: prever reforço ou substituição (solos moles, orgânicos ou turfosos) e informar o CBR do material de empréstimo<br>• 2 a 7% → curvas das Figuras 6.1 e 6.3<br>• Proc. A: CBR ≥ 20% (N &lt; 5×10⁵) ou ≥ 30% (N ≥ 5×10⁵) dispensa a sub-base (§7.1.1a)`,
+  exp:`<b>Expansão do subleito</b> — inchamento medido no ensaio CBR após imersão.<br><b>IP-06 §5:</b> se CBR &gt; 2% e expansão ≥ 2%, o laboratório determina a sobrecarga que reduz a expansão para menos de 2%, e o peso próprio do pavimento precisa ser igual ou maior que essa pressão.<br><i>Com expansão ≥ 2% aparece o campo da sobrecarga e o programa compara com o peso das camadas.</i>`,
+  sobrecarga:`<b>Sobrecarga exigida (kPa)</b> — pressão que, no ensaio de laboratório, reduz a expansão do subleito para menos de 2% (§5).<br>O programa calcula a pressão do pavimento somando espessura × peso específico típico de cada camada (blocos 22, areia 17, base granular 21, base cimentada 23, sub-base 21, reforço 20 kN/m³) e avisa se ficar abaixo.<br><i>1 kPa ≈ 0,01 kgf/cm².</i>`,
+  lencol:`<b>Profundidade do lençol d'água</b> — distância do nível d'água subterrâneo até o greide de terraplenagem.<br><b>IP-06 §8.1:</b> o dimensionamento pressupõe drenagem superficial adequada e lençol a pelo menos 1,50 m do greide. Se não atender, rebaixar com drenos ou apresentar solução alternativa à SIURB/PMSP.<br><i>Deixe vazio se não houver sondagem.</i>`,
+  cbrref:`<b>CBR do reforço ou do material de substituição</b><br>Use quando o subleito for fraco (CBR baixo) ou quando houver substituição de solo mole por material de empréstimo (§5).<br>Com este valor o programa:<br>• dimensiona as camadas de cima com o CBR do reforço<br>• calcula a espessura do reforço pela diferença de leituras no mesmo gráfico: H(CBR subleito) − H(CBR reforço)<br><i>Precisa ser maior que o CBR do subleito.</i>`,
+  reforco:`<b>Espessura do reforço (cm)</b><br>Vazio: o programa calcula automaticamente = H(CBR do subleito) − H(CBR do reforço), lidos na Figura 6.1 (Proc. A) ou 6.3 (Proc. B).<br>Preenchido: usa o seu valor e avisa se for menor que o necessário.<br>Com CBR do subleito abaixo de 2% (fora do gráfico) a espessura deve vir do estudo geotécnico (IP-01) e precisa ser informada aqui.`,
+  areia:`<b>Camada de assentamento</b> — areia (eventualmente pó-de-pedra) onde os blocos são assentados e vibrados.<br><b>IP-06 §8.3:</b> no máximo 5% de silte e argila e no máximo 10% retido na peneira 4,8 mm; sem torrões, matéria orgânica ou substâncias nocivas.<br><b>Espessura:</b> os exemplos da IP-06 (§7.1.2 e §7.2.1) adotam 5 cm compactada; a faixa usual de execução é 3 a 5 cm.<br><i>Não conta como camada estrutural.</i>`,
+  fpk:`<b>Resistência característica à compressão dos blocos (fpk)</b><br><b>Quadro 6.3 da IP-06:</b><br>• N ≤ 5×10⁵ → blocos de 6 cm, 35 MPa<br>• 5×10⁵ &lt; N &lt; 10⁷ → 8 cm, 35 a 50 MPa<br>• N ≥ 10⁷ → 10 cm, 50 MPa<br>Os blocos devem atender à EM-6 (SIURB/PMSP) e às NBR 9780 e NBR 9781 (§7.1.1b e §8.4).`,
+  subccr:`<b>Sub-base granular sob a base cimentada (Proc. B)</b><br>Parte da espessura HBG executada em material granular; o restante vira base cimentada: H<sub>cim</sub> = (HBG − H<sub>sub-base</sub>) / 1,65.<br>O exemplo §7.2.1 adota 15 cm. Espessura mínima de base cimentada: 10 cm.<br><i>Só aparece no Proc. B com base cimentada.</i>`,
+  hconf:`<b>Leitura própria do gráfico (opcional)</b><br>Se você mesmo leu o valor no gráfico da norma, digite aqui e ele substitui a leitura automática:<br>• Proc. A → sub-base da Figura 6.1<br>• Proc. B → HBG da Figura 6.3<br>O programa avisa quando a sua leitura difere mais de 15% da automática.<br><i>Vazio = leitura automática.</i>`,
+  arred:`<b>Arredondamento</b><br>Ao centímetro: igual aos exemplos da IP-06 (17,5 → 18 cm; 8,48 → 10 cm pelo mínimo).<br>Múltiplo de 5 cm: prática comum de obra, mais conservadora.<br>Sempre arredonda para cima e respeita os mínimos da norma.`,
+  'r-n':`<b>N adotado</b> e a classe de tráfego correspondente pelas faixas do Quadro 6.1.`,
+  'r-h-est':`<b>Leitura automática do gráfico</b> — Proc. A: sub-base da Figura 6.1; Proc. B: HBG da Figura 6.3. Interpolação logarítmica entre as curvas (ou linhas do quadro) vizinhas, já com o CBR de projeto (do reforço, se houver).`,
+  'r-h-usado':`<b>Valor usado</b> — a leitura automática, ou a sua leitura própria se você preencheu esse campo. Já inclui os mínimos da norma.`,
+  'r-cbr-min-sb':`<b>CBR mínimo do material da sub-base</b> (§7.1.1a): 20% quando N &lt; 5×10⁵ e 30% quando N ≥ 5×10⁵.`,
+  'r-fpk-min':`<b>fpk mínimo</b> pelo Quadro 6.3: 35 MPa até N &lt; 10⁷ e 50 MPa para N ≥ 10⁷.`,
+  'r-proc':`<b>Procedimento usado</b> e o recomendado pelo Quadro 6.2 / §6 para este N.`,
+  'r-cond':`<b>Condição</b> — resumo das verificações: dentro da norma, com alertas para revisar, ou fora do campo dos gráficos.`,
+  'col-camada':`Camadas da superfície para o subleito.`,
+  'col-teo':`<b>Calculada</b> — valor saído da norma/gráfico, antes do arredondamento.`,
+  'col-adot':`<b>Adotada</b> — arredondada para cima e respeitando os mínimos. É a espessura de projeto.`,
+  'col-sit':`<b>Situação</b> — critério de norma que a camada atende ou alerta.`,
+  'l-blocos':`<b>Blocos (peças) de concreto</b> — espessura pelo Quadro 6.3 (6, 8 ou 10 cm). No Proc. B o mínimo é 8 cm (§7.2).`,
+  'l-areia':`<b>Areia de assentamento</b> — material conforme §8.3; espessura usual 3 a 5 cm (5 cm nos exemplos).`,
+  'l-base':`<b>Base</b> — Proc. A: base cimentada só para N ≥ 1,5×10⁶ (10 cm até 10⁷; Figura 6.2 acima). Proc. B: base granular = HBG (mín. 15 cm) ou base cimentada = (HBG − sub-base)/1,65 (mín. 10 cm).`,
+  'l-sb':`<b>Sub-base</b> — Proc. A: Figura 6.1 com CBR ≥ 20% ou 30%; mínimo 10 cm (N &lt; 5×10⁵) ou 15 cm (N ≥ 5×10⁵) para subleito com CBR acima de 7%; dispensada se o subleito já tiver o CBR exigido. Proc. B com base cimentada: espessura informada por você.`,
+  'l-ref':`<b>Reforço do subleito</b> — material de CBR maior que o subleito; espessura pela diferença de leituras no gráfico ou informada pelo estudo geotécnico.`,
+  'l-total':`<b>Espessura total</b> da estrutura (todas as camadas) e a pressão que ela aplica no subleito (peso próprio), usada na verificação de expansão do §5.`,
+};
+
+function iniciarAjuda(){
+  if(window._ajudaOk)return; window._ajudaOk=true;
+  const pop=document.createElement('div'); pop.id='ajuda-pop'; pop.hidden=true; document.body.appendChild(pop);
+  let alvo=null, fixo=false;
+  function mostrar(el){
+    const html=AJUDA[el.dataset.ajuda]; if(!html)return;
+    alvo=el; pop.innerHTML=html; pop.hidden=false;
+    const r=el.getBoundingClientRect(), w=Math.min(320,window.innerWidth-24);
+    pop.style.width=w+'px';
+    let x=Math.min(Math.max(12,r.left),window.innerWidth-w-12);
+    pop.style.left=x+'px'; pop.style.top='0px';
+    const h=pop.offsetHeight;
+    let y=r.bottom+6; if(y+h>window.innerHeight-8) y=Math.max(8,r.top-h-6);
+    pop.style.top=y+'px';
+  }
+  function esconder(){ pop.hidden=true; alvo=null; fixo=false; }
+  document.addEventListener('mouseover',e=>{ if(fixo)return; const el=e.target.closest('[data-ajuda]'); if(el&&el!==alvo) mostrar(el); else if(!el&&alvo&&!e.target.closest('#ajuda-pop')) esconder(); });
+  document.addEventListener('focusin',e=>{ if(window.matchMedia&&matchMedia('(hover: none)').matches)return; const el=e.target.closest('[data-ajuda]'); if(el) mostrar(el); });
+  document.addEventListener('click',e=>{
+    const i=e.target.closest('.ajuda-i');
+    if(i){ e.preventDefault(); const el=i.closest('[data-ajuda]'); if(fixo&&alvo===el){esconder();} else {mostrar(el); fixo=true;} return; }
+    if(!e.target.closest('#ajuda-pop')&&fixo) esconder();
+  });
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') esconder(); });
+  window.addEventListener('scroll',()=>{ if(!fixo) esconder(); },true);
+  // ícone ⓘ em cada rótulo/linha com explicação (tocar no celular)
+  document.querySelectorAll('[data-ajuda]').forEach(el=>{
+    const alvoTxt=el.querySelector('label')||el.querySelector('td')||(el.tagName==='TH'?el:null)||el.querySelector('.nl');
+    if(alvoTxt&&!alvoTxt.querySelector('.ajuda-i')){ const b=document.createElement('span'); b.className='ajuda-i'; b.textContent='ⓘ'; b.setAttribute('role','button'); b.setAttribute('aria-label','Explicação'); alvoTxt.appendChild(b); }
+  });
+}
+
+/* ══════════════════════════════════════════════════════
    N E LOGRADOURO
 ══════════════════════════════════════════════════════ */
-const N_MAP={'1e5':1e5,'5e5':5e5,'2e6':2e6,'2e7':2e7,'5e7':5e7};
+const N_MAP={'1e5':1e5,'5e5':5e5,'2e6':2e6,'2e7':2e7,'5e7':5e7,'bus1e7':1e7,'bus5e7':5e7};
 const VIA_MAP={
-  '1e5':'Via local residencial · Leve',
-  '5e5':'Coletora secundária · Médio',
-  '2e6':'Coletora principal · Meio Pesado',
-  '2e7':'Arterial · Pesado',
-  '5e7':'Arterial principal / Expressa · Muito Pesado',
-  custom:'N informado manualmente'
+  '1e5':'Via local · tráfego leve',
+  '5e5':'Via local e coletora · tráfego médio',
+  '2e6':'Vias coletoras · tráfego meio pesado',
+  '2e7':'Vias coletoras e estruturais · tráfego pesado',
+  '5e7':'Vias estruturais · tráfego muito pesado',
+  'bus1e7':'Faixa exclusiva de ônibus · volume médio',
+  'bus5e7':'Faixa exclusiva de ônibus · volume pesado',
+  custom:'N calculado pelo projetista'
 };
+function classeTrafego(N){
+  if(N<=1.4e5)return{c:'L',nome:'Leve'};
+  if(N<=6.8e5)return{c:'M',nome:'Médio'};
+  if(N<=3.1e6)return{c:'MP',nome:'Meio pesado'};
+  if(N<=3.3e7)return{c:'P',nome:'Pesado'};
+  return{c:'MuP',nome:'Muito pesado'};
+}
 function atualizarN(){
   document.getElementById('n-custom-field').hidden=document.getElementById('n-sel').value!=='custom';
   calcular();
 }
 function getNAdotado(){
   const sel=document.getElementById('n-sel').value;
-  if(sel==='custom'){const vv=parseFloat(document.getElementById('n-custom').value);return isNaN(vv)?null:vv;}
+  if(sel==='custom'){const vv=v('n-custom');return isNaN(vv)||vv<=0?null:vv;}
   return N_MAP[sel]||null;
 }
 function atualizarLogradouro(){
@@ -834,77 +921,231 @@ function atualizarLogradouro(){
 }
 
 /* ══════════════════════════════════════════════════════
+   MENSAGENS NOS CAMPOS
+══════════════════════════════════════════════════════ */
+const CAMPOS=['n-sel','n-custom','base-mat','cbr-sub','exp-sub','sobrecarga','lencol','cbr-ref','reforco','areia-cm','fpk','sub-ccr','h-conf'];
+function limparMarcas(){ CAMPOS.forEach(id=>marcar(id,'','')); }
+function marcar(id,nivel,txt){
+  const m=document.getElementById('m-'+id), inp=document.getElementById(id);
+  if(m){ m.className='fmsg'+(nivel?' '+nivel:''); m.innerHTML=txt||''; }
+  if(inp){ inp.classList.toggle('campo-warn',nivel==='warn'); inp.classList.toggle('campo-err',nivel==='err'); inp.classList.toggle('campo-ok',nivel==='ok'); }
+}
+
+/* ══════════════════════════════════════════════════════
+   LEITURAS DOS GRÁFICOS
+══════════════════════════════════════════════════════ */
+// Figura 6.1: sub-base (Proc. A)
+function lerFig61(N,CBR){
+  const cbrMin=N<5e5?20:30, hMin=N<5e5?10:15;
+  if(CBR>=cbrMin) return {H:0,dispensa:true,hMin,cbrMin,txt:`CBR ${fmt(CBR,1)}% ≥ ${cbrMin}% → sub-base dispensada (§7.1.1a)`};
+  if(CBR<2) return {H:null,fora:true,hMin,cbrMin};
+  if(CBR>7) return {H:hMin,minimo:true,hMin,cbrMin,txt:`7% < CBR < ${cbrMin}% → espessura mínima de ${hMin} cm da Figura 6.1`};
+  const i=interp2D(HSB_N,HSB_CBR,HSB_TAB,N,CBR);
+  return {...i,H:Math.max(i.H,hMin),Hlido:i.H,hMin,cbrMin,foraN:N<1e4||N>1e8};
+}
+// Figura 6.3: HBG (Proc. B)
+function lerFig63(N,CBR){
+  if(CBR<2) return {H:null,fora:true};
+  const i=interp2D(HBG_N,HBG_CBR,HBG_TAB,N,Math.min(CBR,20));
+  return {...i,H:Math.max(i.H,HBG_MIN),Hlido:i.H,foraN:N<1e3||N>1e7};
+}
+
+/* ══════════════════════════════════════════════════════
    CALCULAR
 ══════════════════════════════════════════════════════ */
 function calcular(){
-  const N  =getNAdotado();
+  limparMarcas();
   const sel=document.getElementById('n-sel').value;
-  const CBR=v('cbr-sub');
-  const exp=v('exp-sub')||0;
-  const len=v('lencol');
-  const mat=s('base-mat');
-  const fpkI=v('fpk')||35;
-  const areia=v('areia-cm')||5;
-  const subCCR=v('sub-ccr')||15;
-  const ref=v('reforco')||0;
-  const hConf=v('h-conf');
+  const N=getNAdotado();
+  const CBR=v('cbr-sub'), exp=v('exp-sub'), sobre=v('sobrecarga'), len=v('lencol');
+  let mat=s('base-mat'); if(!['PROCA','GRAN','CCR'].includes(mat)) mat='PROCA';
+  const fpkI=isNaN(v('fpk'))?35:v('fpk');
+  const areia=isNaN(v('areia-cm'))?5:v('areia-cm');
+  const subCCRi=v('sub-ccr'), cbrRef=v('cbr-ref'), refMan=v('reforco'), hConf=v('h-conf');
+  const passo=+s('arred')||1;
+  const arr=x=>x<=0?0:(passo===5?Math.ceil(x/5-1e-9)*5:Math.ceil(x-1e-9));
   const sb=document.getElementById('status-bar');
+  document.getElementById('sub-ccr-field').hidden=(mat!=='CCR');
+  document.getElementById('sobrecarga-field').hidden=!(exp>=2);
 
-  if(!N||isNaN(CBR)){
+  const alertas=[], sugest=[];
+  const A=(nivel,txt)=>alertas.push({nivel,txt});
+
+  // ── validação de N
+  if(sel==='custom'){
+    if(N==null) marcar('n-custom','err','Informe o N (ex.: 3e5).');
+    else if(N<1e3) marcar('n-custom','err','Abaixo de 10³: fora dos gráficos da IP-06.');
+    else{ const c=classeTrafego(N); marcar('n-custom','ok','Classe pelo Quadro 6.1: '+c.nome+'.'); }
+  }
+  if(N==null||isNaN(CBR)){
+    if(isNaN(CBR)) marcar('cbr-sub','', 'Informe o CBR do ensaio (ex.: 5).');
     sb.textContent='Preencha N e CBR do subleito para dimensionar.';sb.className='vbar info';
+    document.getElementById('avisos').hidden=true;
     document.getElementById('corte-status').textContent='Aguardando dimensionamento.';
     document.getElementById('corte-status').className='vbar info';
+    resultado=null; limparResultados(); return;
+  }
+  const classe=classeTrafego(N);
+  const procRec=N<=1e5?'PROCA':N<=1.5e6?'GRAN':'PROCA';
+  const procRecTxt=N<=1e5?'Proc. A':N<=1.5e6?'Proc. B':'Proc. A (com base cimentada)';
+  const procOk=(mat==='PROCA')===(procRec==='PROCA');
+  if(sel!=='custom') marcar('n-sel','ok','Classe '+classe.nome+' · vida de projeto '+(N>=5e6?'12':'10')+' anos.');
+  if(N>=1e7) A('info','Tráfego '+classe.nome.toLowerCase()+': a IP-06 (§6) visa principalmente vias até tráfego médio; para tráfego pesado pede estudos mais detalhados, aprovados pela SIURB/PMSP.');
+
+  // ── procedimento
+  if((mat==='GRAN'||mat==='CCR')&&N>1e7){
+    marcar('base-mat','err','A Figura 6.3 vai só até N = 10⁷. Use o Proc. A.');
+    A('err','Proc. B fora do gráfico: a Figura 6.3 termina em N = 10⁷ e o N adotado é '+fmtN(N)+'. O cálculo usa a linha de 10⁷ (contra a segurança). Pelo Quadro 6.2, para tráfego pesado a 1ª prioridade é o Proc. A.');
+  }else if(!procOk){
+    marcar('base-mat','warn','Sugestão para este N: '+procRecTxt+' (Quadro 6.2 / §6).');
+  }else marcar('base-mat','ok','Procedimento recomendado para este N (Quadro 6.2).');
+
+  // ── CBR
+  let cbrMin_sb=N<5e5?20:30;
+  if(CBR<=0||CBR>100){ marcar('cbr-sub','err','Valor inválido (use 0,1 a 100%).'); resultado=null; limparResultados(); sb.textContent='CBR do subleito inválido.'; sb.className='vbar warn'; return; }
+  if(CBR<2) marcar('cbr-sub',(cbrRef>CBR&&cbrRef>=2)?'warn':'err',(cbrRef>CBR&&cbrRef>=2)?'Abaixo de 2%: dimensionado com o CBR da substituição/reforço (§5).':'Abaixo de 2%: fora dos gráficos. Preveja reforço/substituição (§5) e informe o CBR desse material.');
+  else if(CBR<3) marcar('cbr-sub','warn','Subleito fraco: compare com a solução de reforço (preencha CBR do reforço).');
+  else if(mat==='PROCA'&&CBR>=cbrMin_sb) marcar('cbr-sub','ok','CBR ≥ '+cbrMin_sb+'%: sub-base dispensada (§7.1.1a).');
+  else marcar('cbr-sub','ok','Dentro do campo dos gráficos.');
+
+  // ── expansão (§5)
+  if(!isNaN(exp)){
+    if(exp<0) marcar('exp-sub','err','Valor inválido.');
+    else if(exp>=2&&CBR>2){ marcar('exp-sub','warn',isNaN(sobre)?'≥ 2%: informe a sobrecarga do ensaio para verificar o peso do pavimento (§5).':'≥ 2%: peso do pavimento verificado contra a sobrecarga (§5).'); }
+    else if(exp>=2) marcar('exp-sub','warn','≥ 2% com CBR ≤ 2%: tratar junto com a substituição do subleito.');
+    else marcar('exp-sub','ok','Abaixo de 2%: sem exigência adicional.');
+  }
+  // ── lençol (§8.1)
+  if(!isNaN(len)){
+    if(len<1.5){ marcar('lencol','warn','Menos de 1,50 m: rebaixar com drenos ou solução alternativa (§8.1).'); A('warn','Lençol d\'água a '+fmt(len,2)+' m do greide de terraplenagem (mínimo 1,50 m, §8.1): prever drenos de rebaixamento ou solução alternativa aprovada pela SIURB/PMSP.'); }
+    else marcar('lencol','ok','Atende ao mínimo de 1,50 m (§8.1).');
+  }
+
+  // ── reforço: CBR de projeto
+  let usaRef=false, CBRp=CBR;
+  if(!isNaN(cbrRef)){
+    if(cbrRef<=CBR){ marcar('cbr-ref','warn','Precisa ser maior que o CBR do subleito; reforço ignorado.'); }
+    else if(cbrRef>100){ marcar('cbr-ref','err','Valor inválido.'); }
+    else { usaRef=true; CBRp=cbrRef; }
+  }else if(!isNaN(refMan)&&refMan>0){
+    marcar('reforco','warn','Informe também o CBR do reforço; sem ele a camada não entra no cálculo estrutural.');
+  }
+
+  // ── leitura do gráfico com o CBR de projeto
+  let leit, h_graf=null, h_usado=null, figRef;
+  if(mat==='PROCA'){ leit=lerFig61(N,CBRp); figRef='Figura 6.1'; }
+  else { leit=lerFig63(N,CBRp); figRef='Figura 6.3'; }
+  cbrMin_sb=mat==='PROCA'?leit.cbrMin:cbrMin_sb;
+  if(leit.fora){
+    resultado=null; limparResultados();
+    sb.textContent=usaRef?'O CBR do reforço também está abaixo de 2%: fora dos gráficos da IP-06.':'CBR abaixo de 2%: fora dos gráficos da IP-06. Informe o CBR do material de reforço/substituição (§5).';
+    sb.className='vbar warn';
+    document.getElementById('avisos').hidden=true;
     return;
   }
-
-  // Alertas geotécnicos
-  const alertas=[];
-  if(CBR<2) alertas.push('CBR < 2%: subleito muito fraco — exige estudo geotécnico específico.');
-  if(exp>=2) alertas.push('Expansão ≥ 2%: avaliar sobrecarga e solução de estabilização.');
-  if(!isNaN(len)&&len<1.5) alertas.push('Lençol freático a menos de 1,50 m da formação — providenciar drenagem.');
-
-  // Blocos — Quadro 6.3
-  let bloco_teo,fpk_min;
-  if(N<=5e5){bloco_teo=6;fpk_min=35;}
-  else if(N<1e7){bloco_teo=8;fpk_min=35;}
-  else{bloco_teo=10;fpk_min=50;}
-
-  // CBR mínimo sub-base
-  const cbr_min_sb=N<5e5?20:30;
-
-  // Procedimento e espessuras
-  let proc,h_est,h_base_teo=0,h_sb_teo=0;
-  if(mat==='PROCA'){
-    proc='A (sub-base da Fig. 6.1, sem base)';
-    if(N>1.5e6) alertas.push('Proc. A sem base: aplicável apenas N < 1,5×10⁶ — revise a escolha.');
-    h_est=Math.round(interp2D(HSB_N,HSB_CBR,HSB_TAB,N,CBR));
-    h_sb_teo=h_est; h_base_teo=0;
-  }else if(mat==='CCR'){
-    proc='B (base CCR, Figura 6.3)';
-    h_est=Math.round(interp2D(HBG_N,HBG_CBR,HBG_TAB,N,CBR));
-    const hBGliq=Math.max(0,h_est-subCCR);
-    h_base_teo=Math.max(10,Math.ceil(hBGliq/1.65));
-    h_sb_teo=subCCR;
-  }else{
-    proc='B (base granular, Figura 6.3)';
-    h_est=Math.round(interp2D(HBG_N,HBG_CBR,HBG_TAB,N,CBR));
-    h_sb_teo=15;
-    h_base_teo=Math.max(15,h_est-15);
+  h_graf=leit.H;
+  h_usado=h_graf;
+  if(!isNaN(hConf)&&hConf>0){
+    h_usado=hConf;
+    const dif=h_graf>0?Math.abs(hConf-h_graf)/h_graf:1;
+    if(dif>0.15) marcar('h-conf','warn','Difere '+Math.round(dif*100)+'% da leitura automática ('+fmt(h_graf,1)+' cm). Confira o gráfico.');
+    else marcar('h-conf','ok','Próxima da leitura automática ('+fmt(h_graf,1)+' cm).');
+    if(mat==='PROCA'&&!leit.dispensa&&hConf<leit.hMin){ h_usado=leit.hMin; marcar('h-conf','warn','Abaixo do mínimo de '+leit.hMin+' cm da Figura 6.1; usado o mínimo.'); }
+    if(mat!=='PROCA'&&hConf<HBG_MIN){ h_usado=HBG_MIN; marcar('h-conf','warn','Abaixo do mínimo de 15 cm da Figura 6.3; usado o mínimo.'); }
+  }
+  if(leit.foraN) A('warn','N = '+fmtN(N)+' fora da faixa da '+figRef+' ('+(mat==='PROCA'?'10⁴ a 10⁸':'10³ a 10⁷')+'): usada a borda do gráfico.');
+  if(mat==='PROCA'&&leit.minimo){
+    const h7=interp2D(HSB_N,HSB_CBR,HSB_TAB,N,7).H;
+    if(h7>leit.hMin+0.5) sugest.push('Para CBR entre 7% e '+leit.cbrMin+'% a Figura 6.1 só fixa o mínimo de '+leit.hMin+' cm; para CBR próximo de 7% considere a curva de 7% ('+fmt(h7,1)+' cm), a favor da segurança.');
   }
 
-  const h_base_adot=h_base_teo>0?Math.ceil(h_base_teo/5)*5:0;
-  const h_sb_adot  =h_sb_teo>0 ?Math.ceil(h_sb_teo/5)*5:0;
-  const h_usado=!isNaN(hConf)&&hConf>0?hConf:h_est;
-  const total=bloco_teo+areia+h_base_adot+h_sb_adot+ref;
-  const ok_fpk=fpkI>=fpk_min;
-  const cond=!ok_fpk?`⚠ fpk ${fpkI} MPa < mínimo ${fpk_min} MPa`:
-    alertas.length>0?'⚠ Verificar alertas geotécnicos':
-    '✓ Seção estruturalmente válida';
+  // ── blocos (Quadro 6.3; Proc. B mínimo 8 cm, §7.2)
+  let bloco_q,fpk_min;
+  if(N<=5e5){bloco_q=6;fpk_min=35;}
+  else if(N<1e7){bloco_q=8;fpk_min=35;}
+  else{bloco_q=10;fpk_min=50;}
+  const bloco_teo=(mat!=='PROCA')?Math.max(8,bloco_q):bloco_q;
+  const blocoObs=(mat!=='PROCA'&&bloco_q<8)?'mín. 8 cm no Proc. B (§7.2)':'Quadro 6.3';
+  if(fpkI<fpk_min){ marcar('fpk','err','Mínimo '+fpk_min+' MPa para N = '+fmtN(N)+' (Quadro 6.3). Sugestão: '+fpk_min+' MPa.'); A('err','fpk de '+fpkI+' MPa abaixo do mínimo de '+fpk_min+' MPa (Quadro 6.3).'); }
+  else if(N>5e5&&N<1e7&&fpkI<50) marcar('fpk','ok','Atende (35 MPa). Para 5×10⁵ &lt; N &lt; 10⁷ o Quadro 6.3 admite 35 a 50 MPa.');
+  else marcar('fpk','ok','Atende ao Quadro 6.3.');
 
-  resultado={N,sel,CBR,exp,len:isNaN(len)?null:len,mat,fpkI,areia,subCCR,ref,hConf:isNaN(hConf)?null:hConf,
-    proc,h_est,h_usado,bloco_teo,areia_adot:areia,
-    h_base_teo,h_base_adot,h_sb_teo,h_sb_adot,total,
-    fpk_min,cbr_min_sb,cond,alertas};
+  // ── areia
+  if(areia<3||areia>5){ marcar('areia-cm','warn','Fora da faixa usual de 3 a 5 cm. A IP-06 adota 5 cm nos exemplos.'); }
+  else marcar('areia-cm','ok', areia===5?'Igual aos exemplos da IP-06 (5 cm).':'Dentro da faixa usual (3 a 5 cm).');
+
+  // ── camadas
+  let base_teo=0, base_adot=0, base_nome='Base', base_tipo='', sb_teo=0, sb_adot=0, sb_nome='Sub-base granular';
+  let calc={};
+  if(mat==='PROCA'){
+    sb_teo=leit.dispensa?0:h_usado; sb_adot=leit.dispensa?0:arr(sb_teo);
+    sb_nome='Sub-base granular (CBR ≥ '+leit.cbrMin+'%)';
+    if(N<1.5e6){ base_teo=0; base_nome='Base (dispensada, N < 1,5×10⁶)'; }
+    else if(N<1e7){ base_teo=10; base_tipo='cim'; base_nome='Base cimentada'; calc.baseRegra='1,5×10⁶ ≤ N < 10⁷ → espessura mínima de 10 cm (§7.1)'; }
+    else { base_teo=baseFig62(Math.min(N,8e7)); base_tipo='cim'; base_nome='Base cimentada'; calc.baseRegra='N ≥ 10⁷ → Figura 6.2: '+fmt(base_teo,1)+' cm';
+      if(N>8e7) A('warn','N acima de 8×10⁷: fora da Figura 6.2; usada a borda do gráfico (18,8 cm).'); }
+    base_adot=base_teo>0?arr(base_teo):0;
+  }else if(mat==='GRAN'){
+    base_teo=h_usado; base_adot=arr(Math.max(15,base_teo)); base_tipo='gran'; base_nome='Base granular (HBG)';
+    sb_teo=0; sb_adot=0; sb_nome='Sub-base (incluída na HBG)';
+    if(base_adot>=35) sugest.push('Base granular de '+base_adot+' cm: pode ser executada em duas camadas (base + sub-base granular) ou trocada pela alternativa com base cimentada, que fica mais delgada (§7.2).');
+  }else{ // CCR
+    let hsb=isNaN(subCCRi)?15:subCCRi;
+    if(hsb<15){ marcar('sub-ccr','warn','O exemplo §7.2.1 adota 15 cm; camadas granulares com menos de 15 cm não são recomendadas.'); }
+    if(hsb>=h_usado){ marcar('sub-ccr','warn','A sub-base sozinha já atinge a HBG; a base cimentada fica só com o mínimo de 10 cm.'); }
+    else if(hsb>=15) marcar('sub-ccr','ok','HBG restante para a base: '+fmt(h_usado-hsb,1)+' cm granular.');
+    sb_teo=hsb; sb_adot=arr(hsb);
+    const liq=Math.max(0,h_usado-sb_adot);
+    calc.liq=liq; calc.cim=liq/K_CIM;
+    base_teo=calc.cim; base_adot=arr(Math.max(10,base_teo)); base_tipo='cim'; base_nome='Base cimentada (ex.: CCR)';
+  }
+
+  // ── reforço: espessura
+  let ref_teo=0, ref_adot=0, refInfo='';
+  if(usaRef){
+    if(CBR<2){
+      if(isNaN(refMan)||refMan<=0){ marcar('reforco','err','CBR do subleito abaixo de 2%: informe a espessura do estudo geotécnico (IP-01).'); A('err','Reforço/substituição sem espessura: com CBR do subleito abaixo de 2% a espessura vem do estudo geotécnico.'); }
+      else { ref_teo=refMan; ref_adot=arr(refMan); refInfo='informada (estudo geotécnico)'; marcar('reforco','ok','Espessura informada pelo projetista.'); }
+    }else{
+      const hSub=(mat==='PROCA'?lerFig61(N,CBR):lerFig63(N,CBR)).H;
+      ref_teo=Math.max(0,hSub-h_graf);
+      calc.refHsub=hSub; calc.refHref=h_graf;
+      if(!isNaN(refMan)&&refMan>0){
+        ref_adot=arr(refMan); refInfo='informada';
+        if(refMan+0.01<ref_teo){ marcar('reforco','warn','Menor que o necessário: '+fmt(ref_teo,1)+' cm. Sugestão: '+arr(ref_teo)+' cm.'); A('warn','Reforço de '+fmt(refMan,0)+' cm é menor que o necessário ('+fmt(ref_teo,1)+' cm).'); }
+        else marcar('reforco','ok','Atende (necessário '+fmt(ref_teo,1)+' cm).');
+      }else{
+        ref_adot=arr(ref_teo); refInfo='automática';
+        marcar('reforco','ok', ref_teo>0?'Calculada: '+fmt(hSub,1)+' − '+fmt(h_graf,1)+' = '+fmt(ref_teo,1)+' cm.':'Com este CBR o reforço não reduz as camadas.');
+      }
+      marcar('cbr-ref','ok','Camadas superiores dimensionadas com CBR = '+fmt(cbrRef,1)+'%.');
+      if(ref_teo<=0) sugest.push('O reforço com CBR '+fmt(cbrRef,1)+'% não reduz a estrutura neste caso (a leitura do gráfico já está no mínimo).');
+    }
+  }else if(CBR<3&&CBR>=2){
+    sugest.push('Subleito com CBR '+fmt(CBR,1)+'%: compare com uma solução com reforço (preencha "CBR do material do reforço").');
+  }
+
+  // ── total e peso próprio
+  const total=bloco_teo+areia+base_adot+sb_adot+ref_adot;
+  const gBase=base_tipo==='cim'?GAMA.baseCim:GAMA.baseGran;
+  const pressao=(bloco_teo*GAMA.blocos+areia*GAMA.areia+base_adot*gBase+sb_adot*GAMA.sub+ref_adot*GAMA.ref)/100;
+  if(exp>=2&&CBR>2){
+    if(isNaN(sobre)){ A('warn','Expansão de '+fmt(exp,1)+'% (≥ 2%): informe a sobrecarga do ensaio para verificar o peso do pavimento (§5). Pressão atual do pavimento: '+fmt(pressao,1)+' kPa.'); }
+    else if(pressao+1e-9<sobre){ marcar('sobrecarga','err','Pavimento aplica '+fmt(pressao,1)+' kPa, menor que '+fmt(sobre,1)+' kPa.'); A('err','Peso próprio do pavimento ('+fmt(pressao,1)+' kPa) menor que a sobrecarga exigida ('+fmt(sobre,1)+' kPa): aumente camadas (ex.: reforço) ou trate o subleito expansivo (§5).'); }
+    else marcar('sobrecarga','ok','Pavimento aplica '+fmt(pressao,1)+' kPa ≥ '+fmt(sobre,1)+' kPa.');
+  }
+
+  const temErr=alertas.some(a=>a.nivel==='err'), temWarn=alertas.some(a=>a.nivel==='warn');
+  const cond=temErr?'⚠ Revisar: há itens fora da norma':temWarn?'⚠ Válido, com alertas':'✓ Atende à IP-06/2004';
+  const procNome=mat==='PROCA'?'A (ABCP ET-27)':mat==='GRAN'?'B (PCA) · base granular':'B (PCA) · base cimentada';
+
+  resultado={N,sel,classe:classe.nome,CBR,CBRp,usaRef,cbrRef:usaRef?cbrRef:null,exp:isNaN(exp)?null:exp,sobre:isNaN(sobre)?null:sobre,
+    len:isNaN(len)?null:len,mat,fpkI,areia,passo,
+    proc:procNome,procRec:procRecTxt,procOk,figRef,leit,h_est:h_graf,h_usado,hConf:(!isNaN(hConf)&&hConf>0)?hConf:null,
+    bloco_q,bloco_teo,blocoObs,fpk_min,cbr_min_sb:cbrMin_sb,
+    base_teo,h_base_teo:base_teo,h_base_adot:base_adot,base_nome,base_tipo,
+    h_sb_teo:sb_teo,h_sb_adot:sb_adot,sb_nome,sb_disp:mat==='PROCA'&&leit.dispensa,
+    ref_teo,ref:ref_adot,refInfo,calc,total,pressao,cond,alertas,sugest};
 
   atualizarResultados();
   atualizarCorte();
@@ -912,39 +1153,56 @@ function calcular(){
   calcTopo();
 }
 
+function limparResultados(){
+  ['res-n','r-h-est','r-h-usado','r-cbr-min-sb','r-fpk-min','r-proc','r-cond','tc-blocos-teo','tc-blocos-adot','tc-blocos-sit','tc-areia-teo','tc-areia-adot','tc-areia-sit','tc-base-teo','tc-base-adot','tc-base-sit','tc-sb-teo','tc-sb-adot','tc-sb-sit','tc-ref-teo','tc-ref-adot','tc-ref-sit','tc-total','tc-peso']
+    .forEach(id=>{const e=document.getElementById(id); if(e){e.textContent='—'; if(e.tagName==='TD') e.className='to';}});
+  document.getElementById('res-n-via').textContent='Informe N e CBR';
+  document.getElementById('memo-content').innerHTML=''; 
+  const ms=document.getElementById('memo-status'); ms.textContent='Preencha N e CBR e calcule.'; ms.className='vbar info';
+  document.getElementById('svg-corte').innerHTML='';
+  const cs=document.getElementById('corte-status'); cs.textContent='Aguardando dimensionamento.'; cs.className='vbar info';
+}
 function atualizarResultados(){
   const r=resultado;if(!r)return;
-  document.getElementById('res-n').textContent=fmtN(r.N);
-  document.getElementById('res-n-via').textContent=VIA_MAP[r.sel]||'N Manual';
-  document.getElementById('r-h-est').textContent=fmt(r.h_est,0)+' cm';
-  document.getElementById('r-h-usado').textContent=fmt(r.h_usado,0)+' cm';
-  document.getElementById('r-cbr-min-sb').textContent=r.cbr_min_sb+' %';
-  document.getElementById('r-fpk-min').textContent=r.fpk_min+' MPa';
-  document.getElementById('r-proc').textContent=r.proc;
-  document.getElementById('r-cond').textContent=r.cond;
+  const T=(id,t)=>{const e=document.getElementById(id); if(e) e.textContent=t;};
+  const C=(id,ok)=>{const e=document.getElementById(id); if(e) e.className='to '+(ok===true?'tok':ok===false?'twarn':'');};
+  T('res-n',fmtN(r.N));
+  T('res-n-via',(VIA_MAP[r.sel]||'N calculado')+' · classe '+r.classe);
+  T('r-h-est',fmt(r.h_est,1)+' cm · '+r.figRef);
+  T('r-h-usado',fmt(r.h_usado,1)+' cm'+(r.hConf?' (leitura própria)':''));
+  T('r-cbr-min-sb',r.cbr_min_sb+' %');
+  T('r-fpk-min',r.fpk_min+' MPa');
+  T('r-proc',r.proc+(r.procOk?' · recomendado':' · recomendado: '+r.procRec));
+  T('r-cond',r.cond);
 
-  document.getElementById('tc-blocos-teo').textContent=r.bloco_teo+' cm';
-  document.getElementById('tc-blocos-adot').textContent=r.bloco_teo+' cm';
-  document.getElementById('tc-blocos-sit').textContent=r.fpkI>=r.fpk_min?'fpk OK':'⚠ Revisar fpk';
-  document.getElementById('tc-blocos-sit').className=r.fpkI>=r.fpk_min?'to tok':'to twarn';
-  document.getElementById('tc-areia-teo').textContent=r.areia+' cm';
-  document.getElementById('tc-areia-adot').textContent=r.areia+' cm';
+  T('tc-blocos-teo',r.bloco_q+' cm');
+  T('tc-blocos-adot',r.bloco_teo+' cm');
+  T('tc-blocos-sit',(r.fpkI>=r.fpk_min?'fpk '+r.fpkI+' MPa OK':'⚠ fpk < '+r.fpk_min+' MPa')+' · '+r.blocoObs); C('tc-blocos-sit',r.fpkI>=r.fpk_min);
+  T('tc-areia-teo',fmt(r.areia,1)+' cm'); T('tc-areia-adot',fmt(r.areia,1)+' cm');
+  const okAreia=r.areia>=3&&r.areia<=5; T('tc-areia-sit',okAreia?'3 a 5 cm · §8.3':'⚠ fora de 3 a 5 cm'); C('tc-areia-sit',okAreia);
 
-  const baseLbl={'GRAN':'Base granular','CCR':'Base CCR','PROCA':'Base (dispensada)'};
-  document.getElementById('tc-base-label').textContent=baseLbl[r.mat]||'Base';
-  document.getElementById('tc-base-teo').textContent=r.h_base_teo>0?r.h_base_teo+' cm':'Dispensada';
-  document.getElementById('tc-base-adot').textContent=r.h_base_adot>0?r.h_base_adot+' cm':'Dispensada';
-  document.getElementById('tc-base-sit').textContent=r.h_base_adot>=15||r.h_base_adot===0?'OK':'⚠ < 15 cm';
-  document.getElementById('tc-sb-teo').textContent=r.h_sb_teo>0?r.h_sb_teo+' cm':'—';
-  document.getElementById('tc-sb-adot').textContent=r.h_sb_adot>0?r.h_sb_adot+' cm':'—';
-  document.getElementById('tc-ref-teo').textContent=r.ref>0?r.ref+' cm':'—';
-  document.getElementById('tc-ref-adot').textContent=r.ref>0?r.ref+' cm':'—';
-  document.getElementById('tc-total').textContent=r.total+' cm';
+  T('tc-base-label',r.base_nome);
+  T('tc-base-teo',r.h_base_teo>0?fmt(r.h_base_teo,1)+' cm':'—');
+  T('tc-base-adot',r.h_base_adot>0?r.h_base_adot+' cm':'Dispensada');
+  T('tc-base-sit',r.h_base_adot===0?'N < 1,5×10⁶ (§7.1)':r.base_tipo==='cim'?'mín. 10 cm '+(r.mat==='PROCA'?(r.N>=1e7?'· Fig. 6.2':'· §7.1'):'· K = 1,65'):'mín. 15 cm · Fig. 6.3'); C('tc-base-sit',true);
+  T('tc-sb-label',r.sb_nome);
+  T('tc-sb-teo',r.h_sb_teo>0?fmt(r.h_sb_teo,1)+' cm':'—');
+  T('tc-sb-adot',r.h_sb_adot>0?r.h_sb_adot+' cm':(r.sb_disp?'Dispensada':'—'));
+  T('tc-sb-sit',r.sb_disp?'subleito CBR ≥ '+r.cbr_min_sb+'%':r.mat==='PROCA'?'CBR ≥ '+r.cbr_min_sb+'% · Fig. 6.1':r.mat==='CCR'?'granular · '+(r.h_sb_adot>=15?'≥ 15 cm':'⚠ < 15 cm'):'—'); C('tc-sb-sit',r.mat==='CCR'?r.h_sb_adot>=15:true);
+  T('tc-ref-teo',r.usaRef?fmt(r.ref_teo,1)+' cm':'—');
+  T('tc-ref-adot',r.ref>0?r.ref+' cm':'—');
+  T('tc-ref-sit',r.usaRef?'CBR '+fmt(r.cbrRef,1)+'% · '+r.refInfo:'sem reforço'); C('tc-ref-sit',r.usaRef?true:null);
+  T('tc-total',fmt(r.total,1)+' cm');
+  T('tc-peso',fmt(r.pressao,1)+' kPa no subleito');
 
   const sb=document.getElementById('status-bar');
-  if(r.alertas.length>0){sb.textContent=r.alertas.join(' · ');sb.className='vbar warn';}
-  else if(!r.cond.startsWith('✓')){sb.textContent=r.cond;sb.className='vbar warn';}
-  else{sb.textContent='✓ Dimensionamento concluído · '+r.proc+' · Espessura total: '+r.total+' cm';sb.className='vbar ok';}
+  const temErr=r.alertas.some(a=>a.nivel==='err');
+  sb.textContent=(temErr?'⚠ Revisar · ':r.alertas.some(a=>a.nivel==='warn')?'⚠ ':'✓ ')+'Proc. '+r.proc+' · espessura total '+fmt(r.total,1)+' cm';
+  sb.className='vbar '+(temErr||r.alertas.some(a=>a.nivel==='warn')?'warn':'ok');
+  const av=document.getElementById('avisos');
+  const itens=[...r.alertas.map(a=>`<div class="aviso ${a.nivel}">${a.nivel==='err'?'⛔':a.nivel==='warn'?'⚠':'ℹ'} ${esc(a.txt)}</div>`),
+               ...r.sugest.map(t=>`<div class="aviso sug">💡 ${esc(t)}</div>`)];
+  av.innerHTML=itens.join(''); av.hidden=!itens.length;
 }
 
 /* ══════════════════════════════════════════════════════
@@ -954,20 +1212,20 @@ function atualizarCorte(){
   const r=resultado;
   const svg=document.getElementById('svg-corte');
   const sc=document.getElementById('corte-status');
-  if(!r)return;
-  sc.textContent='Seção dimensionada · '+r.proc+' · Total: '+r.total+' cm';
+  if(!r){svg.innerHTML='';return;}
+  sc.textContent='Seção dimensionada · Proc. '+r.proc+' · Total: '+fmt(r.total,1)+' cm';
   sc.className='vbar ok';
 
-  const W=720,H=380,mL=120,mR=110,mT=46,mB=30;
+  const W=720,H=380,mL=120,mR=200,mT=46,mB=30;
   const drawW=W-mL-mR,drawH=H-mT-mB;
   const camadas=[
     {nome:'Blocos de concreto',h:r.bloco_teo,fill:'#c8b9a0',stroke:'#8a7055',pat:'blk'},
     {nome:'Areia de assentamento',h:r.areia,fill:'#f5e8b0',stroke:'#b8a050'},
-    {nome:'Base '+(r.mat==='CCR'?'CCR':'granular'),h:r.h_base_adot,fill:'#a8c8a0',stroke:'#5a8a4a'},
-    {nome:'Sub-base granular',h:r.h_sb_adot,fill:'#d0b090',stroke:'#9a7050',pat:'gran'},
-    {nome:'Reforço do subleito',h:r.ref,fill:'#c0a878',stroke:'#886030'},
-    {nome:'Subleito',h:20,fill:'#d4c4a0',stroke:'#a09060'},
-  ].filter(c=>c.h>0||c.nome==='Subleito');
+    {nome:r.base_nome,h:r.h_base_adot,fill:r.base_tipo==='cim'?'#b8c4c8':'#a8c8a0',stroke:'#5a8a4a'},
+    {nome:r.sb_nome,h:r.h_sb_adot,fill:'#d0b090',stroke:'#9a7050',pat:'gran'},
+    {nome:'Reforço (CBR '+fmt(r.cbrRef,1)+'%)',h:r.ref,fill:'#c0a878',stroke:'#886030'},
+    {nome:'Subleito (CBR '+fmt(r.CBR,1)+'%)',h:20,fill:'#d4c4a0',stroke:'#a09060',sub:true},
+  ].filter(c=>c.h>0);
 
   const totH=camadas.reduce((a,c)=>a+c.h,0);
   const scale=drawH/totH;
@@ -986,8 +1244,8 @@ function atualizarCorte(){
     </pattern>
   </defs>`;
 
-  out+=`<text x="${W/2}" y="16" font-size="11" font-weight="700" text-anchor="middle" fill="var(--fg)">${logradouro||'Pavimento Intertravado'}</text>`;
-  out+=`<text x="${W/2}" y="30" font-size="9" text-anchor="middle" fill="var(--fg3)">Seção transversal esquemática · Espessura total: ${r.total} cm · Proc. ${r.mat}</text>`;
+  out+=`<text x="${W/2}" y="16" font-size="11" font-weight="700" text-anchor="middle" fill="var(--fg)">${esc(logradouro||'Pavimento Intertravado')}</text>`;
+  out+=`<text x="${W/2}" y="30" font-size="9" text-anchor="middle" fill="var(--fg3)">Seção esquemática · espessura total ${fmt(r.total,1)} cm · Proc. ${esc(r.proc)} · N = ${fmtN(r.N).replace(/<[^>]+>/g,'')}</text>`;
 
   let yAcc=mT;
   for(const c of camadas){
@@ -995,10 +1253,8 @@ function atualizarCorte(){
     const fill=c.pat?`url(#${c.pat})`:c.fill;
     out+=`<rect x="${mL}" y="${yAcc}" width="${drawW}" height="${hPx}" fill="${fill}" stroke="${c.stroke}" stroke-width="1"/>`;
     const midY=yAcc+hPx/2;
-    out+=`<text x="${mL-6}" y="${midY+4}" font-size="9" text-anchor="end" fill="var(--fg2)">${c.h} cm</text>`;
-    out+=`<line x1="${mL-4}" y1="${midY}" x2="${mL}" y2="${midY}" stroke="var(--border)" stroke-width=".5"/>`;
-    const label=c.nome+(c.h>0&&c.nome!=='Subleito'?' · '+c.h+' cm':'');
-    out+=`<text x="${mL+drawW+6}" y="${midY+4}" font-size="9" fill="var(--fg2)">${label}</text>`;
+    if(!c.sub) out+=`<text x="${mL-6}" y="${midY+4}" font-size="9" text-anchor="end" fill="var(--fg2)">${fmt(c.h,c.h%1?1:0)} cm</text>`;
+    out+=`<text x="${mL+drawW+6}" y="${midY+4}" font-size="9" fill="var(--fg2)">${esc(c.nome)}</text>`;
     yAcc+=hPx;
   }
   svg.innerHTML=out;
@@ -1062,9 +1318,9 @@ function calcTopo(){
     const cams=[
       {n:'Blocos de concreto',h:r.bloco_teo,m:'Blocos de concreto (ABNT NBR 9781)'},
       {n:'Areia de assentamento',h:r.areia,m:'Areia selecionada'},
-      {n:'Base',h:r.h_base_adot,m:r.mat==='CCR'?'CCR (concreto compactado com rolo)':'Granular compactado'},
+      {n:'Base',h:r.h_base_adot,m:r.base_tipo==='cim'?'Base cimentada (CCR ou similar)':'Granular compactado'},
       {n:'Sub-base',h:r.h_sb_adot,m:'Material granular, CBR controlado'},
-      {n:'Reforço',h:r.ref,m:'Solução geotécnica'},
+      {n:'Reforço',h:r.ref,m:'Material de CBR '+fmt(r.cbrRef,1)+'%'},
     ].filter(c=>c.h>0);
     document.getElementById('vols-tbody').innerHTML=cams.map(c=>{
       const vol=(c.h/100)*totArea;
@@ -1074,316 +1330,165 @@ function calcTopo(){
 }
 
 /* ══════════════════════════════════════════════════════
-   MEMÓRIA DE CÁLCULO (detalhada como pavimento flexível)
+   MEMÓRIA DE CÁLCULO — uma única fonte para tela, Excel, Word e PDF
+   Itens: {h}, {p}, {kv:[k,v]}, {f}, {tab:{cab,lin}}, {al}
 ══════════════════════════════════════════════════════ */
-function atualizarMemoria(){
-  const r=resultado;if(!r)return;
+function montarMemoria(r){
+  const M=[]; const h=t=>M.push({h:t}), p=t=>M.push({p:t}), kv=(k,x)=>M.push({kv:[k,x]}), f=t=>M.push({f:t});
   const hoje=new Date().toLocaleDateString('pt-BR');
   const logr=logradouro||'(não informado)';
   const resp=document.getElementById('resp-inp').value||'(não informado)';
+  const N=fmtN(r.N), arrTxt=r.passo===5?'para cima, múltiplo de 5 cm':'para cima, ao centímetro';
+
+  h('1 · Identificação');
+  kv('Logradouro / obra:',logr);
+  kv('Responsável técnico:',resp);
+  kv('Data do cálculo:',hoje);
+  kv('Norma:','IP-06/2004 — Dimensionamento de pavimentos com blocos intertravados de concreto (SIURB/PMSP)');
+  kv('Normas citadas pela IP-06:','EM-6 (SIURB/PMSP), ABNT NBR 9780 e NBR 9781 (peças de concreto)');
+
+  h('2 · Tráfego (§4 e Quadro 6.1)');
+  p('N é o número acumulado de solicitações do eixo simples padrão na vida de projeto (10 anos para tráfego leve a meio pesado e 12 anos para pesado e muito pesado — Quadro 6.1). A carga máxima legal considerada é de 10 t por eixo simples de rodagem dupla (§4.2).');
+  kv('Tipo de via / tráfego:',VIA_MAP[r.sel]||'N calculado');
+  kv('N adotado:',N+' solicitações');
+  kv('Classe pelas faixas do Quadro 6.1:',r.classe);
+
+  h('3 · Subleito (§5) e drenagem (§8.1)');
+  kv('CBR do subleito:',fmt(r.CBR,1)+' %');
+  kv('Expansão:',r.exp!=null?fmt(r.exp,1)+' %':'não informada');
+  if(r.exp!=null&&r.exp>=2&&r.CBR>2){
+    p('Com CBR > 2% e expansão ≥ 2%, o peso próprio do pavimento deve transmitir ao subleito pressão igual ou maior que a sobrecarga que reduz a expansão a menos de 2% (§5). Pesos específicos típicos adotados: blocos 22, areia 17, base granular 21, base cimentada 23, sub-base 21, reforço 20 kN/m³.');
+    f('pressão do pavimento = Σ γ·h = '+fmt(r.pressao,1)+' kPa'+(r.sobre!=null?(r.pressao>=r.sobre?' ≥ ':' < ')+fmt(r.sobre,1)+' kPa (exigida) → '+(r.pressao>=r.sobre?'atende':'NÃO atende'):' (sobrecarga do ensaio não informada)'));
+  }
+  kv('Lençol d\'água abaixo do greide de terraplenagem:',r.len!=null?fmt(r.len,2)+' m '+(r.len>=1.5?'(≥ 1,50 m — atende §8.1)':'(< 1,50 m — prever rebaixamento, §8.1)'):'não informado (o dimensionamento pressupõe ≥ 1,50 m, §8.1)');
+  if(r.usaRef){
+    kv('Reforço / substituição:','material com CBR '+fmt(r.cbrRef,1)+' % — as camadas superiores são dimensionadas com este CBR (§5)');
+  }
+
+  h('4 · Procedimento (§6, Quadro 6.2)');
+  p('Procedimento A (ABCP ET-27): recomendado para tráfego leve (N até 10⁵), sem base, e para N acima de 1,5×10⁶ com base cimentada. Procedimento B (PCA): recomendado para N entre 10⁵ e 1,5×10⁶, com bases granulares; admite base cimentada com fator de equivalência 1,65.');
+  kv('Procedimento adotado:','Proc. '+r.proc);
+  kv('Recomendado para este N:',r.procRec+(r.procOk?' — coincide com o adotado':' — difere do adotado'));
+
+  const L=r.leit;
+  if(r.mat==='PROCA'){
+    h('5 · Sub-base — Figura 6.1');
+    kv('CBR de projeto:',fmt(r.CBRp,1)+' %'+(r.usaRef?' (do reforço)':''));
+    kv('CBR mínimo do material da sub-base (§7.1.1a):',r.cbr_min_sb+' % ('+(r.N<5e5?'N < 5×10⁵':'N ≥ 5×10⁵')+')');
+    if(L.dispensa) f(L.txt);
+    else if(L.minimo) f(L.txt);
+    else{
+      p('Leitura por interpolação logarítmica entre as curvas vizinhas do gráfico:');
+      f('t = (log N − log '+fmtN(L.N1)+') / (log '+fmtN(L.N2)+' − log '+fmtN(L.N1)+') = '+fmt(L.t,3));
+      f('u = (log CBR − log '+L.C1+') / (log '+L.C2+' − log '+L.C1+') = '+fmt(L.u,3));
+      f('H = '+fmt(L.H11,1)+'·(1−t)(1−u) + '+fmt(L.H21,1)+'·t(1−u) + '+fmt(L.H12,1)+'·(1−t)u + '+fmt(L.H22,1)+'·t·u = '+fmt(L.Hlido,1)+' cm');
+      if(L.Hlido<L.hMin) f('mínimo da Figura 6.1 = '+L.hMin+' cm → '+L.hMin+' cm');
+    }
+    if(r.hConf) kv('Leitura própria do gráfico:',fmt(r.hConf,1)+' cm (substitui a leitura automática)');
+    kv('Sub-base adotada:',r.h_sb_adot>0?r.h_sb_adot+' cm ('+arrTxt+')':'dispensada');
+    h('6 · Base — §7.1 e Figura 6.2');
+    if(r.N<1.5e6) f('N = '+N+' < 1,5×10⁶ → camada de base não é necessária');
+    else f(r.calc.baseRegra+' → adotado '+r.h_base_adot+' cm de base cimentada');
+  }else{
+    h('5 · Espessura granular HBG — Figura 6.3');
+    kv('CBR de projeto:',fmt(r.CBRp,1)+' %'+(r.usaRef?' (do reforço)':'')+(r.CBRp>20?' (acima de 20%: usa a coluna de 20%)':''));
+    p('Interpolação logarítmica entre as linhas e colunas vizinhas do quadro da Figura 6.3 (células em branco = mínimo de 15 cm):');
+    f('t = (log N − log '+fmtN(L.N1)+') / (log '+fmtN(L.N2)+' − log '+fmtN(L.N1)+') = '+fmt(L.t,3));
+    f('u = (log CBR − log '+L.C1+') / (log '+L.C2+' − log '+L.C1+') = '+fmt(L.u,3));
+    f('HBG = '+L.H11+'·(1−t)(1−u) + '+L.H21+'·t(1−u) + '+L.H12+'·(1−t)u + '+L.H22+'·t·u = '+fmt(L.Hlido,1)+' cm');
+    if(r.hConf) kv('Leitura própria do gráfico:',fmt(r.hConf,1)+' cm (substitui a leitura automática)');
+    kv('HBG usada:',fmt(r.h_usado,1)+' cm');
+    h('6 · Distribuição em camadas — §7.2');
+    if(r.mat==='GRAN'){
+      f('base granular = HBG = '+fmt(r.h_usado,1)+' cm → adotada '+r.h_base_adot+' cm (mínimo 15 cm; '+arrTxt+')');
+    }else{
+      f('sub-base granular adotada = '+r.h_sb_adot+' cm');
+      f('H cimentada = (HBG − H sub-base) / K = ('+fmt(r.h_usado,1)+' − '+r.h_sb_adot+') / 1,65 = '+fmt(r.calc.cim,2)+' cm');
+      f('mínimo para base tratada com cimento = 10 cm → adotada '+r.h_base_adot+' cm');
+    }
+    p('Os blocos no Procedimento B têm espessura mínima de 8 cm, chegando a 10 cm nas condições mais severas (§7.2).');
+  }
+
+  if(r.usaRef){
+    h('7 · Reforço do subleito');
+    if(r.CBR<2) f('CBR do subleito < 2% (fora do gráfico): espessura informada pelo estudo geotécnico = '+r.ref+' cm');
+    else{
+      f('H(CBR subleito '+fmt(r.CBR,1)+'%) − H(CBR reforço '+fmt(r.cbrRef,1)+'%) = '+fmt(r.calc.refHsub,1)+' − '+fmt(r.calc.refHref,1)+' = '+fmt(r.ref_teo,1)+' cm ('+r.figRef+')');
+      kv('Reforço adotado:',r.ref+' cm ('+r.refInfo+')');
+    }
+  }
+
+  h((r.usaRef?'8':'7')+' · Blocos de concreto — Quadro 6.3');
+  f('N ≤ 5×10⁵ → 6 cm, 35 MPa · 5×10⁵ < N < 10⁷ → 8 cm, 35 a 50 MPa · N ≥ 10⁷ → 10 cm, 50 MPa');
+  f('N = '+N+' → '+r.bloco_q+' cm'+(r.bloco_teo!==r.bloco_q?' → '+r.bloco_teo+' cm (mínimo do Proc. B)':'')+' · fpk mínimo '+r.fpk_min+' MPa');
+  kv('fpk especificado:',r.fpkI+' MPa → '+(r.fpkI>=r.fpk_min?'atende':'NÃO atende'));
+  kv('Areia de assentamento:',fmt(r.areia,1)+' cm — areia ou pó-de-pedra com no máximo 5% de silte e argila e 10% retido na peneira 4,8 mm (§8.3)');
+
+  h((r.usaRef?'9':'8')+' · Estrutura dimensionada');
+  const lin=[['Blocos de concreto',r.bloco_q,r.bloco_teo,'Quadro 6.3 · fpk ≥ '+r.fpk_min+' MPa'],
+             ['Areia de assentamento',r.areia,r.areia,'§8.3']];
+  lin.push([r.base_nome,r.h_base_teo>0?fmt(r.h_base_teo,1):'—',r.h_base_adot>0?r.h_base_adot:'dispensada',r.mat==='PROCA'?(r.N>=1e7?'Figura 6.2':'§7.1'):r.mat==='GRAN'?'Figura 6.3':'K = 1,65; mín. 10 cm']);
+  if(r.h_sb_adot>0||r.sb_disp) lin.push([r.sb_nome,r.h_sb_teo>0?fmt(r.h_sb_teo,1):'—',r.h_sb_adot>0?r.h_sb_adot:'dispensada',r.mat==='PROCA'?'Figura 6.1':'§7.2.1']);
+  if(r.ref>0) lin.push(['Reforço (CBR '+fmt(r.cbrRef,1)+'%)',fmt(r.ref_teo,1),r.ref,r.refInfo]);
+  lin.push(['Subleito (CBR '+fmt(r.CBR,1)+'%)','','','']);
+  M.push({tab:{cab:['Camada','Calculada (cm)','Adotada (cm)','Critério'],lin}});
+  f('espessura total = '+[r.bloco_teo,r.areia,r.h_base_adot,r.h_sb_adot,r.ref].filter(x=>x>0).map(x=>fmt(x,x%1?1:0)).join(' + ')+' = '+fmt(r.total,1)+' cm');
+  kv('Pressão do pavimento no subleito:',fmt(r.pressao,1)+' kPa');
+
+  if(r.alertas.length||r.sugest.length){
+    h('Alertas e sugestões');
+    r.alertas.forEach(a=>M.push({al:(a.nivel==='err'?'⛔ ':a.nivel==='warn'?'⚠ ':'ℹ ')+a.txt}));
+    r.sugest.forEach(t=>M.push({al:'💡 '+t}));
+  }
+
+  h('Pressupostos (§8)');
+  p('Drenagem superficial adequada e lençol a pelo menos 1,50 m do greide (§8.1); controle e recebimento de todas as camadas conforme as Instruções de Execução da SIURB/PMSP (§8.2); blocos conforme EM-6, NBR 9780 e NBR 9781 (§8.4); vias com infraestrutura de água, esgoto e drenagem executada (§8.5). Contenção lateral contínua (guias) é indispensável para o intertravamento.');
+  return M;
+}
+
+function atualizarMemoria(){
+  const r=resultado;if(!r)return;
+  const hoje=new Date().toLocaleDateString('pt-BR');
   document.getElementById('memo-header').innerHTML=
-    `<strong>Logradouro:</strong> ${logr} &nbsp;·&nbsp; <strong>Responsável:</strong> ${resp} &nbsp;·&nbsp; <strong>Data:</strong> ${hoje}`;
+    `<strong>Logradouro:</strong> ${esc(logradouro||'(não informado)')} &nbsp;·&nbsp; <strong>Responsável:</strong> ${esc(document.getElementById('resp-inp').value||'(não informado)')} &nbsp;·&nbsp; <strong>Data:</strong> ${hoje}`;
   const ms=document.getElementById('memo-status');
-  if(r.alertas.length>0){ms.textContent=r.alertas.join(' · ');ms.className='vbar warn';}
-  else{ms.textContent=r.cond;ms.className=r.cond.startsWith('✓')?'vbar ok':'vbar warn';}
-
-  // Classificação do N
-  let classN='';
-  if(r.N<=5e5)classN='Baixo volume de tráfego — N ≤ 5×10⁵';
-  else if(r.N<=5e6)classN='Médio volume de tráfego — 5×10⁵ < N ≤ 5×10⁶';
-  else classN='Alto volume de tráfego — N > 5×10⁶';
-
-  const baseTxt={GRAN:'Brita graduada ou macadame seco (granular)',CCR:'Concreto Compactado com Rolo (CCR)',PROCA:'Sub-base granular (base dispensada — Proc. A)'};
-  const procDesc=r.mat==='PROCA'
-    ?"Procedimento A (IP-06/2004 §6.1): determina a espessura de sub-base diretamente a partir da Figura 6.1, dispensando camada de base para N &lt; 1,5×10⁶."
-    :r.mat==='CCR'
-    ?"Procedimento B com CCR (IP-06/2004 §6.2): determina HBG total da Figura 6.3. A parte CCR é convertida usando fator de equivalência K = 1,65."
-    :"Procedimento B granular (IP-06/2004 §6.2): determina HBG total na Figura 6.3 e distribui entre base e sub-base (sub-base mínima 15 cm).";
-
-  // Interpolation detail strings
-  const figRef=r.mat==='PROCA'?'Figura 6.1':'Figura 6.3';
-  const hbgLiq=r.mat==='CCR'?Math.max(0,r.h_est-(r.subCCR||r.h_sb_adot)):0;
-  const ccr_calc=r.mat==='CCR'?`
-    <p class="mexp">Com o procedimento B + CCR, o HBG total interpolado é dividido em:</p>
-    <div class="mfml">HBG_total (interpolado) = ${fmt(r.h_est,0)} cm</div>
-    <div class="mfml">Sub-base granular sob CCR (mínimo 15 cm) = ${r.subCCR||r.h_sb_adot} cm</div>
-    <div class="mfml">HBG_líquido = HBG_total − H_sub-base = ${fmt(r.h_est,0)} − ${r.subCCR||r.h_sb_adot} = ${fmt(hbgLiq,0)} cm</div>
-    <p class="mexp">O CCR é convertido pelo fator de equivalência estrutural K = 1,65 (IP-06/2004 §6.2.2):</p>
-    <div class="mfml">h_CCR = HBG_líquido / K = ${fmt(hbgLiq,0)} / 1,65 = ${fmt(hbgLiq/1.65,1)} cm → adotado ${r.h_base_adot} cm (múltiplo de 5 cm)</div>
-  `:'';
-  const sbCalc=r.mat==='GRAN'?`
-    <p class="mexp">No Procedimento B granular, o HBG total é distribuído em base + sub-base, com sub-base mínima de 15 cm (IP-06/2004 §6.2.1):</p>
-    <div class="mfml">HBG_total (interpolado) = ${fmt(r.h_est,0)} cm</div>
-    <div class="mfml">H_base (teórico) = HBG_total − H_sub-base_mín = ${fmt(r.h_est,0)} − ${r.h_sb_teo||15} = ${fmt(Math.max(0,r.h_est-(r.h_sb_teo||15)),0)} cm</div>
-    <div class="mfml">H_sub-base (adotado) = ${r.h_sb_adot} cm (mínimo 15 cm)</div>
-    <div class="mfml">H_base (adotado) = ${r.h_base_adot>0?r.h_base_adot:'0'} cm (arredondado para múltiplo de 5 cm)</div>
-  `:r.mat==='PROCA'?`
-    <p class="mexp">No Procedimento A, a espessura da sub-base é lida diretamente na Figura 6.1 em função de N e CBR do subleito. A camada de base é dispensada quando N &lt; 1,5×10⁶ (IP-06/2004 §6.1.2).</p>
-    <div class="mfml">H_sub-base (interpolado) = ${fmt(r.h_est,0)} cm</div>
-    <div class="mfml">H_base = dispensada (N = ${fmtN(r.N)} ${r.N<1.5e6?'< 1,5×10⁶':'≥ 1,5×10⁶ — verificar'})</div>
-  `:'';
-
-  document.getElementById('memo-content').innerHTML=`
-  <div class="ms">
-    <h3>1 · Identificação</h3>
-    <div class="mkv"><span class="mk">Logradouro / obra:</span><span class="mv">${logr}</span></div>
-    <div class="mkv"><span class="mk">Responsável técnico:</span><span class="mv">${resp}</span></div>
-    <div class="mkv"><span class="mk">Data do cálculo:</span><span class="mv">${hoje}</span></div>
-    <div class="mkv"><span class="mk">Norma de dimensionamento:</span><span class="mv">IP-06/2004 (SIURB/PMSP) — Instrução de Projeto: Pavimento Intertravado de Blocos de Concreto</span></div>
-    <div class="mkv"><span class="mk">Normas complementares:</span><span class="mv">ABNT NBR 9781:2013 (blocos) · ABNT NBR 15953:2026 (execução)</span></div>
-  </div>
-
-  <div class="ms">
-    <h3>2 · Dados de Tráfego</h3>
-    <p class="mexp">O número N representa a quantidade acumulada de repetições do eixo padrão de 8,2 tf (80 kN) durante a vida útil do pavimento. Segundo a IP-06/2004 §5, a vida de projeto típica é de 10 a 12 anos. O valor de N é determinado a partir do Volume Médio Diário (VMD) de veículos comerciais, do fator de crescimento de tráfego, do fator veículo e do fator climático regional.</p>
-    <div class="mkv"><span class="mk">Tipo de via / tráfego:</span><span class="mv">${VIA_MAP[r.sel]||'N informado manualmente'}</span></div>
-    <div class="mkv"><span class="mk">Número N adotado:</span><span class="mv">${fmtN(r.N)} eixos padrão de 8,2 tf</span></div>
-    <p class="mexp">Classificação do tráfego segundo IP-06/2004 §5.2:</p>
-    <div class="mfml">${r.N<=5e5?'N = '+fmtN(r.N)+' <= 5x10^5  =>  Baixo volume de tráfego':r.N<=5e6?'N = '+fmtN(r.N)+' in (5x10^5 ; 5x10^6]  =>  Médio volume de tráfego':'N = '+fmtN(r.N)+' > 5x10^6  =>  Alto volume de tráfego'}</div>
-    <div class="mkv"><span class="mk">Classificação IP-06:</span><span class="mv">${classN}</span></div>
-    <div class="mkv"><span class="mk">Vida de projeto típica:</span><span class="mv">10 a 12 anos (IP-06/2004 §5)</span></div>
-  </div>
-
-  <div class="ms">
-    <h3>3 · Parâmetros do Subleito</h3>
-    <p class="mexp">O CBR (California Bearing Ratio) do subleito é obtido em ensaio de laboratório (DNIT 172/2016) em amostras representativas da cota de formação do pavimento. A expansão e o nível do lençol freático são parâmetros complementares que podem indicar necessidade de reforço do subleito.</p>
-    <div class="mkv"><span class="mk">CBR do subleito:</span><span class="mv">${fmt(r.CBR,1)} % (ensaio representativo na cota de formação)</span></div>
-    <div class="mkv"><span class="mk">Expansão do subleito:</span><span class="mv">${r.exp>0?fmt(r.exp,1)+' %':'não informada'}</span></div>
-    <div class="mkv"><span class="mk">Lençol freático:</span><span class="mv">${r.len!=null?fmt(r.len,1)+' m abaixo da formação':'não informado'}</span></div>
-    <p class="mexp">O CBR mínimo exigido para a sub-base é definido em função de N (IP-06/2004 §6, Quadro 6.2):</p>
-    <div class="mfml">${r.N<5e5?'N = '+fmtN(r.N)+' < 5x10^5  =>  CBR_sub-base >= 20 %':'N = '+fmtN(r.N)+' >= 5x10^5  =>  CBR_sub-base >= 30 %'}</div>
-    <div class="mkv"><span class="mk">CBR mínimo da sub-base:</span><span class="mv">${r.cbr_min_sb} %</span></div>
-    ${r.alertas.length>0?'<div class="mkv"><span class="mk">Alertas geotécnicos:</span><span class="mv" style="color:var(--warn-fg)">'+r.alertas.join('<br>')+'</span></div>':''}
-  </div>
-
-  <div class="ms">
-    <h3>4 · Procedimento de Dimensionamento</h3>
-    <p class="mexp">A IP-06/2004 prevê dois procedimentos de dimensionamento do reforço estrutural sob os blocos:</p>
-    <p class="mexp"><strong>Procedimento A (§6.1):</strong> Aplica-se apenas quando N &lt; 1,5×10⁶. Lê-se a espessura da sub-base diretamente na Figura 6.1 em função de N e CBR do subleito. A camada de base é dispensada, reduzindo o custo da obra.</p>
-    <p class="mexp"><strong>Procedimento B (§6.2):</strong> Aplica-se para qualquer N. Determina o HBG (Hespessura de Base Granular equivalente) total a partir da Figura 6.3. O HBG pode ser executado em base granular ou CCR, distribuído entre as camadas de base e sub-base.</p>
-    <div class="mkv"><span class="mk">Procedimento adotado:</span><span class="mv">${r.proc}</span></div>
-    <div class="mkv"><span class="mk">Descrição:</span><span class="mv">${procDesc}</span></div>
-    <div class="mkv"><span class="mk">Material da base:</span><span class="mv">${baseTxt[r.mat]||r.mat}</span></div>
-  </div>
-
-  <div class="ms">
-    <h3>5 · Determinação da Espessura H</h3>
-    <p class="mexp">A leitura das Figuras 6.1 e 6.3 da IP-06/2004 é realizada por interpolação bilinear em escala log-log. Dados os valores de N e CBR do subleito, localizam-se as curvas (ou valores tabelados) imediatamente inferiores e superiores a cada parâmetro, e aplica-se interpolação logarítmica dupla conforme:</p>
-    <div class="mfml">t = (log N - log N1) / (log N2 - log N1)</div>
-    <div class="mfml">u = (log CBR - log CBR1) / (log CBR2 - log CBR1)</div>
-    <div class="mfml">H = H11·(1-t)·(1-u) + H21·t·(1-u) + H12·(1-t)·u + H22·t·u</div>
-    <p class="mexp">onde H11, H12, H21, H22 são os valores tabelados nos quatro vértices da célula da matriz, N1≤N≤N2 e CBR1≤CBR≤CBR2.</p>
-    <div class="mkv"><span class="mk">Figura utilizada:</span><span class="mv">${figRef} da IP-06/2004</span></div>
-    <div class="mkv"><span class="mk">N de entrada:</span><span class="mv">${fmtN(r.N)} eixos padrão</span></div>
-    <div class="mkv"><span class="mk">CBR de entrada:</span><span class="mv">${fmt(r.CBR,1)} %</span></div>
-    <div class="mkv"><span class="mk">H estimado (resultado da interpolação):</span><span class="mv">${fmt(r.h_est,0)} cm</span></div>
-    <div class="mkv"><span class="mk">H conferido na figura:</span><span class="mv">${r.hConf?fmt(r.hConf,0)+' cm (valor informado manualmente — prevalece sobre interpolação)':'Não informado — adotado H interpolado'}</span></div>
-    <div class="mkv"><span class="mk">H adotado no cálculo:</span><span class="mv">${fmt(r.h_usado,0)} cm</span></div>
-    ${sbCalc}
-    ${ccr_calc}
-  </div>
-
-  <div class="ms">
-    <h3>6 · Dimensionamento dos Blocos (Quadro 6.3 — IP-06/2004)</h3>
-    <p class="mexp">A espessura dos blocos de concreto é determinada pelo Quadro 6.3 da IP-06/2004 em função do número N acumulado de projeto:</p>
-    <div class="mfml">N <= 5x10^5  =>  espessura = 6 cm</div>
-    <div class="mfml">5x10^5 < N < 10^7  =>  espessura = 8 cm</div>
-    <div class="mfml">N >= 10^7  =>  espessura = 10 cm</div>
-    <p class="mexp">Verificação para o projeto:</p>
-    <div class="mfml">N adotado = ${fmtN(r.N)}  =>  espessura dos blocos = ${r.bloco_teo} cm</div>
-    <p class="mexp">A resistência característica à compressão (fpk) dos blocos é especificada conforme ABNT NBR 9781:2013, Tabela 2:</p>
-    <div class="mfml">${r.N>=1e7?'N >= 10^7  =>  fpk_min = '+r.fpk_min+' MPa (classe C50 ou superior)':'N < 10^7  =>  fpk_min = '+r.fpk_min+' MPa (classe C35)'}</div>
-    <div class="mkv"><span class="mk">fpk mínimo exigido (NBR 9781):</span><span class="mv">${r.fpk_min} MPa</span></div>
-    <div class="mkv"><span class="mk">fpk especificado em projeto:</span><span class="mv">${r.fpkI} MPa</span></div>
-    <div class="mkv"><span class="mk">Verificação:</span><span class="mv">${r.fpkI} >= ${r.fpk_min} MPa → ${r.fpkI>=r.fpk_min?'✓ Atende à NBR 9781:2013':'⚠ NÃO atende — revisar especificação'}</span></div>
-  </div>
-
-  <div class="ms">
-    <h3>7 · Pacote Estrutural Dimensionado</h3>
-    <p class="mexp">O pacote estrutural é composto pelas camadas a seguir, da superfície ao subleito. As espessuras teóricas resultam diretamente do dimensionamento; as espessuras adotadas são arredondadas para múltiplos de 5 cm e respeitam os valores mínimos normativos.</p>
-    <div class="tw">
-      <table>
-        <thead><tr><th>Camada</th><th>Material</th><th>Teórica (cm)</th><th>Adotada (cm)</th><th>Critério</th><th>Situação</th></tr></thead>
-        <tbody>
-          <tr><td>Blocos de concreto</td><td>ABNT NBR 9781 — ${r.fpkI} MPa</td><td class="to">${r.bloco_teo}</td><td class="to">${r.bloco_teo}</td><td>IP-06 Quadro 6.3</td><td class="${r.fpkI>=r.fpk_min?'tok':'twarn'}">${r.fpkI>=r.fpk_min?'✓ OK':'⚠ Revisar'}</td></tr>
-          <tr><td>Areia de assentamento</td><td>Areia selecionada</td><td class="to">${r.areia}</td><td class="to">${r.areia}</td><td>IP-06 §7 — 3 a 5 cm</td><td class="${r.areia>=3&&r.areia<=5?'tok':'twarn'}">${r.areia>=3&&r.areia<=5?'✓ OK':'⚠ Fora do limite'}</td></tr>
-          <tr><td>${r.mat==='CCR'?'Base CCR':r.mat==='PROCA'?'Base (disp.)':'Base granular'}</td><td>${baseTxt[r.mat]}</td><td class="to">${r.h_base_teo>0?r.h_base_teo:'—'}</td><td class="to">${r.h_base_adot>0?r.h_base_adot:'Dispensada'}</td><td>IP-06 Fig. ${r.mat==='PROCA'?'6.1':'6.3'}</td><td class="tok">✓ OK</td></tr>
-          <tr><td>Sub-base granular</td><td>Granular, CBR ≥ ${r.cbr_min_sb}%</td><td class="to">${r.h_sb_teo>0?r.h_sb_teo:'—'}</td><td class="to">${r.h_sb_adot>0?r.h_sb_adot:'—'}</td><td>CBR ≥ ${r.cbr_min_sb}%</td><td class="tok">✓ OK</td></tr>
-          ${r.ref>0?`<tr><td>Reforço do subleito</td><td>Solução geotécnica</td><td class="to">${r.ref}</td><td class="to">${r.ref}</td><td>Projeto específico</td><td class="tok">✓ OK</td></tr>`:''}
-        </tbody>
-        <tfoot>
-          <tr style="font-weight:700;background:var(--tab-hover)">
-            <td colspan="3">Espessura física total</td>
-            <td class="to">${r.total} cm</td><td colspan="2"></td>
-          </tr>
-        </tfoot>
-      </table>
-    </div>
-    <p class="mexp" style="margin-top:8px">Espessura física total = blocos + areia + base + sub-base${r.ref>0?' + reforço':''}:</p>
-    <div class="mfml">${r.bloco_teo} + ${r.areia} + ${r.h_base_adot>0?r.h_base_adot:0} + ${r.h_sb_adot>0?r.h_sb_adot:0}${r.ref>0?' + '+r.ref:''} = ${r.total} cm</div>
-  </div>
-
-  <div class="ms">
-    <h3>8 · Recomendações Construtivas (IP-06/2004 §7 e NBR 15953:2026)</h3>
-    <p class="mexp">As recomendações a seguir são extraídas da IP-06/2004 §7 e da ABNT NBR 15953:2026 e devem constar nas especificações de serviço do projeto executivo:</p>
-    <div class="mkv"><span class="mk">Contenção lateral:</span><span class="mv">Obrigatória e contínua (meio-fio, barra-guia ou similar) — impede deslocamento lateral dos blocos e manutenção do intertravamento</span></div>
-    <div class="mkv"><span class="mk">Leito de assentamento (areia):</span><span class="mv">Espessura de ${r.areia} cm de areia média (D50 entre 0,3 e 1,0 mm), espalhada após compactação final da sub-base; não compactar a areia antes da colocação dos blocos</span></div>
-    <div class="mkv"><span class="mk">Padrão de assentamento:</span><span class="mv">Espinha de peixe a 45° obrigatória em vias com tráfego veicular; fileiras retas aceitáveis apenas em passeios de pedestres (IP-06/2004 §7.3)</span></div>
-    <div class="mkv"><span class="mk">Compactação dos blocos:</span><span class="mv">Placa vibratória mínima 75 kg, passadas cruzadas; mínimo 3 passadas após assentamento; verificar planeza com régua de 3 m (tolerância ± 5 mm)</span></div>
-    <div class="mkv"><span class="mk">Preenchimento de juntas:</span><span class="mv">Areia fina (módulo de finura &lt; 2,2) varrida sobre a superfície após compactação; repassar pelo menos 2 vezes com intervalo de 24 h após vibração</span></div>
-    <div class="mkv"><span class="mk">Drenagem superficial:</span><span class="mv">Declividade transversal mínima 2% e longitudinal mínima 0,5% (IP-06/2004 §4.3); prever caixas de inspeção e grelhas conforme projeto de drenagem</span></div>
-    <div class="mkv"><span class="mk">Tolerâncias (NBR 15953:2026 §8.5):</span><span class="mv">Acabamento superficial ± 5 mm/3 m; largura de juntas 2 a 5 mm; alinhamento de juntas ± 10 mm/10 m</span></div>
-    <div class="mkv"><span class="mk">Sub-base (critério geotécnico):</span><span class="mv">CBR ≥ ${r.cbr_min_sb}%, expansão ≤ 2%, grau de compactação ≥ 100% PN (IP-06/2004 §6.4)</span></div>
-  </div>
-  `;
+  ms.textContent=r.cond+' · Proc. '+r.proc+' · total '+fmt(r.total,1)+' cm';
+  ms.className=r.cond.startsWith('✓')?'vbar ok':'vbar warn';
+  let html='', aberto=false;
+  for(const it of montarMemoria(r)){
+    if(it.h){ if(aberto) html+='</div>'; html+=`<div class="ms"><h3>${esc(it.h)}</h3>`; aberto=true; }
+    else if(it.p) html+=`<p class="mexp">${esc(it.p)}</p>`;
+    else if(it.kv) html+=`<div class="mkv"><span class="mk">${esc(it.kv[0])}</span><span class="mv">${esc(it.kv[1])}</span></div>`;
+    else if(it.f) html+=`<div class="mfml">${esc(it.f)}</div>`;
+    else if(it.al) html+=`<div class="mkv"><span class="mv" style="color:var(--warn-fg)">${esc(it.al)}</span></div>`;
+    else if(it.tab) html+=`<div class="tw"><table><thead><tr>${it.tab.cab.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead><tbody>${it.tab.lin.map(l=>`<tr>${l.map((c,i)=>`<td${i===1||i===2?' class="to"':''}>${esc(c)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+  }
+  if(aberto) html+='</div>';
+  document.getElementById('memo-content').innerHTML=html;
 }
 
 /* ══════════════════════════════════════════════════════
    EXPORTAÇÃO — HELPERS
 ══════════════════════════════════════════════════════ */
 function pdfTexto(t){
-  const sup={'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};
-  return String(t).replace(/[⁰-⁹]/g,c=>'^'+(sup[c]||c))
-    .replace(/×/g,'x').replace(/≥/g,'>=').replace(/≤/g,'<=').replace(/✓/g,'OK').replace(/⚠/g,'!')
-    .replace(/[—–]/g,'-').replace(/[""]/g,'"').replace(/[^\x00-\xFF]/g,'');
+  const sup={'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9','⁻':'-'};
+  return String(t).replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁻]+/g,m=>'^'+m.split('').map(c=>sup[c]).join(''))
+    .replace(/×/g,'x').replace(/≥/g,'>=').replace(/≤/g,'<=').replace(/✓/g,'OK').replace(/[⚠⛔]/g,'!').replace(/ℹ/g,'i').replace(/💡/g,'*')
+    .replace(/→/g,'=>').replace(/−/g,'-').replace(/Σ/g,'soma').replace(/γ/g,'g').replace(/·/g,'.')
+    .replace(/[—–]/g,'-').replace(/[“”]/g,'"').replace(/[^\x00-\xFF]/g,'');
 }
 
 function getMemoriaRows(){
   const r=resultado;if(!r)return[];
-  const hoje=new Date().toLocaleDateString('pt-BR');
-  const logr=logradouro||'—';const resp=document.getElementById('resp-inp').value||'—';
-  const baseTxt={GRAN:'Granular compactado (HBG)',CCR:'CCR — Concreto Compactado com Rolo',PROCA:'Sub-base granular (base dispensada)'};
-  const classN=r.N<=5e5?'Baixo volume de tráfego (N ≤ 5×10⁵)':r.N<=5e6?'Médio volume de tráfego (5×10⁵ < N ≤ 5×10⁶)':'Alto volume de tráfego (N > 5×10⁶)';
-  const procDesc=r.mat==='PROCA'?'Procedimento A (IP-06/2004 §6.1): sub-base lida na Figura 6.1; base dispensada para N < 1,5×10⁶.':r.mat==='CCR'?'Procedimento B com CCR (IP-06/2004 §6.2): HBG total convertido para CCR com fator K = 1,65.':'Procedimento B granular (IP-06/2004 §6.2): HBG total distribuído em base + sub-base granular.';
-  const figRef=r.mat==='PROCA'?'Figura 6.1':'Figura 6.3';
-  const hbgLiq=r.mat==='CCR'?Math.max(0,r.h_est-(r.subCCR||r.h_sb_adot)):0;
-  // Incremento construtivo: diferença entre espessura adotada (arredondada) e teórica
-  const inc_base = r.h_base_teo>0 ? (r.h_base_adot - r.h_base_teo) : 0;
-  const inc_sb   = r.h_sb_teo>0   ? (r.h_sb_adot   - r.h_sb_teo)   : 0;
-  const inc_total= inc_base + inc_sb;
-  const rows=[];
-  const sec=(t)=>{rows.push(['','']);rows.push([t,'']);};
-  const kv=(k,v2)=>rows.push([k,v2]);
-  const fm=(f)=>rows.push(['    '+f,'']);
-  const ex=(t)=>rows.push(['  > '+t,'']);
-
-  rows.push(['DIMENSIONAMENTO DE PAVIMENTO INTERTRAVADO — IP-06/2004','']);
-  rows.push(['Normas: IP-06/2004 (SIURB/PMSP), ABNT NBR 9781:2013, ABNT NBR 15953:2026','']);
-
-  sec('1. IDENTIFICAÇÃO');
-  kv('Logradouro / obra:',logr);
-  kv('Responsável técnico:',resp);
-  kv('Data do cálculo:',hoje);
-  kv('Norma de dimensionamento:','IP-06/2004 — SIURB/PMSP — Instrução de Projeto: Pavimento Intertravado de Blocos de Concreto');
-  kv('Normas complementares:','ABNT NBR 9781:2013 (blocos) | ABNT NBR 15953:2026 (execução)');
-
-  sec('2. DADOS DE TRÁFEGO');
-  ex('O número N representa a quantidade acumulada de repetições do eixo padrão de 8,2 tf (80 kN) durante a vida útil do pavimento. Vida de projeto típica: 10 a 12 anos (IP-06/2004 §5).');
-  kv('Tipo de via / tráfego:',VIA_MAP[r.sel]||'N informado manualmente');
-  kv('Número N adotado (eixos padrão de 8,2 tf):',fmtN(r.N));
-  ex('Classificação do tráfego segundo IP-06/2004 §5.2:');
-  fm('N ≤ 5×10⁵  =>  Baixo volume de tráfego');
-  fm('5×10⁵ < N ≤ 5×10⁶  =>  Médio volume de tráfego');
-  fm('N > 5×10⁶  =>  Alto volume de tráfego');
-  kv('Classificação do tráfego:',classN);
-  kv('Vida de projeto típica:','10 a 12 anos (IP-06/2004 §5)');
-
-  sec('3. PARÂMETROS DO SUBLEITO');
-  ex('O CBR (California Bearing Ratio) do subleito é obtido em ensaio de laboratório (DNIT 172/2016) em amostras representativas da cota de formação do pavimento. A expansão e o nível do lençol freático são parâmetros complementares que podem indicar necessidade de reforço do subleito.');
-  kv('CBR do subleito (%):',fmt(r.CBR,1)+' %');
-  kv('Expansão do subleito (%):',r.exp>0?fmt(r.exp,1)+' %':'não informada');
-  kv('Lençol freático abaixo da formação (m):',r.len!=null?fmt(r.len,1)+' m':'não informado');
-  ex('O CBR mínimo exigido para a sub-base é definido em função de N (IP-06/2004 §6, Quadro 6.2):');
-  fm(r.N<5e5?'N = '+fmtN(r.N)+' < 5×10⁵  =>  CBR_sub-base ≥ 20 %':'N = '+fmtN(r.N)+' ≥ 5×10⁵  =>  CBR_sub-base ≥ 30 %');
-  kv('CBR mínimo exigido para a sub-base (%):',r.cbr_min_sb+' %');
-  if(r.alertas.length>0){ex('Alertas geotécnicos:');r.alertas.forEach(a=>fm('! '+a));}
-
-  sec('4. PROCEDIMENTO DE DIMENSIONAMENTO');
-  ex('A IP-06/2004 prevê dois procedimentos de dimensionamento do reforço estrutural sob os blocos:');
-  ex('  Procedimento A (§6.1): Aplica-se apenas quando N < 1,5×10⁶. Lê-se a espessura da sub-base diretamente na Figura 6.1 em função de N e CBR do subleito. A camada de base é dispensada.');
-  ex('  Procedimento B (§6.2): Aplica-se para qualquer N. Determina o HBG (Espessura de Base Granular equivalente) total a partir da Figura 6.3. O HBG pode ser executado em base granular ou CCR, distribuído entre as camadas de base e sub-base.');
-  kv('Procedimento adotado:',r.proc);
-  kv('Descrição:',procDesc);
-  kv('Material da base:',baseTxt[r.mat]||r.mat);
-
-  sec('5. DETERMINAÇÃO DA ESPESSURA H — INTERPOLAÇÃO BILINEAR');
-  ex('A leitura das Figuras 6.1 e 6.3 da IP-06/2004 é realizada por interpolação bilinear em escala log-log. Dados os valores de N e CBR do subleito, localizam-se as curvas (ou valores tabelados) imediatamente inferiores e superiores a cada parâmetro, e aplica-se interpolação logarítmica dupla:');
-  fm('t = (log N - log N1) / (log N2 - log N1)');
-  fm('u = (log CBR - log CBR1) / (log CBR2 - log CBR1)');
-  fm('H = H11·(1-t)·(1-u) + H21·t·(1-u) + H12·(1-t)·u + H22·t·u');
-  ex('onde H11, H12, H21, H22 são os valores tabelados nos quatro vértices da célula da matriz, N1 ≤ N ≤ N2 e CBR1 ≤ CBR ≤ CBR2.');
-  kv('Figura utilizada:',figRef+' da IP-06/2004');
-  kv('N de entrada (eixos padrão):',fmtN(r.N));
-  kv('CBR de entrada (%):',fmt(r.CBR,1)+' %');
-  kv('H estimado — resultado da interpolação (cm):',fmt(r.h_est,0)+' cm');
-  kv('H conferido na figura (cm):',r.hConf?fmt(r.hConf,0)+' cm (valor informado manualmente — prevalece sobre interpolação)':'Não informado — adotado H interpolado');
-  kv('H adotado no cálculo (cm):',fmt(r.h_usado,0)+' cm');
-  if(r.mat==='CCR'){
-    ex('Com o Procedimento B + CCR, o HBG total interpolado é dividido em:');
-    fm('HBG_total (interpolado) = '+fmt(r.h_est,0)+' cm');
-    fm('Sub-base granular sob CCR (mínimo 15 cm) = '+(r.subCCR||r.h_sb_adot)+' cm');
-    fm('HBG_líquido = HBG_total − H_sub-base = '+fmt(r.h_est,0)+' − '+(r.subCCR||r.h_sb_adot)+' = '+fmt(hbgLiq,0)+' cm');
-    ex('O CCR é convertido pelo fator de equivalência estrutural K = 1,65 (IP-06/2004 §6.2.2):');
-    fm('h_CCR = HBG_líquido / K = '+fmt(hbgLiq,0)+' / 1,65 = '+fmt(hbgLiq/1.65,1)+' cm  =>  adotado '+r.h_base_adot+' cm (múltiplo de 5 cm)');
-  }else if(r.mat==='GRAN'){
-    ex('No Procedimento B granular, o HBG total é distribuído em base + sub-base, com sub-base mínima de 15 cm (IP-06/2004 §6.2.1):');
-    fm('HBG_total (interpolado) = '+fmt(r.h_est,0)+' cm');
-    fm('H_base (teórico) = HBG_total − H_sub-base_mín = '+fmt(r.h_est,0)+' − '+(r.h_sb_teo||15)+' = '+fmt(Math.max(0,r.h_est-(r.h_sb_teo||15)),0)+' cm');
-    fm('H_sub-base (adotado) = '+r.h_sb_adot+' cm (mínimo 15 cm)');
-    fm('H_base (adotado) = '+(r.h_base_adot>0?r.h_base_adot:0)+' cm (arredondado para múltiplo de 5 cm)');
-  }else if(r.mat==='PROCA'){
-    ex('No Procedimento A, a espessura da sub-base é lida diretamente na Figura 6.1 em função de N e CBR do subleito. A camada de base é dispensada quando N < 1,5×10⁶ (IP-06/2004 §6.1.2).');
-    fm('H_sub-base (interpolado) = '+fmt(r.h_est,0)+' cm');
-    fm('H_base = dispensada (N = '+fmtN(r.N)+' '+(r.N<1.5e6?'< 1,5×10⁶':'≥ 1,5×10⁶ — verificar')+')');
+  const rows=[['DIMENSIONAMENTO DE PAVIMENTO INTERTRAVADO — IP-06/2004','']];
+  for(const it of montarMemoria(r)){
+    if(it.h){rows.push(['','']);rows.push([it.h,'']);}
+    else if(it.p) rows.push(['  > '+it.p,'']);
+    else if(it.kv) rows.push([it.kv[0],it.kv[1]]);
+    else if(it.f) rows.push(['    '+it.f,'']);
+    else if(it.al) rows.push(['  '+it.al,'']);
+    else if(it.tab){ rows.push(it.tab.cab); it.tab.lin.forEach(l=>rows.push(l)); }
   }
-
-  sec('6. DIMENSIONAMENTO DOS BLOCOS — QUADRO 6.3 (IP-06/2004)');
-  ex('A espessura dos blocos de concreto é determinada pelo Quadro 6.3 da IP-06/2004 em função do número N acumulado de projeto:');
-  fm('N ≤ 5×10⁵  =>  espessura = 6 cm');
-  fm('5×10⁵ < N < 10⁷  =>  espessura = 8 cm');
-  fm('N ≥ 10⁷  =>  espessura = 10 cm');
-  ex('Verificação para o projeto:');
-  fm('N adotado = '+fmtN(r.N)+'  =>  espessura dos blocos = '+r.bloco_teo+' cm');
-  ex('A resistência característica à compressão (fpk) dos blocos é especificada conforme ABNT NBR 9781:2013, Tabela 2:');
-  fm(r.N>=1e7?'N ≥ 10⁷  =>  fpk_mín = '+r.fpk_min+' MPa (classe C50 ou superior)':'N < 10⁷  =>  fpk_mín = '+r.fpk_min+' MPa (classe C35)');
-  kv('fpk mínimo exigido — NBR 9781:2013 (MPa):',r.fpk_min+' MPa');
-  kv('fpk especificado em projeto (MPa):',r.fpkI+' MPa');
-  kv('Verificação NBR 9781:2013:',r.fpkI+' ≥ '+r.fpk_min+' MPa  =>  '+(r.fpkI>=r.fpk_min?'ATENDE':'NÃO ATENDE — revisar especificação'));
-
-  sec('7. PACOTE ESTRUTURAL DIMENSIONADO');
-  ex('O pacote estrutural é composto pelas camadas a seguir, da superfície ao subleito. As espessuras teóricas resultam diretamente do dimensionamento; as espessuras adotadas são arredondadas para múltiplos de 5 cm e respeitam os valores mínimos normativos.');
-  rows.push(['Camada','Esp. teórica (cm)','Esp. adotada (cm)','Material / critério']);
-  rows.push(['Blocos de concreto',r.bloco_teo,r.bloco_teo,'ABNT NBR 9781 — fpk '+r.fpkI+' MPa | IP-06 Quadro 6.3']);
-  rows.push(['Areia de assentamento',r.areia,r.areia,'Areia selecionada | IP-06 §7: 3 a 5 cm']);
-  rows.push([r.mat==='CCR'?'Base CCR':r.mat==='PROCA'?'Base (dispensada)':'Base granular',r.h_base_teo>0?r.h_base_teo+' cm':'—',r.h_base_adot>0?r.h_base_adot+' cm':'Dispensada','IP-06 Fig. '+(r.mat==='PROCA'?'6.1':'6.3')]);
-  rows.push(['Sub-base granular',r.h_sb_teo>0?r.h_sb_teo+' cm':'—',r.h_sb_adot>0?r.h_sb_adot+' cm':'—','Granular — CBR ≥ '+r.cbr_min_sb+'%']);
-  if(r.ref>0)rows.push(['Reforço do subleito',r.ref+' cm',r.ref+' cm','Solução geotécnica — projeto específico']);
-  rows.push(['ESPESSURA FÍSICA TOTAL','',r.total+' cm','']);
-  ex('Fórmula da espessura física total:');
-  fm(r.bloco_teo+' (blocos) + '+r.areia+' (areia) + '+(r.h_base_adot>0?r.h_base_adot:0)+' (base) + '+(r.h_sb_adot>0?r.h_sb_adot:0)+' (sub-base)'+(r.ref>0?' + '+r.ref+' (reforço)':'')+' = '+r.total+' cm');
-  rows.push(['','']);
-  ex('Incremento construtivo — diferença entre espessura teórica e adotada (arredondamento para múltiplo de 5 cm):');
-  fm('Incremento na base:     '+( r.h_base_teo>0?r.h_base_adot+' − '+r.h_base_teo+' = '+inc_base+' cm':'base dispensada'));
-  fm('Incremento na sub-base: '+( r.h_sb_teo>0?r.h_sb_adot+' − '+r.h_sb_teo+' = '+inc_sb+' cm':'sub-base não aplicável'));
-  kv('Incremento construtivo total (cm):', (inc_total >= 0 ? '+' : '')+inc_total+' cm (arredondamento conservador, a favor da segurança)');
-
-  sec('8. RECOMENDAÇÕES CONSTRUTIVAS (IP-06/2004 §7 e NBR 15953:2026)');
-  kv('Contenção lateral:','Obrigatória e contínua (meio-fio, barra-guia ou similar) — impede deslocamento lateral dos blocos e manutenção do intertravamento');
-  kv('Leito de assentamento (areia):','Espessura de '+r.areia+' cm de areia média (D50 entre 0,3 e 1,0 mm), espalhada após compactação final da sub-base; não compactar a areia antes da colocação dos blocos');
-  kv('Padrão de assentamento:','Espinha de peixe a 45° obrigatória em vias com tráfego veicular; fileiras retas aceitáveis apenas em passeios de pedestres (IP-06/2004 §7.3)');
-  kv('Compactação dos blocos:','Placa vibratória mínima 75 kg, passadas cruzadas; mínimo 3 passadas após assentamento; verificar planeza com régua de 3 m (tolerância ±5 mm)');
-  kv('Preenchimento de juntas:','Areia fina (módulo de finura < 2,2) varrida sobre a superfície após compactação; repassar pelo menos 2 vezes com intervalo de 24 h após vibração');
-  kv('Drenagem superficial:','Declividade transversal mínima 2% e longitudinal mínima 0,5% (IP-06/2004 §4.3); prever caixas de inspeção e grelhas conforme projeto de drenagem');
-  kv('Tolerâncias (NBR 15953:2026 §8.5):','Acabamento superficial ±5 mm/3 m; largura de juntas 2 a 5 mm; alinhamento de juntas ±10 mm/10 m');
-  kv('Sub-base — critério geotécnico:','CBR ≥ '+r.cbr_min_sb+'%, expansão ≤ 2%, grau de compactação ≥ 100% PN (IP-06/2004 §6.4)');
-
-  if(r.alertas.length>0){sec('ALERTAS GEOTÉCNICOS');r.alertas.forEach(a=>kv('',a));}
-
-  sec('REFERÊNCIAS NORMATIVAS');
-  kv('','IP-06/2004 — SIURB/PMSP — Instrução de Projeto: Pavimento Intertravado de Blocos de Concreto');
-  kv('','ABNT NBR 9781:2013 — Peças de concreto para pavimentação intertravada');
-  kv('','ABNT NBR 15953:2026 — Execução de pavimentos com peças de concreto');
-  kv('','ABCP ET-27 (4ª ed.) — Pavimento Intertravado de Blocos de Concreto');
   return rows;
 }
 
@@ -1393,7 +1498,7 @@ function exportarExcel(){
   const ws=XLSX.utils.aoa_to_sheet(getMemoriaRows());
   ws['!cols']=[{wch:42},{wch:20},{wch:18},{wch:40}];
   const wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,'Memória de Cálculo',ws);
+  XLSX.utils.book_append_sheet(wb,ws,'Memória de Cálculo');
   const buf=XLSX.write(wb,{bookType:'xlsx',type:'array'});
   triggerDownload(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),'intertravado_memoria_'+carimbo()+'.xlsx');
 }
@@ -1455,137 +1560,22 @@ function _zip(files,mimeOverride){
 
 function exportarWord(){
   if(!resultado){toast('Calcule primeiro.',true);return;}
-  const r=resultado;
-  const hoje=new Date().toLocaleDateString('pt-BR');
-  const logr=logradouro||'(não informado)';const resp=document.getElementById('resp-inp').value||'(não informado)';
   const CT='application/vnd.openxmlformats-officedocument.wordprocessingml';
   const R='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
-  const baseTxt={GRAN:'Granular compactado (HBG)',CCR:'CCR — Concreto Compactado com Rolo',PROCA:'Sub-base granular (base dispensada)'};
-  const classN=r.N<=5e5?'Baixo volume de tráfego (N ≤ 5×10⁵)':r.N<=5e6?'Médio volume de tráfego (5×10⁵ < N ≤ 5×10⁶)':'Alto volume de tráfego (N > 5×10⁶)';
-  const procDesc=r.mat==='PROCA'?'Procedimento A (IP-06/2004 §6.1): sub-base lida na Figura 6.1; base dispensada para N < 1,5×10⁶.':r.mat==='CCR'?'Procedimento B com CCR (IP-06/2004 §6.2): HBG total convertido para CCR com fator K = 1,65.':'Procedimento B granular (IP-06/2004 §6.2): HBG total distribuído em base + sub-base granular.';
-  const figRef=r.mat==='PROCA'?'Figura 6.1':'Figura 6.3';
-  const hbgLiq=r.mat==='CCR'?Math.max(0,r.h_est-(r.subCCR||r.h_sb_adot)):0;
-  const inc_base=r.h_base_teo>0?(r.h_base_adot-r.h_base_teo):0;
-  const inc_sb=r.h_sb_teo>0?(r.h_sb_adot-r.h_sb_teo):0;
-  const inc_total=inc_base+inc_sb;
+  const cel=(t,b)=>`<w:tc><w:tcPr><w:tcBorders><w:top w:val="single" w:sz="4"/><w:left w:val="single" w:sz="4"/><w:bottom w:val="single" w:sz="4"/><w:right w:val="single" w:sz="4"/></w:tcBorders></w:tcPr><w:p><w:r><w:rPr>${b?'<w:b/>':''}<w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">${_xml(t)}</w:t></w:r></w:p></w:tc>`;
   let body='';
   body+=_h('DIMENSIONAMENTO DE PAVIMENTO INTERTRAVADO',1);
-  body+=_h('IP-06/2004 (SIURB/PMSP) | ABNT NBR 9781:2013 | ABNT NBR 15953:2026',2);
-  body+=_p('');
-  body+=_h('1. Identificação',2);
-  body+=_kv('Logradouro / obra:',logr);
-  body+=_kv('Responsável técnico:',resp);
-  body+=_kv('Data do cálculo:',hoje);
-  body+=_kv('Norma de dimensionamento:','IP-06/2004 — SIURB/PMSP — Instrução de Projeto: Pavimento Intertravado de Blocos de Concreto');
-  body+=_kv('Normas complementares:','ABNT NBR 9781:2013 (blocos) | ABNT NBR 15953:2026 (execução)');
-  body+=_p('');
-  body+=_h('2. Dados de Tráfego',2);
-  body+=_p('O número N representa a quantidade acumulada de repetições do eixo padrão de 8,2 tf (80 kN) durante a vida útil do pavimento. Vida de projeto típica: 10 a 12 anos (IP-06/2004 §5).');
-  body+=_kv('Tipo de via / tráfego:',VIA_MAP[r.sel]||'N informado manualmente');
-  body+=_kv('Número N adotado (eixos padrão de 8,2 tf):',fmtN(r.N));
-  body+=_p('Classificação do tráfego segundo IP-06/2004 §5.2:');
-  body+=_p('    N ≤ 5×10⁵  =>  Baixo volume de tráfego');
-  body+=_p('    5×10⁵ < N ≤ 5×10⁶  =>  Médio volume de tráfego');
-  body+=_p('    N > 5×10⁶  =>  Alto volume de tráfego');
-  body+=_kv('Classificação do tráfego:',classN);
-  body+=_p('');
-  body+=_h('3. Parâmetros do Subleito',2);
-  body+=_p('O CBR (California Bearing Ratio) do subleito é obtido em ensaio de laboratório (DNIT 172/2016) em amostras representativas da cota de formação do pavimento. A expansão e o nível do lençol freático são parâmetros complementares que podem indicar necessidade de reforço do subleito.');
-  body+=_kv('CBR do subleito (%):',fmt(r.CBR,1)+' %');
-  body+=_kv('Expansão do subleito (%):',r.exp>0?fmt(r.exp,1)+' %':'não informada');
-  body+=_kv('Lençol freático abaixo da formação (m):',r.len!=null?fmt(r.len,1)+' m':'não informado');
-  body+=_p('CBR mínimo exigido para a sub-base — IP-06/2004 §6, Quadro 6.2:');
-  body+=_p('    '+( r.N<5e5?'N = '+fmtN(r.N)+' < 5×10⁵  =>  CBR_sub-base ≥ 20 %':'N = '+fmtN(r.N)+' ≥ 5×10⁵  =>  CBR_sub-base ≥ 30 %'));
-  body+=_kv('CBR mínimo exigido para a sub-base (%):',r.cbr_min_sb+' %');
-  if(r.alertas.length>0){body+=_p('Alertas geotécnicos:');r.alertas.forEach(a=>body+=_p('    ! '+a));}
-  body+=_p('');
-  body+=_h('4. Procedimento de Dimensionamento',2);
-  body+=_p('A IP-06/2004 prevê dois procedimentos de dimensionamento do reforço estrutural sob os blocos:');
-  body+=_p('  Procedimento A (§6.1): Aplica-se apenas quando N < 1,5×10⁶. Lê-se a espessura da sub-base diretamente na Figura 6.1 em função de N e CBR do subleito. A camada de base é dispensada.');
-  body+=_p('  Procedimento B (§6.2): Aplica-se para qualquer N. Determina o HBG (Espessura de Base Granular equivalente) total a partir da Figura 6.3. O HBG pode ser executado em base granular ou CCR, distribuído entre as camadas de base e sub-base.');
-  body+=_kv('Procedimento adotado:',r.proc);
-  body+=_kv('Descrição:',procDesc);
-  body+=_kv('Material da base:',baseTxt[r.mat]||r.mat);
-  body+=_p('');
-  body+=_h('5. Determinação da Espessura H — Interpolação Bilinear',2);
-  body+=_p('A leitura das Figuras 6.1 e 6.3 da IP-06/2004 é realizada por interpolação bilinear em escala log-log. Dados os valores de N e CBR do subleito, localizam-se as curvas (ou valores tabelados) imediatamente inferiores e superiores a cada parâmetro, e aplica-se interpolação logarítmica dupla:');
-  body+=_p('    t = (log N - log N1) / (log N2 - log N1)',false,18);
-  body+=_p('    u = (log CBR - log CBR1) / (log CBR2 - log CBR1)',false,18);
-  body+=_p('    H = H11*(1-t)*(1-u) + H21*t*(1-u) + H12*(1-t)*u + H22*t*u',false,18);
-  body+=_p('onde H11, H12, H21, H22 são os valores tabelados nos quatro vértices da célula da matriz, N1≤N≤N2 e CBR1≤CBR≤CBR2.');
-  body+=_kv('Figura utilizada:',figRef+' da IP-06/2004');
-  body+=_kv('N de entrada (eixos padrão):',fmtN(r.N));
-  body+=_kv('CBR de entrada (%):',fmt(r.CBR,1)+' %');
-  body+=_kv('H estimado — resultado da interpolação (cm):',fmt(r.h_est,0)+' cm');
-  body+=_kv('H conferido na figura (cm):',r.hConf?fmt(r.hConf,0)+' cm (valor informado manualmente — prevalece sobre interpolação)':'Não informado — adotado H interpolado');
-  body+=_kv('H adotado no cálculo (cm):',fmt(r.h_usado,0)+' cm');
-  if(r.mat==='CCR'){
-    body+=_p('Com o Procedimento B + CCR, o HBG total interpolado é dividido em:');
-    body+=_p('    HBG_total (interpolado) = '+fmt(r.h_est,0)+' cm');
-    body+=_p('    Sub-base granular sob CCR (mínimo 15 cm) = '+(r.subCCR||r.h_sb_adot)+' cm');
-    body+=_p('    HBG_líquido = HBG_total - H_sub-base = '+fmt(r.h_est,0)+' - '+(r.subCCR||r.h_sb_adot)+' = '+fmt(hbgLiq,0)+' cm');
-    body+=_p('O CCR é convertido pelo fator de equivalência estrutural K = 1,65 (IP-06/2004 §6.2.2):');
-    body+=_p('    h_CCR = HBG_líquido / K = '+fmt(hbgLiq,0)+' / 1,65 = '+fmt(hbgLiq/1.65,1)+' cm  =>  adotado '+r.h_base_adot+' cm (múltiplo de 5 cm)');
-  }else if(r.mat==='GRAN'){
-    body+=_p('No Procedimento B granular, o HBG total é distribuído em base + sub-base, com sub-base mínima de 15 cm (IP-06/2004 §6.2.1):');
-    body+=_p('    HBG_total (interpolado) = '+fmt(r.h_est,0)+' cm');
-    body+=_p('    H_base (teórico) = HBG_total - H_sub-base_min = '+fmt(r.h_est,0)+' - '+(r.h_sb_teo||15)+' = '+fmt(Math.max(0,r.h_est-(r.h_sb_teo||15)),0)+' cm');
-    body+=_p('    H_sub-base (adotado) = '+r.h_sb_adot+' cm (mínimo 15 cm)');
-    body+=_p('    H_base (adotado) = '+(r.h_base_adot>0?r.h_base_adot:0)+' cm (arredondado para múltiplo de 5 cm)');
-  }else if(r.mat==='PROCA'){
-    body+=_p('No Procedimento A, a espessura da sub-base é lida diretamente na Figura 6.1 em função de N e CBR do subleito. A camada de base é dispensada quando N < 1,5×10⁶ (IP-06/2004 §6.1.2).');
-    body+=_p('    H_sub-base (interpolado) = '+fmt(r.h_est,0)+' cm');
-    body+=_p('    H_base = dispensada (N = '+fmtN(r.N)+' '+(r.N<1.5e6?'< 1,5×10⁶':'>= 1,5×10⁶ — verificar')+')');
+  body+=_h('IP-06/2004 (SIURB/PMSP)',2);
+  for(const it of montarMemoria(resultado)){
+    if(it.h) body+=_h(it.h,2);
+    else if(it.p) body+=_p(it.p);
+    else if(it.kv) body+=_kv(it.kv[0],it.kv[1]);
+    else if(it.f) body+=`<w:p><w:pPr><w:ind w:left="360"/><w:spacing w:after="40"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Consolas" w:hAnsi="Consolas"/><w:sz w:val="18"/></w:rPr><w:t xml:space="preserve">${_xml(it.f)}</w:t></w:r></w:p>`;
+    else if(it.al) body+=_p(it.al,true,18);
+    else if(it.tab) body+=`<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/></w:tblPr><w:tr>${it.tab.cab.map(c=>cel(c,true)).join('')}</w:tr>${it.tab.lin.map(l=>`<w:tr>${l.map(c=>cel(c,false)).join('')}</w:tr>`).join('')}</w:tbl>`+_p('');
   }
-  body+=_p('');
-  body+=_h('6. Dimensionamento dos Blocos — Quadro 6.3 (IP-06/2004)',2);
-  body+=_p('A espessura dos blocos de concreto é determinada pelo Quadro 6.3 da IP-06/2004 em função do número N acumulado de projeto:');
-  body+=_p('    N ≤ 5×10⁵  =>  espessura = 6 cm');
-  body+=_p('    5×10⁵ < N < 10⁷  =>  espessura = 8 cm');
-  body+=_p('    N ≥ 10⁷  =>  espessura = 10 cm');
-  body+=_p('Verificação para o projeto:');
-  body+=_p('    N adotado = '+fmtN(r.N)+'  =>  espessura dos blocos = '+r.bloco_teo+' cm');
-  body+=_p('A resistência característica à compressão (fpk) dos blocos é especificada conforme ABNT NBR 9781:2013, Tabela 2:');
-  body+=_p('    '+(r.N>=1e7?'N ≥ 10⁷  =>  fpk_min = '+r.fpk_min+' MPa (classe C50 ou superior)':'N < 10⁷  =>  fpk_min = '+r.fpk_min+' MPa (classe C35)'));
-  body+=_kv('fpk mínimo exigido — NBR 9781:2013 (MPa):',r.fpk_min+' MPa');
-  body+=_kv('fpk especificado em projeto (MPa):',r.fpkI+' MPa');
-  body+=_kv('Verificação NBR 9781:2013:',r.fpkI+' >= '+r.fpk_min+' MPa  =>  '+(r.fpkI>=r.fpk_min?'ATENDE':'NÃO ATENDE — revisar especificação'));
-  body+=_p('');
-  body+=_h('7. Pacote Estrutural Dimensionado',2);
-  body+=_p('O pacote estrutural é composto pelas camadas a seguir, da superfície ao subleito. As espessuras teóricas resultam diretamente do dimensionamento; as espessuras adotadas são arredondadas para múltiplos de 5 cm e respeitam os valores mínimos normativos.');
-  body+=_kv('Blocos de concreto (cm):',r.bloco_teo+' cm  |  fpk: '+r.fpkI+' MPa  |  fpk_min: '+r.fpk_min+' MPa  |  NBR 9781 — IP-06 Quadro 6.3');
-  body+=_kv('Areia de assentamento (cm):',r.areia+' cm  |  Areia selecionada D50 0,3-1,0 mm  |  IP-06 §7: 3 a 5 cm');
-  body+=_kv('Base ('+baseTxt[r.mat]+') (cm):',r.h_base_adot>0?r.h_base_adot+' cm':'Dispensada');
-  body+=_kv('Sub-base granular (CBR ≥ '+r.cbr_min_sb+'%) (cm):',r.h_sb_adot>0?r.h_sb_adot+' cm':'—');
-  if(r.ref>0)body+=_kv('Reforço do subleito (cm):',r.ref+' cm');
-  body+=_p('Fórmula da espessura física total:');
-  body+=_p('    '+r.bloco_teo+' (blocos) + '+r.areia+' (areia) + '+(r.h_base_adot>0?r.h_base_adot:0)+' (base) + '+(r.h_sb_adot>0?r.h_sb_adot:0)+' (sub-base)'+(r.ref>0?' + '+r.ref+' (reforço)':'')+' = '+r.total+' cm');
-  body+=_kv('Espessura física total (cm):',r.total+' cm');
-  body+=_p('');
-  body+=_p('Incremento construtivo — diferença entre espessura teórica e adotada (arredondamento para múltiplo de 5 cm):');
-  body+=_p('    Incremento na base:     '+(r.h_base_teo>0?r.h_base_adot+' − '+r.h_base_teo+' = '+inc_base+' cm':'base dispensada'));
-  body+=_p('    Incremento na sub-base: '+(r.h_sb_teo>0?r.h_sb_adot+' − '+r.h_sb_teo+' = '+inc_sb+' cm':'sub-base não aplicável'));
-  body+=_kv('Incremento construtivo total (cm):',(inc_total>=0?'+':'')+inc_total+' cm (arredondamento conservador, a favor da segurança)');
-  body+=_p('');
-  body+=_h('8. Recomendações Construtivas (IP-06/2004 §7 e NBR 15953:2026)',2);
-  body+=_kv('Contenção lateral:','Obrigatória e contínua (meio-fio, barra-guia ou similar) — impede deslocamento lateral dos blocos e manutenção do intertravamento');
-  body+=_kv('Leito de assentamento:','Espessura de '+r.areia+' cm de areia média (D50 entre 0,3 e 1,0 mm), espalhada após compactação final da sub-base; não compactar a areia antes da colocação dos blocos');
-  body+=_kv('Padrão de assentamento:','Espinha de peixe a 45 graus obrigatória em vias com tráfego veicular; fileiras retas aceitáveis apenas em passeios de pedestres (IP-06/2004 §7.3)');
-  body+=_kv('Compactação dos blocos:','Placa vibratória mínima 75 kg, passadas cruzadas; mínimo 3 passadas após assentamento; verificar planeza com régua de 3 m (tolerância +/- 5 mm)');
-  body+=_kv('Preenchimento de juntas:','Areia fina (módulo de finura < 2,2) varrida sobre a superfície após compactação; repassar pelo menos 2 vezes com intervalo de 24 h após vibração');
-  body+=_kv('Drenagem superficial:','Declividade transversal mínima 2% e longitudinal mínima 0,5% (IP-06/2004 §4.3); prever caixas de inspeção e grelhas conforme projeto de drenagem');
-  body+=_kv('Tolerâncias (NBR 15953:2026 §8.5):','Acabamento superficial +/-5 mm/3 m; largura de juntas 2 a 5 mm; alinhamento de juntas +/-10 mm/10 m');
-  body+=_kv('Sub-base — critério geotécnico:','CBR ≥ '+r.cbr_min_sb+'%, expansão ≤ 2%, grau de compactação ≥ 100% PN (IP-06/2004 §6.4)');
-  if(r.alertas.length>0){body+=_p('');body+=_h('Alertas Geotécnicos',2);r.alertas.forEach(a=>body+=_p('! '+a));}
-  body+=_p('');
-  body+=_h('Referências Normativas',2);
-  body+=_p('IP-06/2004 — SIURB/PMSP — Instrução de Projeto: Pavimento Intertravado de Blocos de Concreto');
-  body+=_p('ABNT NBR 9781:2013 — Peças de concreto para pavimentação intertravada');
-  body+=_p('ABNT NBR 15953:2026 — Execução de pavimentos com peças de concreto');
-  body+=_p('ABCP ET-27 (4ª ed.) — Pavimento Intertravado de Blocos de Concreto');
-
   const styles=_XMLH+`<w:styles ${_W}><w:style w:type="paragraph" w:styleId="Normal"><w:name w:val="Normal"/><w:pPr><w:spacing w:after="80"/></w:pPr><w:rPr><w:sz w:val="20"/></w:rPr></w:style></w:styles>`;
-  const doc=_XMLH+`<w:document ${_W}><w:body>${body}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1701" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
+  const doc=_XMLH+`<w:document ${_W}><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1134" w:right="1134" w:bottom="1134" w:left="1701" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
   const blob=_zip([
     {nome:'[Content_Types].xml',texto:_XMLH+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="'+CT+'.document.main+xml"/><Override PartName="/word/styles.xml" ContentType="'+CT+'.styles+xml"/></Types>'},
     {nome:'_rels/.rels',texto:_XMLH+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="'+R+'/officeDocument" Target="word/document.xml"/></Relationships>'},
@@ -1600,44 +1590,37 @@ async function exportarPDF(){
   if(!resultado){toast('Calcule primeiro.',true);return;}
   const lib=typeof window.jspdf!=='undefined'?window.jspdf:(typeof jsPDF!=='undefined'?{jsPDF}:null);
   if(!lib){toast('Biblioteca PDF não carregada. Verifique a internet.',true);return;}
-  const{jsPDF:J}=lib;
-  const doc=new J({unit:'mm',format:'a4'});
-  const r=resultado;
-  const hoje=new Date().toLocaleDateString('pt-BR');
-  const logr=logradouro||'—';const resp=document.getElementById('resp-inp').value||'—';
-  let y=18,lm=20,pw=170;
-  const nl=()=>{y+=5;if(y>280){doc.addPage();y=18;}};
-  const pt=t=>pdfTexto(t);
-  function pdfTexto(t){return String(t||'').replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹]/g,c=>{const m={'⁰':'0','¹':'1','²':'2','³':'3','⁴':'4','⁵':'5','⁶':'6','⁷':'7','⁸':'8','⁹':'9'};return'^'+(m[c]||c)}).replace(/×/g,'x').replace(/≥/g,'>=').replace(/≤/g,'<=').replace(/✓/g,'OK').replace(/⚠/g,'!').replace(/[—–]/g,'-').replace(/[^\x00-\xFF]/g,'');}
-  doc.setFontSize(14);doc.setFont('helvetica','bold');
-  doc.text('DIMENSIONAMENTO DE PAVIMENTO INTERTRAVADO',lm,y);y+=7;
-  doc.setFontSize(9);doc.setFont('helvetica','normal');
-  doc.text('IP-06/2004 (SIURB/PMSP) · ABNT NBR 9781:2013 · ABNT NBR 15953:2026',lm,y);y+=8;
-  const rows=getMemoriaRows();
-  for(const row of rows){
-    if(y>280){doc.addPage();y=18;}
-    const k=row[0]||'';const v2=row[1]!=null?row[1]:'';
-    // 4-column table rows (structural package)
-    if(row.length>=4){
-      const cols=[pt(String(k)),pt(String(row[1]||'')),pt(String(row[2]||'')),pt(String(row[3]||''))];
-      const ws=[50,22,22,76];const xs=[lm,lm+50,lm+72,lm+94];
-      let maxL=1;
-      const splits=cols.map((c,i)=>{const l=doc.splitTextToSize(c,ws[i]);maxL=Math.max(maxL,l.length);return l;});
-      const isHeader=row[0]==='Camada';
-      doc.setFont('helvetica',isHeader?'bold':'normal');doc.setFontSize(8);
-      splits.forEach((l,i)=>doc.text(l,xs[i],y));
-      doc.setFont('helvetica','normal');doc.setFontSize(9);
-      y+=maxL*4.5;continue;
+  const doc=new lib.jsPDF({unit:'mm',format:'a4'});
+  const pt=pdfTexto, lm=20, pw=170;
+  let y=18;
+  const quebra=hh=>{ if(y+hh>282){doc.addPage();y=18;} };
+  const texto=(t,{b=false,sz=9,ind=0,larg=pw}={})=>{
+    doc.setFont('helvetica',b?'bold':'normal'); doc.setFontSize(sz);
+    const l=doc.splitTextToSize(pt(t),larg-ind); const hh=l.length*(sz*0.42+0.6);
+    quebra(hh); doc.text(l,lm+ind,y+sz*0.35); y+=hh+0.8;
+  };
+  texto('DIMENSIONAMENTO DE PAVIMENTO INTERTRAVADO',{b:true,sz:14});
+  texto('IP-06/2004 (SIURB/PMSP) - Total Civil',{sz:9});
+  y+=2;
+  for(const it of montarMemoria(resultado)){
+    if(it.h){ y+=2; texto(it.h,{b:true,sz:11}); }
+    else if(it.p) texto(it.p);
+    else if(it.f) texto(it.f,{ind:6,sz:8.5});
+    else if(it.al) texto(it.al,{b:true,sz:8.5});
+    else if(it.kv){
+      doc.setFontSize(9);
+      doc.setFont('helvetica','bold'); const kl=doc.splitTextToSize(pt(it.kv[0]),62);
+      doc.setFont('helvetica','normal'); const vl=doc.splitTextToSize(pt(it.kv[1]),pw-65);
+      const hh=Math.max(kl.length,vl.length)*4.4; quebra(hh);
+      doc.setFont('helvetica','bold'); doc.text(kl,lm,y+3.2);
+      doc.setFont('helvetica','normal'); doc.text(vl,lm+65,y+3.2); y+=hh+0.8;
+    }else if(it.tab){
+      const ws=[62,26,26,56], xs=[lm,lm+62,lm+88,lm+114];
+      const linha=(l,b)=>{ doc.setFont('helvetica',b?'bold':'normal'); doc.setFontSize(8);
+        const sp=l.map((c,i)=>doc.splitTextToSize(pt(String(c)),ws[i]-2)); const hh=Math.max(...sp.map(x=>x.length))*3.8+1.6;
+        quebra(hh); sp.forEach((x,i)=>{ doc.rect(xs[i],y,ws[i],hh); doc.text(x,xs[i]+1,y+3.4); }); y+=hh; };
+      linha(it.tab.cab,true); it.tab.lin.forEach(l=>linha(l,false)); y+=2;
     }
-    if(!k&&!v2){y+=3;continue;}
-    if(!v2&&k){doc.setFont('helvetica','bold');doc.setFontSize(10);doc.text(pt(String(k)),lm,y);doc.setFont('helvetica','normal');doc.setFontSize(9);y+=5;continue;}
-    doc.setFont('helvetica','bold');
-    const kLines=doc.splitTextToSize(pt(String(k)),65);
-    doc.text(kLines,lm,y);
-    doc.setFont('helvetica','normal');
-    const vLines=doc.splitTextToSize(pt(String(v2)),pw-67);
-    doc.text(vLines,lm+67,y);
-    y+=Math.max(kLines.length,vLines.length)*5;
   }
   doc.save('intertravado_memoria_'+carimbo()+'.pdf');
 }
@@ -1647,29 +1630,24 @@ function exportarTabExcel(tab){
   if(typeof XLSX==='undefined'){toast('Biblioteca não carregada.',true);return;}
   if(!resultado){toast('Calcule primeiro.',true);return;}
   const r=resultado;let rows=[],fname='',sheet='';
+  const camadas=()=>{
+    const l=[['Blocos de concreto',r.bloco_teo,'fpk '+r.fpkI+' MPa (mín. '+r.fpk_min+')'],['Areia de assentamento',r.areia,'§8.3'],
+      [r.base_nome,r.h_base_adot||'dispensada',r.base_tipo==='cim'?'base cimentada':'granular']];
+    if(r.h_sb_adot>0||r.sb_disp) l.push([r.sb_nome,r.h_sb_adot||'dispensada','granular']);
+    if(r.ref>0) l.push(['Reforço (CBR '+fmt(r.cbrRef,1)+'%)',r.ref,r.refInfo]);
+    l.push(['TOTAL',r.total,'cm']); return l;
+  };
   if(tab==='dim'){
     sheet='Dimensionamento';fname='intertravado_dimensionamento_'+carimbo()+'.xlsx';
-    rows=[
-      ['DIMENSIONAMENTO DE PAVIMENTO INTERTRAVADO — IP-06/2004',''],
-      ['N acumulado:',fmtN(r.N)],['Tipo de via:',VIA_MAP[r.sel]||'N manual'],
-      ['CBR subleito (%):',fmt(r.CBR,1)],['Procedimento:',r.proc],
-      ['H estimado (cm):',fmt(r.h_est,0)],['H adotado (cm):',fmt(r.h_usado,0)],['',''],
-      ['Camada','Teórica (cm)','Adotada (cm)','Material'],
-      ['Blocos de concreto',r.bloco_teo,r.bloco_teo,'ABNT NBR 9781 — '+r.fpkI+' MPa'],
-      ['Areia de assentamento',r.areia,r.areia,'Areia selecionada'],
-      ['Base',r.h_base_teo||'—',r.h_base_adot||'Dispensada',r.mat],
-      ['Sub-base',r.h_sb_teo||'—',r.h_sb_adot||'—','Granular CBR>='+r.cbr_min_sb+'%'],
-      r.ref>0?['Reforço',r.ref,r.ref,'Geotécnico']:['','','',''],
-      ['Total físico','',r.total,'cm'],
-    ];
+    rows=[['DIMENSIONAMENTO DE PAVIMENTO INTERTRAVADO — IP-06/2004'],
+      ['N adotado:',pdfTexto(fmtN(r.N))],['Tráfego:',(VIA_MAP[r.sel]||'N calculado')+' · '+r.classe],
+      ['CBR subleito (%):',r.CBR],['CBR de projeto (%):',r.CBRp],['Procedimento:','Proc. '+r.proc],
+      ['Leitura do gráfico (cm):',+r.h_est.toFixed(1)],['Valor usado (cm):',+r.h_usado.toFixed(1)],[''],
+      ['Camada','Adotada (cm)','Observação'],...camadas(),[''],
+      ...r.alertas.map(a=>['Alerta:',a.txt]),...r.sugest.map(t=>['Sugestão:',t])];
   }else if(tab==='corte'){
     sheet='Secao Transversal';fname='intertravado_secao_'+carimbo()+'.xlsx';
-    rows=[['SEÇÃO TRANSVERSAL — CAMADAS'],['Camada','Espessura adotada (cm)','Material'],
-      ['Blocos',r.bloco_teo,'Concreto NBR 9781'],
-      ['Areia',r.areia,'Areia selecionada'],
-      ['Base',r.h_base_adot||'—',r.mat],['Sub-base',r.h_sb_adot||'—','Granular'],
-      r.ref>0?['Reforço',r.ref,'Geotécnico']:['','',''],
-      ['TOTAL',r.total,'cm']];
+    rows=[['SEÇÃO TRANSVERSAL — CAMADAS'],['Camada','Espessura adotada (cm)','Material'],...camadas()];
   }else if(tab==='topo'){
     sheet='Topografia';fname='intertravado_topografia_'+carimbo()+'.xlsx';
     rows=[['TOPOGRAFIA — CORTE E ATERRO'],['Estaca','Terreno esq.','Terreno eixo','Terreno dir.','Greide eixo','Largura','Corte (m²)','Aterro (m²)'],
@@ -1677,7 +1655,7 @@ function exportarTabExcel(tab){
   }else{
     return exportarExcel();
   }
-  const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:36},{wch:20},{wch:20},{wch:28}];
+  const ws=XLSX.utils.aoa_to_sheet(rows);ws['!cols']=[{wch:40},{wch:22},{wch:40},{wch:28}];
   const wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,ws,sheet);
   const buf=XLSX.write(wb,{bookType:'xlsx',type:'array'});
   triggerDownload(new Blob([buf],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),fname);
@@ -1703,16 +1681,16 @@ function projetoParaJSON(){
     ident:{logradouro:document.getElementById('logradouro-inp').value,responsavel:document.getElementById('resp-inp').value},
     numN:{sel:document.getElementById('n-sel').value,custom:document.getElementById('n-custom').value},
     subleito:{cbr:document.getElementById('cbr-sub').value,exp:document.getElementById('exp-sub').value,lencol:document.getElementById('lencol').value},
-    base:{mat:document.getElementById('base-mat').value,areia:document.getElementById('areia-cm').value,fpk:document.getElementById('fpk').value,subCCR:document.getElementById('sub-ccr').value,reforco:document.getElementById('reforco').value,hConf:document.getElementById('h-conf').value},
+    base:{mat:document.getElementById('base-mat').value,areia:document.getElementById('areia-cm').value,fpk:document.getElementById('fpk').value,subCCR:document.getElementById('sub-ccr').value,reforco:document.getElementById('reforco').value,hConf:document.getElementById('h-conf').value,cbrRef:document.getElementById('cbr-ref').value,sobrecarga:document.getElementById('sobrecarga').value,arred:document.getElementById('arred').value},
     topo:{caiEsq:document.getElementById('cai-esq').value,caiDir:document.getElementById('cai-dir').value,largPad:document.getElementById('larg-pad').value,rows:topoRows},
   };
 }
 function aplicarProjeto(p){
   function set(id,val){const e=document.getElementById(id);if(e&&val!=null&&val!=='')e.value=val;}
   if(p.ident){set('logradouro-inp',p.ident.logradouro);set('resp-inp',p.ident.responsavel);}
-  if(p.numN){set('n-sel',p.numN.sel||'1e5');set('n-custom',p.numN.custom);}
+  if(p.numN){set('n-sel',N_MAP[p.numN.sel]||p.numN.sel==='custom'?p.numN.sel:'1e5');set('n-custom',p.numN.custom);}
   if(p.subleito){set('cbr-sub',p.subleito.cbr);set('exp-sub',p.subleito.exp);set('lencol',p.subleito.lencol);}
-  if(p.base){set('base-mat',p.base.mat);set('areia-cm',p.base.areia);set('fpk',p.base.fpk);set('sub-ccr',p.base.subCCR);set('reforco',p.base.reforco);set('h-conf',p.base.hConf);}
+  if(p.base){set('base-mat',p.base.mat);set('areia-cm',p.base.areia);set('fpk',p.base.fpk);set('sub-ccr',p.base.subCCR);set('reforco',p.base.reforco&&p.base.reforco!=='0'?p.base.reforco:'');set('h-conf',p.base.hConf);set('cbr-ref',p.base.cbrRef);set('sobrecarga',p.base.sobrecarga);set('arred',p.base.arred);}
   if(p.topo){set('cai-esq',p.topo.caiEsq);set('cai-dir',p.topo.caiDir);set('larg-pad',p.topo.largPad);if(p.topo.rows){topoRows=[...p.topo.rows];renderTopoTable();}}
   document.getElementById('n-custom-field').hidden=(document.getElementById('n-sel').value!=='custom');
   atualizarLogradouro();calcular();
@@ -1759,6 +1737,7 @@ document.querySelectorAll('.tab').forEach(t=>{
   try{const th=localStorage.getItem('pint_theme');if(th)document.documentElement.setAttribute('data-theme',th);const fs=localStorage.getItem('pint_fs');if(fs){fontSize=+fs;document.body.style.fontSize=fontSize+'px';}}catch(e){}
   topoRows=[{est:0,tEsq:100,tEixo:100,tDir:100,greide:100,larg:6},{est:20,tEsq:100,tEixo:100,tDir:100,greide:100,larg:6}];
   renderTopoTable();
+  iniciarAjuda();
 })();
 </script>
 
