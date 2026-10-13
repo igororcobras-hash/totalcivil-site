@@ -120,9 +120,110 @@ input.mercado-input::-webkit-outer-spin-button, input.mercado-input::-webkit-inn
 .td-num-click:hover{background:#fde68a !important}
 
 
+/* ============================================================
+   TELA INICIAL — Seleção do ambiente de uso (igual ao Pavimento Flexível)
+   ============================================================ */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;}
+#splash{position:fixed;top:0;right:0;bottom:0;left:0;z-index:9999;overflow-y:auto;background:#17365D;color:#fff;display:flex;padding:32px 16px;transition:opacity .25s ease;}
+#splash.hiding{opacity:0;pointer-events:none;}
+.splash-box{width:100%;max-width:760px;margin:auto;}
+.splash-norma{font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.62);}
+.splash-titulo{font-size:26px;font-weight:700;line-height:1.2;margin:6px 0 4px;text-wrap:balance;}
+.splash-sub{font-size:13.5px;color:rgba(255,255,255,.78);}
+.splash-linha{height:1px;background:rgba(255,255,255,.18);margin:22px 0 18px;}
+.splash-prompt{font-size:12px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:rgba(255,255,255,.7);margin-bottom:12px;}
+.splash-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;}
+@media(max-width:640px){.splash-cards{grid-template-columns:1fr;}}
+.splash-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.22);border-radius:8px;padding:16px 16px 14px;color:#fff;cursor:pointer;font:inherit;min-height:44px;transition:background .15s,border-color .15s;}
+.splash-card:hover,.splash-card:focus-visible{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.55);outline:none;}
+.splash-card.detectado{border-color:#9cc3ff;background:rgba(156,195,255,.10);}
+.splash-card svg{width:28px;height:28px;flex:none;}
+.splash-card-label{font-size:16px;font-weight:700;}
+.splash-card-desc{font-size:12px;line-height:1.45;color:rgba(255,255,255,.75);}
+.splash-tag{display:none;position:absolute;top:10px;right:10px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#0f2340;background:#9cc3ff;border-radius:3px;padding:2px 6px;}
+.splash-card.detectado .splash-tag{display:inline-block;}
+.splash-note{font-size:11.5px;color:rgba(255,255,255,.6);margin-top:18px;line-height:1.5;}
+
+/* Ajustes por ambiente — Orçamento */
+[hidden]{display:none!important}
+body.mode-mobile .main{flex-direction:column;overflow:auto}
+body.mode-mobile .left,body.mode-mobile .right{width:100%!important;height:auto;min-height:70vh;flex:none}
+body.mode-mobile .main-splitter{display:none}
+body.mode-mobile .header{padding:8px 10px}
+body.mode-mobile .header .btn,body.mode-mobile .btn{padding:8px 10px;font-size:12px;min-height:38px}
+body.mode-mobile .header h1 img{max-height:36px;width:auto}
+body.mode-mobile table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+body.mode-android input,body.mode-android select,body.mode-android textarea{font-size:15px}
+body.mode-ios input,body.mode-ios select,body.mode-ios textarea{font-size:16px}
 </style>
 </head>
 <body>
+<!-- TELA INICIAL: Seleção do ambiente de uso -->
+<div id="splash" role="dialog" aria-modal="true" aria-labelledby="splash-titulo" hidden>
+  <div class="splash-box">
+    <div class="splash-norma">EMOP · SINAPI · SCO</div>
+    <div class="splash-titulo" id="splash-titulo">Orçamento de Obras</div>
+    <div class="splash-sub">Orçamento analítico com bancos EMOP, SINAPI e SCO, composições, BDI e exportação para planilha.</div>
+    <div class="splash-linha"></div>
+    <div class="splash-prompt">Selecione o ambiente de uso</div>
+    <div class="splash-cards">
+      <button type="button" class="splash-card" data-modo="desktop" onclick="initApp('desktop')">
+        <span class="splash-tag">Este aparelho</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3.5" width="19" height="13" rx="1.5"/><path d="M8 20.5h8M12 16.5v4"/></svg>
+        <span class="splash-card-label">Computador</span>
+        <span class="splash-card-desc">Windows, macOS ou Linux. Tela completa, com todas as colunas das tabelas.</span>
+      </button>
+      <button type="button" class="splash-card" data-modo="android" onclick="initApp('android')">
+        <span class="splash-tag">Este aparelho</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="1.8"/><path d="M10 18.8h4"/></svg>
+        <span class="splash-card-label">Android</span>
+        <span class="splash-card-desc">Celular ou tablet Android. Campos empilhados e botões maiores para toque.</span>
+      </button>
+      <button type="button" class="splash-card" data-modo="ios" onclick="initApp('ios')">
+        <span class="splash-tag">Este aparelho</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10.5 4.6h3"/><circle cx="12" cy="19" r=".6"/></svg>
+        <span class="splash-card-label">iPhone / iPad</span>
+        <span class="splash-card-desc">iOS e iPadOS, no Safari. Campos ajustados para não ampliar a tela ao digitar.</span>
+      </button>
+    </div>
+    <div class="splash-note">O ambiente pode ser trocado a qualquer momento pelo botão “Ambiente” no cabeçalho.</div>
+  </div>
+</div>
+<script>
+/* Seleção do ambiente de uso (Computador, Android, iPhone/iPad) */
+var _deviceMode = 'desktop', _splashTimer = null, _ambienteEscolhido = false;
+var NOMES_AMBIENTE = {desktop: 'Computador', android: 'Android', ios: 'iPhone / iPad'};
+var ROTULO_AMBIENTE = {desktop: 'Computador', android: 'Android', ios: 'iOS'};
+function detectarAmbiente(){
+  var ua = navigator.userAgent || '';
+  if (/iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'ios';
+  if (/Android/i.test(ua)) return 'android';
+  return 'desktop';
+}
+function marcarAmbienteDetectado(){
+  var det = detectarAmbiente();
+  document.querySelectorAll('.splash-card').forEach(function(c){ c.classList.toggle('detectado', c.dataset.modo === det); });
+  return det;
+}
+function initApp(mode){
+  if (!NOMES_AMBIENTE[mode]) mode = 'desktop';
+  _deviceMode = mode; _ambienteEscolhido = true;
+  document.body.classList.remove('mode-desktop', 'mode-mobile', 'mode-android', 'mode-ios');
+  document.body.classList.add('mode-' + mode);
+  if (mode !== 'desktop') document.body.classList.add('mode-mobile');
+  var btn = document.getElementById('device-toggle-btn');
+  if (!btn){ var hr = document.querySelector('.header > div:last-child'); if (hr){ btn = document.createElement('button'); btn.id = 'device-toggle-btn'; btn.className = 'btn btn-dark'; btn.type = 'button'; btn.onclick = abrirSelecaoAmbiente; hr.appendChild(btn); } }
+  if (btn){ btn.hidden = false; btn.textContent = 'Ambiente: ' + ROTULO_AMBIENTE[mode]; btn.title = 'Ambiente atual: ' + NOMES_AMBIENTE[mode] + '. Toque para trocar.'; }
+  var s = document.getElementById('splash');
+  if (s){ s.classList.add('hiding'); clearTimeout(_splashTimer); _splashTimer = setTimeout(function(){ s.hidden = true; }, 260); }
+}
+function abrirSelecaoAmbiente(){
+  var s = document.getElementById('splash'); if (!s) return;
+  clearTimeout(_splashTimer); var det = marcarAmbienteDetectado();
+  s.hidden = false; s.classList.remove('hiding');
+  var atual = s.querySelector('.splash-card[data-modo="' + (_ambienteEscolhido ? _deviceMode : det) + '"]'); if (atual) atual.focus();
+}
+/* chamada quando o acesso é liberado: mostra a escolha uma vez por abertura */
+function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente(); }
+</script>
+
 
 <!-- TELA DE LOGIN / CADASTRO COM AUTORIZAÇÃO -->
 <div id="authOverlay" class="auth-overlay">
@@ -9768,6 +9869,7 @@ async function aoMudarSessao(u){
 }
 
 function liberar(){
+  if(window.mostrarSelecaoAmbiente) window.mostrarSelecaoAmbiente();
   const sessao = {username: eu.apelido, nome: eu.nome || eu.apelido, role: eu.admin ? 'ADMIN' : 'USER', uid: eu.uid, loginEm: new Date().toISOString()};
   try{ localStorage.setItem(KEY, JSON.stringify(sessao)); }catch(e){}
   $('authOverlay').style.display = 'none';
