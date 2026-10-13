@@ -535,6 +535,20 @@ $('bt-limpar').onclick = () => { sel.clear(); salvarSel(); renderProgramas(); at
 $('bt-contratar').onclick = () => abrirCadastro();
 $('bt-teste').onclick = () => abrirCadastro(true);
 
+/* ---------- abrir programa sempre na versão mais nova ----------
+   Antes de abrir, pergunta ao servidor se o programa mudou (sem baixar de novo
+   se não mudou). Assim o celular/computador nunca abre uma cópia antiga. */
+async function abrirPrograma(url){
+  try{ await Promise.race([fetch(url, {cache: 'no-cache', credentials: 'same-origin'}), new Promise(r => setTimeout(r, 4000))]); }catch(e){}
+  location.href = url;
+}
+document.addEventListener('click', ev => {
+  const a = ev.target.closest('a[href]'); if(!a) return;
+  const href = a.getAttribute('href');
+  if(!/^\/(pavimento|orcamento|intertravado)\/$/.test(href) || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+  ev.preventDefault(); a.style.opacity = '.6'; abrirPrograma(href);
+});
+
 /* ---------- janelas ---------- */
 document.addEventListener('click', ev => {
   const a = ev.target.closest('[data-abrir]');
@@ -731,7 +745,7 @@ $('form-entrar').addEventListener('submit', async ev => {
     msg('en-msg', '');
     fechar('dl-entrar');
     const volta = new URLSearchParams(location.search).get('voltar');
-    if(volta && /^\/[a-z]+\/?$/.test(volta)) location.href = volta;
+    if(volta && /^\/[a-z]+\/?$/.test(volta)) abrirPrograma(volta);
   }catch(e){ msg('en-msg', traduzir(e, 'Não foi possível entrar'), 'erro'); }
   finally{ bt.disabled = false; }
 });
@@ -1213,7 +1227,7 @@ renderProgramas(); atualizarBarra();
       try{ await carregarPerfil(u); }catch(e){ console.error(e); eu = null; aplicarSessao(); if(u) toast(traduzir(e, 'Não foi possível ler seu cadastro')); }
       const q = new URLSearchParams(location.search);
       if(!u && q.get('entrar')) abrir('dl-entrar');
-      if(eu && q.get('voltar') && /^\/[a-z]+\/?$/.test(q.get('voltar'))) location.href = q.get('voltar');
+      if(eu && q.get('voltar') && /^\/[a-z]+\/?$/.test(q.get('voltar'))) abrirPrograma(q.get('voltar'));
       if(eu && eu.admin && location.hash === '#usuarios'){ abrir('dl-usuarios'); mostrarAba('usuarios'); }
     });
   }catch(e){ console.error(e); toast('Não foi possível conectar ao servidor. Recarregue a página.'); }
