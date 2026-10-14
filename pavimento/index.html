@@ -2047,7 +2047,7 @@ function calcTopo() {
   linhas.forEach((L) => {
     if (L.gr === null) {return;}
     L.form = L.gr - eTot; // cota de formação no eixo
-    if (L.na !== null && L.na > 0) {
+    if (L.na !== null) {
       // formação mais baixa da seção: na borda, descontado o caimento transversal
       L.formNA = L.form - (L.larg || 0) / 2 * Math.max(cEsq, cDir, 0);
       L.afna = L.formNA - L.na;
@@ -2400,7 +2400,7 @@ function secaoSVG(L, G, P, papel) {
   const ptsY = [G.tE, G.tC, G.tD, L.gr, G.E.yInt, G.D.yInt, G.E.tInt, G.D.tInt];
   const ymax = Math.max.apply(null, ptsY) + 0.45;
   let ymin = Math.min.apply(null, ptsY.concat([G.form - 0.8])) - 0.15;
-  const temNA = L.na !== null && L.na > 0;
+  const temNA = L.na !== null;
   const naVisivel = temNA && L.na > ymin - 4;
   if (naVisivel) ymin = Math.min(ymin, L.na - 0.3);
   const W = 640,padX = 86,top = 62;
@@ -2413,7 +2413,7 @@ function secaoSVG(L, G, P, papel) {
   const temRe = !!(G.E.re || G.D.re);
   if (temRe) leg.push(['#7fbf6a', 'Reaterro lateral', 'q']);
   leg.push(['#6b4a1e', 'Terreno natural (perfil)', 'l'], ['#a98a5a', 'Solo natural', 'q'], ['#e08a4a', 'Aterro', 'q'], ['#4a90d9', 'Corte', 'q'], [C.acc, 'Formação (subleito)', 'd']);
-  if (L.na !== null && L.na > 0) leg.push(['#2f7fd1', 'Nível d\'água (N.A.)', 'd']);
+  if (L.na !== null) leg.push(['#2f7fd1', 'Nível d\'água (N.A.)', 'd']);
   const legPos = [];let lx = 8,lrow = 0;
   leg.forEach((it) => {const w = 30 + it[1].length * 5.3 + 12;if (lx + w > W - 8 && lx > 8) {lx = 8;lrow++;}legPos.push([lx, lrow]);lx += w;});
   // cotas horizontais (da menor, junto ao desenho, até a plataforma total)
@@ -3908,7 +3908,7 @@ ${body}</body></html>`;
     const resumoRows = topoResumo().map((r) => `<tr><td>${r[0].replace(/:$/, '')}</td><td>${r[1]}</td></tr>`).join('');
     const secaoRows = L.map((d) => `<tr><td>${c(d.est)}</td><td>${c3(d.te)}</td><td>${c3(d.tc)}</td><td>${c3(d.td)}</td><td>${c3(d.gr)}</td><td>${c(d.larg)}</td><td>${c3(d.form)}</td><td>${c(d.ac)}</td><td>${c(d.aa)}</td><td>${d.sit}</td></tr>`).join('');
     const volRows = L.map((d) => `<tr><td>${c(d.est)}</td><td>${c(d.dl)}</td><td>${c(d.vc)}</td><td>${c(d.va)}</td><td>${c(d.vr)}</td><td>${c(d.vcb)}</td><td>${c(d.vbs)}</td><td>${c(d.vsb)}</td><td>${c(d.vrf)}</td></tr>`).join('');
-    const naRows = L.filter((d) => d.na !== null && d.na > 0).map((d) => `<tr><td>${c(d.est)}</td><td>${c3(d.formNA)}</td><td>${c3(d.na)}</td><td>${c(d.afna)}</td><td>${d.naCritico ? 'ABAIXO DO MÍNIMO' : 'Atende'}</td></tr>`).join('');
+    const naRows = L.filter((d) => d.na !== null).map((d) => `<tr><td>${c(d.est)}</td><td>${c3(d.formNA)}</td><td>${c3(d.na)}</td><td>${c(d.afna)}</td><td>${d.naCritico ? 'ABAIXO DO MÍNIMO' : 'Atende'}</td></tr>`).join('');
     html = wrap(`
     <h2>Resumo de Volumes</h2>
     <p>Corte e aterro medidos contra a cota de formação, igual ao greide menos a espessura estrutural do pavimento. Volumes entre estacas pela média das áreas extremas.</p>
