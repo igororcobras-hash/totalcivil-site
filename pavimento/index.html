@@ -424,6 +424,7 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
   <button class="tb-btn tb-btn-excel" onclick="exportarMemoriaExcel()">Excel</button>
   <button class="tb-btn tb-btn-word" translate="no" onclick="exportarMemoriaWord()">Word</button>
   <button class="tb-btn tb-btn-pdf"   onclick="exportarMemoriaPDF()">PDF</button>
+  <label class="tb-chk" title="Inclui o desenho da seção transversal de cada estaca no Word e no PDF"><input type="checkbox" class="exp-perfis" checked onchange="sincPerfis(this)"> Exportar perfis</label>
   <span class="tb-sep"></span>
   <button class="tb-btn tb-btn-save" onclick="exportarTudo()" title="Gera Excel, Word e PDF da memória">Exportar tudo</button>
 </div>
@@ -889,7 +890,7 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
     <button class="tb-btn tb-btn-excel" onclick="exportarTabExcel('corte')">Excel</button>
     <button class="tb-btn tb-btn-word" translate="no" onclick="exportarTabWord('corte')">Word</button>
     <button class="tb-btn tb-btn-pdf"   onclick="exportarTabPDF('corte')">PDF</button>
-    <label class="tb-chk" title="Desmarque para exportar só os dados, sem o desenho de cada seção"><input type="checkbox" id="exp_perfis" checked> Exportar perfis</label>
+    <label class="tb-chk" title="Inclui o desenho da seção transversal de cada estaca no Word e no PDF"><input type="checkbox" id="exp_perfis" class="exp-perfis" checked onchange="sincPerfis(this)"> Exportar perfis</label>
   </div>
 </div>
 
@@ -2574,6 +2575,7 @@ function secaoSVG(L, G, P, papel) {
 }
 
 function secaoSelecionadas() {
+  if (!_R._topo) calcTopo(); // cada novo cálculo zera _R: refaz a topografia antes de usar
   const P = secaoParams();
   const linhas = _R._topo && _R._topo.linhas || [];
   const de = parseFloat((document.getElementById('c_de') || {}).value);
@@ -2601,7 +2603,45 @@ function secaoTabela() {
   });
 }
 /* Opção "Exportar perfis" da aba Seção Transversal (marcada = com os desenhos) */
-function exportarPerfis() {const el = document.getElementById('exp_perfis');return !el || el.checked;}
+function exportarPerfis() {const el = document.querySelector('.exp-perfis');return !el || el.checked;}
+function sincPerfis(el) {document.querySelectorAll('.exp-perfis').forEach((c) => {c.checked = el.checked;});}
+
+/* Desenhos das seções do trecho escolhido, prontos para o Word e o PDF.
+   Devolve [{ rot, img (JPEG em data URL), W, H }] ou { rot, falta } quando a estaca não tem dados. */
+async function perfisParaExportar() {
+  const Pc = secaoParams(),saida = [];
+  for (const o of secaoSelecionadas()) {
+    const rot = 'Estaca ' + String(o.L.est).replace('.', ',') + ' — ' + o.L.sit;
+    if (!o.G) {saida.push({ rot: 'Estaca ' + String(o.L.est).replace('.', ','), falta: true });continue;}
+    const fig = secaoSVG(o.L, o.G, Pc, true);
+    try {saida.push({ rot: rot, img: await svgParaPng(fig.svg, fig.W, fig.H), W: fig.W, H: fig.H });}
+    catch (e) {saida.push({ rot: rot, falta: true });}
+  }
+  return saida;
+}
+/* Trecho HTML (para htmlParaDocx) com um título e uma figura por estaca */
+function perfisHtml(perfis, figs) {
+  return perfis.map((p) => {
+    if (p.falta) return `<h3>${p.rot}</h3><p>Sem dados completos na Topografia para desenhar a seção.</p>`;
+    figs.push(p); // o desenho já traz o título da estaca
+    return `<img data-fig="${figs.length - 1}">`;
+  }).join('');
+}
+/* Acrescenta os perfis ao PDF (jsPDF), uma figura por estaca; devolve o novo y */
+function perfisNoPdf(doc, perfis, y, lm) {
+  perfis.forEach((p) => {
+    if (p.falta) {
+      if (y > 275) {doc.addPage();y = 20;}
+      doc.setFont('helvetica', 'normal');doc.setFontSize(9);doc.setTextColor(30);
+      doc.text(p.rot + ': sem dados completos na Topografia', lm, y);y += 6;return;
+    }
+    const wmm = 180,hmm = wmm * p.H / p.W;
+    if (y + hmm > 285) {doc.addPage();y = 20;}
+    doc.addImage(p.img, 'JPEG', lm, y, wmm, hmm);
+    y += hmm + 4;
+  });
+  return y;
+}
 function secaoFaixaTexto() {
   const sel = secaoSelecionadas();
   if (!sel.length) return 'nenhuma estaca';
@@ -3035,7 +3075,7 @@ function exportarMemoriaExcel() {var _R$_topo5;
 /* ============================================================
    EXPORT — WORD (MEMÓRIA COMPLETA)
    ============================================================ */
-function exportarMemoriaWord() {
+async function exportarMemoriaWord() {
   const R = _R;const sc = SCENARIOS[selectedScenario];
   const hoje = new Date().toLocaleDateString('pt-BR');
   const topoR = R._topo || {};
@@ -3295,7 +3335,14 @@ function exportarMemoriaWord() {
   </div>
   </body></html>`;
 
-  return triggerDownload(htmlParaDocx(html), 'Memoria_de_Calculo_Pavimento_Flexivel_' + carimboArquivo() + '.docx');
+  // Anexo: seção transversal de cada estaca (opção "Exportar perfis")
+  const figs = [];let htmlDoc = html;
+  if (exportarPerfis()) {
+    const perfis = await perfisParaExportar();
+    if (perfis.length) htmlDoc = html.replace('</body></html>', `<div class="quebra-pagina"></div><h2>Anexo — Seções Transversais por Estaca</h2>
+    <p>Trecho: ${secaoFaixaTexto()}. Cotas em metros; corte e aterro medidos contra a cota de formação.</p>${perfisHtml(perfis, figs)}</body></html>`);
+  }
+  return triggerDownload(htmlParaDocx(htmlDoc, figs), 'Memoria_de_Calculo_Pavimento_Flexivel_' + carimboArquivo() + '.docx');
 }
 
 /* ============================================================
@@ -3382,6 +3429,24 @@ function _par(segs, o) {
   if (jc) p += `<w:jc w:val="${jc}"/>`;
   return `<w:p>${p ? '<w:pPr>' + p + '</w:pPr>' : ''}${r}</w:p>`;
 }
+let _docxFigs = []; // figuras do documento em geração (htmlParaDocx)
+function _figuraDocx(i) {
+  const f = _docxFigs[i];if (!f) return '';
+  const cx = DOCX_LARG * 635,cy = Math.round(cx * f.H / f.W),id = i + 1; // 1 twip = 635 EMU
+  return '<w:p><w:pPr><w:keepLines/><w:spacing w:before="60" w:after="120"/><w:jc w:val="center"/></w:pPr><w:r><w:drawing>' +
+  `<wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${id}" name="Figura ${id}"/>` +
+  '<wp:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></wp:cNvGraphicFramePr>' +
+  '<a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic>' +
+  `<pic:nvPicPr><pic:cNvPr id="${id}" name="secao${id}.jpeg"/><pic:cNvPicPr/></pic:nvPicPr>` +
+  `<pic:blipFill><a:blip r:embed="rIdFig${id}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill>` +
+  `<pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr>` +
+  '</pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>';
+}
+function _bytesDeDataUrl(u) {
+  const b = atob(u.slice(u.indexOf(',') + 1)),a = new Uint8Array(b.length);
+  for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i);
+  return a;
+}
 function _blocos(node, ctx, o) {
   let x = '',pend = [];
   const descarregar = () => {if (pend.length) {x += _par(pend, o);pend = [];}};
@@ -3402,6 +3467,8 @@ function _blocos(node, ctx, o) {
     if (tag === 'h2') {_segs(n, c, s);x += _par(s, { estilo: 'Titulo1' });} else
     if (/^h[3-6]$/.test(tag)) {_segs(n, c, s);x += _par(s, { estilo: 'Titulo2' });} else
     if (tag === 'table') {x += _tabela(n);} else
+    if (tag === 'img') {x += _figuraDocx(+n.getAttribute('data-fig'));} else
+    if (/\bquebra-pagina\b/.test(cls)) {x += '<w:p><w:r><w:br w:type="page"/></w:r></w:p>';} else
     if (tag === 'ul' || tag === 'ol') {
       [...n.children].forEach((li, i) => {
         const ss = [{ t: (tag === 'ol' ? i + 1 + '.' : '•') + '  ', c }];
@@ -3488,7 +3555,7 @@ function _zip(arquivos, tipo) {// ZIP sem compressão (método "store"), válido
   const hora = d.getHours() << 11 | d.getMinutes() << 5 | d.getSeconds() >> 1;
   const data = d.getFullYear() - 1980 << 9 | d.getMonth() + 1 << 5 | d.getDate();
   arquivos.forEach((a) => {
-    const nome = enc.encode(a.nome),dados = enc.encode(a.texto),crc = _crc32(dados);
+    const nome = enc.encode(a.nome),dados = a.bytes || enc.encode(a.texto),crc = _crc32(dados);
     const h = new DataView(new ArrayBuffer(30));
     h.setUint32(0, 0x04034b50, true);h.setUint16(4, 20, true);h.setUint16(6, 0x0800, true);h.setUint16(8, 0, true);
     h.setUint16(10, hora, true);h.setUint16(12, data, true);h.setUint32(14, crc, true);
@@ -3508,12 +3575,15 @@ function _zip(arquivos, tipo) {// ZIP sem compressão (método "store"), válido
   e.setUint16(8, arquivos.length, true);e.setUint16(10, arquivos.length, true);e.setUint32(12, tam, true);e.setUint32(16, pos, true);e.setUint16(20, 0, true);
   return new Blob([...partes, ...central, new Uint8Array(e.buffer)], { type: tipo });
 }
-function htmlParaDocx(html) {
+function htmlParaDocx(html, figuras) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const titulo = ((doc.querySelector('h1') || {}).textContent || 'Calculadora de Pavimento Flexível').trim();
+  _docxFigs = figuras || [];
   const corpo = _blocos(doc.body, {}, {});
+  const figs = _docxFigs;_docxFigs = [];
   const P = DOCX_PAG;
-  const documento = _XMLH + `<w:document ${_W}><w:body>${corpo}` +
+  const NSFIG = 'xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"';
+  const documento = _XMLH + `<w:document ${_W} ${NSFIG}><w:body>${corpo}` +
   `<w:sectPr><w:footerReference w:type="default" r:id="rIdRodape"/><w:pgSz w:w="${P.w}" w:h="${P.h}"/>` +
   `<w:pgMar w:top="${P.top}" w:right="${P.right}" w:bottom="${P.bottom}" w:left="${P.left}" w:header="567" w:footer="567" w:gutter="0"/></w:sectPr></w:body></w:document>`;
   const rodape = _XMLH + `<w:ftr ${_W}><w:p><w:pPr><w:pStyle w:val="Rodape"/></w:pPr>` +
@@ -3524,7 +3594,7 @@ function htmlParaDocx(html) {
   const CT = 'application/vnd.openxmlformats-officedocument.wordprocessingml';
   return _zip([
   { nome: '[Content_Types].xml', texto: _XMLH + '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">' +
-    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/>' +
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpeg" ContentType="image/jpeg"/>' +
     `<Override PartName="/word/document.xml" ContentType="${CT}.document.main+xml"/>` +
     `<Override PartName="/word/styles.xml" ContentType="${CT}.styles+xml"/>` +
     `<Override PartName="/word/settings.xml" ContentType="${CT}.settings+xml"/>` +
@@ -3543,7 +3613,9 @@ function htmlParaDocx(html) {
     `<Relationship Id="rIdEstilos" Type="${R}/styles" Target="styles.xml"/>` +
     `<Relationship Id="rIdConfig" Type="${R}/settings" Target="settings.xml"/>` +
     `<Relationship Id="rIdRodape" Type="${R}/footer" Target="footer1.xml"/>` +
-    `<Relationship Id="rIdProj" Type="${R}/customXml" Target="../customXml/item1.xml"/></Relationships>` },
+    `<Relationship Id="rIdProj" Type="${R}/customXml" Target="../customXml/item1.xml"/>` +
+    figs.map((f, i) => `<Relationship Id="rIdFig${i + 1}" Type="${R}/image" Target="media/secao${i + 1}.jpeg"/>`).join('') + '</Relationships>' },
+  ...figs.map((f, i) => ({ nome: 'word/media/secao' + (i + 1) + '.jpeg', bytes: _bytesDeDataUrl(f.img) })),
   { nome: 'customXml/item1.xml', texto: _XMLH + '<pavimento xmlns="urn:calc-pavimento">' + _xml(projetoMarcado()) + '</pavimento>' },
   { nome: 'word/document.xml', texto: documento },
   { nome: 'word/styles.xml', texto: _estilosXml() },
@@ -3650,6 +3722,15 @@ async function exportarMemoriaPDF() {
 
   doc.setFontSize(8);doc.setTextColor(150);
   doc.text('Calculadora de Pavimento Flexível | gerado automaticamente', lm, 285);
+
+  if (exportarPerfis()) {
+    const perfis = await perfisParaExportar();
+    if (perfis.length) {
+      doc.addPage();y = 20;
+      addSection('Anexo — Seções Transversais por Estaca', [['Trecho:', secaoFaixaTexto()]]);
+      y = perfisNoPdf(doc, perfis, y, lm);
+    }
+  }
 
   const buf = doc.output('arraybuffer');
   await triggerDownload(new Blob([buf], { type: 'application/pdf' }), 'pavimento_memoria_calculo.pdf');
@@ -3769,7 +3850,8 @@ function exportarTabExcel(tab) {
 /* ============================================================
    EXPORT — PER-TAB WORD
    ============================================================ */
-function exportarTabWord(tab) {
+async function exportarTabWord(tab) {
+  const figs = [];
   const R = _R;const sc = SCENARIOS[selectedScenario];
   let html = '',fname = '';
 
@@ -3872,7 +3954,7 @@ ${body}</body></html>`;
     ${tb.map((r) => `<h3>Estaca ${String(r[0]).replace('.', ',')} — ${r[1]}</h3>
     <table><tr><th>Item</th><th>Valor</th></tr>` +
     secaoCabecalho().map((c, i) => i < 2 ? '' : `<tr><td>${c}</td><td>${num(r[i], i)}</td></tr>`).join('') + '</table>').join('')}
-    <p>Os desenhos das seções estão na calculadora e no PDF desta aba.</p>
+    ${exportarPerfis() ? '<h2>Perfis das Seções</h2>' + perfisHtml(await perfisParaExportar(), figs) : ''}
     `, 'Seções Transversais');
   } else if (tab === 'mat') {
     fname = 'pavimento_materiais.docx';
@@ -3885,7 +3967,7 @@ ${body}</body></html>`;
   }
 
   if (html) {
-    return triggerDownload(htmlParaDocx(html), fname);
+    return triggerDownload(htmlParaDocx(html, figs), fname);
   }
 }
 
@@ -4012,17 +4094,7 @@ async function exportarTabPDF(tab) {
         addRow(rot, o.L.sit + ' · greide ' + fmt(o.L.gr, 3) + ' m · formação ' + fmt(o.G.form, 3) + ' m · corte ' + fmt(o.L.ac, 2) + ' m² · aterro ' + fmt(o.L.aa, 2) + ' m²');
       }
     }
-    for (const o of exportarPerfis() ? sels : []) {
-      if (!o.G) {addRow('Estaca ' + String(o.L.est).replace('.', ',') + ':', 'sem dados completos na Topografia');continue;}
-      const fig = secaoSVG(o.L, o.G, Pc, true);
-      const wmm = 180,hmm = wmm * fig.H / fig.W;
-      if (y + hmm > 285) {doc.addPage();y = 20;}
-      try {
-        const png = await svgParaPng(fig.svg, fig.W, fig.H);
-        doc.addImage(png, 'JPEG', lm, y, wmm, hmm);
-        y += hmm + 4;
-      } catch (e) {addRow('Estaca ' + String(o.L.est).replace('.', ',') + ':', 'não foi possível desenhar');}
-    }
+    if (exportarPerfis()) y = perfisNoPdf(doc, await perfisParaExportar(), y, lm);
     const buf = doc.output('arraybuffer');
     await triggerDownload(new Blob([buf], { type: 'application/pdf' }), 'pavimento_secoes_transversais.pdf');
 
