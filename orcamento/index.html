@@ -6675,7 +6675,7 @@ setTimeout(inicializarBancoSco, 200);
     var sinOrig = window._sinapiImportMeta ? ('importado por você'+(window._sinapiImportMeta.importadoEm?' em '+window._sinapiImportMeta.importadoEm:'')) : 'embutido no programa';
     var scoOrig = window._scoImportMeta ? ('importado por você'+(window._scoImportMeta.importadoEm?' em '+window._scoImportMeta.importadoEm:'')) : 'embutido no programa';
     var geral = [
-      ['Versão do programa', 'V1-02-32'],
+      ['Versão do programa', 'V1-02-33'],
       ['Navegador', navegador()],
       ['Tela (largura)', window.innerWidth+' px'],
       ['Descompressão nativa (bancos embutidos)', window.DecompressionStream ? 'sim' : 'NÃO — atualize o navegador'],
@@ -10179,5 +10179,512 @@ if(document.readyState === 'loading'){
 document.addEventListener('DOMContentLoaded', limparRestos);
 
 </script>
+<!-- ==================== PATCH V1-02-33 - COTAÇÃO: tipo de fonte de cada preço + regra do Manual de Pesquisa de Preços do STJ (4ª ed.) ==================== -->
+<style>
+#modalQuartil .modal-quartil-box{max-width:960px}
+.cot-linha{display:grid;grid-template-columns:26px 110px 1fr 230px 74px;gap:4px;align-items:center}
+.cot-linha input,.cot-linha select{padding:4px 6px;border-radius:6px;font-size:10px;min-width:0}
+.cot-linha-head{font-size:8px;font-weight:800;color:#92400e;text-transform:uppercase}
+.cot-prot{display:flex;align-items:center;justify-content:center;gap:2px;font-size:11px}
+.cot-badge{color:white;padding:2px 6px;border-radius:10px;font-size:8px;white-space:nowrap;display:inline-block}
+@media (max-width:640px){ .cot-linha{grid-template-columns:22px 1fr 1fr} .cot-linha select{grid-column:2/4} .cot-prot{grid-column:2/4;justify-content:flex-start} .cot-linha-head{display:none} }
+</style>
+<script>
+(function(){
+  // ==================================================================
+  // Janela "📈 Cotação Quartis" (V1-02-33)
+  // Base: Manual de Orientação - Pesquisa de Preços, STJ, 4ª ed. (questão XXV, p. 27-31)
+  //       e IN SEGES/ME 65/2021, art. 5º (fontes de preço).
+  //  - Cada preço tem um TIPO DE FONTE (Banco de Preços, Ata, Contrato, Painel, Mídia/site,
+  //    Fornecedor, Nota fiscal, Outra).
+  //  - Atas de registro de preços e contratos com o poder público (em execução ou executados)
+  //    "não deverão ser considerados inexequíveis" (Manual, p. 28). O Banco de Preços reúne
+  //    esses mesmos preços de contratações públicas e entra marcado do mesmo jeito.
+  //    A marca 🛡 "não excluir" vem ligada para esses tipos e pode ser mudada linha a linha.
+  //    Ela só impede a exclusão por preço BAIXO (inexequível). Preço excessivamente elevado
+  //    continua sendo excluído, seja qual for a fonte (o manual não faz exceção para ele).
+  //  - Dois critérios de exclusão:
+  //      MEDIA_DEMAIS (padrão, Manual STJ): cada preço é comparado à média dos DEMAIS; acima de
+  //      125% = excessivamente elevado (excluído primeiro, numa passada só); depois, sem os
+  //      excessivos, abaixo de 75% = inexequível. Confere com o exemplo do manual (p. 29-31).
+  //      QUARTIS (o das versões até a V1-02-32): fora de Q1-1,5×IQR / Q3+1,5×IQR.
+  //  - Além da Média e da Mediana saneadas, mostra o Menor Preço Válido (Manual, questão XXVI).
+  // ==================================================================
+  var TIPOS = [
+    {id:'',             nome:'— Tipo de fonte —',                                curto:'Não informado',    base:'',                                             prot:false},
+    {id:'BANCO_PRECOS', nome:'Banco de Preços (contratações públicas)',          curto:'Banco de Preços',  base:'IN 65/2021, art. 5º, II (contratações públicas)', prot:true},
+    {id:'ATA',          nome:'Ata de Registro de Preços',                        curto:'Ata (ARP)',        base:'IN 65/2021, art. 5º, II',                      prot:true},
+    {id:'CONTRATO',     nome:'Contrato público (em execução ou executado)',      curto:'Contrato público', base:'IN 65/2021, art. 5º, II',                      prot:true},
+    {id:'PAINEL',       nome:'Painel de Preços / Comprasnet / sistema oficial',  curto:'Painel de Preços', base:'IN 65/2021, art. 5º, I',                       prot:false},
+    {id:'MIDIA',        nome:'Mídia especializada / tabela / site',              curto:'Mídia / site',     base:'IN 65/2021, art. 5º, III',                     prot:false},
+    {id:'FORNECEDOR',   nome:'Pesquisa direta com fornecedor',                   curto:'Fornecedor',       base:'IN 65/2021, art. 5º, IV',                      prot:false},
+    {id:'NFE',          nome:'Nota fiscal eletrônica',                           curto:'Nota fiscal',      base:'IN 65/2021, art. 5º, V',                       prot:false},
+    {id:'OUTRA',        nome:'Outra fonte',                                      curto:'Outra',            base:'',                                             prot:false}
+  ];
+  window.COT_TIPOS_FONTE = TIPOS;
+  function tipoPorId(id){ for(var i=0;i<TIPOS.length;i++) if(TIPOS[i].id===id) return TIPOS[i]; return TIPOS[0]; }
+  var METODOS = {
+    MEDIA_DEMAIS: {nome:'Média dos demais: abaixo de 75% inexequível, acima de 125% excessivo (Manual STJ)', curto:'Manual STJ 75%/125%'},
+    QUARTIS:      {nome:'Quartis: Q1 e Q3 com limites de 1,5×IQR (TCU)', curto:'Quartis 25/75%'}
+  };
+  var STATUS_TXT = { VALIDO:'VÁLIDO', VALIDO_PROT:'VÁLIDO (não excluível)', INEXEQUIVEL:'EXCLUÍDO: INEXEQUÍVEL', EXCESSIVO:'EXCLUÍDO: EXCESSIVAMENTE ELEVADO' };
+  var STATUS_COR = { VALIDO:'#22c55e', VALIDO_PROT:'#0ea5e9', INEXEQUIVEL:'#ef4444', EXCESSIVO:'#ef4444' };
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function brl(v){ return (Number(v)||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+  function rotuloEscolha(e){ return e==='MEDIA' ? 'Média Saneada' : (e==='MENOR' ? 'Menor Preço Válido' : 'Mediana Saneada'); }
+  function rotuloEscolhaCurto(e){ return e==='MEDIA' ? 'Média' : (e==='MENOR' ? 'Menor válido' : 'Mediana'); }
+  function metodoCurto(m){ return (METODOS[m]||METODOS.QUARTIS).curto; }  // sem método = cálculo antigo (Quartis)
+  window.cotRotuloEscolha = rotuloEscolha;
+
+  // "1.500" = mil e quinhentos (antes virava 1,5); "1.234,56", "1234,56" e "1234.56" continuam iguais
+  function parsePreco(txt){
+    var s = String(txt==null?'':txt).replace(/R\$/gi,'').replace(/\s/g,'');
+    if(!s) return NaN;
+    if(s.indexOf(',')>=0) s = s.replace(/\./g,'').replace(',','.');
+    else if(/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g,'');
+    return parseFloat(s);
+  }
+  window.cotParsePreco = parsePreco;
+  function calcQuartil(arr, p){
+    if(!arr.length) return 0;
+    var sorted=[].concat(arr).sort(function(a,b){return a-b;});
+    var pos=(sorted.length-1)*p, base=Math.floor(pos), rest=pos-base;
+    if(sorted[base+1]!==undefined) return sorted[base] + rest*(sorted[base+1]-sorted[base]);
+    return sorted[base];
+  }
+  window.cotCalcQuartil = calcQuartil;
+
+  // ---------- montagem da janela ----------
+  function metodoAtual(){ var s=document.getElementById('cotMetodoSelect'); return (s && METODOS[s.value]) ? s.value : 'MEDIA_DEMAIS'; }
+  function prepararJanela(){
+    var modal=document.getElementById('modalQuartil'); if(!modal) return;
+    var titulo=modal.querySelector('b'); if(titulo) titulo.textContent='📈 COTAÇÃO - Saneamento da pesquisa de preços (Quartis ou Manual STJ)';
+    var bc=modal.querySelector('button[onclick="calcularQuartis()"]'); if(bc) bc.textContent='Calcular Cotação';
+    var cont=document.getElementById('cotacaoInputs'); if(!cont) return;
+    cont.style.display='flex'; cont.style.flexDirection='column'; cont.style.gap='4px';
+    var sel=document.getElementById('cotQtdSelect');
+    if(sel && !document.getElementById('cotMetodoSelect')){
+      var barra=sel.parentNode;
+      var dica=barra.querySelector('span[style*="64748b"]'); if(dica) dica.remove();
+      barra.style.flexWrap='wrap';
+      var lab=document.createElement('span'); lab.textContent='Critério de exclusão:'; lab.style.marginLeft='8px';
+      var ms=document.createElement('select'); ms.id='cotMetodoSelect';
+      ms.style.cssText='padding:3px 6px;border:1px solid #f59e0b;border-radius:6px;font-size:10px;font-weight:700;max-width:100%';
+      Object.keys(METODOS).forEach(function(k){ var o=document.createElement('option'); o.value=k; o.textContent=METODOS[k].nome; ms.appendChild(o); });
+      try{ var salvo=localStorage.getItem('schueler_cot_metodo_v33'); if(salvo && METODOS[salvo]) ms.value=salvo; }catch(e){}
+      ms.onchange=function(){ try{ localStorage.setItem('schueler_cot_metodo_v33', ms.value); }catch(e){} if(window._ultimaCotacaoDados) window.calcularQuartis(); };
+      barra.appendChild(lab); barra.appendChild(ms);
+    }
+    if(!document.getElementById('cotInputsHead')){
+      var head=document.createElement('div'); head.id='cotInputsHead'; head.className='cot-linha cot-linha-head'; head.style.marginBottom='2px';
+      head.innerHTML='<span>Nº</span><span>Preço (R$)</span><span>Fonte / empresa</span><span>Tipo de fonte</span><span title="Não excluir como inexequível (preço baixo)">🛡 Não excluir</span>';
+      cont.parentNode.insertBefore(head, cont);
+      var nota=document.createElement('div'); nota.id='cotNotaManual';
+      nota.style.cssText='font-size:9px;color:#475569;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:5px 7px;margin-top:6px;line-height:1.45';
+      nota.innerHTML='🛡 <b>Não excluir</b>: preços de <b>Ata de Registro de Preços</b>, <b>contrato público</b> (em execução ou executado) e <b>Banco de Preços</b> já tiveram a exequibilidade demonstrada e não são excluídos como inexequíveis, mesmo abaixo do limite (Manual de Pesquisa de Preços do STJ, 4ª ed., p. 28). '
+        + 'Preço <b>excessivamente elevado</b> é excluído qualquer que seja a fonte. A marca pode ser ligada ou desligada em cada linha.';
+      cont.parentNode.insertBefore(nota, cont.nextSibling);
+    }
+  }
+  function linhaHTML(idx){
+    var opts=TIPOS.map(function(t){ return '<option value="'+t.id+'">'+esc(t.nome)+'</option>'; }).join('');
+    return '<label style="font-size:9px;font-weight:700">C'+(idx+1)+'</label>'
+      + '<input type="text" inputmode="decimal" id="cot_'+idx+'" placeholder="R$ 0,00" style="border:1px solid #f59e0b" oninput="calcularQuartisLive()">'
+      + '<input type="text" id="cot_fonte_'+idx+'" placeholder="Fonte / empresa / nº da ata" style="border:1px solid #cbd5e1">'
+      + '<select id="cot_tipo_'+idx+'" style="border:1px solid #cbd5e1" onchange="cotTipoMudou('+idx+')">'+opts+'</select>'
+      + '<label class="cot-prot" title="Não excluir como inexequível (preço baixo)"><input type="checkbox" id="cot_prot_'+idx+'"> 🛡</label>';
+  }
+  window.cotTipoMudou=function(idx){
+    var t=tipoPorId((document.getElementById('cot_tipo_'+idx)||{}).value||'');
+    var p=document.getElementById('cot_prot_'+idx); if(p) p.checked=!!t.prot;
+  };
+  window.addCotacaoLinha=function(){
+    prepararJanela();
+    var cont=document.getElementById('cotacaoInputs'); if(!cont) return;
+    if(cont.children.length>=8){ alert('Máx 8 cotações'); return; }
+    var div=document.createElement('div'); div.className='cot-linha';
+    div.innerHTML=linhaHTML(cont.children.length);
+    cont.appendChild(div);
+  };
+  function qtdSelecionada(){ var sel=document.getElementById('cotQtdSelect'); var q=sel?parseInt(sel.value,10):5; if(isNaN(q)||q<4) q=4; if(q>8) q=8; return q; }
+  function initCotInputs(){
+    prepararJanela();
+    var cont=document.getElementById('cotacaoInputs'); if(!cont) return;
+    cont.innerHTML='';
+    for(var i=0, q=qtdSelecionada(); i<q; i++) window.addCotacaoLinha();
+  }
+  window.ajustarQtdCotacoes=function(){
+    var cont=document.getElementById('cotacaoInputs'); if(!cont) return;
+    var antigos=[];
+    for(var i=0;i<cont.children.length;i++){
+      antigos.push({
+        v:(document.getElementById('cot_'+i)||{}).value||'',
+        f:(document.getElementById('cot_fonte_'+i)||{}).value||'',
+        t:(document.getElementById('cot_tipo_'+i)||{}).value||'',
+        p:!!(document.getElementById('cot_prot_'+i)||{}).checked
+      });
+    }
+    initCotInputs();
+    antigos.forEach(function(a,k){
+      if(!document.getElementById('cot_'+k)) return;
+      document.getElementById('cot_'+k).value=a.v;
+      document.getElementById('cot_fonte_'+k).value=a.f;
+      document.getElementById('cot_tipo_'+k).value=a.t;
+      document.getElementById('cot_prot_'+k).checked=a.p;
+    });
+  };
+  window.limparCotacao=function(){
+    initCotInputs();
+    document.getElementById('cotacaoResultado').innerHTML='';
+    var box=document.getElementById('cotacaoNovoItemBox'); if(box) box.style.display='none';
+    window._ultimaCotacaoDados=null;
+  };
+  window.abrirModalCotacaoGeral=function(){
+    document.getElementById('modalQuartil').style.display='flex';
+    prepararJanela();
+    var cont=document.getElementById('cotacaoInputs');
+    // janela montada por versão anterior (sem a coluna de tipo): refaz preservando os valores
+    if(!cont.children.length) initCotInputs();
+    else if(!document.getElementById('cot_tipo_0')) window.ajustarQtdCotacoes();
+    var box=document.getElementById('cotacaoNovoItemBox'); if(box) box.style.display='none';
+    window.carregarCacheCotacoesSalvas().then(function(){ window.renderCotacoesSalvas(); });
+  };
+
+  // ---------- cálculo ----------
+  function classificar(itens, metodo){
+    var vals=itens.map(function(o){return o.v;});
+    var sorted=vals.slice().sort(function(a,b){return a-b;});
+    var r={ q1:calcQuartil(sorted,0.25), q3:calcQuartil(sorted,0.75), median:calcQuartil(sorted,0.5) };
+    r.iqr=r.q3-r.q1; r.limInf=r.q1-1.5*r.iqr; r.limSup=r.q3+1.5*r.iqr;
+    if(metodo==='MEDIA_DEMAIS'){
+      // 1º excessivamente elevados (cada preço contra a média de TODOS os demais), 2º inexequíveis (sem os excessivos)
+      var soma=vals.reduce(function(s,x){return s+x;},0), n=itens.length;
+      itens.forEach(function(o){ o.ref=(soma-o.v)/(n-1); o.pct=o.ref>0?o.v/o.ref*100:0; o.status = (o.v>1.25*o.ref) ? 'EXCESSIVO' : 'VALIDO'; });
+      var resto=itens.filter(function(o){ return o.status!=='EXCESSIVO'; });
+      var soma2=resto.reduce(function(s,o){return s+o.v;},0), m=resto.length;
+      if(m>=2) resto.forEach(function(o){
+        o.ref=(soma2-o.v)/(m-1); o.pct=o.ref>0?o.v/o.ref*100:0;
+        if(o.v<0.75*o.ref) o.status = o.prot ? 'VALIDO_PROT' : 'INEXEQUIVEL';
+      });
+    } else {
+      itens.forEach(function(o){
+        o.ref=null; o.pct=null;
+        if(o.v>r.limSup) o.status='EXCESSIVO';
+        else if(o.v<r.limInf) o.status = o.prot ? 'VALIDO_PROT' : 'INEXEQUIVEL';
+        else o.status='VALIDO';
+      });
+    }
+    return r;
+  }
+  window.cotClassificar = classificar;
+
+  window.calcularQuartis=function(){
+    prepararJanela();
+    var cont=document.getElementById('cotacaoInputs');
+    var itens=[];
+    for(var i=0;i<cont.children.length;i++){
+      var inp=document.getElementById('cot_'+i); if(!inp) continue;
+      var n=parsePreco(inp.value);
+      if(isNaN(n) || n<=0) continue;
+      var tipoId=(document.getElementById('cot_tipo_'+i)||{}).value||'';
+      itens.push({ v:n, fonteNome:(document.getElementById('cot_fonte_'+i)||{}).value||'', tipo:tipoId,
+                   prot:!!(document.getElementById('cot_prot_'+i)||{}).checked });
+    }
+    if(itens.length<3){ document.getElementById('cotacaoResultado').innerHTML='<div style="color:#dc2626;font-size:10px">Insira pelo menos 3 preços válidos</div>'; return; }
+    var metodo=metodoAtual();
+    var r=classificar(itens, metodo);
+    itens.sort(function(a,b){return a.v-b.v;});
+    itens.forEach(function(o){ o.f=o.fonteNome+' : R$ '+o.v.toLocaleString('pt-BR',{minimumFractionDigits:2}); });
+    var valOk=function(o){ return o.status==='VALIDO' || o.status==='VALIDO_PROT'; };
+    var validos=itens.filter(valOk).map(function(o){return o.v;});
+    var outliers=itens.filter(function(o){return !valOk(o);}).map(function(o){return o.v;});
+    var nProt=itens.filter(function(o){return o.status==='VALIDO_PROT';}).length;
+    var medianaValida = validos.length ? calcQuartil(validos,0.5) : r.median;
+    var mediaValida = validos.length ? validos.reduce(function(s,x){return s+x;},0)/validos.length : 0;
+    var menorValido = validos.length ? Math.min.apply(null, validos) : 0;
+    var desvioPadrao=0;
+    if(validos.length>1){ var sq=validos.reduce(function(s,x){ return s+Math.pow(x-mediaValida,2); },0); desvioPadrao=Math.sqrt(sq/(validos.length-1)); }
+    var cv = mediaValida>0 ? (desvioPadrao/mediaValida)*100 : 0;
+    var criterioTCU = cv<=25 ? 'MEDIA' : 'MEDIANA';
+
+    var card='background:#f8fafc;border:1px solid #e2e8f0;padding:8px;border-radius:8px;font-size:10px';
+    var html='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:8px">';
+    if(metodo==='QUARTIS'){
+      html+='<div style="'+card+'"><b>Q1 (25%)</b><br><strong style="font-size:12px">R$ '+brl(r.q1)+'</strong></div>';
+      html+='<div style="'+card+'"><b>Q3 (75%)</b><br><strong style="font-size:12px">R$ '+brl(r.q3)+'</strong></div>';
+      html+='<div style="background:#fffbeb;border:1px solid #fde68a;padding:8px;border-radius:8px;font-size:10px"><b>IQR</b><br>'+brl(r.iqr)+'<br><small>Lim Inf: '+brl(r.limInf)+'<br>Lim Sup: '+brl(r.limSup)+'</small></div>';
+    } else {
+      html+='<div style="'+card+';grid-column:span 2"><b>Manual STJ (p. 27-31)</b><br><small>Cada preço é comparado à <b>média dos demais</b>. Acima de 125% é <b>excessivamente elevado</b> e sai primeiro. Depois, sem os excessivos, abaixo de 75% é <b>inexequível</b>.</small></div>';
+      html+='<div style="background:#fffbeb;border:1px solid #fde68a;padding:8px;border-radius:8px;font-size:10px"><b>Excluídos</b><br><strong style="font-size:12px">'+outliers.length+'</strong> de '+itens.length+'</div>';
+    }
+    html+='<div style="background:#f0f9ff;border:1px solid #7dd3fc;padding:8px;border-radius:8px;font-size:10px"><b>CV (Coef. de Variação)</b><br><strong style="font-size:14px;color:#0c4a6e">'+cv.toLocaleString('pt-BR',{minimumFractionDigits:1,maximumFractionDigits:1})+'%</strong><br><small>Válidos: '+validos.length+' / '+itens.length+'</small></div>';
+    html+='</div>';
+    if(nProt) html+='<div style="margin-top:8px;padding:7px 8px;border-radius:8px;font-size:10px;background:#e0f2fe;border:1px solid #7dd3fc">🛡 <b>'+nProt+' preço(s)</b> abaixo do limite foram <b>mantidos</b> por serem de ata, contrato público ou Banco de Preços (marca "Não excluir"). O Manual do STJ (p. 28) diz que esses valores não devem ser considerados inexequíveis.</div>';
+    if(validos.length<3) html+='<div style="margin-top:8px;padding:7px 8px;border-radius:8px;font-size:10px;background:#fee2e2;border:1px solid #fca5a5">⚠️ Restaram <b>'+validos.length+'</b> preço(s) válido(s). A IN 65/2021 pede no mínimo 3; com menos, o processo precisa de justificativa da autoridade competente.</div>';
+    html+='<div style="margin-top:8px;padding:8px;border-radius:8px;font-size:10px;background:'+(criterioTCU==='MEDIA'?'#dcfce7;border:1px solid #86efac':'#fef3c7;border:1px solid #fcd34d')+'">'
+        + (criterioTCU==='MEDIA'
+          ? '✅ <b>CV = '+cv.toFixed(1)+'% (≤25%)</b> → amostra homogênea. O TCU (item 4.3.9.3) recomenda usar a <b>MÉDIA</b> como preço de referência.'
+          : '⚠️ <b>CV = '+cv.toFixed(1)+'% (&gt;25%)</b> → forte dispersão. O TCU (item 4.3.9.3) recomenda usar a <b>MEDIANA</b> como preço de referência.')
+        + '</div>';
+    html+='<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-top:8px">';
+    html+='<button id="btnEscolherMedia" class="btn" style="padding:8px;font-weight:800;text-align:left" onclick="escolherCriterioCotacao(\'MEDIA\')"><span style="font-size:8px;display:block">MÉDIA SANEADA'+(criterioTCU==='MEDIA'?' • recomendado TCU':'')+'</span><span style="font-size:14px">R$ '+brl(mediaValida)+'</span></button>';
+    html+='<button id="btnEscolherMediana" class="btn" style="padding:8px;font-weight:800;text-align:left" onclick="escolherCriterioCotacao(\'MEDIANA\')"><span style="font-size:8px;display:block">MEDIANA SANEADA'+(criterioTCU==='MEDIANA'?' • recomendado TCU':'')+'</span><span style="font-size:14px">R$ '+brl(medianaValida)+'</span></button>';
+    html+='<button id="btnEscolherMenor" class="btn" style="padding:8px;font-weight:800;text-align:left" onclick="escolherCriterioCotacao(\'MENOR\')"><span style="font-size:8px;display:block">MENOR PREÇO VÁLIDO • Manual STJ</span><span style="font-size:14px">R$ '+brl(menorValido)+'</span></button>';
+    html+='</div>';
+    var colRef = metodo==='MEDIA_DEMAIS';
+    html+='<div style="overflow-x:auto"><table class="cot-table" style="margin-top:10px"><thead><tr><th>PREÇO</th><th>TIPO DE FONTE</th><th>FONTE</th>'+(colRef?'<th>MÉDIA DOS DEMAIS</th><th>%</th>':'')+'<th>AVALIAÇÃO</th></tr></thead><tbody>';
+    itens.forEach(function(o){
+      var t=tipoPorId(o.tipo), ok=valOk(o);
+      html+='<tr class="'+(ok?'valido':'outlier')+'"><td style="white-space:nowrap">R$ '+brl(o.v)+'</td>'
+        + '<td style="font-size:9px">'+esc(t.id?t.curto:'—')+(o.prot?' 🛡':'')+'</td>'
+        + '<td style="font-size:9px">'+esc(o.fonteNome)+'</td>'
+        + (colRef?'<td style="font-size:9px;white-space:nowrap">'+(o.ref!=null?'R$ '+brl(o.ref):'')+'</td><td style="font-size:9px">'+(o.pct!=null?o.pct.toFixed(0)+'%':'')+'</td>':'')
+        + '<td><span class="cot-badge" style="background:'+STATUS_COR[o.status]+'">'+STATUS_TXT[o.status]+'</span></td></tr>';
+    });
+    html+='</tbody></table></div>';
+    html+='<div id="cotacaoAcoesEscolha" style="margin-top:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">'
+        + '<button class="btn btn-primary" onclick="aplicarMedianaCotacao()">✅ APLICAR AO ITEM EM EDIÇÃO</button>'
+        + '<button class="btn btn-dark" onclick="salvarCalculoCotacao()">💾 Salvar este cálculo</button>'
+        + '<span style="font-size:9px;color:#64748b">Aplicar usa o item clicado em "Buscar Mercado"; Salvar guarda o cálculo para exportar junto com o orçamento</span>'
+        + '</div>';
+    document.getElementById('cotacaoResultado').innerHTML=html;
+
+    window._ultimaCotacaoDados = {
+      valores: itens.map(function(o){return o.v;}),
+      fontes: itens.map(function(o){return o.f;}),
+      tipos: itens.map(function(o){return o.tipo;}),
+      tiposNome: itens.map(function(o){ var t=tipoPorId(o.tipo); return t.id?t.curto:''; }),
+      protegidos: itens.map(function(o){return o.prot;}),
+      status: itens.map(function(o){return o.status;}),
+      refs: itens.map(function(o){return o.ref;}),
+      pcts: itens.map(function(o){return o.pct;}),
+      metodo: metodo,
+      q1:r.q1, q3:r.q3, iqr:r.iqr, limInf:r.limInf, limSup:r.limSup,
+      validos:validos, outliers:outliers,
+      mediana:medianaValida, media:mediaValida, menor:menorValido, cv:cv, criterioTCU:criterioTCU,
+      escolha: criterioTCU,
+      data: new Date().toISOString().slice(0,10)
+    };
+    window.escolherCriterioCotacao(criterioTCU);
+    var box=document.getElementById('cotacaoNovoItemBox'); if(box) box.style.display='block';
+  };
+  window.escolherCriterioCotacao=function(tipo){
+    var d=window._ultimaCotacaoDados; if(!d) return;
+    d.escolha=tipo;
+    d.valorEscolhido = tipo==='MEDIA' ? d.media : (tipo==='MENOR' ? d.menor : d.mediana);
+    [['btnEscolherMedia','MEDIA'],['btnEscolherMediana','MEDIANA'],['btnEscolherMenor','MENOR']].forEach(function(p){
+      var b=document.getElementById(p[0]); if(!b) return;
+      var on=(tipo===p[1]);
+      b.style.background=on?'#0f172a':'#f1f5f9'; b.style.color=on?'white':'#0f172a'; b.style.border=on?'2px solid #0f172a':'2px solid #cbd5e1';
+    });
+  };
+
+  // ---------- aplicar / inserir / salvar ----------
+  window.aplicarMedianaCotacao=function(valorForcado){
+    var dados=window._ultimaCotacaoDados;
+    if(!dados){ alert('Calcule a cotação (Calcular Quartis) antes de aplicar.'); return; }
+    var valor=(typeof valorForcado==='number') ? valorForcado : dados.valorEscolhido;
+    var rot=rotuloEscolha(dados.escolha);
+    if(typeof mercadoEditId!=='undefined' && mercadoEditId){
+      var o=orc.find(function(x){return x.id===mercadoEditId;});
+      if(o){
+        o.mercado=valor; o.mercado_loja=rot+' ('+metodoCurto(dados.metodo)+')'; o.mercado_data=new Date().toISOString().slice(0,10);
+        if(typeof saveOrc==='function') saveOrc(); if(typeof renderOrc==='function') renderOrc();
+        alert('Aplicado R$ '+brl(valor)+' ('+rot+') ao item '+o.codigo); window.fecharModalCotacaoGeral();
+      }
+    } else {
+      alert(rot+' calculada: R$ '+brl(valor)+'\nSelecione um item com "Buscar Mercado" para aplicar, ou use o formulário abaixo para inserir um item NOVO no orçamento.');
+    }
+  };
+  window.inserirItemMercadoNoOrcamento=function(){
+    var dados=window._ultimaCotacaoDados;
+    if(!dados){ alert('Calcule a cotação (Calcular Quartis) antes de inserir o item.'); return; }
+    var descr=((document.getElementById('cotNovoDescr')||{}).value||'').trim();
+    if(!descr){ alert('Informe a descrição do item.'); return; }
+    var codigo=((document.getElementById('cotNovoCodigo')||{}).value||'').trim();
+    var unid=((document.getElementById('cotNovoUnid')||{}).value||'UN').trim()||'UN';
+    var qtdNum=parseFloat(((document.getElementById('cotNovoQtd')||{}).value||'1').trim().replace(',','.'));
+    if(isNaN(qtdNum) || qtdNum<=0) qtdNum=1;
+    var valor=dados.valorEscolhido, rot=rotuloEscolha(dados.escolha);
+    var novoItem={
+      id: Date.now()+Math.random(), tipo:'ITEM',
+      codigo: codigo || ('MERC-'+Date.now()), descr: descr, unid: unid, qtd: qtdNum,
+      custo: valor, bdi: (window.bdiConfig?window.bdiConfig.principal:0) || 0,
+      mercado: valor,
+      mercado_loja: rot+' '+metodoCurto(dados.metodo)+' ('+dados.validos.length+'/'+(dados.validos.length+dados.outliers.length)+' válidos, CV '+dados.cv.toFixed(1)+'%)',
+      mercado_data: dados.data,
+      cotacao_fontes: dados.fontes, cotacao_valores: dados.valores,
+      cotacao_tipos: dados.tiposNome, cotacao_status: dados.status, cotacao_metodo: dados.metodo,
+      cotacao_q1: dados.q1, cotacao_q3: dados.q3, cotacao_iqr: dados.iqr, cotacao_cv: dados.cv,
+      cotacao_criterio: dados.escolha,
+      data_base: (document.getElementById('dataBaseEMOP')||{}).value || ''
+    };
+    var pos=-1;
+    try{ if(typeof perguntarLinhaInsert==='function') pos=perguntarLinhaInsert(); }catch(e){}
+    if(pos<0 || pos>=orc.length){ orc.push(novoItem); if(typeof insertPosIndex!=='undefined') insertPosIndex=-1; }
+    else { orc.splice(pos,0,novoItem); if(typeof insertPosIndex!=='undefined') insertPosIndex=pos; }
+    if(typeof saveOrc==='function') saveOrc();
+    if(typeof renderOrc==='function') renderOrc();
+    window._ultimoItemVinculadoCotacao={ codigo:novoItem.codigo, descr:novoItem.descr };
+    alert('✅ Item de mercado inserido no orçamento:\n'+descr+'\nCusto ('+rot+'): R$ '+brl(valor));
+    ['cotNovoCodigo','cotNovoDescr','cotNovoUnid'].forEach(function(id){ var el=document.getElementById(id); if(el) el.value=''; });
+    var qtdEl=document.getElementById('cotNovoQtd'); if(qtdEl) qtdEl.value='1';
+    window.fecharModalCotacaoGeral();
+  };
+  window.salvarCalculoCotacao=function(){
+    var dados=window._ultimaCotacaoDados;
+    if(!dados){ alert('Calcule a cotação (Calcular Quartis) antes de salvar.'); return; }
+    if(!window.SchuelerDB){ alert('Armazenamento local (IndexedDB) indisponível neste navegador.'); return; }
+    var info=(typeof orcamentoAtualInfo==='function') ? orcamentoAtualInfo() : {orcId:null, orcNome:''};
+    var usr=(typeof usuarioAtual==='function') ? usuarioAtual() : null;
+    var vinculado=null, rotulo='';
+    if(typeof mercadoEditId!=='undefined' && mercadoEditId){
+      var o=(typeof orc!=='undefined'?orc:[]).find(function(x){return x.id===mercadoEditId;});
+      if(o){ vinculado={codigo:o.codigo, descr:o.descr}; rotulo=(o.codigo?o.codigo+' — ':'')+o.descr; }
+    }
+    if(!vinculado && window._ultimoItemVinculadoCotacao){
+      vinculado=window._ultimoItemVinculadoCotacao; rotulo=(vinculado.codigo?vinculado.codigo+' — ':'')+vinculado.descr;
+    }
+    if(!rotulo){
+      rotulo=window.prompt('Este cálculo não está vinculado a nenhum item do orçamento.\nInforme uma descrição/etiqueta para identificá-lo na lista de cálculos salvos:', 'Cotação de '+dados.data) || ('Cotação de '+dados.data);
+    }
+    var registro={
+      orcId:info.orcId, orcNome:info.orcNome, rotulo:rotulo, vinculado:vinculado,
+      valores:dados.valores, fontes:dados.fontes,
+      tipos:dados.tipos, tiposNome:dados.tiposNome, protegidos:dados.protegidos, status:dados.status, refs:dados.refs, pcts:dados.pcts,
+      metodo:dados.metodo,
+      q1:dados.q1, q3:dados.q3, iqr:dados.iqr, limInf:dados.limInf, limSup:dados.limSup,
+      validos:dados.validos, outliers:dados.outliers,
+      mediana:dados.mediana, media:dados.media, menor:dados.menor, cv:dados.cv,
+      criterioTCU:dados.criterioTCU, escolha:dados.escolha, valorEscolhido:dados.valorEscolhido,
+      data:dados.data, ts:Date.now(),
+      usuario: usr ? (usr.nome || usr.usuario || usr.login || '') : ''
+    };
+    window.SchuelerDB.add('cotacoesQuartis', registro).then(function(){
+      return window.carregarCacheCotacoesSalvas();
+    }).then(function(){
+      window.renderCotacoesSalvas();
+      alert('💾 Cálculo salvo com sucesso!\n"'+rotulo+'"\nEle será sempre incluído na exportação do orçamento (aba "Cotações") e pode ser exportado individualmente na lista abaixo.');
+    }).catch(function(e){ alert('Erro ao salvar cálculo: '+(e&&e.message?e.message:e)); });
+  };
+  window.renderCotacoesSalvas=function(){
+    var box=document.getElementById('cotacoesSalvasBox'); if(!box) return;
+    var lista=window._cotacoesSalvasCache||[];
+    if(!lista.length){ box.innerHTML='<div style="font-size:9px;color:#94a3b8;padding:6px">Nenhum cálculo salvo ainda.</div>'; return; }
+    var html='<table class="cot-table" style="width:100%"><thead><tr><th>DATA</th><th>ITEM / ETIQUETA</th><th>MEDIANA</th><th>MÉDIA</th><th>CV%</th><th>CRITÉRIO</th><th></th></tr></thead><tbody>';
+    lista.forEach(function(c){
+      html+='<tr>'
+        + '<td style="font-size:9px">'+esc(c.data||'')+'</td>'
+        + '<td style="font-size:9px">'+esc(c.rotulo||'')+'</td>'
+        + '<td style="font-size:9px">R$ '+brl(c.mediana)+'</td>'
+        + '<td style="font-size:9px">R$ '+brl(c.media)+'</td>'
+        + '<td style="font-size:9px">'+(Number(c.cv)||0).toFixed(1)+'%</td>'
+        + '<td style="font-size:9px">'+rotuloEscolhaCurto(c.escolha)+(c.escolha===c.criterioTCU?' • TCU':'')+'<br><span style="color:#64748b">'+metodoCurto(c.metodo)+'</span></td>'
+        + '<td style="white-space:nowrap"><button class="btn btn-ghost" style="padding:2px 6px;font-size:9px;border:1px solid #cbd5e1" onclick="exportarCalculoCotacaoIndividual('+c.id+')">📥</button> '
+        + '<button class="btn btn-ghost" style="padding:2px 6px;font-size:9px;border:1px solid #fca5a5;color:#dc2626" onclick="removerCotacaoSalva('+c.id+')">🗑️</button></td>'
+        + '</tr>';
+    });
+    box.innerHTML=html+'</tbody></table>';
+  };
+
+  // ---------- exportação ----------
+  // linhas de preço de um cálculo salvo (cálculos antigos, sem tipo/status, usam os limites salvos)
+  function linhasPreco(c){
+    return (c.valores||[]).map(function(v,i){
+      var st=(c.status||[])[i];
+      var aval = st ? STATUS_TXT[st] : ((v<c.limInf || v>c.limSup) ? 'OUTLIER' : 'VÁLIDO');
+      var tId=(c.tipos||[])[i]||'', t=tipoPorId(tId);
+      return { v:Number(v)||0, f:(c.fontes||[])[i]||'', aval:aval,
+               tipo:(c.tiposNome||[])[i] || (t.id?t.curto:''), base:t.base, prot:!!(c.protegidos||[])[i],
+               ref:(c.refs||[])[i], pct:(c.pcts||[])[i] };
+    }).sort(function(a,b){return a.v-b.v;});
+  }
+  window.exportarCalculoCotacaoIndividual=function(id){
+    var c=(window._cotacoesSalvasCache||[]).find(function(x){ return x.id===id; });
+    if(!c){ alert('Cálculo não encontrado.'); return; }
+    if(typeof XLSX==='undefined'){ alert('Biblioteca de exportação (XLSX) não carregada.'); return; }
+    var stj = c.metodo==='MEDIA_DEMAIS';
+    var dadosCab=[
+      ['CÁLCULO DE COTAÇÃO — '+(stj?'MÉDIA DOS DEMAIS (MANUAL STJ, 75% / 125%)':'MÉTODO QUARTIS (TCU 4.3.9.3)')],
+      ['Item / Etiqueta', c.rotulo||''],
+      ['Data', c.data||''],
+      ['Usuário', c.usuario||''],
+      ['Critério de exclusão', (METODOS[c.metodo]||METODOS.QUARTIS).nome],
+      ['Q1 (25%)', Number(c.q1)||0],
+      ['Q3 (75%)', Number(c.q3)||0],
+      ['IQR', Number(c.iqr)||0],
+      ['Limite Inferior', stj?'75% da média dos demais':(Number(c.limInf)||0)],
+      ['Limite Superior', stj?'125% da média dos demais':(Number(c.limSup)||0)],
+      ['Coeficiente de Variação (CV)', (Number(c.cv)||0).toFixed(2)+'%'],
+      ['Critério recomendado (TCU)', c.criterioTCU==='MEDIA'?'Média':'Mediana'],
+      ['Critério utilizado', rotuloEscolhaCurto(c.escolha)],
+      ['Mediana Saneada (R$)', Number(c.mediana)||0],
+      ['Média Saneada (R$)', Number(c.media)||0],
+      ['Menor Preço Válido (R$)', c.menor!=null ? (Number(c.menor)||0) : ''],
+      ['Valor Aplicado (R$)', Number(c.valorEscolhido)||0],
+      ['Fontes não excluíveis', 'Atas de registro de preços, contratos públicos e Banco de Preços marcados com 🛡 não são excluídos como inexequíveis (Manual de Pesquisa de Preços do STJ, 4ª ed., p. 28). Preço excessivamente elevado é excluído de qualquer fonte.'],
+      []
+    ];
+    var wsCab=XLSX.utils.aoa_to_sheet(dadosCab);
+    wsCab['!cols']=[{wch:32},{wch:60}];
+    var dadosVal=[['PREÇO COLETADO (R$)','AVALIAÇÃO','FONTE','TIPO DE FONTE','BASE (IN 65/2021)','NÃO EXCLUIR 🛡','MÉDIA DOS DEMAIS (R$)','% DA MÉDIA DOS DEMAIS']];
+    linhasPreco(c).forEach(function(o){
+      dadosVal.push([o.v, o.aval, o.f, o.tipo, o.base, o.prot?'SIM':'', o.ref!=null?Number(o.ref):'', o.pct!=null?Math.round(o.pct)+'%':'']);
+    });
+    var wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, wsCab, 'Resumo');
+    var wsTab=XLSX.utils.aoa_to_sheet(dadosVal);
+    estilizarPlanilhaBanco(wsTab, 8, [{wch:16},{wch:30},{wch:44},{wch:18},{wch:30},{wch:10},{wch:16},{wch:12}]);
+    XLSX.utils.book_append_sheet(wb, wsTab, 'Preços Coletados');
+    var nomeArq='Cotacao_'+(c.rotulo||'item').replace(/[^a-zA-Z0-9À-ÿ _-]/g,'').slice(0,40).trim()+'_'+(c.data||new Date().toISOString().slice(0,10))+'.xlsx';
+    XLSX.writeFile(wb, nomeArq);
+  };
+  // aba "Cotações" do XLSX do orçamento: mesmas 13 colunas de antes + 3 novas no fim
+  window.adicionarPlanilhaCotacoes=function(wb){
+    var salvos=window._cotacoesSalvasCache||[];
+    var comCotacaoNaoSalva=(typeof orc!=='undefined'?orc:[]).filter(function(l){
+      return l.tipo==='ITEM' && Array.isArray(l.cotacao_valores) && l.cotacao_valores.length &&
+        !salvos.some(function(s){ return s.vinculado && s.vinculado.codigo===l.codigo && s.vinculado.descr===l.descr; });
+    });
+    if(!salvos.length && !comCotacaoNaoSalva.length) return;
+    var linhas=[['ITEM / ETIQUETA','MEDIANA SANEADA (R$)','MÉDIA SANEADA (R$)','CRITÉRIO UTILIZADO','CV (%)','CRITÉRIO TCU','Q1 (25%)','Q3 (75%)','IQR','QTD VÁLIDOS/EXCLUÍDOS','FONTES / VALORES COLETADOS','DATA','USUÁRIO','CRITÉRIO DE EXCLUSÃO','MENOR PREÇO VÁLIDO (R$)','TIPO DE FONTE / AVALIAÇÃO']];
+    salvos.forEach(function(c){
+      var lp=linhasPreco(c);
+      linhas.push([
+        c.rotulo||'', Number(c.mediana)||0, Number(c.media)||0,
+        rotuloEscolhaCurto(c.escolha), Number(c.cv)||0,
+        c.criterioTCU==='MEDIA'?'Média (CV≤25%)':'Mediana (CV>25%)',
+        Number(c.q1)||0, Number(c.q3)||0, Number(c.iqr)||0,
+        (c.validos?c.validos.length:0)+' válidos / '+(c.outliers?c.outliers.length:0)+' excluídos',
+        (c.fontes||[]).join(' | '), c.data||'', c.usuario||'',
+        (METODOS[c.metodo]||METODOS.QUARTIS).nome,
+        c.menor!=null ? (Number(c.menor)||0) : '',
+        lp.map(function(o){ return 'R$ '+brl(o.v)+' ['+(o.tipo||'tipo não informado')+(o.prot?' 🛡':'')+'] '+o.aval; }).join(' | ')
+      ]);
+    });
+    comCotacaoNaoSalva.forEach(function(it){
+      var tiposTxt=(it.cotacao_valores||[]).map(function(v,i){
+        var st=(it.cotacao_status||[])[i];
+        return 'R$ '+brl(v)+' ['+((it.cotacao_tipos||[])[i]||'tipo não informado')+']'+(st?' '+STATUS_TXT[st]:'');
+      }).join(' | ');
+      linhas.push([
+        (it.codigo?it.codigo+' — ':'')+(it.descr||''), Number(it.mercado)||0, '',
+        rotuloEscolhaCurto(it.cotacao_criterio), Number(it.cotacao_cv)||0,
+        '', Number(it.cotacao_q1)||0, Number(it.cotacao_q3)||0, Number(it.cotacao_iqr)||0,
+        (it.cotacao_valores||[]).length+' valores', (it.cotacao_fontes||[]).join(' | '), it.mercado_data||'', '',
+        (METODOS[it.cotacao_metodo]||METODOS.QUARTIS).nome, '', tiposTxt
+      ]);
+    });
+    var ws=XLSX.utils.aoa_to_sheet(linhas);
+    estilizarPlanilhaBanco(ws, 16, [{wch:34},{wch:16},{wch:16},{wch:16},{wch:10},{wch:18},{wch:12},{wch:12},{wch:10},{wch:20},{wch:60},{wch:12},{wch:14},{wch:40},{wch:16},{wch:70}]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Cotações');
+  };
+
+  // janela pronta já na abertura (se alguém abrir pelo HTML antigo)
+  try{ prepararJanela(); }catch(e){}
+})();
+</script>
+<!-- FIM PATCH V1-02-33 -->
+
 </body>
 </html>
