@@ -1824,7 +1824,7 @@ const AJUDA = {
   tp_larg: `<b>Largura (m)</b> — largura total da plataforma da estaca, incluindo bermas e meio-fio.`,
   tp_na: `<b>Cota do N.A. (m)</b> — cota do nível d'água nesta estaca (cota, não profundidade). Deixe vazio se não houver sondagem.`,
   tp_form: `<b>Formação no eixo (m)</b> = greide − espessura estrutural total. Corte e aterro são medidos contra esta cota.`,
-  tp_afna: `<b>Afastamento do N.A. (m)</b> = formação no eixo − cota do N.A.<br>Fica em destaque quando é menor que o afastamento mínimo da aba Dimensionamento.`
+  tp_afna: `<b>Afastamento do N.A. (m)</b> = formação na borda mais baixa − cota do N.A.<br>Formação na borda = formação no eixo − (largura ÷ 2) × caimento, no lado de maior caimento.<br>Fica em destaque quando é menor que o afastamento mínimo da aba Dimensionamento.`
 };
 
 function iniciarAjuda() {
@@ -2047,7 +2047,9 @@ function calcTopo() {
     if (L.gr === null) {return;}
     L.form = L.gr - eTot; // cota de formação no eixo
     if (L.na !== null && L.na > 0) {
-      L.afna = L.form - L.na;
+      // formação mais baixa da seção: na borda, descontado o caimento transversal
+      L.formNA = L.form - (L.larg || 0) / 2 * Math.max(cEsq, cDir, 0);
+      L.afna = L.formNA - L.na;
       L.naCritico = L.afna < afMin;
     }
     const tC = L.tc;
@@ -3824,7 +3826,7 @@ ${body}</body></html>`;
     const resumoRows = topoResumo().map((r) => `<tr><td>${r[0].replace(/:$/, '')}</td><td>${r[1]}</td></tr>`).join('');
     const secaoRows = L.map((d) => `<tr><td>${c(d.est)}</td><td>${c3(d.te)}</td><td>${c3(d.tc)}</td><td>${c3(d.td)}</td><td>${c3(d.gr)}</td><td>${c(d.larg)}</td><td>${c3(d.form)}</td><td>${c(d.ac)}</td><td>${c(d.aa)}</td><td>${d.sit}</td></tr>`).join('');
     const volRows = L.map((d) => `<tr><td>${c(d.est)}</td><td>${c(d.dl)}</td><td>${c(d.vc)}</td><td>${c(d.va)}</td><td>${c(d.vr)}</td><td>${c(d.vcb)}</td><td>${c(d.vbs)}</td><td>${c(d.vsb)}</td><td>${c(d.vrf)}</td></tr>`).join('');
-    const naRows = L.filter((d) => d.na !== null && d.na > 0).map((d) => `<tr><td>${c(d.est)}</td><td>${c3(d.form)}</td><td>${c3(d.na)}</td><td>${c(d.afna)}</td><td>${d.naCritico ? 'ABAIXO DO MÍNIMO' : 'Atende'}</td></tr>`).join('');
+    const naRows = L.filter((d) => d.na !== null && d.na > 0).map((d) => `<tr><td>${c(d.est)}</td><td>${c3(d.formNA)}</td><td>${c3(d.na)}</td><td>${c(d.afna)}</td><td>${d.naCritico ? 'ABAIXO DO MÍNIMO' : 'Atende'}</td></tr>`).join('');
     html = wrap(`
     <h2>Resumo de Volumes</h2>
     <p>Corte e aterro medidos contra a cota de formação, igual ao greide menos a espessura estrutural do pavimento. Volumes entre estacas pela média das áreas extremas.</p>
@@ -3834,7 +3836,7 @@ ${body}</body></html>`;
     <h2>Volumes por Trecho</h2>
     <table><tr><th>Estaca</th><th>Dist. (m)</th><th>Corte (m³)</th><th>Aterro (m³)</th><th>Reaterro (m³)</th><th>CBUQ (m³)</th><th>Base (m³)</th><th>Sub-base (m³)</th><th>Reforço (m³)</th></tr>${volRows}</table>
     ${naRows ? `<h2>Verificação do Nível d'Água</h2>
-    <table><tr><th>Estaca</th><th>Cota de Formação</th><th>Cota do N.A.</th><th>Afastamento (m)</th><th>Situação</th></tr>${naRows}</table>` : ''}
+    <table><tr><th>Estaca</th><th>Formação na borda (mais baixa)</th><th>Cota do N.A.</th><th>Afastamento (m)</th><th>Situação</th></tr>${naRows}</table>` : ''}
     `, 'Topografia e Volumes');
 
   } else if (tab === 'mem') {
