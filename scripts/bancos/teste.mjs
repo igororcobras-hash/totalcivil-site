@@ -35,13 +35,19 @@ function planilhaSinapi(o = {}){
     });
     return XLSX.utils.aoa_to_sheet(rows);
   }
+  // como na planilha da Caixa: nas composições cada estado tem 2 colunas (Custo e %AS) e o
+  // nome do estado fica na linha de cima (RJ sobre a coluna 40)
   function abaComp(campo, titulo){
     const rows = topo(titulo);
-    rows.push(['Grupo', 'Código da Composição', 'Descrição', 'Unidade'].concat(ufsCab));
+    rows[8] = ['', '', '', ''];
+    ufsCab.forEach(u => { rows[8].push(u, ''); });
+    const cab = ['Grupo', 'Código da Composição', 'Descrição', 'Unidade'];
+    UFS.forEach(() => cab.push('Custo (R$)', '%AS'));
+    rows.push(cab);
     emb.sinapi.composicoes.forEach(c => {
       const p = r2(c[campo]);
       const linha = [c.GRUPO, +c.CODIGO.slice(3), c.DESCR1, c.UNID];
-      UFS.forEach(u => linha.push(u === 'RJ' ? p : Math.round(p * (0.7 + (u.charCodeAt(1) % 7) / 10) * 100) / 100));
+      UFS.forEach(u => linha.push(u === 'RJ' ? p : Math.round(p * (0.7 + (u.charCodeAt(1) % 7) / 10) * 100) / 100, 0.3));
       rows.push(linha);
     });
     return XLSX.utils.aoa_to_sheet(rows);

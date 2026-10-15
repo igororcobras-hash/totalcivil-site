@@ -52,8 +52,17 @@ export function conferirCabecalhosSinapi(rel, wb, leitores){
     rel.exigir(!ruins.length, aba + ': colunas Código/Descrição/Unidade' + (aba === 'Analítico' ? '/Tipo/Coeficiente' : '') + ' no lugar certo',
       aba + ': coluna(s) fora do lugar: ' + ruins.map(i => '#' + i + ' = "' + (cab[i] || '') + '"').join(', '));
     if(aba !== 'Analítico'){
-      const col = L.acharColunaUF(rows[h] || [], 'RJ');
-      rel.exigir(col >= 0, aba + ': coluna RJ achada pelo título (coluna ' + col + ')', aba + ': não achei a coluna "RJ" pelo título');
+      // A coluna que o leitor do programa usa: a do título "RJ" na linha de títulos ou, se não
+      // houver, a posição fixa (23 nos insumos, 40 nas composições). Nas composições o "RJ" fica
+      // numa linha acima (célula mesclada sobre Custo e %AS); por isso procura até 4 linhas acima
+      // e exige que o título "RJ" esteja exatamente sobre a coluna que vai ser lida.
+      const colTitulo = L.acharColunaUF(rows[h] || [], 'RJ');
+      const colLida = colTitulo >= 0 ? colTitulo : (e.marcador === 'Grupo' ? 40 : 23);
+      const achados = [];
+      for(let i = Math.max(0, h - 4); i <= h; i++) (rows[i] || []).forEach((v, c) => { if(String(v == null ? '' : v).trim() === 'RJ') achados.push({ linha: i + 1, col: c }); });
+      const certo = achados.filter(a => a.col === colLida)[0];
+      rel.exigir(!!certo, aba + ': título "RJ" sobre a coluna lida (coluna ' + colLida + (certo ? ', linha ' + certo.linha : '') + ')',
+        aba + ': o título "RJ" não está sobre a coluna lida (' + colLida + '); "RJ" achado em: ' + (achados.map(a => 'linha ' + a.linha + ' coluna ' + a.col).join(', ') || 'nenhum lugar'));
       const topo = rows.slice(0, h).map(r => (r || []).join(' ')).join(' ');
       if(e.contrario.test(topo) && !e.onera.test(topo)) rel.falha(aba + ': o título da aba diz o contrário do esperado (' + e.contrario + ')');
       else if(e.onera.test(topo)) rel.ok(aba + ': título confirma ' + (/SEM/.test(String(e.onera)) ? 'SEM' : 'COM') + ' desoneração');
