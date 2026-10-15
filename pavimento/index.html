@@ -1066,7 +1066,7 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
             <td>Base</td>
             <td>Brita Graduada Simples (BGS)</td>
             <td>BGTC, Macadame betuminoso, PMF</td>
-            <td>CBR ≥ 80%, expansão ≤ 0,5%, LL ≤ 25%, IP ≤ 6% (CBR ≥ 60% se N ≤ 5×10⁶)</td>
+            <td id="o_mat_base">CBR ≥ 80%, expansão ≤ 0,5%, LL ≤ 25%, IP ≤ 6% (CBR ≥ 60% se N ≤ 5×10⁶)</td>
             <td>CBR, granulometria, LL/LP</td>
             <td>Compactação ≥ 100% Proctor Normal</td>
             <td>DNIT 141/2010-ES; IPR-719</td>
@@ -1075,7 +1075,7 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
             <td>Sub-base</td>
             <td>Material granular selecionado</td>
             <td>Solo melhorado c/ cimento (SMC), Rachão</td>
-            <td>CBR ≥ 20%, IG = 0, expansão ≤ 1%</td>
+            <td id="o_mat_sb">CBR ≥ 20%, IG = 0, expansão ≤ 1%</td>
             <td>CBR, LL/LP, granulometria</td>
             <td>Compactação ≥ 100% Proctor Normal</td>
             <td>DNIT 139/2010-ES; IPR-719</td>
@@ -1084,7 +1084,7 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
             <td>Reforço do Subleito</td>
             <td>Solo estabilizado granulometricamente</td>
             <td>Solo melhorado c/ cal, Solo-cimento</td>
-            <td>CBR maior que o do subleito, expansão ≤ 1%</td>
+            <td id="o_mat_ref">CBR maior que o do subleito, expansão ≤ 1%</td>
             <td>CBR, LL, IG</td>
             <td>Espessura calculada pelas inequações</td>
             <td>DNIT 138/2010-ES; IPR-719</td>
@@ -1805,6 +1805,10 @@ function calc() {
   set('o_tipo_rev_txt', (s('tipo_rev') || 'auto') === 'auto' ?
   'Adotado: ' + nomeRev() + ' — automático pela Tabela 32' : 'Adotado: ' + nomeRev() + ' — DNIT IPR-719, Tabelas 31 e 32');
   set('o_crit_mat_txt', critMat().fonte);
+  {const rig = critMat().rig,obs = rig ? ' — mais rígido que o IPR-719' : '';
+    set('o_mat_base', 'CBR ≥ 80%, expansão ≤ ' + (rig ? '0,3' : '0,5') + '%, LL ≤ 25%, IP ≤ 6% (CBR ≥ 60% se N ≤ 5×10⁶)' + obs);
+    set('o_mat_sb', 'CBR ≥ 20%, IG = 0, expansão ≤ ' + (rig ? '0,5%, IP ≤ 6' : '1%') + obs);
+    set('o_mat_ref', 'CBR maior que o do subleito, expansão ≤ 1%' + (rig ? ', IP ≤ 10' : '') + obs);}
   set('o_k_ref_txt', rev_ts ? 'Não entra no cálculo: tratamento superficial (R·KR = 0)' :
   'Tabela 31: ' + nomeRev() + ' = ' + fmt(REV_TIPOS[tipo_rev].k, 2));
   set('o_cbr_base_show', fmt(cbr_base_val, 1) + '%');
