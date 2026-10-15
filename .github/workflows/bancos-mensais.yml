@@ -4,6 +4,11 @@ name: Bancos mensais SINAPI e SCO
 # converte e grava em orcamento/dados/ (um arquivo por mês; os meses anteriores ficam).
 # Se uma conferência falhar, o mês não é gravado e o GitHub manda e-mail com o motivo.
 on:
+  # Num PR que mexe na rotina: baixa e confere de verdade, mas não grava nada no site
+  pull_request:
+    paths:
+      - 'scripts/bancos/**'
+      - '.github/workflows/bancos-mensais.yml'
   schedule:
     - cron: '17 10 3-28 * *'   # todo dia, do dia 3 ao 28, às 07:17 de Brasília
   workflow_dispatch:
@@ -44,9 +49,14 @@ jobs:
           DESDE: ${{ github.event.inputs.desde || '' }}
         run: |
           set +e
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            export BANCOS_PASTA_DADOS="$RUNNER_TEMP/dados"; cp -r ../../orcamento/dados "$BANCOS_PASTA_DADOS"
+            echo "Teste do PR: nada é gravado no site."
+          fi
           if [ -n "$DESDE" ]; then node atualizar.mjs --fonte "$FONTE" --desde "$DESDE"; else node atualizar.mjs --fonte "$FONTE"; fi
           echo "resultado=$?" >> "$GITHUB_ENV"
       - name: Publicar no site os meses gravados
+        if: github.event_name != 'pull_request'
         run: |
           git add orcamento/dados
           if git diff --cached --quiet; then echo "Nenhum mês novo."; exit 0; fi
