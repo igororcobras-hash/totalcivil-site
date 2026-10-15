@@ -5638,7 +5638,21 @@ function acharLinhaHeader(rows, marcador, maxLinhas){
 function sheetToRows(wb, nome){
   var ws = wb.Sheets[nome];
   if(!ws) return null;
-  return XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true});
+  var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true});
+  // V1-02-35: na planilha da Caixa de 09/2026 o código da composição (coluna B das abas CSD/CCD)
+  // vem como fórmula (link para a ficha) sem o valor salvo, e era lido como 0. Nesse caso o
+  // código é o último número escrito dentro da fórmula.
+  try{
+    var rg = XLSX.utils.decode_range(ws['!ref']);
+    for(var R=rg.s.r; R<=rg.e.r; R++){
+      var cel = ws[XLSX.utils.encode_cell({r:R, c:1})];
+      if(!cel || !cel.f || (cel.v!==undefined && cel.v!==null && cel.v!=='' && cel.v!==0)) continue;
+      var m = /([0-9]{3,})[^0-9]*$/.exec(String(cel.f));
+      var lin = rows[R-rg.s.r];
+      if(m && lin) lin[1] = Number(m[1]);
+    }
+  }catch(e){}
+  return rows;
 }
 function parseInsumosOficial(rows, uf){
   var hIdx = acharLinhaHeader(rows, 'Classificação', 15);

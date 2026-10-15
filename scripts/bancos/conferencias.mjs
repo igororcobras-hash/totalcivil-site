@@ -51,6 +51,8 @@ export function conferirCabecalhosSinapi(rel, wb, leitores){
     if(process.env.BANCOS_MOSTRAR_LINHAS){   // diagnóstico: como a aba está montada
       const curto = r => (r || []).slice(0, 8).map(v => String(v == null ? '·' : v).replace(/\s+/g, ' ').slice(0, 25)).join(' | ');
       rel.aviso(aba + ': ' + rows.length + ' linhas; títulos na linha ' + (h + 1));
+      const ws = wb.Sheets[aba];
+      ['B' + (h + 2), 'B' + (h + 3)].forEach(ref => rel.aviso('   célula ' + ref + ' como está no arquivo: ' + JSON.stringify(ws[ref] || null).slice(0, 300)));
       for(let i = Math.max(0, h - 3); i < Math.min(rows.length, h + 5); i++) rel.aviso('   L' + (i + 1) + ': ' + curto(rows[i]) + '  …[40]=' + String((rows[i] || [])[40]));
     }
     const ruins = Object.keys(e.colunas).filter(i => !e.colunas[i].test(cab[i] || ''));

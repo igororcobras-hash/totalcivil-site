@@ -50,7 +50,13 @@ function planilhaSinapi(o = {}){
       UFS.forEach(u => linha.push(u === 'RJ' ? p : Math.round(p * (0.7 + (u.charCodeAt(1) % 7) / 10) * 100) / 100, 0.3));
       rows.push(linha);
     });
-    return XLSX.utils.aoa_to_sheet(rows);
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    // como na planilha da Caixa de 09/2026: o código é um link (fórmula) sem o valor salvo
+    for(let k = 10; k < rows.length; k++){
+      const cod = rows[k][1];
+      ws['B' + (k + 1)] = { t: 'n', v: 0, f: 'HYPERLINK("https://www.caixa.gov.br/fichas/' + cod + '.pdf",' + cod + ')' };
+    }
+    return ws;
   }
   const ana = [['Analítico'], [], ['Mês de Referência', ref], [], [], [], [], [], [], []];
   ana.push(['Grupo', 'Código da Composição', 'Tipo Item', 'Código do Item', 'Descrição', 'Unidade', 'Coeficiente']);
