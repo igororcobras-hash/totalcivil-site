@@ -65,10 +65,10 @@ export function lerReferencia(v){
 
 async function baixar(url){
   let ultimoErro = null;
-  for(let t = 1; t <= 3; t++){
+  for(let t = 1; t <= 4; t++){
     try{
       const ctrl = new AbortController();
-      const timer = setTimeout(() => ctrl.abort(), 180000);
+      const timer = setTimeout(() => ctrl.abort(), 600000);   // o ZIP da SINAPI é grande e o site da Caixa é lento
       const r = await fetch(url, { headers: { 'User-Agent': UA, 'Accept': '*/*', 'Accept-Language': 'pt-BR,pt;q=0.9' }, redirect: 'follow', signal: ctrl.signal });
       clearTimeout(timer);
       if(r.status === 404) return { status: 404, buf: null };
@@ -76,8 +76,9 @@ async function baixar(url){
       if(!r.ok) throw new Error('HTTP ' + r.status + ' em ' + url);
       return { status: r.status, buf, tipo: r.headers.get('content-type') || '' };
     }catch(e){
-      ultimoErro = e;
-      await new Promise(res => setTimeout(res, 2000 * t * t));
+      ultimoErro = new Error('não consegui baixar ' + url + ' (tentativa ' + t + ' de 4): ' + (e.name === 'AbortError' ? 'demorou mais de 10 minutos' : (e.cause && (e.cause.code || e.cause.message)) || e.message));
+      console.log(ultimoErro.message);
+      await new Promise(res => setTimeout(res, 15000 * t));
     }
   }
   throw ultimoErro;
