@@ -457,7 +457,7 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
     <div class="sec-title">Dados de Entrada — Número N e CBR <span class="sec-dica">passe o mouse (ou toque no ⓘ) sobre cada item para ver a explicação</span></div>
     <div class="grid3">
       <div class="field" data-ajuda="dim_N_display">
-        <label>Número N (eixos equiv. — cenários do Quadro 2.1 da IP-02/2004, PMSP, ou valor calculado)</label>
+        <label>Número N (eixos equiv. — método do DNIT ou N do estudo de tráfego)</label>
         <div class="out-cell"><div class="val" id="dim_N_display">—</div></div>
         <span class="unit">Definido na aba Número N · N = operações de eixo padrão de 8,2 tf</span>
       </div>
@@ -508,11 +508,12 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
       <div class="field" data-ajuda="modo_fator">
         <label>Fator de Segurança sobre H₂₀ — inequação [1]</label>
         <select id="modo_fator" onchange="calc()">
-          <option value="auto">Automático — 1,20 quando N &gt; 10⁷</option>
+          <option value="auto">Padrão IPR-719 — 1,00</option>
           <option value="1">1,00 — sem majoração</option>
-          <option value="0.8">0,80 — sub-base CBR ≥ 40% e N ≤ 10⁶</option>
+          <option value="1.2">1,20 — método DNER original (N &gt; 10⁷), não consta do IPR-719</option>
+          <option value="0.8">0,80 — método DNER original (sub-base CBR ≥ 40% e N ≤ 10⁶), não consta do IPR-719</option>
         </select>
-        <span class="unit">Majora a proteção exigida da sub-base</span>
+        <span class="unit">O IPR-719 usa R·KR + B·KB ≥ H₂₀, sem fator</span>
       </div>
     </div>
     <div class="grid3" style="margin-top:10px;">
@@ -526,10 +527,22 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
   <div class="sec">
     <div class="sec-title">Coeficientes Estruturais (K) por Camada</div>
     <div class="grid4">
+      <div class="field" data-ajuda="tipo_rev">
+        <label>Tipo de revestimento</label>
+        <select id="tipo_rev" onchange="tipoRevMudou()">
+          <option value="auto">Automático (Tabela 32)</option>
+          <option value="CBUQ">Concreto betuminoso (CBUQ) — K 2,00</option>
+          <option value="PMQ">Pré-misturado a quente, graduação densa — K 1,70</option>
+          <option value="PMF">Pré-misturado a frio, graduação densa — K 1,40</option>
+          <option value="PEN">Betuminoso por penetração — K 1,20</option>
+          <option value="TS">Tratamento superficial — R·KR = 0</option>
+        </select>
+        <span class="unit" id="o_tipo_rev_txt">DNIT IPR-719, Tabelas 31 e 32</span>
+      </div>
       <div class="field" data-ajuda="k_ref">
-        <label>K Revestimento — CBUQ</label>
+        <label>K Revestimento</label>
         <input type="number" id="k_ref" value="2.0" step="0.01" min="0.01" oninput="calc()">
-        <span class="unit">K = 2,0 (DNIT IPR-719, Tabela 31)</span>
+        <span class="unit" id="o_k_ref_txt">DNIT IPR-719, Tabela 31</span>
       </div>
       <div class="field" data-ajuda="k_base">
         <label>K Base</label>
@@ -570,8 +583,8 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
         </tr></thead>
         <tbody>
           <tr>
-            <td>Revestimento (CBUQ)</td>
-            <td>Concreto Betuminoso Usinado a Quente</td>
+            <td id="o_rev_nome">Revestimento (CBUQ)</td>
+            <td id="o_rev_mat">Concreto betuminoso usinado a quente (CBUQ)</td>
             <td>—</td>
             <td id="o_k_ref_show">—</td>
             <td id="o_emin_ref">—</td>
@@ -618,7 +631,7 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
   <div class="sec">
     <div class="sec-title">Estrutura Final Adotada</div>
     <div class="grid4">
-      <div><div class="out-cell"><div class="lbl">Revestimento CBUQ (cm)</div><div class="val" id="ef_ref">—</div></div></div>
+      <div><div class="out-cell"><div class="lbl">Revestimento (cm)</div><div class="val" id="ef_ref">—</div></div></div>
       <div><div class="out-cell"><div class="lbl">Base (cm)</div><div class="val" id="ef_base">—</div></div></div>
       <div><div class="out-cell"><div class="lbl">Sub-base (cm)</div><div class="val" id="ef_sb">—</div></div></div>
       <div><div class="out-cell"><div class="lbl">Reforço Subleito (cm)</div><div class="val" id="ef_r">—</div></div></div>
@@ -693,7 +706,7 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
         <thead><tr>
           <th>Fator CBR</th><th>CBR_sub</th><th>CBR_ref</th><th>CBR_sb</th>
           <th>H₂₀ (cm)</th><th>Hn (cm)</th><th>Hm (cm)</th>
-          <th>CBUQ (cm)</th><th>Base (cm)</th><th>Sub-base (cm)</th><th>Reforço (cm)</th><th>Total (cm)</th>
+          <th>Revest. (cm)</th><th>Base (cm)</th><th>Sub-base (cm)</th><th>Reforço (cm)</th><th>Total (cm)</th>
         </tr></thead>
         <tbody id="sens_tbody"></tbody>
       </table>
@@ -709,61 +722,70 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
 </div>
 
 <!-- ============================================================
-     TAB: NÚMERO N (Quadro 2.1 da IP-02/2004, PMSP)
+     TAB: NÚMERO N (DNIT IPR-719, p. 143–144)
      ============================================================ -->
 <div id="tab-numN" class="tab-content">
   <div class="sec">
-    <div class="sec-title">Seleção do Número N — cenários do Quadro 2.1 da IP-02/2004 (Prefeitura de São Paulo, SIURB/PMSP)</div>
-    <p style="font-size:11px;color:var(--fg3);margin-bottom:12px;">Selecione o cenário de tráfego que melhor representa a via em projeto. O valor de N será transferido automaticamente para a aba Dimensionamento.</p>
+    <div class="sec-title">Número N — método do DNIT (Manual de Pavimentação IPR-719, p. 143–144)</div>
+    <p style="font-size:11px;color:var(--fg3);margin-bottom:12px;">Calcule o N pelo método do DNIT ou informe o N do seu estudo de tráfego. O valor é transferido automaticamente para a aba Dimensionamento.</p>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:16px;">
-      <div class="n-scenario-card" id="sc_0" onclick="selectScenario(0)">
-        <div class="sc-label">Via Local — LEVE</div>
-        <div class="sc-val">N = 1,00 × 10⁵</div>
-        <div style="font-size:10px;color:var(--fg3);margin-top:2px;">Vias locais, tráfego predominantemente de passeio</div>
+      <div class="n-scenario-card selected" id="sc_0" onclick="selectScenario(0)">
+        <div class="sc-label">Calcular pelo método do DNIT</div>
+        <div class="sc-val" id="sc_0_val">N = —</div>
+        <div style="font-size:10px;color:var(--fg3);margin-top:2px;">N = Vt × FV (IPR-719, p. 143–144)</div>
       </div>
       <div class="n-scenario-card" id="sc_1" onclick="selectScenario(1)">
-        <div class="sc-label">Via Local e Coletora — MÉDIO</div>
-        <div class="sc-val">N = 5,00 × 10⁵</div>
-        <div style="font-size:10px;color:var(--fg3);margin-top:2px;">Vias coletoras com tráfego moderado</div>
+        <div class="sc-label">Informar o N do estudo de tráfego</div>
+        <div class="sc-val" id="sc_1_val">N = —</div>
+        <div style="font-size:10px;color:var(--fg3);margin-top:2px;">Valor calculado fora do programa</div>
       </div>
-      <div class="n-scenario-card selected" id="sc_2" onclick="selectScenario(2)">
-        <div class="sc-label">Via Local e Coletora — MEIO PESADO</div>
-        <div class="sc-val">N = 2,00 × 10⁶</div>
-        <div style="font-size:10px;color:var(--fg3);margin-top:2px;">Vias coletoras com ônibus e caminhões leves</div>
+    </div>
+
+    <div id="sc_dnit_row">
+      <div class="grid3">
+        <div class="field" data-ajuda="n_v1">
+          <label>V1 — volume médio diário no ano de abertura</label>
+          <input type="number" id="n_v1" value="300" step="1" min="1" oninput="updateDnitN()">
+          <span class="unit">veículos por dia, num sentido</span>
+        </div>
+        <div class="field" data-ajuda="n_t">
+          <label>t — taxa de crescimento anual (%)</label>
+          <input type="number" id="n_t" value="3" step="0.1" min="0" oninput="updateDnitN()">
+          <span class="unit">crescimento do tráfego</span>
+        </div>
+        <div class="field" data-ajuda="n_p">
+          <label>P — período de projeto (anos)</label>
+          <input type="number" id="n_p" value="10" step="1" min="1" oninput="updateDnitN()">
+          <span class="unit">anos</span>
+        </div>
+        <div class="field" data-ajuda="n_cresc">
+          <label>Crescimento do tráfego</label>
+          <select id="n_cresc" onchange="updateDnitN()">
+            <option value="arit">Progressão aritmética</option>
+            <option value="geom">Progressão geométrica</option>
+          </select>
+          <span class="unit">IPR-719, p. 143</span>
+        </div>
+        <div class="field" data-ajuda="n_fv">
+          <label>FV — fator de veículo (FE × FC)</label>
+          <input type="number" id="n_fv" value="2.00" step="0.01" min="0.0001" oninput="updateDnitN()">
+          <span class="unit">eixos equivalentes ao padrão de 8,2 t por veículo</span>
+        </div>
       </div>
-      <div class="n-scenario-card" id="sc_3" onclick="selectScenario(3)">
-        <div class="sc-label">Coletoras e Estruturais — PESADO</div>
-        <div class="sc-val">N = 2,00 × 10⁷</div>
-        <div style="font-size:10px;color:var(--fg3);margin-top:2px;">Vias estruturais com tráfego pesado</div>
+      <div class="grid3" style="margin-top:10px;">
+        <div><div class="out-cell" data-ajuda="n_o_vm"><div class="lbl">Vm — volume médio diário no período</div><div class="val" id="n_o_vm">—</div></div></div>
+        <div><div class="out-cell" data-ajuda="n_o_vt"><div class="lbl">Vt — volume total no período</div><div class="val" id="n_o_vt">—</div></div></div>
+        <div><div class="out-cell" data-ajuda="n_o_n"><div class="lbl">N = Vt × FV</div><div class="val" id="n_o_n">—</div></div></div>
       </div>
-      <div class="n-scenario-card" id="sc_4" onclick="selectScenario(4)">
-        <div class="sc-label">Coletoras e Estruturais — MUITO PESADO</div>
-        <div class="sc-val">N = 5,00 × 10⁷</div>
-        <div style="font-size:10px;color:var(--fg3);margin-top:2px;">Corredores de carga e terminais</div>
-      </div>
-      <div class="n-scenario-card" id="sc_5" onclick="selectScenario(5)">
-        <div class="sc-label">Faixa Exclusiva de Ônibus — VOL. MÉDIO</div>
-        <div class="sc-val">N = 1,00 × 10⁷</div>
-        <div style="font-size:10px;color:var(--fg3);margin-top:2px;">BRT / faixa exclusiva moderada</div>
-      </div>
-      <div class="n-scenario-card" id="sc_6" onclick="selectScenario(6)">
-        <div class="sc-label">Faixa Exclusiva de Ônibus — VOL. PESADO</div>
-        <div class="sc-val">N = 5,00 × 10⁷</div>
-        <div style="font-size:10px;color:var(--fg3);margin-top:2px;">BRT de alto volume / corredor exclusivo pesado</div>
-      </div>
-      <div class="n-scenario-card" id="sc_7" onclick="selectScenario(7)">
-        <div class="sc-label">Personalizado</div>
-        <div class="sc-val" id="sc_7_val">N = —</div>
-        <div style="font-size:10px;color:var(--fg3);margin-top:2px;">Informe o valor abaixo</div>
-      </div>
+      <p style="font-size:10px;color:var(--fg3);margin-top:6px;font-style:italic;">Progressão aritmética: Vm = V1 × [2 + (P − 1) × t/100] / 2 e Vt = 365 × P × Vm. Progressão geométrica: Vt = 365 × V1 × [(1 + t/100)<sup>P</sup> − 1] / (t/100). N = Vt × FV, com FV = FE × FC obtido da contagem e pesagem do tráfego (DNIT IPR-719, p. 143–144; Manual de Estudos de Tráfego IPR-723).</p>
     </div>
 
     <div id="sc_custom_row" style="display:none;margin-top:8px;" class="grid3">
       <div class="field" data-ajuda="n_custom">
-        <label>N Personalizado (eixos equiv.)</label>
+        <label>N informado (eixos equiv.)</label>
         <input type="number" id="n_custom" value="1000000" step="100000" min="1" oninput="updateCustomN()">
-        <span class="unit">Digite o número N calculado por VMD, FEC, período etc.</span>
+        <span class="unit">N do estudo de tráfego do projeto</span>
       </div>
     </div>
   </div>
@@ -771,7 +793,7 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
   <div class="sec">
     <div class="sec-title">N Adotado</div>
     <div class="n-card">
-      <div class="n-lbl" id="n_origem_label">Cenário selecionado: Via Local e Coletora — MEIO PESADO</div>
+      <div class="n-lbl" id="n_origem_label">—</div>
       <div class="n-val" id="n_result">2.000.000</div>
       <div class="n-lbl" id="n_class">Tráfego Médio-Pesado</div>
     </div>
@@ -782,13 +804,13 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
     <div class="sec-title">Espessura mínima de revestimento por N — DNIT IPR-719, Tabela 32 (nomes das classes apenas indicativos)</div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>Número N</th><th>Classificação</th><th>Cenário típico</th><th>Esp. mín. CBUQ (cm)</th></tr></thead>
+        <thead><tr><th>Número N</th><th>Classificação</th><th>Espessura mínima de revestimento betuminoso (Tabela 32)</th></tr></thead>
         <tbody>
-          <tr><td>N ≤ 10⁶</td><td>Leve</td><td>Vias locais (tratamento superficial no Manual; aqui adotado 5,0 cm)</td><td>5,0</td></tr>
-          <tr><td>10⁶ &lt; N ≤ 5 × 10⁶</td><td>Médio</td><td>Vias coletoras</td><td>5,0</td></tr>
-          <tr><td>5 × 10⁶ &lt; N ≤ 10⁷</td><td>Médio-Pesado</td><td>Vias estruturais</td><td>7,5</td></tr>
-          <tr><td>10⁷ &lt; N ≤ 5 × 10⁷</td><td>Pesado</td><td>Corredores urbanos, BRT</td><td>10,0</td></tr>
-          <tr><td>N &gt; 5 × 10⁷</td><td>Muito Pesado</td><td>Rodovias, terminais</td><td>12,5</td></tr>
+          <tr><td>N ≤ 10⁶</td><td>Leve</td><td>Tratamentos superficiais betuminosos</td></tr>
+          <tr><td>10⁶ &lt; N ≤ 5 × 10⁶</td><td>Médio</td><td>Revestimentos betuminosos com 5,0 cm de espessura</td></tr>
+          <tr><td>5 × 10⁶ &lt; N ≤ 10⁷</td><td>Médio-Pesado</td><td>Concreto betuminoso com 7,5 cm de espessura</td></tr>
+          <tr><td>10⁷ &lt; N ≤ 5 × 10⁷</td><td>Pesado</td><td>Concreto betuminoso com 10,0 cm de espessura</td></tr>
+          <tr><td>N &gt; 5 × 10⁷</td><td>Muito Pesado</td><td>Concreto betuminoso com 12,5 cm de espessura</td></tr>
         </tbody>
       </table>
     </div>
@@ -1090,15 +1112,16 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
   </div>
 
   <div class="sec">
-    <div class="sec-title">Espessura Mínima de CBUQ adotada no programa</div>
+    <div class="sec-title">Espessura Mínima de Revestimento Betuminoso — DNIT IPR-719, Tabela 32</div>
     <div class="tbl-wrap">
       <table>
-        <thead><tr><th>N (eixos equiv.)</th><th>Esp. mínima CBUQ (cm)</th><th>Classificação</th></tr></thead>
+        <thead><tr><th>N (eixos equiv.)</th><th>Revestimento mínimo</th><th>No programa</th></tr></thead>
         <tbody>
-          <tr><td>N ≤ 5 × 10⁶</td><td>5,0</td><td>Tráfego leve / médio</td></tr>
-          <tr><td>5 × 10⁶ &lt; N ≤ 10 × 10⁶</td><td>7,5</td><td>Tráfego médio-pesado</td></tr>
-          <tr><td>10 × 10⁶ &lt; N ≤ 50 × 10⁶</td><td>10,0</td><td>Tráfego pesado</td></tr>
-          <tr><td>N &gt; 50 × 10⁶</td><td>12,5</td><td>Tráfego muito pesado</td></tr>
+          <tr><td>N ≤ 10⁶</td><td>Tratamentos superficiais betuminosos</td><td>TS: sem espessura estrutural (R·KR = 0)</td></tr>
+          <tr><td>10⁶ &lt; N ≤ 5 × 10⁶</td><td>Revestimentos betuminosos com 5,0 cm</td><td>5,0 cm</td></tr>
+          <tr><td>5 × 10⁶ &lt; N ≤ 10⁷</td><td>Concreto betuminoso com 7,5 cm</td><td>7,5 cm</td></tr>
+          <tr><td>10⁷ &lt; N ≤ 5 × 10⁷</td><td>Concreto betuminoso com 10,0 cm</td><td>10,0 cm</td></tr>
+          <tr><td>N &gt; 5 × 10⁷</td><td>Concreto betuminoso com 12,5 cm</td><td>12,5 cm</td></tr>
         </tbody>
       </table>
     </div>
@@ -1459,21 +1482,48 @@ async function triggerDownload(blob, filename) {
 }
 
 /* ============================================================
-   NÚMERO N — CENÁRIOS (Quadro 2.1 da IP-02/2004, PMSP)
+   NÚMERO N — MÉTODO DO DNIT (IPR-719, p. 143–144)
    ============================================================ */
 const SCENARIOS = [
-{ label: 'Via Local — LEVE', n: 100000 },
-{ label: 'Via Local e Coletora — MÉDIO', n: 500000 },
-{ label: 'Via Local e Coletora — MEIO PESADO', n: 2000000 },
-{ label: 'Coletoras e Estruturais — PESADO', n: 20000000 },
-{ label: 'Coletoras e Estruturais — MUITO PESADO', n: 50000000 },
-{ label: 'Faixa Exclusiva de Ônibus — VOL. MÉDIO', n: 10000000 },
-{ label: 'Faixa Exclusiva de Ônibus — VOL. PESADO', n: 50000000 },
-{ label: 'Personalizado', n: null }];
+{ label: 'Calculado pelo método do DNIT (IPR-719)', n: null },
+{ label: 'Informado (estudo de tráfego)', n: null }];
+const N_DNIT = 0,N_INFORMADO = 1;
 
+let selectedScenario = N_DNIT;
+let N_adotado = 0;
+let _calcN = null;
 
-let selectedScenario = 2;
-let N_adotado = 2000000;
+/* N pelo método do DNIT (Manual de Pavimentação IPR-719, p. 143–144):
+   aritmética: Vm = V1·[2 + (P−1)·t/100]/2 ; Vt = 365·P·Vm
+   geométrica: Vt = 365·V1·[(1 + t/100)^P − 1]/(t/100)
+   N = Vt · FV  (FV = FE · FC) */
+function calcNDnit() {
+  const g = (id) => {const el = document.getElementById(id);const x = el ? parseFloat(el.value) : NaN;return isFinite(x) ? x : NaN;};
+  const V1 = g('n_v1'),t = g('n_t'),P = g('n_p'),FV = g('n_fv');
+  const cresc = (document.getElementById('n_cresc') || {}).value === 'geom' ? 'geom' : 'arit';
+  if (!(V1 > 0 && P > 0 && FV > 0 && t >= 0)) return null;
+  let Vm = null,Vt;
+  if (cresc === 'geom') Vt = t > 0 ? 365 * V1 * (Math.pow(1 + t / 100, P) - 1) / (t / 100) : 365 * V1 * P;else
+  {Vm = V1 * (2 + (P - 1) * t / 100) / 2;Vt = 365 * P * Vm;}
+  return { V1, t, P, FV, cresc, Vm, Vt, N: Vt * FV };
+}
+
+/* Linhas [rótulo, valor] que explicam a origem do N (memória e exportações) */
+function linhasN() {
+  if (selectedScenario !== N_DNIT) return [['Origem do N:', 'Informado pelo projetista (estudo de tráfego)'], ['N informado:', fmtN(N_adotado || 0)]];
+  const c = _calcN || calcNDnit();
+  if (!c) return [['Origem do N:', 'Método do DNIT (IPR-719) — dados incompletos']];
+  const L = [['Origem do N:', 'Método do DNIT (IPR-719, p. 143–144)'],
+  ['V1 (VMD no ano de abertura, num sentido):', fmtN(c.V1) + ' veíc./dia'],
+  ['t (crescimento anual):', fmt(c.t, 2) + ' % — ' + (c.cresc === 'geom' ? 'progressão geométrica' : 'progressão aritmética')],
+  ['P (período de projeto):', fmt(c.P, 0) + ' anos'],
+  ['FV (fator de veículo = FE × FC):', fmt(c.FV, 4)]];
+  if (c.Vm !== null) L.push(['Vm = V1 × [2 + (P − 1) × t/100] / 2:', fmt(c.Vm, 1) + ' veíc./dia']);
+  L.push([c.cresc === 'geom' ? 'Vt = 365 × V1 × [(1 + t/100)^P − 1] / (t/100):' : 'Vt = 365 × P × Vm:', fmtN(Math.round(c.Vt))]);
+  L.push(['N = Vt × FV:', fmtN(Math.round(c.N))]);
+  return L;
+}
+function descricaoN() {return linhasN().map((l) => l[0] + ' ' + l[1]).join('; ');}
 
 function classificaN(n) {
   if (!n || n <= 0) return '—';
@@ -1494,39 +1544,86 @@ function updateNDisplay() {
   const cls = document.getElementById('n_class');
   if (cls) cls.textContent = n ? classificaN(n) : '—';
   const orig = document.getElementById('n_origem_label');
-  if (orig && n) {
-    if (selectedScenario < 7) orig.textContent = SCENARIOS[selectedScenario].label;else
-    orig.textContent = 'Personalizado';
-  }
+  if (orig) orig.textContent = SCENARIOS[selectedScenario] ? SCENARIOS[selectedScenario].label : '—';
+  const c = _calcN;
+  const set = (id, t) => {const el = document.getElementById(id);if (el) el.textContent = t;};
+  set('n_o_vm', c && c.Vm !== null ? fmt(c.Vm, 1) + ' veíc./dia' : c ? '— (geométrica)' : '—');
+  set('n_o_vt', c ? fmtN(Math.round(c.Vt)) : '—');
+  set('n_o_n', c ? fmtN(Math.round(c.N)) : '—');
+  set('sc_0_val', c ? 'N = ' + fmtN(Math.round(c.N)) : 'N = —');
+  const ni = parseFloat((document.getElementById('n_custom') || {}).value) || 0;
+  set('sc_1_val', ni > 0 ? 'N = ' + fmtN(ni) : 'N = —');
 }
 
 function selectScenario(idx) {
-  selectedScenario = idx;
-  const sc = SCENARIOS[idx];
-  // Update card selection UI
+  selectedScenario = idx === N_INFORMADO ? N_INFORMADO : N_DNIT;
   for (let i = 0; i < SCENARIOS.length; i++) {
     const card = document.getElementById('sc_' + i);
-    if (card) card.classList.toggle('selected', i === idx);
+    if (card) card.classList.toggle('selected', i === selectedScenario);
   }
-  // Custom input visibility
   const customRow = document.getElementById('sc_custom_row');
-  if (customRow) customRow.style.display = idx === 7 ? '' : 'none';
-  // Set N
-  if (idx === 7) {var _document$getElementB;
-    const customVal = parseFloat((_document$getElementB = document.getElementById('n_custom')) == null ? void 0 : _document$getElementB.value) || 0;
+  if (customRow) customRow.style.display = selectedScenario === N_INFORMADO ? '' : 'none';
+  const dnitRow = document.getElementById('sc_dnit_row');
+  if (dnitRow) dnitRow.style.display = selectedScenario === N_DNIT ? '' : 'none';
+  _calcN = calcNDnit();
+  if (selectedScenario === N_INFORMADO) {
+    const customVal = parseFloat((document.getElementById('n_custom') || {}).value) || 0;
     N_adotado = customVal > 0 ? customVal : 0;
   } else {
-    N_adotado = sc.n;
+    N_adotado = _calcN ? Math.round(_calcN.N) : 0;
   }
   updateNDisplay();
   calc();
 }
 
-function updateCustomN() {var _document$getElementB2;
-  if (selectedScenario !== 7) return;
-  const val = parseFloat((_document$getElementB2 = document.getElementById('n_custom')) == null ? void 0 : _document$getElementB2.value) || 0;
+function updateCustomN() {
+  if (selectedScenario !== N_INFORMADO) {updateNDisplay();return;}
+  const val = parseFloat((document.getElementById('n_custom') || {}).value) || 0;
   N_adotado = val > 0 ? val : 0;
   updateNDisplay();
+  calc();
+}
+
+function updateDnitN() {
+  _calcN = calcNDnit();
+  if (selectedScenario === N_DNIT) N_adotado = _calcN ? Math.round(_calcN.N) : 0;
+  updateNDisplay();
+  calc();
+}
+
+/* Dados do Número N gravados no projeto (versao 2 = método do DNIT) */
+function dadosNumN() {
+  const g = (id) => (document.getElementById(id) || {}).value || '';
+  return { versao: 2, selectedScenario, N_adotado, customN: g('n_custom'),
+    dnit: { v1: g('n_v1'), t: g('n_t'), p: g('n_p'), cresc: g('n_cresc'), fv: g('n_fv') } };
+}
+
+/* Tipo de revestimento — DNIT IPR-719, Tabela 31 (K) e Tabela 32 (espessura mínima) */
+const REV_TIPOS = {
+  CBUQ: { nome: 'CBUQ', longo: 'concreto betuminoso usinado a quente (CBUQ)', k: 2.00 },
+  PMQ: { nome: 'PMQ', longo: 'pré-misturado a quente de graduação densa (PMQ)', k: 1.70 },
+  PMF: { nome: 'PMF', longo: 'pré-misturado a frio de graduação densa (PMF)', k: 1.40 },
+  PEN: { nome: 'Revest. por penetração', longo: 'revestimento betuminoso por penetração', k: 1.20 },
+  TS: { nome: 'Tratamento superficial', longo: 'tratamento superficial betuminoso (TS)', k: 0 } };
+function tipoRevEfetivo(N) {
+  const t = (document.getElementById('tipo_rev') || {}).value || 'auto';
+  if (REV_TIPOS[t]) return t;
+  return N > 0 && N <= 1e6 ? 'TS' : 'CBUQ';
+}
+function nomeRev() {return (REV_TIPOS[_R && _R.tipo_rev] || REV_TIPOS.CBUQ).nome;}
+function revTS() {return !!(_R && _R.tipo_rev === 'TS');}
+/* Espessura do revestimento para textos: 'TS' quando é tratamento superficial */
+function espRev(cm) {return revTS() ? 'TS' : fmt(_R.e_ref, 1) + (cm ? ' cm' : '');}
+/* Frase do revestimento adotado, para memórias e relatórios */
+function fraseRev() {
+  return revTS() ? 'tratamento superficial betuminoso (sem espessura estrutural, R·KR = 0)' :
+  fmt(_R.e_ref, 1) + ' cm de ' + nomeRevLongo();
+}
+function nomeRevLongo() {return (REV_TIPOS[_R && _R.tipo_rev] || REV_TIPOS.CBUQ).longo;}
+function tipoRevMudou() {
+  const t = tipoRevEfetivo(N_adotado);
+  const el = document.getElementById('k_ref');
+  if (el && t !== 'TS') el.value = REV_TIPOS[t].k.toFixed(2);
   calc();
 }
 
@@ -1551,20 +1648,19 @@ function H_cbr(N, cbr) {return 77.67 * Math.pow(N, 0.0482) * Math.pow(cbr, -0.59
    [2] R·KR + B·KB + h20·KS ≥ Hn
    [3] R·KR + B·KB + h20·KS + hn·KRef ≥ Hm
    Cada camada é arredondada para cima no incremento construtivo, respeitando a espessura mínima. */
-/* Fator de segurança sobre H20 na inequação [1].
-   Método DNER: para N > 10^7 (revestimento de 10,0 cm ou mais),
-   a proteção da sub-base é majorada em 1,20. */
+/* Fator sobre H20 na inequação [1].
+   O DNIT IPR-719 (p. 148) usa R·KR + B·KB ≥ H20, sem fator: o padrão é 1,00.
+   1,20 e 0,80 são do método DNER original e ficam só como opção manual. */
 function fatorH20(N, modo) {
-  if (modo === '1') return 1.0;
+  if (modo === '1.2') return 1.2;
   if (modo === '0.8') return 0.8;
-  return N > 1e7 ? 1.2 : 1.0; // automático
+  return 1.0; // padrão IPR-719 ('auto') e '1'
 }
 function textoFatorH20(N, modo) {
-  const f = fatorH20(N, modo);
-  if (modo === '1') return 'Fator 1,00 adotado manualmente (sem majoração).';
-  if (modo === '0.8') return 'Fator 0,80 adotado manualmente — aplicável apenas com sub-base de CBR ≥ 40% e N ≤ 10⁶; confirmar o enquadramento. Fator do método DNER original; não consta do DNIT IPR-719.';
-  return f > 1 ? 'Fator 1,20 aplicado automaticamente: N > 10⁷ (revestimento de 10,0 cm ou mais). Majoração do método DNER original; não consta do DNIT IPR-719.' :
-  'Fator 1,00: N ≤ 10⁷, sem majoração da proteção da sub-base.';
+  if (modo === '1.2') return 'Fator 1,20 adotado manualmente. Majoração do método DNER original para N > 10⁷; não consta do DNIT IPR-719.';
+  if (modo === '0.8') return 'Fator 0,80 adotado manualmente. Redução do método DNER original para sub-base de CBR ≥ 40% e N ≤ 10⁶; não consta do DNIT IPR-719.';
+  if (modo === '1') return 'Fator 1,00 adotado manualmente (sem majoração), igual ao DNIT IPR-719.';
+  return 'Fator 1,00: inequação [1] do DNIT IPR-719 (R·KR + B·KB ≥ H₂₀), sem majoração.';
 }
 
 function dimensionar(p) {
@@ -1575,10 +1671,12 @@ function dimensionar(p) {
   const H20exig = H20 * fat; // exigência da inequação [1] já majorada
   let emin_ref = 5;
   if (N > 5e7) emin_ref = 12.5;else if (N > 1e7) emin_ref = 10;else if (N > 5e6) emin_ref = 7.5; // limites: N ≤ valor (Manual IPR-719)
-  /* Revestimento: espessura da Tabela de N (5,0 / 7,5 / 10,0 / 12,5 cm).
-     Não recebe o incremento das camadas granulares — o CBUQ não é compactado em camadas de solo. */
+  // Tratamento superficial (Tabela 32, N ≤ 10^6): sem espessura estrutural, R·KR = 0
+  if (p.rev_ts) emin_ref = 0;
+  /* Revestimento: espessura da Tabela 32 (5,0 / 7,5 / 10,0 / 12,5 cm).
+     Não recebe o incremento das camadas granulares — o revestimento não é compactado em camadas de solo. */
   const e_ref = emin_ref;
-  const capR = e_ref * k_ref;
+  const capR = p.rev_ts ? 0 : e_ref * k_ref;
   // Base: atende [1] (e também [2] quando não há sub-base)
   const alvoBase = k_sb > 0 ? H20exig : Math.max(H20exig, Hn);
   const base_teo = k_base > 0 ? (alvoBase - capR) / k_base : 0;
@@ -1637,7 +1735,9 @@ function calc() {
   const cbr_ref = Math.max(0.5, Math.min(100, v('cbr_ref')));
   const cbr_sb = Math.max(0.5, Math.min(100, v('cbr_sb')));
   const cbr_base_val = Math.max(0.5, Math.min(100, v('cbr_base') || 80));
-  const k_ref = v('k_ref') || 2.0;
+  const tipo_rev = tipoRevEfetivo(N);
+  const rev_ts = tipo_rev === 'TS';
+  const k_ref = rev_ts ? 0 : v('k_ref') || 2.0;
   const k_base = v('k_base') || 1.0;
   const k_sb = v('k_sb') || 1.0;
   const k_r = v('k_r') || 1.0;
@@ -1649,14 +1749,14 @@ function calc() {
 
   if (!N || N <= 0) {
     const el = document.getElementById('o_N');
-    if (el) el.textContent = 'Selecione um cenário';
+    if (el) el.textContent = 'Informe o N na aba Número N';
     return;
   }
 
   // Dimensionamento e verificação das inequações (DNIT IPR-719)
   const D = dimensionar({ N, cbr_sub, cbr_ref, cbr_sb, k_ref, k_base, k_sb, k_r, incr,
     emin_base: emin_base_inp, emin_gran: emin_gran_inp,
-    modoFator, e_max_camada });
+    modoFator, e_max_camada, rev_ts });
   const { cbr_eff, H20, Hn, Hm, H20exig, emin_ref, e_ref, e_base, e_sb, e_r, e_total,
     ineq1_val, ineq2_val, ineq3_val } = D;
 
@@ -1668,7 +1768,7 @@ function calc() {
     H20exig, fator_h20: D.fator_h20, modoFator, texto_fator: textoFatorH20(N, modoFator),
     e_max_camada: D.e_max_camada, n_sub_base: D.n_sub_base, n_sub_sb: D.n_sub_sb,
     n_sub_r: D.n_sub_r, subcamada_fracionada: D.subcamada_fracionada, incr,
-    k_ref, k_base, k_sb, k_r };
+    k_ref, k_base, k_sb, k_r, tipo_rev, k_ref_inp: v('k_ref') };
 
   // Update outputs
   const set = (id, v) => {const el = document.getElementById(id);if (el) el.textContent = v;};
@@ -1676,9 +1776,16 @@ function calc() {
   set('o_H20', fmt(H20) + ' cm');
   set('o_Hn', fmt(Hn) + ' cm');
   set('o_Hm', fmt(Hm) + ' cm');
-  set('o_emin_ref', fmt(emin_ref, 1) + ' cm');
+  set('o_emin_ref', rev_ts ? 'TS (Tabela 32)' : fmt(emin_ref, 1) + ' cm');
+  set('o_rev_nome', 'Revestimento (' + nomeRev() + ')');
+  const mRev = nomeRevLongo();
+  set('o_rev_mat', mRev.charAt(0).toUpperCase() + mRev.slice(1));
+  set('o_tipo_rev_txt', (s('tipo_rev') || 'auto') === 'auto' ?
+  'Adotado: ' + nomeRev() + ' — automático pela Tabela 32' : 'Adotado: ' + nomeRev() + ' — DNIT IPR-719, Tabelas 31 e 32');
+  set('o_k_ref_txt', rev_ts ? 'Não entra no cálculo: tratamento superficial (R·KR = 0)' :
+  'Tabela 31: ' + nomeRev() + ' = ' + fmt(REV_TIPOS[tipo_rev].k, 2));
   set('o_cbr_base_show', fmt(cbr_base_val, 1) + '%');
-  set('o_k_ref_show', fmt(k_ref, 2));
+  set('o_k_ref_show', rev_ts ? '— (TS)' : fmt(k_ref, 2));
   set('o_k_base_show', fmt(k_base, 2));
   set('o_k_sb_show', fmt(k_sb, 2));
   set('o_k_r_show', fmt(k_r, 2));
@@ -1687,13 +1794,13 @@ function calc() {
   set('o_cbr_sb_show', fmt(cbr_sb, 1) + '%');
   set('o_cbr_ref_show', fmt(cbr_ref, 1) + '%');
 
-  set('o_e_ref', fmt(e_ref, 1) + ' cm');
+  set('o_e_ref', rev_ts ? 'TS' : fmt(e_ref, 1) + ' cm');
   set('o_e_base', fmt(e_base, 1) + ' cm');
   set('o_e_sb', fmt(e_sb, 1) + ' cm');
   set('o_e_r', e_r > 0 ? fmt(e_r, 1) + ' cm' : '—');
 
   const ef = (e) => e > 0 ? fmt(e, 1) : '—';
-  set('ef_ref', ef(e_ref));
+  set('ef_ref', rev_ts ? 'TS' : ef(e_ref));
   set('ef_base', ef(e_base));
   set('ef_sb', ef(e_sb));
   set('ef_r', ef(e_r));
@@ -1753,7 +1860,7 @@ function buildSensTable() {
   const cbrVals = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0];
   tbody.innerHTML = '';
   cbrVals.forEach((cs) => {
-    const d = dimensionar({ N: _R.N, cbr_sub: cs, cbr_ref: _R.cbr_ref, cbr_sb: _R.cbr_sb,
+    const d = dimensionar({ N: _R.N, rev_ts: _R.tipo_rev === 'TS', cbr_sub: cs, cbr_ref: _R.cbr_ref, cbr_sb: _R.cbr_sb,
       k_ref: _R.k_ref, k_base: _R.k_base, k_sb: _R.k_sb, k_r: _R.k_r, incr: _R.incr || 10,
       emin_base: _R.emin_base || 15, emin_gran: _R.emin_gran || 15,
       modoFator: _R.modoFator, e_max_camada: _R.e_max_camada });
@@ -1773,7 +1880,7 @@ const AJUDA = {
   logradouro: `<b>Logradouro / Rodovia</b> — nome da via do projeto. Sai na memória, no relatório e nos arquivos exportados.<br><i>Só identificação: não entra no cálculo.</i>`,
   trecho: `<b>Trecho</b> — extensão abrangida pelo dimensionamento (ex.: km 0+000 a km 5+500).<br><i>Só identificação: não entra no cálculo.</i>`,
   responsavel: `<b>Responsável técnico</b> — engenheiro responsável pelo projeto. Sai na memória e no relatório.`,
-  dim_N_display: `<b>Número N</b> — número de operações do eixo simples padrão de 8,2 tf previstas no período de projeto. Escolhido na aba Número N (Quadro 2.1 da IP-02/2004, PMSP) ou informado como valor calculado.<br>Entra em H = 77,67 × N<sup>0,0482</sup> × CBR<sup>−0,598</sup> e define a espessura do revestimento:<br>• até 5×10⁶ → 5,0 cm<br>• até 10⁷ → 7,5 cm<br>• até 5×10⁷ → 10,0 cm<br>• acima → 12,5 cm`,
+  dim_N_display: `<b>Número N</b> — número de operações do eixo simples padrão de 8,2 tf previstas no período de projeto. Calculado na aba Número N pelo método do DNIT (IPR-719, p. 143–144) ou informado do estudo de tráfego.<br>Entra em H = 77,67 × N<sup>0,0482</sup> × CBR<sup>−0,598</sup> e define o revestimento mínimo (IPR-719, Tabela 32):<br>• até 10⁶ → tratamento superficial betuminoso<br>• até 5×10⁶ → revestimento betuminoso de 5,0 cm<br>• até 10⁷ → concreto betuminoso de 7,5 cm<br>• até 5×10⁷ → concreto betuminoso de 10,0 cm<br>• acima → concreto betuminoso de 12,5 cm`,
   cbr_sub: `<b>CBR do subleito (%)</b> — Índice de Suporte Califórnia de projeto do solo de fundação (DNIT 172/2016).<br>Define <b>Hm</b>, a espessura equivalente exigida sobre o subleito na inequação [3].<br><i>Requisito: CBR ≥ 2% e expansão ≤ 2%. Abaixo disso, prever substituição do solo ou estudo geotécnico.</i>`,
   cbr_ref: `<b>CBR do reforço do subleito (%)</b> — CBR do material de reforço, que precisa ser maior que o do subleito (DNIT 138/2010-ES).<br>Define <b>Hn</b>, a espessura equivalente exigida sobre o reforço na inequação [2].<br><i>Sem reforço: informe o mesmo CBR do subleito, e o programa não gera a camada.</i>`,
   cbr_sb: `<b>CBR da sub-base (%)</b> — CBR do material granular da sub-base (DNIT 139/2010-ES: CBR ≥ 20%).<br>Define <b>H₂₀</b>, a proteção exigida sobre a sub-base na inequação [1].<br><i>O método limita o CBR a 20%: valores maiores são calculados como 20.</i>`,
@@ -1782,8 +1889,8 @@ const AJUDA = {
   emin_base: `<b>Espessura mínima da base (cm)</b> — mínimo construtivo da base, adotado mesmo quando as inequações pedem menos. Usual: 15 cm.`,
   emin_gran: `<b>Espessura mínima granular (cm)</b> — mínimo construtivo da sub-base e do reforço, quando essas camadas são necessárias. Usual: 15 cm.`,
   e_max_camada: `<b>Espessura máxima por camada compactada (cm)</b> — maior espessura compactada de uma só vez. Define em quantas subcamadas cada camada granular é executada.<br><i>Informativo: não muda o dimensionamento.</i>`,
-  modo_fator: `<b>Fator de segurança sobre H₂₀</b> — multiplica a proteção exigida sobre a sub-base na inequação [1].<br>• Automático: 1,20 quando N &gt; 10⁷; 1,00 nos demais casos<br>• 1,00: sem majoração<br>• 0,80: só com sub-base de CBR ≥ 40% e N ≤ 10⁶ (confirmar o enquadramento)`,
-  o_fator_h20: `<b>Fator aplicado sobre H₂₀</b> — valor usado na inequação [1], conforme a opção escolhida e o N.`,
+  modo_fator: `<b>Fator sobre H₂₀</b> — multiplica a proteção exigida sobre a sub-base na inequação [1].<br>• Padrão IPR-719: 1,00. O Manual usa R·KR + B·KB ≥ H₂₀, sem fator (p. 148)<br>• 1,20: majoração do método DNER original para N &gt; 10⁷<br>• 0,80: redução do método DNER original para sub-base de CBR ≥ 40% e N ≤ 10⁶<br><i>1,20 e 0,80 não constam do IPR-719: só use se o contrato pedir o método DNER original.</i>`,
+  o_fator_h20: `<b>Fator aplicado sobre H₂₀</b> — valor usado na inequação [1], conforme a opção escolhida.`,
   o_H20exig: `<b>H₂₀ exigido (cm)</b> = H₂₀ × fator.<br>Lado direito da inequação [1]: R·KR + B·KB ≥ H₂₀ exigido.`,
   o_e_total_show: `<b>Espessura total física (cm)</b> — soma real das camadas (revestimento + base + sub-base + reforço), sem os coeficientes K. É a espessura usada na cota do subleito e na Topografia.`,
   k_ref: `<b>Coeficiente estrutural K do revestimento</b> — equivalência estrutural em relação à base granular. Tabela 31 do DNIT IPR-719: concreto betuminoso 2,00; pré-misturado a quente 1,70; pré-misturado a frio 1,40; betuminoso por penetração 1,20. O tratamento superficial não tem K na tabela (Tabela 32: usado quando N ≤ 10⁶).`,
@@ -1806,7 +1913,16 @@ const AJUDA = {
   a_lf: `<b>Cota do lençol freático</b> = cota da boca da sondagem − profundidade do nível d'água.`,
   a_afastamento: `<b>Afastamento vertical</b> = cota do subleito − cota do lençol. Precisa ser maior ou igual ao afastamento mínimo.`,
   a_situacao: `<b>Situação</b> — compara o afastamento com o mínimo:<br>• Atende: afastamento ≥ mínimo<br>• Revisar: positivo, mas abaixo do mínimo<br>• Crítico: lençol no nível do subleito ou acima dele`,
-  n_custom: `<b>N personalizado</b> — número N calculado no estudo de tráfego (VMD, fatores de veículo, taxa de crescimento e período de projeto).<br>Pode digitar por extenso (2000000) ou em notação científica (2e6).`,
+  n_custom: `<b>N informado</b> — número N calculado no estudo de tráfego do projeto (volume, fator de veículo, taxa de crescimento e período de projeto).<br>Pode digitar por extenso (2000000) ou em notação científica (2e6).`,
+  n_v1: `<b>V1 — volume médio diário no ano de abertura</b> — volume médio diário de tráfego, num sentido (DNIT IPR-719, p. 143).<br><i>Vem da contagem de tráfego do projeto; a composição do tráfego entra no FV.</i>`,
+  n_t: `<b>t — taxa de crescimento anual (%)</b> — crescimento previsto do tráfego ao longo do período de projeto (DNIT IPR-719, p. 143).`,
+  n_p: `<b>P — período de projeto (anos)</b> — anos de vida útil considerados no cálculo do tráfego.`,
+  n_cresc: `<b>Crescimento do tráfego</b> — forma de projetar o volume (DNIT IPR-719, p. 143):<br>• Aritmética: Vm = V1 × [2 + (P − 1) × t/100] / 2 e Vt = 365 × P × Vm<br>• Geométrica: Vt = 365 × V1 × [(1 + t/100)<sup>P</sup> − 1] / (t/100)`,
+  n_fv: `<b>FV — fator de veículo</b> = FE × FC: número de eixos equivalentes ao eixo padrão de 8,2 t por veículo comercial (DNIT IPR-719, p. 143–144).<br><i>Obtido da contagem e pesagem do tráfego (Manual de Estudos de Tráfego, IPR-723). O FR é tomado como 1,0.</i>`,
+  n_o_vm: `<b>Vm</b> — volume médio diário no período de projeto, na progressão aritmética. Na geométrica o Manual calcula Vt direto.`,
+  n_o_vt: `<b>Vt</b> — volume total de tráfego no período de projeto, num sentido (DNIT IPR-719, p. 143).`,
+  n_o_n: `<b>N = Vt × FV</b> — número equivalente de operações do eixo simples padrão de 8,2 t no período de projeto (DNIT IPR-719, p. 143).`,
+  tipo_rev: `<b>Tipo de revestimento</b> — define o K do revestimento (Tabela 31) e a espessura mínima (Tabela 32) do DNIT IPR-719.<br>• Automático: tratamento superficial se N ≤ 10⁶; concreto betuminoso (CBUQ) acima<br>• Para 10⁶ &lt; N ≤ 5×10⁶ a Tabela 32 pede revestimento betuminoso de 5,0 cm; acima de 5×10⁶, concreto betuminoso<br>• Tratamento superficial: sem espessura estrutural, R·KR = 0 nas inequações`,
   c_de: `<b>Da estaca</b> — primeira seção do trecho mostrado na tela e exportado.`,
   c_ate: `<b>Até a estaca</b> — última seção do trecho mostrado na tela e exportado.`,
   c_ev: `<b>Escala vertical</b> — exagera as alturas no desenho para enxergar cortes e aterros pequenos.<br><i>Só muda o desenho: áreas e volumes não mudam.</i>`,
@@ -1931,6 +2047,12 @@ function atualizarValidacoes() {
   if (R.cbr_sub < 2) msgs.push('ALERTA: CBR do subleito inferior a 2% — prever substituição ou tratamento do material.');
   if ((R.e_r || 0) > 0 && R.cbr_ref <= R.cbr_sub) msgs.push('REVISAR: o CBR do reforço deve superar o CBR do subleito.');
   if (R.cbr_sb > 20) msgs.push('NOTA: CBR da sub-base acima de 20% — H₂₀ calculado com CBR limitado a 20%, conforme o método.');
+  const tSel = s('tipo_rev') || 'auto';
+  if (R.tipo_rev === 'TS' && R.N > 1e6) msgs.push('REVISAR: tratamento superficial só para N ≤ 10⁶ (DNIT IPR-719, Tabela 32).');
+  if (['PMQ', 'PMF', 'PEN'].includes(R.tipo_rev) && R.N > 5e6) msgs.push('REVISAR: para N > 5×10⁶ a Tabela 32 do DNIT IPR-719 pede concreto betuminoso.');
+  if (R.tipo_rev === 'TS') msgs.push('NOTA: tratamento superficial (Tabela 32) — R·KR = 0 nas inequações; as bases granulares devem ter alguma coesão, ao menos aparente (IPR-719, p. 147).');
+  if (tSel !== 'auto' && R.tipo_rev !== 'TS' && R.N > 0 && R.N <= 1e6) msgs.push('NOTA: para N ≤ 10⁶ a Tabela 32 admite tratamento superficial; o ' + nomeRev() + ' adotado fica a favor da segurança.');
+  if (R.tipo_rev !== 'TS' && REV_TIPOS[R.tipo_rev] && Math.abs((R.k_ref || 0) - REV_TIPOS[R.tipo_rev].k) > 0.001) msgs.push('NOTA: K do revestimento (' + fmt(R.k_ref, 2) + ') diferente da Tabela 31 para ' + nomeRev() + ' (' + fmt(REV_TIPOS[R.tipo_rev].k, 2) + ').');
   if (R.subcamada_fracionada) msgs.push('REVISAR: há camada que não fecha um número inteiro de camadas compactadas — ajustar o incremento ou a espessura máxima por camada.');
   if (A.situacao && !A.atende) msgs.push(A.situacao);
   el.textContent = msgs.length ? msgs.join('  •  ') : 'Entradas válidas para o cálculo.';
@@ -2407,7 +2529,7 @@ function secaoSVG(L, G, P, papel) {
   let bot = 82;
   // legenda (cores do desenho)
   const leg = [];
-  P.camadas.forEach((c) => leg.push([c[2], c[0] === 'CBUQ' ? 'Revestimento (CBUQ)' : c[0] === 'Reforço' ? 'Reforço do subleito' : c[0], 'q']));
+  P.camadas.forEach((c) => leg.push([c[2], c[0] === 'CBUQ' ? 'Revestimento (' + nomeRev() + ')' : c[0] === 'Reforço' ? 'Reforço do subleito' : c[0], 'q']));
   if (P.berma > 0 && P.berma < b) leg.push(['#8c8c8c', 'Berma', 'l']);
   if (P.mf) {leg.push(['#b8bcc4', P.mf.tipo === 'conjugado' ? 'Meio-fio' : 'Meio-fio simples', 'q']);if (P.mf.tipo === 'conjugado') leg.push(['#d5d8de', 'Sarjeta', 'q']);}
   const temRe = !!(G.E.re || G.D.re);
@@ -2741,7 +2863,8 @@ function updateMemoria() {
 
   <div class="mem-section">
     <h3>2. Número N de Projeto</h3>
-    <p>Cenário selecionado: <strong>${(sc == null ? void 0 : sc.label) || '—'}</strong><br>
+    <p>Origem do N: <strong>${(sc == null ? void 0 : sc.label) || '—'}</strong><br>
+    ${linhasN().slice(1).map((l) => l[0] + ' ' + l[1]).join('<br>')}<br>
     N adotado: <strong>${fmtN(R.N || N_adotado)}</strong><br>
     Classificação: ${classificaN(R.N || N_adotado)}</p>
   </div>
@@ -2756,7 +2879,7 @@ function updateMemoria() {
 
   <div class="mem-section">
     <h3>4. Coeficientes de Equivalência Estrutural</h3>
-    <p>K_Revestimento (CBUQ): <strong>${fmt(R.k_ref, 2)}</strong><br>
+    <p>K_Revestimento (${nomeRev()}): <strong>${revTS() ? '— (R·KR = 0)' : fmt(R.k_ref, 2)}</strong><br>
     K_Base: <strong>${fmt(R.k_base, 2)}</strong><br>
     K_Sub-base: <strong>${fmt(R.k_sb, 2)}</strong><br>
     K_Reforço: <strong>${fmt(R.k_r, 2)}</strong></p>
@@ -2775,14 +2898,14 @@ function updateMemoria() {
 
   <div class="mem-section">
     <h3>6. Espessura Mínima do Revestimento</h3>
-    <p>Para N = ${fmtN(R.N || 0)}: <strong>e<sub>min,REV</sub> = ${fmt(R.emin_ref, 1)} cm</strong></p>
+    <p>Para N = ${fmtN(R.N || 0)}: <strong>${revTS() ? 'tratamento superficial betuminoso (N ≤ 10⁶), sem espessura estrutural (R·KR = 0)' : 'e<sub>min,REV</sub> = ' + fmt(R.emin_ref, 1) + ' cm'}</strong> — DNIT IPR-719, Tabela 32</p>
   </div>
 
   <div class="mem-section">
     <h3>7. Estrutura Adotada</h3>
     <table class="mem-table">
       <tr><th>Camada</th><th>Espessura</th><th>K</th><th>K×e</th></tr>
-      <tr><td>Revestimento (CBUQ)</td><td>${fmt(R.e_ref, 1)} cm</td><td>${fmt(R.k_ref, 2)}</td><td>${fmt((R.e_ref || 0) * (R.k_ref || 0))}</td></tr>
+      <tr><td>Revestimento (${nomeRev()})</td><td>${espRev(true)}</td><td>${revTS() ? '—' : fmt(R.k_ref, 2)}</td><td>${fmt((R.e_ref || 0) * (R.k_ref || 0))}</td></tr>
       <tr><td>Base</td><td>${fmt(R.e_base, 1)} cm</td><td>${fmt(R.k_base, 2)}</td><td>${fmt((R.e_base || 0) * (R.k_base || 0))}</td></tr>
       <tr><td>Sub-base</td><td>${fmt(R.e_sb, 1)} cm</td><td>${fmt(R.k_sb, 2)}</td><td>${fmt((R.e_sb || 0) * (R.k_sb || 0))}</td></tr>
       <tr><td>Reforço do Subleito</td><td>${R.e_r > 0 ? fmt(R.e_r, 1) + ' cm' : '—'}</td><td>${fmt(R.k_r, 2)}</td><td>${R.e_r > 0 ? fmt((R.e_r || 0) * (R.k_r || 0)) : '—'}</td></tr>
@@ -2862,7 +2985,7 @@ function updateRelatorio() {
   <p><b>Logradouro:</b> ${s('logradouro') || '—'} &nbsp;|&nbsp; <b>Trecho:</b> ${s('trecho') || '—'} &nbsp;|&nbsp; <b>Responsável:</b> ${s('responsavel') || '—'}</p>
 
   <h3 style="font-size:13px;font-weight:700;margin:12px 0 4px;color:var(--accent2)">2. Tráfego de Projeto</h3>
-  <p>Cenário: <b>${(sc == null ? void 0 : sc.label) || '—'}</b> | N adotado: <b>${fmtN(R.N || 0)}</b> | Classificação: ${classificaN(R.N || 0)}</p>
+  <p>Origem do N: <b>${(sc == null ? void 0 : sc.label) || '—'}</b> | N adotado: <b>${fmtN(R.N || 0)}</b> | Classificação: ${classificaN(R.N || 0)}</p>
 
   <h3 style="font-size:13px;font-weight:700;margin:12px 0 4px;color:var(--accent2)">3. Parâmetros de Projeto</h3>
   <p>CBR Subleito: <b>${fmt(R.cbr_sub, 1)}%</b> | CBR Base: <b>${fmt(R.cbr_base_val, 1)}%</b> | CBR SB: <b>${fmt(R.cbr_sb, 1)}%</b></p>
@@ -2873,7 +2996,7 @@ function updateRelatorio() {
   <h3 style="font-size:13px;font-weight:700;margin:12px 0 4px;color:var(--accent2)">5. Estrutura do Pavimento Adotada</h3>
   <table style="width:100%;border-collapse:collapse;font-size:12.5px;margin-bottom:12px;">
     <tr style="background:var(--accent);color:#fff"><th style="padding:6px 10px;text-align:left">Camada</th><th style="padding:6px 10px">Espessura (cm)</th><th style="padding:6px 10px">CBR (%)</th><th style="padding:6px 10px">Coef. K</th></tr>
-    <tr><td style="padding:6px 10px">Revestimento (CBUQ)</td><td style="padding:6px 10px;text-align:center">${fmt(R.e_ref, 1)}</td><td style="padding:6px 10px;text-align:center">—</td><td style="padding:6px 10px;text-align:center">${fmt(R.k_ref, 2)}</td></tr>
+    <tr><td style="padding:6px 10px">Revestimento (${nomeRev()})</td><td style="padding:6px 10px;text-align:center">${espRev(false)}</td><td style="padding:6px 10px;text-align:center">—</td><td style="padding:6px 10px;text-align:center">${revTS() ? '—' : fmt(R.k_ref, 2)}</td></tr>
     <tr><td style="padding:6px 10px">Base</td><td style="padding:6px 10px;text-align:center">${fmt(R.e_base, 1)}</td><td style="padding:6px 10px;text-align:center">${fmt(R.cbr_base_val, 1)}</td><td style="padding:6px 10px;text-align:center">${fmt(R.k_base, 2)}</td></tr>
     ${R.e_sb > 0 ? `<tr><td style="padding:6px 10px">Sub-base</td><td style="padding:6px 10px;text-align:center">${fmt(R.e_sb, 1)}</td><td style="padding:6px 10px;text-align:center">${fmt(R.cbr_sb, 1)}</td><td style="padding:6px 10px;text-align:center">${fmt(R.k_sb, 2)}</td></tr>` : ''}
     ${R.e_r > 0 ? `<tr><td style="padding:6px 10px">Reforço do subleito</td><td style="padding:6px 10px;text-align:center">${fmt(R.e_r, 1)}</td><td style="padding:6px 10px;text-align:center">${fmt(R.cbr_ref, 1)}</td><td style="padding:6px 10px;text-align:center">${fmt(R.k_r, 2)}</td></tr>` : ''}
@@ -2916,14 +3039,13 @@ function salvarProjeto() {var _document$getElementB7;
     ident: {
       logradouro: s('logradouro'), trecho: s('trecho'), responsavel: s('responsavel')
     },
-    numN: { selectedScenario, N_adotado,
-      customN: ((_document$getElementB7 = document.getElementById('n_custom')) == null ? void 0 : _document$getElementB7.value) || '' },
+    numN: dadosNumN(),
     cbr: { cbr_sub: v('cbr_sub'), cbr_ref: v('cbr_ref'), cbr_sb: v('cbr_sb'), cbr_base: v('cbr_base') },
     k: { k_ref: v('k_ref'), k_base: v('k_base'), k_sb: v('k_sb'), k_r: v('k_r') },
     alti: { a_rn: v('a_rn'), a_desnivel: v('a_desnivel'), a_desn_boca: v('a_desn_boca'),
       a_na: v('a_na'), a_afast_min: v('a_afast_min') },
     criterios: { incr: v('incr'), emin_base: v('emin_base'), emin_gran: v('emin_gran'),
-      e_max_camada: v('e_max_camada'), modo_fator: s('modo_fator') },
+      e_max_camada: v('e_max_camada'), modo_fator: s('modo_fator'), tipo_rev: s('tipo_rev') || 'auto', ipr719: true },
     corte: { c_talcorte: v('c_talcorte'),
       c_talaterro: v('c_talaterro'), c_berma: v('c_berma'),
       c_na: v('c_na'), c_rn: v('c_rn') },
@@ -2958,6 +3080,12 @@ function aplicarProjeto(p) {
         if (c.incr) set('incr', c.incr);if (c.emin_base) set('emin_base', c.emin_base);
         if (c.emin_gran) set('emin_gran', c.emin_gran);if (c.e_max_camada) set('e_max_camada', c.e_max_camada);
         if (c.modo_fator) {const el = document.getElementById('modo_fator');if (el) el.value = c.modo_fator;}}
+      {// projetos gravados antes da revisão pelo IPR-719 (15/10/2026) mantêm o resultado de quando foram feitos
+        const c = p.criterios || {},elT = document.getElementById('tipo_rev'),elF = document.getElementById('modo_fator');
+        if (c.ipr719) {if (elT) elT.value = c.tipo_rev || 'auto';} else
+        {if (elT) elT.value = 'CBUQ';
+          const Nant = p.numN && p.numN.N_adotado || 0;
+          if (elF && (!c.modo_fator || c.modo_fator === 'auto')) elF.value = Nant > 1e7 ? '1.2' : '1';}}
       if (p.corte) {set('c_talcorte', p.corte.c_talcorte === 0 ? '0' : p.corte.c_talcorte);
         set('c_talaterro', p.corte.c_talaterro);set('c_berma', p.corte.c_berma);}
       if ((_p$topo = p.topo) != null && _p$topo.rows) {
@@ -2965,11 +3093,18 @@ function aplicarProjeto(p) {
         topoRowCount = 0;
         p.topo.rows.forEach((r) => addTopoRow(r));
       }
-      if (p.numN) {var _p$numN$selectedScena;
-        N_adotado = p.numN.N_adotado || 2000000;
-        selectedScenario = (_p$numN$selectedScena = p.numN.selectedScenario) != null ? _p$numN$selectedScena : 2;
-        if (p.numN.customN) set('n_custom', p.numN.customN);
-        selectScenario(selectedScenario);
+      if (p.numN) {
+        if (p.numN.versao === 2) {
+          const d = p.numN.dnit || {};
+          if (d.v1) set('n_v1', d.v1);if (d.t !== undefined && d.t !== '') set('n_t', d.t);if (d.p) set('n_p', d.p);
+          if (d.cresc) set('n_cresc', d.cresc);if (d.fv) set('n_fv', d.fv);
+          if (p.numN.customN) set('n_custom', p.numN.customN);
+          selectScenario(p.numN.selectedScenario === N_INFORMADO ? N_INFORMADO : N_DNIT);
+        } else {// projeto antigo (cenários da PMSP): o N gravado passa a ser "informado", sem mudar o valor
+          const Nant = p.numN.N_adotado || 0;
+          set('n_custom', Nant > 0 ? String(Math.round(Nant)) : p.numN.customN || '');
+          selectScenario(N_INFORMADO);
+        }
       }
       _mf = Object.assign({}, MF_PADRAO, p.meiofio || {});mfAtualizarResumo();
       calc();
@@ -3008,7 +3143,7 @@ function getMemoriaRows() {var _R$_topo, _R$_topo2, _R$_topo3, _R$_topo4;
   ['Responsável:', s('responsavel') || '—'],
   ['', ''],
   ['NÚMERO N', ''],
-  ['Cenário:', (sc == null ? void 0 : sc.label) || '—'],
+  ['Origem do N:', (sc == null ? void 0 : sc.label) || '—'],
   ['N adotado:', fmtN(R.N || 0)],
   ['Classificação:', classificaN(R.N || 0)],
   ['', ''],
@@ -3030,7 +3165,7 @@ function getMemoriaRows() {var _R$_topo, _R$_topo2, _R$_topo3, _R$_topo4;
   ['Hm (cm):', fmt(R.Hm)],
   ['', ''],
   ['ESTRUTURA ADOTADA', ''],
-  ['Revestimento CBUQ (cm):', fmt(R.e_ref, 1)],
+  ['Revestimento ' + nomeRev() + ' (cm):', espRev(false)],
   ['Base (cm):', fmt(R.e_base, 1)],
   ['Sub-base (cm):', fmt(R.e_sb, 1)],
   ['Reforço (cm):', R.e_r > 0 ? fmt(R.e_r, 1) : '—'],
@@ -3097,7 +3232,7 @@ async function exportarMemoriaWord() {
   /* Gerar linhas de sensibilidade — valores absolutos de CBR como no documento Word */
   const cbrVals = [1.0, 1.5, 2.0, 2.5, 3.0, 4.0];
   const sensRows = cbrVals.map((cs) => {
-    const d = dimensionar({ N: R.N, cbr_sub: cs, cbr_ref: R.cbr_ref, cbr_sb: R.cbr_sb,
+    const d = dimensionar({ N: R.N, rev_ts: R.tipo_rev === 'TS', cbr_sub: cs, cbr_ref: R.cbr_ref, cbr_sb: R.cbr_sb,
       k_ref: R.k_ref, k_base: R.k_base, k_sb: R.k_sb, k_r: R.k_r, incr: R.incr || 10,
       emin_base: R.emin_base || 15, emin_gran: R.emin_gran || 15,
       modoFator: R.modoFator, e_max_camada: R.e_max_camada });
@@ -3140,7 +3275,7 @@ async function exportarMemoriaWord() {
 
   <p>Esta memória de cálculo apresenta o dimensionamento do pavimento flexível pelo Método
   Empírico do CBR (DNIT IPR-719) para a via <b>${logr}</b>, trecho <b>${trecho_txt}</b>.
-  O pavimento adotado possui estrutura com <b>Revestimento CBUQ de ${f1(R.e_ref)} cm</b>,
+  O pavimento adotado possui estrutura com <b>revestimento em ${fraseRev()}</b>,
   <b>Base de ${f1(R.e_base)} cm</b>${R.e_sb > 0 ? `, <b>Sub-base de ${f1(R.e_sb)} cm</b>` : ''}${R.e_r > 0 ? `, <b>Reforço do subleito de ${f1(R.e_r)} cm</b>` : ''},
   totalizando <b>${f1(R.e_total || 0)} cm</b> de pavimento.</p>
 
@@ -3155,7 +3290,7 @@ async function exportarMemoriaWord() {
     ${R.e_r > 0 ? `<tr><td>Reforço do Subleito</td><td>Solo selecionado</td><td>—</td><td>${fN(R.k_r)}</td><td>${f1(R.e_r)} cm</td></tr>` : ''}
     <tr><td>Sub-base</td><td>Brita graduada / Solo estab.</td><td>${f1(R.cbr_sb)}%</td><td>${fN(R.k_sb)}</td><td>${R.e_sb > 0 ? f1(R.e_sb) + ' cm' : '—'}</td></tr>
     <tr><td>Base</td><td>Brita graduada simples</td><td>${f1(R.cbr_base_val)}%</td><td>${fN(R.k_base)}</td><td>${f1(R.e_base)} cm</td></tr>
-    <tr><td>Revestimento</td><td>CBUQ</td><td>—</td><td>${fN(R.k_ref)}</td><td>${f1(R.e_ref)} cm</td></tr>
+    <tr><td>Revestimento</td><td>${nomeRev()}</td><td>—</td><td>${revTS() ? '—' : fN(R.k_ref)}</td><td>${espRev(true)}</td></tr>
   </table>
 
   <h2>1. Objeto</h2>
@@ -3178,7 +3313,7 @@ async function exportarMemoriaWord() {
   <h3>3.1 Tráfego de projeto</h3>
   <table><tr><th>Parâmetro</th><th>Valor</th></tr>
   <tr><td>Número N de projeto</td><td>${Nfmt(R.N || 0)}</td></tr>
-  <tr><td>Cenário (Quadro 2.1 da IP-02/2004, PMSP)</td><td>${(sc == null ? void 0 : sc.label) || '—'}</td></tr>
+  <tr><td>Origem do N</td><td>${(sc == null ? void 0 : sc.label) || '—'}</td></tr>
   <tr><td>Classificação do tráfego</td><td>${classificaN(R.N || 0)}</td></tr>
   </table>
   <h3>3.2 Capacidade de suporte do subleito</h3>
@@ -3213,15 +3348,16 @@ async function exportarMemoriaWord() {
   <p class="formula">Hm = 77,67 × (${Nfmt(R.N || 0)})<sup>0,0482</sup> × (${f1(R.cbr_sub)})<sup>-0,598</sup> = <b>${f2(R.Hm)} cm</b></p>
 
   <h2>6. Verificação do CBR do reforço</h2>
-  ${R.e_r > 0 ? `<p>Após a adoção de ${f1(R.e_ref)} cm de CBUQ, ${f1(R.e_base)} cm de base${R.e_sb > 0 ? ` e ${f1(R.e_sb)} cm de sub-base` : ''}, a estrutura situada acima do reforço fornece <b>${f2(R.ineq2_val)} cm</b> equivalentes. O CBR mínimo do reforço é obtido invertendo-se a equação de H e impondo Hn igual à capacidade disponível.</p>
+  ${R.e_r > 0 ? `<p>Após a adoção de ${revTS() ? 'tratamento superficial' : f1(R.e_ref) + ' cm de ' + nomeRev()}, ${f1(R.e_base)} cm de base${R.e_sb > 0 ? ` e ${f1(R.e_sb)} cm de sub-base` : ''}, a estrutura situada acima do reforço fornece <b>${f2(R.ineq2_val)} cm</b> equivalentes. O CBR mínimo do reforço é obtido invertendo-se a equação de H e impondo Hn igual à capacidade disponível.</p>
   <p class="formula">CBR<sub>mín</sub> = [77,67 × N<sup>0,0482</sup> / H<sub>disp</sub>]<sup>1/0,598</sup> = [77,67 × (${Nfmt(R.N || 0)})<sup>0,0482</sup> / ${f2(R.ineq2_val)}]<sup>1/0,598</sup> = <b>${f2(cbrMinRef)}%</b></p>
   <p>O CBR mínimo calculado para o reforço é ${f2(cbrMinRef)}%. Foi adotado CBR = ${f1(R.cbr_ref)}%, <b class="${okRef ? 'ok' : 'warn'}">${okRef ? 'que atende ao mínimo' : 'inferior ao mínimo — rever o material do reforço ou as camadas superiores'}</b>, mantendo Hn = ${f2(R.Hn)} cm ${okRef ? 'não superior' : 'superior'} aos ${f2(R.ineq2_val)} cm equivalentes disponíveis. ${R.cbr_ref > R.cbr_sub ? `O material deve apresentar CBR superior ao do subleito (${f1(R.cbr_sub)}%) e expansão máxima compatível com a especificação.` : `<b class="warn">Atenção: o CBR do reforço deve ser superior ao do subleito (${f1(R.cbr_sub)}%).</b>`}</p>` :
   `<p>A estrutura dimensionada não requer camada de reforço do subleito: as camadas de revestimento, base e sub-base atendem às três inequações. O CBR informado para o reforço (${f1(R.cbr_ref)}%) não interfere no resultado.</p>`}
 
   <h2>7. Dimensionamento das camadas</h2>
-  <h3>7.1 Revestimento CBUQ</h3>
-  <p>A espessura do revestimento decorre diretamente da tabela de espessuras mínimas em função de N, sem arredondamento pelo incremento das camadas granulares.</p>
-  <p class="formula">Para N = ${Nfmt(R.N || 0)}: e<sub>REV</sub> = <b>${f1(R.e_ref)} cm</b> de concreto betuminoso usinado a quente</p>
+  <h3>7.1 Revestimento (${nomeRev()})</h3>
+  <p>O revestimento decorre diretamente da Tabela 32 do DNIT IPR-719 (espessura mínima de revestimento betuminoso em função de N), sem arredondamento pelo incremento das camadas granulares. O coeficiente K<sub>REV</sub> vem da Tabela 31.</p>
+  <p class="formula">Para N = ${Nfmt(R.N || 0)}: ${revTS() ? '<b>tratamento superficial betuminoso</b>, sem espessura estrutural: R·K<sub>R</sub> = 0 nas inequações' : 'e<sub>REV</sub> = <b>' + f1(R.e_ref) + ' cm</b> de ' + nomeRevLongo() + ', K<sub>REV</sub> = ' + fK(R.k_ref)}</p>
+  ${revTS() ? '<p>No caso de tratamentos superficiais, as bases granulares devem possuir alguma coesão, pelo menos aparente, seja devido à capilaridade ou ao entrosamento de partículas (DNIT IPR-719, p. 147).</p>' : ''}
   <h3>7.2 Base</h3>
   <p>A base completa a proteção exigida sobre a sub-base, já considerando o fator de segurança adotado sobre H₂₀.</p>
   <p class="formula">e<sub>B</sub> = arredondar_sup(máx(${f1(R.emin_base || 15)}; (H₂₀×${fK(R.fator_h20 || 1)} − e<sub>REV</sub>×K<sub>REV</sub>)/K<sub>B</sub>); ${R.incr || 10}) = arredondar_sup(máx(${f1(R.emin_base || 15)}; (${f2(R.H20)}×${fK(R.fator_h20 || 1)} − ${f1(R.e_ref)}×${fK(R.k_ref)})/${fK(R.k_base)}); ${R.incr || 10}) = <b>${f1(R.e_base)} cm</b></p>
@@ -3258,7 +3394,7 @@ async function exportarMemoriaWord() {
   ${R.e_r > 0 ? `<tr><td>2ª</td><td>Reforço do Subleito</td><td>${f1(R.e_r)}</td><td>${fN(R.k_r)}</td><td>${f2((R.e_r || 0) * (R.k_r || 0))}</td></tr>` : ''}
   <tr><td>${R.e_r > 0 ? '3ª' : '2ª'}</td><td>Sub-base</td><td>${R.e_sb > 0 ? f1(R.e_sb) : '—'}</td><td>${fN(R.k_sb)}</td><td>${R.e_sb > 0 ? f2((R.e_sb || 0) * (R.k_sb || 0)) : '—'}</td></tr>
   <tr><td>${R.e_r > 0 ? '4ª' : '3ª'}</td><td>Base</td><td>${f1(R.e_base)}</td><td>${fN(R.k_base)}</td><td>${f2((R.e_base || 0) * (R.k_base || 0))}</td></tr>
-  <tr><td>${R.e_r > 0 ? '5ª' : '4ª'}</td><td>Revestimento CBUQ</td><td>${f1(R.e_ref)}</td><td>${fN(R.k_ref)}</td><td>${f2((R.e_ref || 0) * (R.k_ref || 0))}</td></tr>
+  <tr><td>${R.e_r > 0 ? '5ª' : '4ª'}</td><td>Revestimento ${nomeRev()}</td><td>${espRev(false)}</td><td>${revTS() ? '—' : fN(R.k_ref)}</td><td>${f2((R.e_ref || 0) * (R.k_ref || 0))}</td></tr>
   <tr style="background:#e8f0d8"><td colspan="2"><b>TOTAL</b></td><td><b>${f1(R.e_total || 0)}</b></td><td>—</td><td><b>${f2(R.ineq3_val)}</b></td></tr>
   </table>
 
@@ -3268,7 +3404,7 @@ async function exportarMemoriaWord() {
   ${R.e_r > 0 ? `<tr><td>Reforço</td><td>Solo selecionado</td><td>${f1(R.cbr_ref)}% (superior ao do subleito)</td><td>≤ 1,0%</td><td>IP ≤ 10</td></tr>` : ''}
   <tr><td>Sub-base</td><td>Brita grad. / Solo estab.</td><td>${f1(R.cbr_sb)}%</td><td>≤ 0,5%</td><td>Graul. contínua, IP ≤ 6</td></tr>
   <tr><td>Base</td><td>Brita graduada simples</td><td>${f1(R.cbr_base_val)}%</td><td>≤ 0,3%</td><td>IP ≤ 6, LL ≤ 25%</td></tr>
-  <tr><td>Revestimento</td><td>CBUQ (Concreto Betum. Usinado a Quente)</td><td>—</td><td>—</td><td>Conforme Projeto de Mix</td></tr>
+  <tr><td>Revestimento</td><td>${nomeRevLongo().charAt(0).toUpperCase() + nomeRevLongo().slice(1)}</td><td>—</td><td>—</td><td>Conforme projeto de mistura</td></tr>
   </table>
 
   <h2>11. Execução das camadas granulares</h2>
@@ -3301,7 +3437,7 @@ async function exportarMemoriaWord() {
 
   <h2>13. Sensibilidade ao CBR do subleito</h2>
   <p>H₂₀ = ${f2(R.H20)} cm e Hn = ${f2(R.Hn)} cm independem do CBR do subleito; apenas Hm e o reforço variam.</p>
-  <table><tr><th>CBR do subleito</th><th>Hm (cm)</th><th>CBUQ (cm)</th><th>Base (cm)</th><th>Sub-base (cm)</th><th>Reforço (cm)</th><th>Total (cm)</th></tr>
+  <table><tr><th>CBR do subleito</th><th>Hm (cm)</th><th>Revest. (cm)</th><th>Base (cm)</th><th>Sub-base (cm)</th><th>Reforço (cm)</th><th>Total (cm)</th></tr>
   ${sensRows}
   </table>
 
@@ -3311,7 +3447,7 @@ async function exportarMemoriaWord() {
   • Ensaio de compactação Proctor (NBR 7182) para controle de execução<br>
   • Ensaio de granulometria (NBR 7181) para materiais de base e sub-base<br>
   • Ensaio de Limite de Plasticidade (NBR 7180) para materiais de base<br>
-  • Extração de corpos de prova do revestimento CBUQ para controle de dosagem</p>
+  • ${revTS() ? 'Controle das taxas de ligante e de agregado do tratamento superficial' : 'Extração de corpos de prova do revestimento ' + nomeRev() + ' para controle de dosagem'}</p>
 
   <h2>15. Limitações geotécnicas</h2>
   <p>O presente dimensionamento está condicionado às seguintes hipóteses e limitações:</p>
@@ -3324,7 +3460,7 @@ async function exportarMemoriaWord() {
   <h2>16. Conclusão</h2>
   <p>O dimensionamento pelo Método Empírico do CBR (DNIT IPR-719) para a via <b>${logr}</b>,
   trecho <b>${trecho_txt}</b>, com N = <b>${Nfmt(R.N || 0)}</b>, resultou na seguinte estrutura de pavimento flexível:</p>
-  <p><b>Revestimento CBUQ: ${f1(R.e_ref)} cm</b> | <b>Base: ${f1(R.e_base)} cm</b>${R.e_sb > 0 ? ` | <b>Sub-base: ${f1(R.e_sb)} cm</b>` : ''}${R.e_r > 0 ? ` | <b>Reforço do subleito: ${f1(R.e_r)} cm</b>` : ''} | <b>Espessura Total: ${f1(R.e_total || 0)} cm</b></p>
+  <p><b>Revestimento ${nomeRev()}: ${espRev(true)}</b> | <b>Base: ${f1(R.e_base)} cm</b>${R.e_sb > 0 ? ` | <b>Sub-base: ${f1(R.e_sb)} cm</b>` : ''}${R.e_r > 0 ? ` | <b>Reforço do subleito: ${f1(R.e_r)} cm</b>` : ''} | <b>Espessura Total: ${f1(R.e_total || 0)} cm</b></p>
   <p>As três inequações do método foram verificadas e a estrutura <b class="${ok1 && ok2 && ok3 ? 'ok' : 'warn'}">${ok1 && ok2 && ok3 ? 'ATENDE' : 'NÃO ATENDE COMPLETAMENTE'}</b> os requisitos normativos de resistência estrutural.</p>
 
   <div class="rodape">
@@ -3690,7 +3826,7 @@ async function exportarMemoriaPDF() {
   ['Logradouro:', s('logradouro') || '—'], ['Trecho:', s('trecho') || '—'], ['Responsável:', s('responsavel') || '—']]
   );
   addSection('2. Número N', [
-  ['Cenário:', (sc == null ? void 0 : sc.label) || '—'], ['N adotado:', fmtN(R.N || 0)], ['Classificação:', classificaN(R.N || 0)]]
+  ['Origem do N:', (sc == null ? void 0 : sc.label) || '—'], ['N adotado:', fmtN(R.N || 0)], ['Classificação:', classificaN(R.N || 0)]]
   );
   addSection('3. Parâmetros CBR', [
   ['CBR Subleito:', fmt(R.cbr_sub, 1) + '%'], ['CBR Base:', fmt(R.cbr_base_val, 1) + '%'],
@@ -3700,7 +3836,7 @@ async function exportarMemoriaPDF() {
   ['H20 (cm):', fmt(R.H20)], ['Hn (cm):', fmt(R.Hn)], ['Hm (cm):', fmt(R.Hm)]]
   );
   addSection('5. Estrutura Adotada', [
-  ['Revestimento CBUQ:', fmt(R.e_ref, 1) + ' cm'],
+  ['Revestimento ' + nomeRev() + ':', espRev(true)],
   ['Base:', fmt(R.e_base, 1) + ' cm'],
   ['Sub-base:', R.e_sb > 0 ? fmt(R.e_sb, 1) + ' cm' : '—'],
   ['Reforço do subleito:', R.e_r > 0 ? fmt(R.e_r, 1) + ' cm' : '—'],
@@ -3755,7 +3891,7 @@ function exportarTabExcel(tab) {
     ['H20 (cm):', fmt(R.H20)], ['Hn (cm):', fmt(R.Hn)], ['Hm (cm):', fmt(R.Hm)],
     ['', ''],
     ['Camada', 'Espessura (cm)', 'K'],
-    ['Revestimento CBUQ', fmt(R.e_ref, 1), fmt(R.k_ref, 2)],
+    ['Revestimento ' + nomeRev(), espRev(false), revTS() ? '—' : fmt(R.k_ref, 2)],
     ['Base', fmt(R.e_base, 1), fmt(R.k_base, 2)],
     ['Sub-base', R.e_sb > 0 ? fmt(R.e_sb, 1) : '—', fmt(R.k_sb, 2)],
     ['Reforço do subleito', R.e_r > 0 ? fmt(R.e_r, 1) : '—', fmt(R.k_r, 2)],
@@ -3767,16 +3903,11 @@ function exportarTabExcel(tab) {
 
   } else if (tab === 'numN') {
     sheetName = 'Numero N';fname = 'pavimento_numero_n.xlsx';
-    const sc = SCENARIOS[selectedScenario];
     aoa = [
-    ['NÚMERO N — Quadro 2.1 (IP-02/2004, PMSP)', ''],
-    ['Cenário selecionado:', (sc == null ? void 0 : sc.label) || '—'],
+    ['NÚMERO N — MÉTODO DO DNIT (IPR-719)', ''],
+    ...linhasN(),
     ['N adotado:', fmtN(R.N || 0)],
-    ['Classificação:', classificaN(R.N || 0)],
-    ['', ''],
-    ['QUADRO 6.1 — CENÁRIOS', ''],
-    ['#', 'Descrição', 'N'],
-    ...SCENARIOS.map((sc, i) => [i + 1, sc.label, sc.n ? fmtN(sc.n) : 'Personalizado'])];
+    ['Classificação:', classificaN(R.N || 0)]];
 
   } else if (tab === 'topo') {
     sheetName = 'Topografia';fname = 'pavimento_topografia.xlsx';
@@ -3810,7 +3941,7 @@ function exportarTabExcel(tab) {
     ['Caimento esq. / dir. (%):', fmt(Pc.cEsq * 100, 1) + ' / ' + fmt(Pc.cDir * 100, 1)],
     ['', ''],
     ['Estrutura', 'Espessura (cm)'],
-    ['Revestimento CBUQ', fmt(R.e_ref, 1)],
+    ['Revestimento ' + nomeRev(), espRev(false)],
     ['Base', fmt(R.e_base, 1)],
     ['Sub-base', R.e_sb > 0 ? fmt(R.e_sb, 1) : '—'],
     ['Reforço do subleito', R.e_r > 0 ? fmt(R.e_r, 1) : '—'],
@@ -3829,11 +3960,11 @@ function exportarTabExcel(tab) {
     ['Reforço do Subleito', 'Solo selecionado', '≥ 2', '≤ 1,0', 'Se necessário'],
     ['Sub-base', 'Brita graduada / Solo estab.', fmt(R.cbr_sb, 1) || '≥ 20', '≤ 0,5', 'Granulometria contínua'],
     ['Base', 'Brita graduada simples / BGS', fmt(R.cbr_base_val, 1) || '≥ 80', '≤ 0,3', 'IP ≤ 6'],
-    ['Revestimento', 'CBUQ', '—', '—', 'Conforme Projeto Mix'],
+    ['Revestimento', nomeRev(), '—', '—', 'Conforme projeto de mistura'],
     ['', ''],
     ['ESPESSURAS MÍNIMAS ADOTADAS', '', '', '', ''],
     ['Camada', 'Espessura Mínima (cm)', 'N de Projeto', '', ''],
-    ['CBUQ', fmt(R.emin_ref, 1), fmtN(R.N || 0), '', ''],
+    ['Revestimento ' + nomeRev() + ' (Tabela 32)', espRev(false), fmtN(R.N || 0), '', ''],
     ['Base', '15', '—', '', ''],
     ['Sub-base (granular)', '15', '—', '', '']];
 
@@ -3879,7 +4010,7 @@ ${body}</body></html>`;
     <tr><td>Hm</td><td>${fmt(R.Hm)} cm</td></tr></table>
     <h2>Estrutura Adotada</h2>
     <table><tr><th>Camada</th><th>Espessura</th><th>K</th></tr>
-    <tr><td>Revestimento CBUQ</td><td>${fmt(R.e_ref, 1)} cm</td><td>${fmt(R.k_ref, 2)}</td></tr>
+    <tr><td>Revestimento ${nomeRev()}</td><td>${espRev(true)}</td><td>${revTS() ? '—' : fmt(R.k_ref, 2)}</td></tr>
     <tr><td>Base</td><td>${fmt(R.e_base, 1)} cm</td><td>${fmt(R.k_base, 2)}</td></tr>
     <tr><td>Sub-base</td><td>${R.e_sb > 0 ? fmt(R.e_sb, 1) + ' cm' : '—'}</td><td>${fmt(R.k_sb, 2)}</td></tr>
     <tr><td>Reforço do subleito</td><td>${R.e_r > 0 ? fmt(R.e_r, 1) + ' cm' : '—'}</td><td>${fmt(R.k_r, 2)}</td></tr>
@@ -3892,13 +4023,12 @@ ${body}</body></html>`;
 
   } else if (tab === 'numN') {
     fname = 'pavimento_numero_n.docx';
-    const scenRows = SCENARIOS.map((s2, i) => `<tr${i === selectedScenario ? ' style="background:#d9e8f7"' : ''}><td>${i + 1}</td><td>${s2.label}</td><td>${s2.n ? fmtN(s2.n) : 'Personalizado'}</td></tr>`).join('');
+    const nRows = linhasN().map((l) => `<tr><td>${l[0]}</td><td>${l[1]}</td></tr>`).join('');
     html = wrap(`
-    <h2>Cenário Selecionado</h2>
-    <p><b>Cenário:</b> ${(sc == null ? void 0 : sc.label) || '—'}<br><b>N adotado:</b> ${fmtN(R.N || 0)}<br><b>Classificação:</b> ${classificaN(R.N || 0)}</p>
-    <h2>Cenários de tráfego (Quadro 2.1 da IP-02/2004, PMSP)</h2>
-    <table><tr><th>#</th><th>Descrição</th><th>N</th></tr>${scenRows}</table>
-    `, 'Número N — Quadro 2.1 (IP-02/2004, PMSP)');
+    <h2>Número N — método do DNIT (IPR-719, p. 143–144)</h2>
+    <table>${nRows}</table>
+    <p><b>N adotado:</b> ${fmtN(R.N || 0)}<br><b>Classificação:</b> ${classificaN(R.N || 0)}</p>
+    `, 'Número N — DNIT IPR-719');
 
   } else if (tab === 'topo') {
     fname = 'pavimento_topografia.docx';
@@ -3944,7 +4074,7 @@ ${body}</body></html>`;
     </table>
     <h2>Espessuras das Camadas</h2>
     <table><tr><th>Camada</th><th>Espessura (cm)</th></tr>
-    <tr><td>Revestimento CBUQ</td><td>${fmt(R.e_ref, 1)}</td></tr>
+    <tr><td>Revestimento ${nomeRev()}</td><td>${espRev(false)}</td></tr>
     <tr><td>Base</td><td>${fmt(R.e_base, 1)}</td></tr>
     <tr><td>Sub-base</td><td>${R.e_sb > 0 ? fmt(R.e_sb, 1) : '—'}</td></tr>
     <tr><td>Reforço do subleito</td><td>${R.e_r > 0 ? fmt(R.e_r, 1) : '—'}</td></tr>
@@ -4013,7 +4143,7 @@ async function exportarTabPDF(tab) {
     addRow('Hn (cm):', fmt(R.Hn));
     addRow('Hm (cm):', fmt(R.Hm));
     addH('Estrutura');
-    addRow('Revestimento CBUQ:', fmt(R.e_ref, 1) + ' cm');
+    addRow('Revestimento ' + nomeRev() + ':', espRev(true));
     addRow('Base:', fmt(R.e_base, 1) + ' cm');
     if (R.e_sb > 0) addRow('Sub-base:', fmt(R.e_sb, 1) + ' cm');
     if (R.e_r > 0) addRow('Reforço do subleito:', fmt(R.e_r, 1) + ' cm');
@@ -4026,16 +4156,11 @@ async function exportarTabPDF(tab) {
     await triggerDownload(new Blob([buf], { type: 'application/pdf' }), 'pavimento_dimensionamento.pdf');
 
   } else if (tab === 'numN') {
-    addTitle('Número N — Quadro 2.1 (IP-02/2004, PMSP)', hoje);
-    addH('Cenário Selecionado');
-    addRow('Cenário:', (sc == null ? void 0 : sc.label) || '—');
+    addTitle('Número N — DNIT IPR-719', hoje);
+    addH('Método do DNIT (IPR-719, p. 143–144)');
+    linhasN().forEach((l) => addRow(l[0], l[1]));
     addRow('N adotado:', fmtN(R.N || 0));
     addRow('Classificação:', classificaN(R.N || 0));
-    addH('Quadro 2.1 da IP-02/2004 (PMSP)');
-    SCENARIOS.forEach((s2, i) => {
-      const marker = i === selectedScenario ? '► ' : '  ';
-      addRow(marker + (i + 1) + '. ' + s2.label, s2.n ? fmtN(s2.n) : 'Personalizado', i === selectedScenario);
-    });
     const buf = doc.output('arraybuffer');
     await triggerDownload(new Blob([buf], { type: 'application/pdf' }), 'pavimento_numero_n.pdf');
 
@@ -4111,7 +4236,7 @@ async function exportarTabPDF(tab) {
     addRow('CBR da sub-base:', fmt(R.cbr_sb, 1) + '%');
     addRow('CBR da base:', fmt(R.cbr_base_val, 1) + '%');
     addH('Estrutura adotada');
-    addRow('Revestimento CBUQ:', fmt(R.e_ref, 1) + ' cm');
+    addRow('Revestimento ' + nomeRev() + ':', espRev(true));
     addRow('Base:', fmt(R.e_base, 1) + ' cm');
     if (R.e_sb > 0) addRow('Sub-base:', fmt(R.e_sb, 1) + ' cm');
     if (R.e_r > 0) addRow('Reforço do subleito:', fmt(R.e_r, 1) + ' cm');
@@ -4142,7 +4267,7 @@ async function exportarTabPDF(tab) {
     if (R.e_r > 0) addRow('Reforço do subleito:', 'CBR ' + fmt(R.cbr_ref, 1) + '% · expansão <= 1,0% · IP <= 10');
     addRow('Sub-base:', 'CBR ' + fmt(R.cbr_sb, 1) + '% · expansão <= 0,5% · IP <= 6');
     addRow('Base (BGS):', 'CBR ' + fmt(R.cbr_base_val, 1) + '% · expansão <= 0,3% · IP <= 6, LL <= 25%');
-    addRow('Revestimento:', 'CBUQ conforme projeto de mistura');
+    addRow('Revestimento:', nomeRev() + ' conforme projeto de mistura');
     addH('Execução das camadas granulares');
     addRow('Incremento adotado:', fmt(R.incr || 10, 0) + ' cm');
     addRow('Camada compactada máxima:', fmt(R.e_max_camada || 10, 0) + ' cm');
@@ -4154,7 +4279,7 @@ async function exportarTabPDF(tab) {
     'Compactação Proctor (NBR 7182) — controle de execução',
     'Granulometria (NBR 7181) — base e sub-base',
     'Limite de plasticidade (NBR 7180) — base',
-    'Corpos de prova do CBUQ — controle de dosagem'].forEach((t) => addRow('•', t));
+    revTS() ? 'Taxas de ligante e agregado do tratamento superficial' : 'Corpos de prova do ' + nomeRev() + ' — controle de dosagem'].forEach((t) => addRow('•', t));
     const buf = doc.output('arraybuffer');
     await triggerDownload(new Blob([buf], { type: 'application/pdf' }), 'pavimento_materiais.pdf');
 
@@ -4422,9 +4547,7 @@ function reconhecerPorRotulos(pares, tabelaTopo) {
     if ((r === 'k sub-base' || r === 'k sub base') && ok) {base.k.k_sb = num;marca('K da sub-base', num);} else
     if (r === 'k reforco' && ok) {base.k.k_r = num;marca('K do reforço', num);} else
     if (r === 'n adotado' && ok && num > 0) {
-      let idx = SCENARIOS.findIndex((s) => s.n && Math.abs(s.n - num) / s.n < 0.006);
-      if (idx < 0) idx = 7;
-      base.numN = { selectedScenario: idx, N_adotado: num, customN: idx === 7 ? String(Math.round(num)) : '' };
+      base.numN = Object.assign({}, base.numN || {}, { versao: 2, selectedScenario: N_INFORMADO, N_adotado: num, customN: String(Math.round(num)) });
       marca('Número N', fmtN(num));
     }
   });
@@ -4671,6 +4794,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setVal('cbr_ref', '6');
   setVal('cbr_sb', '20');
   setVal('k_ref', '2.0');
+  setVal('tipo_rev', 'auto');
   setVal('k_base', '1.0');
   setVal('k_sb', '1.0');
   setVal('k_r', '1.0');
@@ -4681,12 +4805,13 @@ document.addEventListener('DOMContentLoaded', () => {
   setVal('emin_base', '15');
   setVal('emin_gran', '15');
   setVal('e_max_camada', '10');
+  setVal('modo_fator', 'auto');
   setVal('a_desn_boca', '0.000');
   setVal('a_afast_min', '1.500');
   setVal('a_na', '2.500');
 
-  // Select scenario 3 (Meio Pesado = index 2) as default
-  selectScenario(2);
+  // N pelo método do DNIT como padrão
+  selectScenario(0);
 
   // Add demo topo rows
   addTopoRow({ est: 0, te: 101.90, tc: 102.00, td: 101.90, gr: 101.00, larg: 7.0 });
@@ -4853,11 +4978,11 @@ function dadosDoProjeto() {
   return {
     v: 3,
     ident: { logradouro: s('logradouro'), trecho: s('trecho'), responsavel: s('responsavel') },
-    numN: { selectedScenario, N_adotado, customN: (document.getElementById('n_custom') || {}).value || '' },
+    numN: dadosNumN(),
     cbr: { cbr_sub: v('cbr_sub'), cbr_ref: v('cbr_ref'), cbr_sb: v('cbr_sb'), cbr_base: v('cbr_base') },
     k: { k_ref: v('k_ref'), k_base: v('k_base'), k_sb: v('k_sb'), k_r: v('k_r') },
     criterios: { incr: v('incr'), emin_base: v('emin_base'), emin_gran: v('emin_gran'),
-      e_max_camada: v('e_max_camada'), modo_fator: s('modo_fator') },
+      e_max_camada: v('e_max_camada'), modo_fator: s('modo_fator'), tipo_rev: s('tipo_rev') || 'auto', ipr719: true },
     alti: { a_rn: v('a_rn'), a_desnivel: v('a_desnivel'), a_desn_boca: v('a_desn_boca'),
       a_na: v('a_na'), a_afast_min: v('a_afast_min') },
     corte: { c_talcorte: v('c_talcorte'),
