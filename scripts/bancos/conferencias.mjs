@@ -48,6 +48,11 @@ export function conferirCabecalhosSinapi(rel, wb, leitores){
     const h = L.acharLinhaHeader(rows, e.marcador, 15);
     if(h < 0){ rel.falha(aba + ': não achei a linha de títulos (começando por "' + e.marcador + '")'); continue; }
     const cab = (rows[h] || []).map(v => String(v == null ? '' : v).replace(/\s+/g, ' ').trim());
+    if(process.env.BANCOS_MOSTRAR_LINHAS){   // diagnóstico: como a aba está montada
+      const curto = r => (r || []).slice(0, 8).map(v => String(v == null ? '·' : v).replace(/\s+/g, ' ').slice(0, 25)).join(' | ');
+      rel.aviso(aba + ': ' + rows.length + ' linhas; títulos na linha ' + (h + 1));
+      for(let i = Math.max(0, h - 3); i < Math.min(rows.length, h + 5); i++) rel.aviso('   L' + (i + 1) + ': ' + curto(rows[i]) + '  …[40]=' + String((rows[i] || [])[40]));
+    }
     const ruins = Object.keys(e.colunas).filter(i => !e.colunas[i].test(cab[i] || ''));
     rel.exigir(!ruins.length, aba + ': colunas Código/Descrição/Unidade' + (aba === 'Analítico' ? '/Tipo/Coeficiente' : '') + ' no lugar certo',
       aba + ': coluna(s) fora do lugar: ' + ruins.map(i => '#' + i + ' = "' + (cab[i] || '') + '"').join(', '));
