@@ -6675,7 +6675,7 @@ setTimeout(inicializarBancoSco, 200);
     var sinOrig = window._sinapiImportMeta ? ('importado por você'+(window._sinapiImportMeta.importadoEm?' em '+window._sinapiImportMeta.importadoEm:'')) : 'embutido no programa';
     var scoOrig = window._scoImportMeta ? ('importado por você'+(window._scoImportMeta.importadoEm?' em '+window._scoImportMeta.importadoEm:'')) : 'embutido no programa';
     var geral = [
-      ['Versão do programa', 'V1-02-33'],
+      ['Versão do programa', 'V1-02-34'],
       ['Navegador', navegador()],
       ['Tela (largura)', window.innerWidth+' px'],
       ['Descompressão nativa (bancos embutidos)', window.DecompressionStream ? 'sim' : 'NÃO — atualize o navegador'],
@@ -10685,6 +10685,35 @@ document.addEventListener('DOMContentLoaded', limparRestos);
 })();
 </script>
 <!-- FIM PATCH V1-02-33 -->
+
+<!-- ==================== PATCH V1-02-34 - COMPOSIÇÕES: nunca trocar o descritivo do insumo pelo código ==================== -->
+<script>
+(function(){
+  // Causa: aplicarDescricoesInsumosNasComps() chamava getDescrInsumo(codigo, null). Quando o insumo não está na
+  // planilha de Insumos EMOP (ou ela não foi importada neste navegador), a função devolvia o próprio código e ele
+  // era gravado no lugar da descrição de TODAS as composições. Agora o descritivo que a composição já tem é o reserva,
+  // e só é trocado quando a planilha de Insumos tem um texto de verdade.
+  window.aplicarDescricoesInsumosNasComps = function(){
+    var n = 0;
+    Object.keys(COMP_MAP || {}).forEach(function(cod){
+      var comp = COMP_MAP[cod];
+      if(!comp || !comp.itens) return;
+      comp.itens.forEach(function(it){
+        var d = getDescrInsumo(it.codigo, it.descr);
+        var c = String(it.codigo == null ? '' : it.codigo).trim();
+        if(d && String(d).trim() !== c){
+          if(d !== it.descr) n++;
+          it.descr = d;
+        }
+        var u = getUnidInsumo(it.codigo, null);
+        if(u && (!it.unid || it.unid === '' || it.unid === 'UN')) it.unid = u;
+      });
+    });
+    return n;
+  };
+})();
+</script>
+<!-- FIM PATCH V1-02-34 -->
 
 </body>
 </html>
