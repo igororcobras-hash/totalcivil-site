@@ -1037,6 +1037,16 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
 <div id="tab-mat" class="tab-content">
   <div class="sec">
     <div class="sec-title">Materiais e Requisitos — Pavimento Flexível (IPR-719)</div>
+    <div class="grid3" style="margin-bottom:12px;">
+      <div class="field" data-ajuda="crit_mat">
+        <label>Critério de expansão dos materiais (memória e exportações)</label>
+        <select id="crit_mat" onchange="calc()">
+          <option value="ipr719">DNIT IPR-719 (mais atual) — sub-base ≤ 1%, base ≤ 0,5%</option>
+          <option value="rigido">Anterior, mais rígido — sub-base ≤ 0,5%, base ≤ 0,3%</option>
+        </select>
+        <span class="unit" id="o_crit_mat_txt">DNIT IPR-719, p. 142 — versão corrigida com errata, a referência mais atual</span>
+      </div>
+    </div>
     <div class="tbl-wrap">
       <table>
         <thead><tr>
@@ -1598,6 +1608,18 @@ function dadosNumN() {
     dnit: { v1: g('n_v1'), t: g('n_t'), p: g('n_p'), cresc: g('n_cresc'), fv: g('n_fv') } };
 }
 
+/* Critério de aceitação dos materiais granulares.
+   ipr719: DNIT IPR-719, p. 142 (reforço e sub-base com expansão ≤ 1%; base ≤ 0,5%, LL ≤ 25%, IP ≤ 6%).
+   rigido: limites mais rígidos que o Manual, usados pelo programa até 15/10/2026 (escolha do projetista). */
+function critMat() {
+  const rig = (document.getElementById('crit_mat') || {}).value === 'rigido';
+  return rig ?
+  { rig: true, ref: '1,0', sb: '0,5', base: '0,3', refComp: 'IP ≤ 10', sbComp: 'Granul. contínua, IP ≤ 6', baseComp: 'IP ≤ 6, LL ≤ 25%',
+    fonte: 'Limites anteriores, mais rígidos que o DNIT IPR-719; o IPR-719 (versão corrigida com errata, rerratificação) é a referência mais atual e pede sub-base ≤ 1% e base ≤ 0,5% (p. 142)' } :
+  { rig: false, ref: '1,0', sb: '1,0', base: '0,5', refComp: 'CBR maior que o do subleito', sbComp: 'IG = 0', baseComp: 'LL ≤ 25%, IP ≤ 6%',
+    fonte: 'DNIT IPR-719, p. 142, versão corrigida com errata (rerratificação), a referência mais atual (expansão medida com sobrecarga de 10 lb)' };
+}
+
 /* Tipo de revestimento — DNIT IPR-719, Tabela 31 (K) e Tabela 32 (espessura mínima) */
 const REV_TIPOS = {
   CBUQ: { nome: 'CBUQ', longo: 'concreto betuminoso usinado a quente (CBUQ)', k: 2.00 },
@@ -1782,6 +1804,7 @@ function calc() {
   set('o_rev_mat', mRev.charAt(0).toUpperCase() + mRev.slice(1));
   set('o_tipo_rev_txt', (s('tipo_rev') || 'auto') === 'auto' ?
   'Adotado: ' + nomeRev() + ' — automático pela Tabela 32' : 'Adotado: ' + nomeRev() + ' — DNIT IPR-719, Tabelas 31 e 32');
+  set('o_crit_mat_txt', critMat().fonte);
   set('o_k_ref_txt', rev_ts ? 'Não entra no cálculo: tratamento superficial (R·KR = 0)' :
   'Tabela 31: ' + nomeRev() + ' = ' + fmt(REV_TIPOS[tipo_rev].k, 2));
   set('o_cbr_base_show', fmt(cbr_base_val, 1) + '%');
@@ -1922,6 +1945,7 @@ const AJUDA = {
   n_o_vm: `<b>Vm</b> — volume médio diário no período de projeto, na progressão aritmética. Na geométrica o Manual calcula Vt direto.`,
   n_o_vt: `<b>Vt</b> — volume total de tráfego no período de projeto, num sentido (DNIT IPR-719, p. 143).`,
   n_o_n: `<b>N = Vt × FV</b> — número equivalente de operações do eixo simples padrão de 8,2 t no período de projeto (DNIT IPR-719, p. 143).`,
+  crit_mat: `<b>Critério de expansão dos materiais</b> — limites que saem na memória e nas exportações da aba Materiais.<br>• DNIT IPR-719 (p. 142), versão corrigida com errata (rerratificação), a referência mais atual: reforço e sub-base com expansão ≤ 1%; base ≤ 0,5%, LL ≤ 25% e IP ≤ 6% (sobrecarga de 10 lb)<br>• Anterior, mais rígido: sub-base ≤ 0,5% e base ≤ 0,3% (com IP ≤ 10 no reforço), limites mais rígidos que o IPR-719, a critério do projetista<br><i>Não muda o dimensionamento.</i>`,
   tipo_rev: `<b>Tipo de revestimento</b> — define o K do revestimento (Tabela 31) e a espessura mínima (Tabela 32) do DNIT IPR-719.<br>• Automático: tratamento superficial se N ≤ 10⁶; concreto betuminoso (CBUQ) acima<br>• Para 10⁶ &lt; N ≤ 5×10⁶ a Tabela 32 pede revestimento betuminoso de 5,0 cm; acima de 5×10⁶, concreto betuminoso<br>• Tratamento superficial: sem espessura estrutural, R·KR = 0 nas inequações`,
   c_de: `<b>Da estaca</b> — primeira seção do trecho mostrado na tela e exportado.`,
   c_ate: `<b>Até a estaca</b> — última seção do trecho mostrado na tela e exportado.`,
@@ -3045,7 +3069,7 @@ function salvarProjeto() {var _document$getElementB7;
     alti: { a_rn: v('a_rn'), a_desnivel: v('a_desnivel'), a_desn_boca: v('a_desn_boca'),
       a_na: v('a_na'), a_afast_min: v('a_afast_min') },
     criterios: { incr: v('incr'), emin_base: v('emin_base'), emin_gran: v('emin_gran'),
-      e_max_camada: v('e_max_camada'), modo_fator: s('modo_fator'), tipo_rev: s('tipo_rev') || 'auto', ipr719: true },
+      e_max_camada: v('e_max_camada'), modo_fator: s('modo_fator'), tipo_rev: s('tipo_rev') || 'auto', ipr719: true, crit_mat: s('crit_mat') || 'ipr719' },
     corte: { c_talcorte: v('c_talcorte'),
       c_talaterro: v('c_talaterro'), c_berma: v('c_berma'),
       c_na: v('c_na'), c_rn: v('c_rn') },
@@ -3080,6 +3104,7 @@ function aplicarProjeto(p) {
         if (c.incr) set('incr', c.incr);if (c.emin_base) set('emin_base', c.emin_base);
         if (c.emin_gran) set('emin_gran', c.emin_gran);if (c.e_max_camada) set('e_max_camada', c.e_max_camada);
         if (c.modo_fator) {const el = document.getElementById('modo_fator');if (el) el.value = c.modo_fator;}}
+      {const el = document.getElementById('crit_mat');if (el) el.value = p.criterios && p.criterios.crit_mat || 'rigido';}
       {// projetos gravados antes da revisão pelo IPR-719 (15/10/2026) mantêm o resultado de quando foram feitos
         const c = p.criterios || {},elT = document.getElementById('tipo_rev'),elF = document.getElementById('modo_fator');
         if (c.ipr719) {if (elT) elT.value = c.tipo_rev || 'auto';} else
@@ -3401,11 +3426,12 @@ async function exportarMemoriaWord() {
   <h2>10. Critérios de aceitação dos materiais</h2>
   <table><tr><th>Camada</th><th>Material</th><th>CBR mínimo</th><th>Expansão máx.</th><th>Complementares</th></tr>
   <tr><td>Subleito</td><td>Solo local compactado</td><td>${f1(R.cbr_sub)}%</td><td>≤ 2,0%</td><td>—</td></tr>
-  ${R.e_r > 0 ? `<tr><td>Reforço</td><td>Solo selecionado</td><td>${f1(R.cbr_ref)}% (superior ao do subleito)</td><td>≤ 1,0%</td><td>IP ≤ 10</td></tr>` : ''}
-  <tr><td>Sub-base</td><td>Brita grad. / Solo estab.</td><td>${f1(R.cbr_sb)}%</td><td>≤ 0,5%</td><td>Graul. contínua, IP ≤ 6</td></tr>
-  <tr><td>Base</td><td>Brita graduada simples</td><td>${f1(R.cbr_base_val)}%</td><td>≤ 0,3%</td><td>IP ≤ 6, LL ≤ 25%</td></tr>
+  ${R.e_r > 0 ? `<tr><td>Reforço</td><td>Solo selecionado</td><td>${f1(R.cbr_ref)}% (superior ao do subleito)</td><td>≤ ${critMat().ref}%</td><td>${critMat().refComp}</td></tr>` : ''}
+  <tr><td>Sub-base</td><td>Brita grad. / Solo estab.</td><td>${f1(R.cbr_sb)}%</td><td>≤ ${critMat().sb}%</td><td>${critMat().sbComp}</td></tr>
+  <tr><td>Base</td><td>Brita graduada simples</td><td>${f1(R.cbr_base_val)}%</td><td>≤ ${critMat().base}%</td><td>${critMat().baseComp}</td></tr>
   <tr><td>Revestimento</td><td>${nomeRevLongo().charAt(0).toUpperCase() + nomeRevLongo().slice(1)}</td><td>—</td><td>—</td><td>Conforme projeto de mistura</td></tr>
   </table>
+  <p>Critério de expansão: ${critMat().fonte}.</p>
 
   <h2>11. Execução das camadas granulares</h2>
   <p>As espessuras de base, sub-base e reforço do subleito foram arredondadas para múltiplos de ${f1(R.incr || 10)} cm, de modo que cada camada seja executada em camadas compactadas inteiras de no máximo ${f1(R.e_max_camada || 10)} cm, conforme a prática de compactação adotada. Com esse critério, a execução fica assim distribuída:</p>
@@ -3957,10 +3983,11 @@ function exportarTabExcel(tab) {
     ['', ''],
     ['Camada', 'Material', 'CBR Mínimo (%)', 'Expansão Máx. (%)', 'Observações'],
     ['Subleito', 'Solo local', fmt(R.cbr_sub, 1), '≤ 2,0', 'Verificar CBR local'],
-    ['Reforço do Subleito', 'Solo selecionado', '≥ 2', '≤ 1,0', 'Se necessário'],
-    ['Sub-base', 'Brita graduada / Solo estab.', fmt(R.cbr_sb, 1) || '≥ 20', '≤ 0,5', 'Granulometria contínua'],
-    ['Base', 'Brita graduada simples / BGS', fmt(R.cbr_base_val, 1) || '≥ 80', '≤ 0,3', 'IP ≤ 6'],
+    ['Reforço do Subleito', 'Solo selecionado', '≥ 2', '≤ ' + critMat().ref, critMat().refComp],
+    ['Sub-base', 'Brita graduada / Solo estab.', fmt(R.cbr_sb, 1) || '≥ 20', '≤ ' + critMat().sb, critMat().sbComp],
+    ['Base', 'Brita graduada simples / BGS', fmt(R.cbr_base_val, 1) || '≥ 80', '≤ ' + critMat().base, critMat().baseComp],
     ['Revestimento', nomeRev(), '—', '—', 'Conforme projeto de mistura'],
+    ['Critério de expansão:', critMat().fonte, '', '', ''],
     ['', ''],
     ['ESPESSURAS MÍNIMAS ADOTADAS', '', '', '', ''],
     ['Camada', 'Espessura Mínima (cm)', 'N de Projeto', '', ''],
@@ -4264,9 +4291,11 @@ async function exportarTabPDF(tab) {
     addTitle('Materiais e Requisitos', hoje);
     addH('Critérios de aceitação');
     addRow('Subleito:', 'CBR ' + fmt(R.cbr_sub, 1) + '% · expansão <= 2,0%');
-    if (R.e_r > 0) addRow('Reforço do subleito:', 'CBR ' + fmt(R.cbr_ref, 1) + '% · expansão <= 1,0% · IP <= 10');
-    addRow('Sub-base:', 'CBR ' + fmt(R.cbr_sb, 1) + '% · expansão <= 0,5% · IP <= 6');
-    addRow('Base (BGS):', 'CBR ' + fmt(R.cbr_base_val, 1) + '% · expansão <= 0,3% · IP <= 6, LL <= 25%');
+    const cm = critMat(),pdfT = (t) => t.replace(/≤/g, '<=');
+    if (R.e_r > 0) addRow('Reforço do subleito:', 'CBR ' + fmt(R.cbr_ref, 1) + '% · expansão <= ' + cm.ref + '% · ' + pdfT(cm.refComp));
+    addRow('Sub-base:', 'CBR ' + fmt(R.cbr_sb, 1) + '% · expansão <= ' + cm.sb + '% · ' + pdfT(cm.sbComp));
+    addRow('Base (BGS):', 'CBR ' + fmt(R.cbr_base_val, 1) + '% · expansão <= ' + cm.base + '% · ' + pdfT(cm.baseComp));
+    addRow('Critério:', cm.fonte);
     addRow('Revestimento:', nomeRev() + ' conforme projeto de mistura');
     addH('Execução das camadas granulares');
     addRow('Incremento adotado:', fmt(R.incr || 10, 0) + ' cm');
@@ -4806,6 +4835,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setVal('emin_gran', '15');
   setVal('e_max_camada', '10');
   setVal('modo_fator', 'auto');
+  setVal('crit_mat', 'ipr719');
   setVal('a_desn_boca', '0.000');
   setVal('a_afast_min', '1.500');
   setVal('a_na', '2.500');
@@ -4982,7 +5012,7 @@ function dadosDoProjeto() {
     cbr: { cbr_sub: v('cbr_sub'), cbr_ref: v('cbr_ref'), cbr_sb: v('cbr_sb'), cbr_base: v('cbr_base') },
     k: { k_ref: v('k_ref'), k_base: v('k_base'), k_sb: v('k_sb'), k_r: v('k_r') },
     criterios: { incr: v('incr'), emin_base: v('emin_base'), emin_gran: v('emin_gran'),
-      e_max_camada: v('e_max_camada'), modo_fator: s('modo_fator'), tipo_rev: s('tipo_rev') || 'auto', ipr719: true },
+      e_max_camada: v('e_max_camada'), modo_fator: s('modo_fator'), tipo_rev: s('tipo_rev') || 'auto', ipr719: true, crit_mat: s('crit_mat') || 'ipr719' },
     alti: { a_rn: v('a_rn'), a_desnivel: v('a_desnivel'), a_desn_boca: v('a_desn_boca'),
       a_na: v('a_na'), a_afast_min: v('a_afast_min') },
     corte: { c_talcorte: v('c_talcorte'),
