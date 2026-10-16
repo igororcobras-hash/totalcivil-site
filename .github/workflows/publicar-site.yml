@@ -1,0 +1,54 @@
+name: Publicar site protegido
+
+# Publica totalcivil.com.br sem o código dos programas:
+#   1. envia cada <programa>/index.html para o Firestore (só quem está liberado recebe);
+#   2. publica o site com a tela de entrada no lugar de cada programa.
+# Precisa: segredo FIREBASE_SERVICE_ACCOUNT e Settings › Pages › Source = "GitHub Actions".
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    # a rotina dos bancos grava na main com o token do Actions, que não dispara o "push" acima
+    workflows: ['Bancos mensais SINAPI e SCO']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: publicar-site
+  cancel-in-progress: false
+
+jobs:
+  montar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar firebase-admin
+        run: npm install --no-save --no-package-lock firebase-admin@13
+      - name: Enviar programas ao Firestore e montar o site público
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node scripts/publicar/montar-site.js _site --enviar
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  publicar:
+    needs: montar
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

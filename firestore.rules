@@ -136,6 +136,36 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Código dos programas (gravado só pela publicação automática, com conta de serviço).
+    // Entregue apenas a quem tem o programa liberado: mesmo campo, recusa e validade
+    // do painel Usuários. A lista abaixo precisa ser igual à de scripts/publicar/montar-site.js.
+    function campoDoPrograma(prog) {
+      return {
+        'pavimento': 'ativo',
+        'orcamento': 'orcamentoAtivo',
+        'intertravado': 'intertravadoAtivo',
+        'drenagem': 'drenagemAtivo',
+        'concreto': 'estruturaAtivo',
+        'visitas': 'visitasAtivo'
+      }.get(prog, '');
+    }
+    function podeUsar(prog) {
+      return admin() || (
+        logado() && temPerfil() && campoDoPrograma(prog) != '' &&
+        perfil().get(campoDoPrograma(prog), false) == true &&
+        perfil().get('recusado', false) != true &&
+        (perfil().get('validade', null) == null || perfil().validade > request.time)
+      );
+    }
+    match /programas/{prog} {
+      allow get: if podeUsar(prog);
+      allow list, write: if false;
+      match /partes/{parte} {
+        allow get: if podeUsar(prog);
+        allow list, write: if false;
+      }
+    }
+
     // Qualquer outro caminho fica bloqueado.
     match /{documento=**} {
       allow read, write: if false;
