@@ -571,6 +571,31 @@ const BLTIPOS = {
   gr: {nome: 'Grelha', fr: 0.50, L: 0},
   cb: {nome: 'Combinada (guia + grelha)', fr: 0.65, L: 1.00}
 };
+const MEIOFIO = {
+  mf15: {nome: 'Meio-fio de concreto pré-moldado, espelho 15 cm — sem sarjeta', h: 0.15, W: 0, Sw: 0},
+  mfs30: {nome: 'Meio-fio com sarjeta conjugada 30 cm (espelho 15 cm)', h: 0.15, W: 0.30, Sw: 8},
+  mfs45: {nome: 'Meio-fio com sarjeta conjugada 45 cm (espelho 15 cm)', h: 0.15, W: 0.45, Sw: 8},
+  mfs60: {nome: 'Meio-fio com sarjeta conjugada 60 cm (espelho 15 cm)', h: 0.15, W: 0.60, Sw: 6},
+  ext30: {nome: 'Meio-fio extrusado com sarjeta 30 cm, moldado in loco', h: 0.15, W: 0.30, Sw: 8},
+  gran: {nome: 'Meio-fio de granito / pedra, espelho 15 cm — sem sarjeta', h: 0.15, W: 0, Sw: 0},
+  baixo: {nome: 'Meio-fio baixo, espelho 10 cm — sem sarjeta', h: 0.10, W: 0, Sw: 0},
+  outro: {nome: 'Outro (informar espelho e sarjeta)'}
+};
+const CAIXAS = {
+  'bls-pm': {nome: 'BL simples de guia — pré-moldada (0,60 × 1,00 × 1,20 m)', tipo: 'gs', L: 1.0, constr: 'Pré-moldada', cxB: 0.60, cxL: 1.00, cxH: 1.20},
+  'bld-pm': {nome: 'BL dupla de guia — pré-moldada (0,60 × 2,20 × 1,20 m)', tipo: 'gd', L: 2.0, constr: 'Pré-moldada', cxB: 0.60, cxL: 2.20, cxH: 1.20},
+  'bls-bl': {nome: 'BL simples de guia — blocos de concreto (0,60 × 1,00 × 1,20 m)', tipo: 'gs', L: 1.0, constr: 'Blocos de concreto', cxB: 0.60, cxL: 1.00, cxH: 1.20},
+  'bld-bl': {nome: 'BL dupla de guia — blocos de concreto (0,60 × 2,20 × 1,20 m)', tipo: 'gd', L: 2.0, constr: 'Blocos de concreto', cxB: 0.60, cxL: 2.20, cxH: 1.20},
+  'bls-tj': {nome: 'BL simples de guia — tijolo maciço (0,60 × 1,00 × 1,20 m)', tipo: 'gs', L: 1.0, constr: 'Alvenaria de tijolo maciço', cxB: 0.60, cxL: 1.00, cxH: 1.20},
+  'bld-tj': {nome: 'BL dupla de guia — tijolo maciço (0,60 × 2,20 × 1,20 m)', tipo: 'gd', L: 2.0, constr: 'Alvenaria de tijolo maciço', cxB: 0.60, cxL: 2.20, cxH: 1.20},
+  'blc-bl': {nome: 'BL combinada com grelha — blocos de concreto (1,30 × 1,00 × 1,20 m)', tipo: 'cb', L: 1.0, gL: 0.90, gB: 0.30, constr: 'Blocos de concreto', cxB: 1.30, cxL: 1.00, cxH: 1.20},
+  'blc-tj': {nome: 'BL combinada com grelha — tijolo maciço (1,30 × 1,00 × 1,20 m)', tipo: 'cb', L: 1.0, gL: 0.90, gB: 0.30, constr: 'Alvenaria de tijolo maciço', cxB: 1.30, cxL: 1.00, cxH: 1.20},
+  'cxr-pm': {nome: 'Caixa de ralo com grelha FoFo 30 × 90 — pré-moldada (0,30 × 0,90 × 0,90 m)', tipo: 'gr', L: 0, gL: 0.90, gB: 0.30, constr: 'Pré-moldada', cxB: 0.30, cxL: 0.90, cxH: 0.90},
+  'cxr-tj': {nome: 'Caixa de ralo com grelha — tijolo maciço (0,40 × 1,00 × 1,00 m)', tipo: 'gr', L: 0, gL: 0.90, gB: 0.30, constr: 'Alvenaria de tijolo maciço', cxB: 0.40, cxL: 1.00, cxH: 1.00},
+  outro: {nome: 'Outro (dimensões livres)'}
+};
+function aplicaModelo(b) { const m = CAIXAS[b.modelo]; if (!m || !m.tipo) return; ['tipo', 'L', 'gL', 'gB', 'constr', 'cxB', 'cxL', 'cxH'].forEach(k => { if (m[k] != null) b[k] = m[k]; }); b.fr = BLTIPOS[m.tipo].fr; }
+function aplicaMeioFio(r) { const m = MEIOFIO[r.mf]; if (!m || m.h == null) return; r.mfH = m.h; r.sjW = m.W; r.sjI = m.Sw || ''; }
 const PVTIPOS = ['Pré-moldado anel Ø1000', 'Pré-moldado anel Ø1200', 'Alvenaria de blocos Ø1200', 'Concreto armado Ø1200', 'Pré-moldado anel Ø1500', 'Câmara retangular'];
 const TAMPAS = ['T-400 / Classe D400 (pista)', 'T-200 / Classe C250 (borda de pista)', 'T-125 / Classe B125 (passeio)'];
 const MATS = ['CA-1 (concreto armado)', 'CA-2 (concreto armado)', 'CA-3 (concreto armado)', 'PS-1 (concreto simples)', 'PEAD corrugado', 'PVC rígido'];
@@ -602,8 +627,8 @@ function exampleProject() {
   p.proj.municipio = 'Município / UF'; p.proj.local = 'Bairro Centro';
   p.proj.obs = 'Projeto de exemplo para conhecer o programa. Substitua pelos dados do seu levantamento.';
   p.ruas = [
-    {id: 'R1', nome: 'Rua João Barros', larg: 7.0, passeio: 2.0, it: 3.0},
-    {id: 'R2', nome: 'Rua Joaquim Azevedo', larg: 6.0, passeio: 1.5, it: 3.0, ref: 'R1', refDist: 80, ang: -90, dist0: 0}
+    {id: 'R1', nome: 'Rua João Barros', larg: 7.0, passeio: 2.0, it: 3.0, mf: 'mfs30', mfH: 0.15, sjW: 0.30, sjI: 8},
+    {id: 'R2', nome: 'Rua Joaquim Azevedo', larg: 6.0, passeio: 1.5, it: 3.0, ref: 'R1', refDist: 80, ang: -90, dist0: 0, mf: 'mf15', mfH: 0.15, sjW: 0, sjI: ''}
   ];
   const e = (rua, dist, cota) => ({rua, dist, cota, obs: ''});
   p.estacas = [e('R1', 0, 10.40), e('R1', 20, 10.21), e('R1', 40, 10.02), e('R1', 60, 9.86), e('R1', 80, 9.70),
@@ -619,7 +644,7 @@ function exampleProject() {
     {id: 'T2', m: 'PV-02', j: 'PV-CRUZ-01', L: '', D: 400, cm: '', cj: '', mat: MATS[1], aL: '', cL: '', tcL: ''},
     {id: 'T3', m: 'PV-CRUZ-01', j: 'PV-03', L: 60, D: 500, cm: '', cj: '', mat: MATS[1], aL: 0.10, cL: 0.60, tcL: ''}
   ];
-  const bl = (id, rua, dist, lado, tipo, pv, prox) => ({id, rua, dist, lado, tipo, L: BLTIPOS[tipo].L, a: 0.05, gL: 0.90, gB: 0.40, ga: 60, fr: BLTIPOS[tipo].fr, S: '', z: '', prox: prox || '', pv, rL: 6, rD: 400, rI: 2.0, constr: 'Pré-moldada'});
+  const bl = (id, rua, dist, lado, tipo, pv, prox) => ({id, modelo: tipo === 'gd' ? 'bld-pm' : 'bls-pm', cxB: 0.60, cxL: tipo === 'gd' ? 2.20 : 1.00, cxH: 1.20, rua, dist, lado, tipo, L: BLTIPOS[tipo].L, a: 0.05, gL: 0.90, gB: 0.40, ga: 60, fr: BLTIPOS[tipo].fr, S: '', z: '', prox: prox || '', pv, rL: 6, rD: 400, rI: 2.0, constr: 'Pré-moldada'});
   p.bls = [
     bl('BL-01', 'R1', 38, 'E', 'gs', 'PV-02', 'BL-03'), bl('BL-02', 'R1', 38, 'D', 'gd', 'PV-02', 'BL-04'),
     bl('BL-03', 'R1', 78, 'E', 'gd', 'PV-CRUZ-01'), bl('BL-04', 'R1', 78, 'D', 'gd', 'PV-CRUZ-01'),
@@ -655,6 +680,8 @@ function migrate(p) {
   p.crit.cTubo = Object.assign({}, (p.crit && p.crit.cTubo) || {});
   p.idf = Object.assign(blankProject().idf, p.idf || {});
   ['ruas', 'estacas', 'bacias', 'bls', 'pvs', 'trechos'].forEach(k => { if (!Array.isArray(p[k])) p[k] = []; });
+  p.ruas.forEach(r => { if (!r.mf) { r.mf = 'mf15'; aplicaMeioFio(r); } });
+  p.bls.forEach(b => { if (!b.modelo) { const k = Object.keys(CAIXAS).find(k => CAIXAS[k].tipo === b.tipo && CAIXAS[k].constr === (b.constr || 'Pré-moldada')) || 'outro'; b.modelo = k; const m = CAIXAS[k]; ['cxB', 'cxL', 'cxH'].forEach(x => { if (b[x] == null) b[x] = m[x] != null ? m[x] : (x === 'cxH' ? 1.2 : x === 'cxB' ? 0.6 : 1.0); }); } });
   return p;
 }
 function loadAll() {
@@ -778,6 +805,26 @@ function partFlow(Q, Dmm, S, n) {
   return r;
 }
 
+/* ---------------- sarjeta: triangular ou composta (meio-fio com sarjeta) ----------------
+   Izzard / HEC-22: Q = 0,375/n · Sx^(5/3) · S^½ · T^(8/3); seção composta pelo fator Eo. */
+function geomSarjeta(rua, bl) {
+  const c = P.crit, Sx = rua && num(rua.it) > 0 ? num(rua.it) / 100 : 0.03;
+  const h = rua && num(rua.mfH) > 0 ? num(rua.mfH) : 0.15, ymax = Math.min(c.ymax, h - 0.02);
+  if (bl && num(bl.z) > 0) return {simples: true, Sx: 1 / num(bl.z), W: 0, Sw: 1 / num(bl.z), z: num(bl.z), ymax, h, desc: 'triangular (z = ' + fmt(num(bl.z), 1) + ')'};
+  const W = rua ? (num(rua.sjW) || 0) : 0, Sw = rua && num(rua.sjI) > 0 ? num(rua.sjI) / 100 : Sx;
+  if (W > 0 && Sw > Sx) return {simples: false, W, Sw, Sx, z: 1 / Sx, ymax, h, desc: 'composta: sarjeta ' + fmt(W, 2) + ' m a ' + fmt(Sw * 100, 1) + '% + pista a ' + fmt(Sx * 100, 1) + '%'};
+  return {simples: true, W: 0, Sw: Sx, Sx, z: 1 / Sx, ymax, h, desc: 'triangular, pista a ' + fmt(Sx * 100, 1) + '% (z = ' + fmt(1 / Sx, 1) + ')'};
+}
+function sarjQT(T, g, n, S) {
+  if (!(T > 0)) return 0;
+  if (g.simples || T <= g.W) { const sx = g.simples ? g.Sx : g.Sw; return 0.375 / n * Math.pow(sx, 5 / 3) * Math.sqrt(S) * Math.pow(T, 8 / 3); }
+  const Qs = 0.375 / n * Math.pow(g.Sx, 5 / 3) * Math.sqrt(S) * Math.pow(T - g.W, 8 / 3), k = g.Sw / g.Sx;
+  const Eo = 1 / (1 + k / (Math.pow(1 + k / (T / g.W - 1), 8 / 3) - 1));
+  return Eo >= 1 ? sarjQT(g.W, g, n, S) : Qs / (1 - Eo);
+}
+function sarjY(T, g) { if (g.simples) return T * g.Sx; return T <= g.W ? T * g.Sw : g.W * g.Sw + (T - g.W) * g.Sx; }
+function sarjTy(y, g) { if (g.simples) return y / g.Sx; const yw = g.W * g.Sw; return y <= yw ? y / g.Sw : g.W + (y - yw) / g.Sx; }
+function sarjT(Q, g, n, S) { let lo = 0, hi = 60; for (let k = 0; k < 80; k++) { const m = (lo + hi) / 2; if (sarjQT(m, g, n, S) < Q) lo = m; else hi = m; } return hi; }
 /* ---------------- sarjeta (Izzard) e boca-de-lobo ---------------- */
 // Q = 0,375 · (z/n) · S^½ · y^(8/3)
 function izzardQ(y, z, n, S) { return 0.375 * (z / n) * Math.sqrt(S) * Math.pow(y, 8 / 3); }
@@ -869,16 +916,15 @@ function calc() {
     const Sauto = greideDecl(bl.rua, num(bl.dist));
     const Sp = num(bl.S) != null ? num(bl.S) : (isNum(Sauto) ? Sauto * 100 : null);
     const rua = ruaById(bl.rua);
-    const z = num(bl.z) != null ? num(bl.z) : (rua && num(rua.it) > 0 ? 100 / num(rua.it) : 33);
-    r.Sp = Sp; r.Sauto = isNum(Sauto) ? Sauto * 100 : null; r.z = z;
+    const g = geomSarjeta(rua, bl), z = g.z;
+    r.Sp = Sp; r.Sauto = isNum(Sauto) ? Sauto * 100 : null; r.z = z; r.g = g; r.ymax = g.ymax; r.secao = g.desc;
     const ns = +c.nSarj || 0.016;
     if (isNum(Sp) && Sp > 0) {
       const S = Sp / 100;
       r.F = fatorSarjeta(Sp);
-      r.Qsarj = izzardQ(c.ymax, z, ns, S);           // capacidade teórica com lâmina máxima
+      r.Qsarj = sarjQT(sarjTy(g.ymax, g), g, ns, S);   // capacidade teórica com a lâmina máxima junto à guia
       r.Qadm = r.F * r.Qsarj;                          // admissível (DAEE)
-      r.y = r.Qafl > 0 ? izzardY(r.Qafl, z, ns, S) : 0; r.T = r.y * z;
-      r.Vs = r.y > 0 ? r.Qafl / (r.y * r.y * z / 2) : 0;
+      r.T = r.Qafl > 0 ? sarjT(r.Qafl, g, ns, S) : 0; r.y = sarjY(r.T, g);
     } else { r.F = null; r.y = null; }
     // engolimento
     const fr = num(bl.fr) != null ? num(bl.fr) : BLTIPOS[bl.tipo].fr;
@@ -899,7 +945,7 @@ function calc() {
     if (!isNum(Sp) || Sp <= 0) add('Declividade da sarjeta', '—', 'informe ou cadastre o greide', 'err', 'Sem declividade não é possível calcular a lâmina.');
     else {
       add('Declividade da sarjeta', fmt(Sp, 2) + ' %', '≥ ' + fmt(c.imin, 2) + ' %', Sp >= c.imin ? 'ok' : 'warn', 'Sarjeta muito plana: risco de empoçamento.');
-      add('Lâmina na sarjeta', fmt(r.y * 100, 1) + ' cm', '≤ ' + fmt(c.ymax * 100, 1) + ' cm', r.y <= c.ymax ? 'ok' : 'err', 'A água ultrapassa o limite junto à guia. Antecipe a BL ou reduza a área.');
+      add('Lâmina na sarjeta', fmt(r.y * 100, 1) + ' cm', '≤ ' + fmt(g.ymax * 100, 1) + ' cm', r.y <= g.ymax + 1e-6 ? 'ok' : 'err', 'A água ultrapassa o limite junto à guia. Antecipe a BL ou reduza a área.');
       add('Largura alagada T', fmt(r.T, 2) + ' m', '≤ ' + fmt(c.Tmax, 2) + ' m', r.T <= c.Tmax ? 'ok' : 'warn', 'Espalhamento acima do admitido sobre a pista.');
       add('Vazão × admissível da sarjeta', fL(r.Qafl) + ' L/s', '≤ ' + fL(r.Qadm) + ' L/s', r.Qafl <= r.Qadm ? 'ok' : 'err', 'Vazão maior que a admissível (com fator de redução F).');
     }
@@ -1148,6 +1194,14 @@ const HELP = {
   'crit.cEsc': 'Custo por m³ de escavação de vala, escoramento e reaterro compactado. A correção automática usa para comparar alternativas (aprofundar × aumentar tubo). Use o seu banco (SINAPI/EMOP).',
   'crit.cPVm': 'Custo do poço de visita por metro de profundidade. Entra na comparação de alternativas.',
   'crit.cTubo': 'Preço do tubo assentado por metro, por diâmetro. Em branco, usa o valor de referência mostrado. Substitua pelos preços do seu orçamento.',
+  'ruas.mf': 'Tipo de meio-fio da rua. Os tipos "com sarjeta conjugada" têm uma faixa de concreto junto à guia, mais inclinada que a pista, que concentra a água e aumenta a capacidade de escoamento (seção composta). Ao escolher, o espelho e a sarjeta são preenchidos com valores usuais, que você pode ajustar.',
+  'ruas.mfH': 'Altura visível do meio-fio acima da sarjeta (espelho). A lâmina d\'água máxima junto à guia é o espelho menos 2 cm de folga, para a água não subir no passeio.',
+  'ruas.sjW': 'Largura da sarjeta de concreto junto ao meio-fio (0,30 a 0,60 m). Zero = sem sarjeta: a água escoa direto sobre a pista.',
+  'ruas.sjI': 'Caimento transversal da sarjeta em direção à guia. Deve ser maior que o da pista (usual 5 a 10 %).',
+  'bls.modelo': 'Modelo da caixa da boca-de-lobo (caixa de ralo), conforme os tipos usuais do SINAPI e do SCO. Ao escolher, o tipo hidráulico, a abertura, a grelha, o material e as dimensões internas da caixa são preenchidos; você pode ajustar nos detalhes (▸). O modelo também define a composição de custo.',
+  'bls.cxB': 'Largura interna da caixa, perpendicular ao meio-fio (sob o passeio).',
+  'bls.cxL': 'Comprimento interno da caixa, ao longo do meio-fio.',
+  'bls.cxH': 'Profundidade interna da caixa, do topo ao fundo. Define a cota de saída do ramal no desenho.',
   'ruas.it': 'Inclinação transversal da sarjeta/pista em direção à guia. Define z = 100 / i, que é a "abertura" do triângulo de escoamento. Pistas usuais: 2 a 3 %.',
   'bacias.id': 'Código da bacia (ex.: B1).',
   'bacias.nome': 'Descrição da área: quadra, trecho de pista, lote, praça.',
@@ -1235,6 +1289,8 @@ const FB = {
   'idf.d': v => (v < 0.5 || v > 1.3) ? mk('warn', 'Valor incomum para d (usual 0,60 a 1,10).') : null,
   'idf.kH': (v) => { const t = kirpich(num(P.idf.kL), num(v)); return isNum(t) ? mk('info', 'tc Kirpich = ' + f2(t, 1) + ' min' + (t < P.crit.tcMin ? ' (será adotado o mínimo de ' + P.crit.tcMin + ' min)' : '') + '.') : null; },
   'ruas.it': v => !(v > 0) ? mk('err', 'Informe a inclinação transversal.', 3, 'Usar 3 %') : (v < 1.5 || v > 5) ? mk('warn', 'Fora do usual (2 a 3 %). z resultante = ' + f2(100 / v, 1) + '.', 3, 'Usar 3 %') : mk('ok', 'z = ' + f2(100 / v, 1) + ' (largura alagada = z × lâmina).'),
+  'ruas.mfH': v => !(v > 0) ? mk('err', 'Informe o espelho do meio-fio.', 0.15, 'Usar 0,15 m') : mk('info', 'Lâmina máxima junto à guia: ' + fmt(Math.min(P.crit.ymax, v - 0.02) * 100, 1) + ' cm.'),
+  'ruas.sjI': (v, o) => (num(o.sjW) || 0) > 0 && !(v > (num(o.it) || 0)) ? mk('warn', 'A sarjeta deve ser mais inclinada que a pista (' + fmt(num(o.it), 1) + ' %); senão é calculada como seção simples.', 8, 'Usar 8 %') : null,
   'ruas.larg': v => !(v > 0) ? mk('err', 'Informe a largura da pista.') : null,
   'bacias.A': (v, o) => !(v > 0) ? mk('err', 'Informe a área em hectares (ex.: 2.500 m² = 0,25 ha).') : v > 300 ? mk('err', 'Acima de ~3 km² o Método Racional não é recomendado; use hidrograma unitário.') : v > 2 ? mk('warn', 'Área grande para descarregar num único ponto de microdrenagem. Divida em sub-bacias por boca-de-lobo.') : mk('ok', '= ' + f2(v * 10000, 0) + ' m² · Q = ' + fL(R.bac[o.id] && R.bac[o.id].Q) + ' L/s'),
   'bacias.C': v => !(v > 0 && v <= 1) ? mk('err', 'C deve estar entre 0 e 1.', 0.7, 'Usar 0,70') : v >= 0.85 ? mk('info', 'Faixa de superfícies quase impermeáveis (telhados, asfalto, concreto).') : v >= 0.6 ? mk('info', 'Faixa de área urbana densa / residencial com lotes pequenos.') : v >= 0.35 ? mk('info', 'Faixa residencial com lotes grandes / misto.') : mk('info', 'Faixa de áreas verdes, praças, gramados.'),
@@ -1465,6 +1521,8 @@ function onField(e) {
   const old = getPath(p);
   if (p.endsWith('.id') && old !== v) renameRef(p.split('.')[0], old, v);
   setPath(p, v);
+  if (/^ruas\.\d+\.mf$/.test(p)) aplicaMeioFio(getPath(p.replace(/\.mf$/, '')));
+  if (/^bls\.\d+\.modelo$/.test(p)) aplicaModelo(getPath(p.replace(/\.modelo$/, '')));
   if (p === 'proj.nome') { $('bar-nome').value = v; }
   save();
   if (el.tagName === 'SELECT' || (e.type === 'change' && el.dataset.full)) { calc(); renderTab(); return; }
@@ -1703,6 +1761,9 @@ function vRuas() {
     <button class="btn-icon" title="Excluir" onclick="delItem('ruas',${i})">✕</button></div><div class="item-b"><div class="fgrid">
     ${fld(`ruas.${i}.id`, 'Código', {type: 'txt'})}${fld(`ruas.${i}.nome`, 'Nome da rua', {type: 'txt', w2: true})}
     ${fld(`ruas.${i}.larg`, 'Largura da pista (m)', {step: 0.1})}${fld(`ruas.${i}.passeio`, 'Passeio (m/lado)', {step: 0.1})}${fld(`ruas.${i}.it`, 'Inclinação transversal (%)', {step: 0.5})}
+    </div><div class="section-title">Meio-fio e sarjeta</div><div class="fgrid">
+    ${fld(`ruas.${i}.mf`, 'Tipo de meio-fio', {type: 'sel', w2: true, opts: Object.entries(MEIOFIO).map(([k, v]) => [k, v.nome])})}
+    ${fld(`ruas.${i}.mfH`, 'Espelho do meio-fio (m)', {step: 0.01})}${fld(`ruas.${i}.sjW`, 'Largura da sarjeta (m)', {step: 0.05, ph: '0 = sem sarjeta'})}${(num(r.sjW) || 0) > 0 ? fld(`ruas.${i}.sjI`, 'Caimento da sarjeta (%)', {step: 0.5}) : ''}
     </div><div class="section-title">Posição na planta</div><div class="fgrid">
     ${fld(`ruas.${i}.ref`, 'Começa / cruza a rua', {type: 'sel', opts: [['', '— nenhuma (rua inicial) —']].concat(P.ruas.filter(x => x.id !== r.id).map(x => [x.id, x.nome]))})}
     ${r.ref ? fld(`ruas.${i}.refDist`, 'Na estaca da outra rua', {type: 'est'}) + fld(`ruas.${i}.ang`, 'Ângulo (°)', {step: 5}) + fld(`ruas.${i}.dist0`, 'Estaca desta rua no ponto', {type: 'est'}) : fld(`ruas.${i}.az`, 'Direção (° a partir do leste)', {step: 5, ph: '0'})}
@@ -1766,7 +1827,8 @@ function vBLs() {
     {h: 'Rua', p: 'rua', o: () => ({type: 'sel', opts: optsRua()}), w: 130, k: 'bls.rua'},
     {h: 'Estaca', p: 'dist', o: {type: 'est'}, w: 84, k: 'bls.dist'},
     {h: 'Lado', p: 'lado', o: {type: 'sel', opts: [['E', 'Esq.'], ['D', 'Dir.']]}, w: 70, k: 'bls.lado'},
-    {h: 'Tipo', p: 'tipo', o: {type: 'sel', opts: Object.entries(BLTIPOS).map(([k, v]) => [k, v.nome])}, w: 130, k: 'bls.tipo'},
+    {h: 'Modelo da caixa de ralo', p: 'modelo', o: {type: 'sel', opts: Object.entries(CAIXAS).map(([k, v]) => [k, v.nome])}, w: 330, k: 'bls.modelo'},
+    {h: 'Tipo hidráulico', p: 'tipo', o: {type: 'sel', opts: Object.entries(BLTIPOS).map(([k, v]) => [k, v.nome])}, w: 130, k: 'bls.tipo'},
     {h: 'L guia', u: 'm', p: (o, i) => o.tipo === 'gr' ? null : `bls.${i}.L`, o: {step: 0.1}, w: 66, k: 'bls.L'},
     {h: 'S sarjeta', u: '%', p: 'S', o: {step: 0.05, ph: 'auto'}, w: 72, k: 'bls.S'},
     {h: 'S usada', u: '%', res: 'Sx'}, {h: 'Q chega', u: 'L/s', res: 'Qafl'}, {h: 'Lâmina y', u: 'cm', res: 'y'}, {h: 'Larg. T', u: 'm', res: 'T'},
@@ -1779,7 +1841,9 @@ function vBLs() {
     {h: 'V ramal', u: 'm/s', res: 'rV'}, {h: 'y/D ramal', res: 'ryD'}
   ], (o, i) => (o.tipo === 'gr' || o.tipo === 'cb' ? fld(`bls.${i}.gL`, 'Grelha — comprimento (m)', {step: 0.05}) + fld(`bls.${i}.gB`, 'Grelha — largura (m)', {step: 0.05}) + fld(`bls.${i}.ga`, 'Grelha — área livre (%)', {step: 5}) : '') +
       fld(`bls.${i}.a`, 'Depressão a (m)', {step: 0.01}) + fld(`bls.${i}.fr`, 'Fator de redução', {step: 0.05}) + fld(`bls.${i}.z`, 'z = 1/i transversal', {step: 1, ph: 'auto pela rua'}) +
-      fld(`bls.${i}.constr`, 'Execução', {type: 'sel', opts: ['Pré-moldada', 'Blocos de concreto', 'Concreto moldado in loco']}))}
+      fld(`bls.${i}.constr`, 'Execução', {type: 'sel', opts: ['Pré-moldada', 'Blocos de concreto', 'Alvenaria de tijolo maciço', 'Concreto moldado in loco']}) +
+      fld(`bls.${i}.cxB`, 'Caixa — largura interna (m)', {step: 0.05}) + fld(`bls.${i}.cxL`, 'Caixa — comprimento interno (m)', {step: 0.05}) + fld(`bls.${i}.cxH`, 'Caixa — profundidade interna (m)', {step: 0.05}) +
+      `<div class="res" style="grid-column:1/-1" data-res="blsec-${i}"></div>`)}
   ${ajuda('Fórmulas e critérios usados', `
     <p><b>Sarjeta (Izzard):</b> <span class="formula">Q = 0,375 · (z/n) · S<sup>½</sup> · y<sup>8/3</sup></span>; largura alagada T = z · y. Admissível = capacidade com y<sub>máx</sub> × fator F (DAEE/CETESB): 0,50 até 0,4 %; 0,80 de 1 a 3 %; 0,50 a 5 %; 0,40 a 6 %; 0,27 a 8 %; 0,20 a 10 %.</p>
     <p><b>Boca-de-lobo de guia:</b> <span class="formula">Q = C<sub>w</sub> · L · (y + a)<sup>3/2</sup></span>. <b>Grelha:</b> vertedor até h = 0,12 m (<span class="formula">C<sub>w</sub> · P · h<sup>3/2</sup></span>) e orifício acima de 0,42 m (<span class="formula">C<sub>o</sub> · A<sub>útil</sub> · h<sup>½</sup></span>). A capacidade real é a teórica × fator de redução.</p>
@@ -1838,6 +1902,7 @@ function vRede() {
 
 /* ---------- blocos de resultado ---------- */
 const RES = {
+  blsec(i) { const b = P.bls[i], r = R.bl[b.id]; if (!r || !r.g) return ''; return `<div class="msg info">ℹ <span>Seção da sarjeta: <b>${esc(r.secao)}</b> · lâmina máxima junto à guia ${fmt(r.ymax * 100, 1)} cm (espelho do meio-fio ${fmt(r.g.h * 100, 0)} cm − 2 cm de folga) · largura alagada ${fmt(r.T, 2)} m · lâmina ${fmt(r.y * 100, 1)} cm.</span></div>`; },
   idf() { const tr = P.crit.tr, t = P.crit.tcMin; return `<div class="kv">${kv('i (' + t + ' min; TR ' + tr + ')', fmt(idf(t), 1) + ' mm/h')}${kv('i (10 min)', fmt(idf(10), 1) + ' mm/h')}${kv('i (15 min)', fmt(idf(15), 1) + ' mm/h')}${kv('i (60 min)', fmt(idf(60), 1) + ' mm/h')}</div>`; },
   kir() { const t = kirpich(num(P.idf.kL), num(P.idf.kH)); const ta = isNum(t) ? Math.max(P.crit.tcMin, t) : null;
     return `<div class="kv">${kv('tc Kirpich', isNum(t) ? fmt(t, 2) + ' min' : '—')}${kv('tc adotado', isNum(ta) ? fmt(ta, 2) + ' min' : '—')}${kv('i (TR ' + P.crit.tr + ')', isNum(ta) ? fmt(idf(ta), 1) + ' mm/h' : '—')}</div>`; },
@@ -1947,7 +2012,7 @@ function memorialHTML(sel) {
   ${T(['Bacia', 'Descrição', 'Destino', 'A (ha)', 'C', 'tc (min)', 'i (mm/h)', 'Q (L/s)'], P.bacias.map(b => { const r = R.bac[b.id]; return tr([esc(b.id), esc(b.nome), esc(b.dest), fmt(r.A, 3), fmt(r.C, 2), fmt(r.tc, 1), fmt(r.i, 1), fL(r.Q)]); }))}` : ''}
 
   ${sel.bls ? `${H('Sarjetas e bocas-de-lobo')}
-  ${T(['BL', 'Rua / est.', 'Tipo', 'S (%)', 'Q afl. (L/s)', 'y (cm)', 'T (m)', 'Q adm. (L/s)', 'Cap. (L/s)', 'Engolida (L/s)', 'Passa (L/s)', ''], P.bls.map(b => { const r = R.bl[b.id]; return tr([esc(b.id), esc(ruaNome(b.rua)) + ' ' + estLabel(num(b.dist)), BLTIPOS[b.tipo].nome, fmt(r.Sp, 2), fL(r.Qafl), isNum(r.y) ? fmt(r.y * 100, 1) : '—', fmt(r.T, 2), fL(r.Qadm), fL(r.Qcap), fL(r.Qeng), fL(r.Qbyp) + (b.prox && r.Qbyp > 1e-4 ? ' → ' + esc(b.prox) : ''), stTxt(r.st)]); }))}` : ''}
+  ${T(['BL', 'Rua / est.', 'Modelo da caixa', 'S (%)', 'Q afl. (L/s)', 'y (cm)', 'T (m)', 'Q adm. (L/s)', 'Cap. (L/s)', 'Engolida (L/s)', 'Passa (L/s)', ''], P.bls.map(b => { const r = R.bl[b.id]; return tr([esc(b.id), esc(ruaNome(b.rua)) + ' ' + estLabel(num(b.dist)), esc((CAIXAS[b.modelo] || {}).nome || BLTIPOS[b.tipo].nome), fmt(r.Sp, 2), fL(r.Qafl), isNum(r.y) ? fmt(r.y * 100, 1) : '—', fmt(r.T, 2), fL(r.Qadm), fL(r.Qcap), fL(r.Qeng), fL(r.Qbyp) + (b.prox && r.Qbyp > 1e-4 ? ' → ' + esc(b.prox) : ''), stTxt(r.st)]); }))}` : ''}
 
   ${sel.ramais ? `${H('Ramais de ligação')}
   ${T(['Ramal', 'PV', 'Ø (mm)', 'L (m)', 'i (%)', 'Q (L/s)', 'y/D', 'V (m/s)', 'τ (Pa)', ''], P.bls.map(b => { const r = R.bl[b.id], m = r.ram; return tr([esc(b.id), esc(b.pv), b.rD, fmt(num(b.rL), 1), fmt(num(b.rI), 2), fL(r.Qeng), m.carga ? 'carga' : fmt(m.yD, 2), fmt(m.V, 2), fmt(m.tau, 2), '']); }))}` : ''}
@@ -2173,9 +2238,9 @@ function tabelasMemoria() {
     fm: ['@', '@', '@', '@', '@', '0.00', '0.000', '0.00', '0.0000', '0.00', '0.0', '0.0', '0', '0.000', '0.000', '0.000', '0.0', '0.00', '0.00', '0.00', '0.0', '0.00', '0.00', '0.00', '0.000', '0.000', '0.00', '0.00', '@']});
   T.push({nome: 'Bacias', titulo: 'Bacias de contribuição — Método Racional', head: ['Bacia', 'Descrição', 'Destino', 'Área (ha)', 'C', 'C·A (ha)', 'tc (min)', 'i (mm/h)', 'Q (L/s)'],
     rows: P.bacias.map(b => { const r = R.bac[b.id]; return [b.id, b.nome, b.dest, r.A, r.C, r.CA, r.tc, r.i, r.Q * 1000]; }), fm: ['@', '@', '@', '0.000', '0.00', '0.0000', '0.0', '0.0', '0.0']});
-  T.push({nome: 'Bocas-de-lobo', titulo: 'Sarjetas (Izzard) e bocas-de-lobo', head: ['BL', 'Rua', 'Estaca', 'Lado', 'Tipo', 'L guia (m)', 'Depressão (m)', 'Fator redução', 'S sarjeta (%)', 'z', 'Fator F', 'Q chega (L/s)', 'Lâmina y (cm)', 'Largura T (m)', 'Q adm. sarjeta (L/s)', 'Capacidade BL (L/s)', 'Engolida (L/s)', 'Passa (L/s)', 'Passa para', 'Eficiência (%)', 'Situação'],
-    rows: P.bls.map(b => { const r = R.bl[b.id]; return [b.id, ruaNome(b.rua), estLabel(num(b.dist)), b.lado === 'D' ? 'Direito' : 'Esquerdo', BLTIPOS[b.tipo].nome, nz(num(b.L)), nz(num(b.a)), nz(r.fr), nz(r.Sp), nz(r.z), nz(r.F), r.Qafl * 1000, nz(r.y * 100), nz(r.T), nz(r.Qadm * 1000), r.Qcap * 1000, r.Qeng * 1000, r.Qbyp * 1000, b.prox || '', r.ef * 100, stNome(r.st)]; }),
-    fm: ['@', '@', '@', '@', '@', '0.00', '0.00', '0.00', '0.00', '0.0', '0.00', '0.0', '0.0', '0.00', '0.0', '0.0', '0.0', '0.0', '@', '0', '@']});
+  T.push({nome: 'Bocas-de-lobo', titulo: 'Sarjetas (Izzard) e bocas-de-lobo', head: ['BL', 'Rua', 'Estaca', 'Lado', 'Modelo da caixa', 'Seção da sarjeta', 'Tipo', 'L guia (m)', 'Depressão (m)', 'Fator redução', 'S sarjeta (%)', 'z', 'Fator F', 'Q chega (L/s)', 'Lâmina y (cm)', 'Largura T (m)', 'Q adm. sarjeta (L/s)', 'Capacidade BL (L/s)', 'Engolida (L/s)', 'Passa (L/s)', 'Passa para', 'Eficiência (%)', 'Situação'],
+    rows: P.bls.map(b => { const r = R.bl[b.id]; return [b.id, ruaNome(b.rua), estLabel(num(b.dist)), b.lado === 'D' ? 'Direito' : 'Esquerdo', (CAIXAS[b.modelo] || {}).nome || '', r.secao || '', BLTIPOS[b.tipo].nome, nz(num(b.L)), nz(num(b.a)), nz(r.fr), nz(r.Sp), nz(r.z), nz(r.F), r.Qafl * 1000, nz(r.y * 100), nz(r.T), nz(r.Qadm * 1000), r.Qcap * 1000, r.Qeng * 1000, r.Qbyp * 1000, b.prox || '', r.ef * 100, stNome(r.st)]; }),
+    fm: ['@', '@', '@', '@', '@', '@', '@', '0.00', '0.00', '0.00', '0.00', '0.0', '0.00', '0.0', '0.0', '0.00', '0.0', '0.0', '0.0', '0.0', '@', '0', '@']});
   T.push({nome: 'Ramais', titulo: 'Ramais de ligação BL → PV (Manning, seção parcial)', head: ['Ramal (BL)', 'PV', 'Ø (mm)', 'L (m)', 'i (%)', 'Q (L/s)', 'Q plena (L/s)', 'y/D', 'V (m/s)', 'τ (Pa)'],
     rows: P.bls.map(b => { const r = R.bl[b.id], m = r.ram; return [b.id, b.pv, +b.rD, nz(num(b.rL)), nz(num(b.rI)), r.Qeng * 1000, nz(m.Qp * 1000), m.carga ? 'carga' : nz(m.yD), nz(m.V), nz(m.tau)]; }), fm: ['@', '@', '0', '0.00', '0.00', '0.0', '0.0', '0.00', '0.00', '0.00']});
   T.push({nome: 'PVs', titulo: 'Poços de visita — perdas por turbulência (hf = K·V²/2g)', head: ['PV', 'Rua', 'Estaca', 'Tipo', 'Ø (mm)', 'Tampão', 'Tampa (m)', 'Fundo (m)', 'Profundidade (m)', 'Escoamento', 'K', 'V saída (m/s)', 'hf (m)', 'NA (m)', 'Folga (m)', 'Situação'],
@@ -2646,15 +2711,17 @@ function dadosSecao(pvId) {
   const fundoPV = rp.fundo, B = De + 2 * c.valaFolga;
   const fundoVala = Math.min(ci - e - c.berco, fundoPV - parede - c.berco);
   const larg = +rua.larg || 7, pas = +rua.passeio || 2, it = (+rua.it || 3) / 100;
+  const mfH = num(rua.mfH) || 0.15, sjW = num(rua.sjW) || 0, sjI = num(rua.sjI) > 0 ? num(rua.sjI) / 100 : it;
+  const zSup = x => { const a = Math.abs(x), xs = Math.max(0, larg / 2 - sjW); return rp.tp - it * Math.min(a, xs) - (a > xs ? sjI * (Math.min(a, larg / 2) - xs) : 0); };
   const bls = P.bls.filter(b => b.pv === pvId).map(b => {
     const rb = R.bl[b.id] || {}, side = b.lado === 'D' ? 1 : -1;
-    const zCurb = rp.tp - it * larg / 2;
-    const prof = +c.blProf || 1.0, topo = zCurb + 0.15, fundo = topo - prof;
+    const zCurb = zSup(larg / 2);
+    const prof = num(b.cxH) || +c.blProf || 1.0, topo = zCurb + mfH, fundo = topo - prof;
     const rD = (num(b.rD) || 400) / 1000, rI = (num(b.rI) || 0) / 100, rL = num(b.rL) || 0;
     const ciBL = fundo + 0.05, ciPV = ciBL - rI * rL;
-    return {b, rb, side, zCurb, topo, fundo, prof, rD, rI, rL, ciBL, ciPV, larg: b.tipo === 'gd' ? 1.2 : 0.6};
+    return {b, rb, side, zCurb, topo, fundo, prof, rD, rI, rL, ciBL, ciPV, larg: num(b.cxB) || (b.tipo === 'gd' ? 1.2 : 0.6)};
   });
-  return {pv, rp, rua, t, rt, saida, D, e, De, ci, parede, dpv, fundoPV, B, fundoVala, larg, pas, it, bls, tp: rp.tp};
+  return {pv, rp, rua, t, rt, saida, D, e, De, ci, parede, dpv, fundoPV, B, fundoVala, larg, pas, it, bls, tp: rp.tp, mfH, sjW, sjI, zSup};
 }
 function svgSecao(pvId, K, W = 1100) {
   const d = dadosSecao(pvId); if (!d) return '';
@@ -2663,23 +2730,26 @@ function svgSecao(pvId, K, W = 1100) {
   const sc = (W - 140) / (2 * half), Hd = (zTop - zBot) * sc;
   const H = Math.round(70 + Hd + 30);
   const X = x => W / 2 + x * sc, Y = z => 60 + (zTop - z) * sc;
-  const zR = x => d.tp - d.it * Math.min(Math.abs(x), d.larg / 2);   // superfície da pista
+  const zR = x => d.zSup(x);   // superfície da pista e da sarjeta
   let s = `<svg ${SVGNS} viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="${K.bg}"/>`;
   s += tx(20, 30, 'Seção transversal no ' + d.pv.id + ' — ' + (d.rua.nome || '') + ' · est. ' + estLabel(num(d.pv.dist)), {fs: 18, w: 700, c: K.blue});
   s += tx(W - 20, 30, 'Escala 1:1 (horizontal = vertical)', {fs: 12, a: 'end', c: K.muted});
   // solo
-  s += `<polygon points="${X(-half)},${Y(zR(half) + 0.15)} ${X(-d.larg / 2)},${Y(zR(d.larg / 2) + 0.15)} ${X(-d.larg / 2)},${Y(zR(d.larg / 2))} ${X(0)},${Y(d.tp)} ${X(d.larg / 2)},${Y(zR(d.larg / 2))} ${X(d.larg / 2)},${Y(zR(d.larg / 2) + 0.15)} ${X(half)},${Y(zR(half) + 0.15)} ${X(half)},${H} ${X(-half)},${H}" fill="${K.soil}"/>`;
+  const mh = d.mfH;
+  s += `<polygon points="${X(-half)},${Y(zR(half) + mh)} ${X(-d.larg / 2)},${Y(zR(d.larg / 2) + mh)} ${X(-d.larg / 2)},${Y(zR(d.larg / 2))} ${X(0)},${Y(d.tp)} ${X(d.larg / 2)},${Y(zR(d.larg / 2))} ${X(d.larg / 2)},${Y(zR(d.larg / 2) + mh)} ${X(half)},${Y(zR(half) + mh)} ${X(half)},${H} ${X(-half)},${H}" fill="${K.soil}"/>`;
   // vala com reaterro (largura maior no PV)
   const Bpv = d.dpv + 2 * d.parede + 2 * c.valaFolga;
   s += `<polygon points="${X(-Bpv / 2)},${Y(zR(Bpv / 2))} ${X(0)},${Y(d.tp)} ${X(Bpv / 2)},${Y(zR(Bpv / 2))} ${X(Bpv / 2)},${Y(d.fundoVala)} ${X(-Bpv / 2)},${Y(d.fundoVala)}" fill="${K.reat}" stroke="${K.terr}" stroke-width="1.4" stroke-dasharray="7 4"/>`;
   if (d.tp - d.fundoVala > 1.25) [-1, 1].forEach(sd => { s += rc(X(sd * Bpv / 2) - (sd > 0 ? 0 : 5), Y(zR(Bpv / 2)), 5, Y(d.fundoVala) - Y(zR(Bpv / 2)), K.terr); });
   s += rc(X(-Bpv / 2), Y(d.fundoVala + c.berco), Bpv * sc, c.berco * sc, K.brita, K.ink, 0.6);
   // pavimento, meio-fio, passeios
-  s += `<polyline points="${X(-d.larg / 2)},${Y(zR(d.larg / 2))} ${X(0)},${Y(d.tp)} ${X(d.larg / 2)},${Y(zR(d.larg / 2))}" fill="none" stroke="${K.pav}" stroke-width="${Math.max(3, 0.1 * sc)}"/>`;
+  const xs = Math.max(0, d.larg / 2 - d.sjW);
+  s += `<polyline points="${X(-xs)},${Y(zR(xs))} ${X(0)},${Y(d.tp)} ${X(xs)},${Y(zR(xs))}" fill="none" stroke="${K.pav}" stroke-width="${Math.max(3, 0.1 * sc)}"/>`;
+  if (d.sjW > 0) [-1, 1].forEach(sd => { s += `<polygon points="${X(sd * xs)},${Y(zR(xs))} ${X(sd * d.larg / 2)},${Y(zR(d.larg / 2))} ${X(sd * d.larg / 2)},${Y(zR(d.larg / 2) - 0.10)} ${X(sd * xs)},${Y(zR(xs) - 0.10)}" fill="${K.conc}" stroke="${K.ink}" stroke-width="0.8"/>`; });
   [-1, 1].forEach(sd => {
     const xc = sd * d.larg / 2, zc = zR(d.larg / 2);
-    s += rc(X(Math.min(xc, xc + sd * 0.15)), Y(zc + 0.15), 0.15 * sc, 0.45 * sc, K.mf, K.ink, 0.8);
-    s += rc(X(Math.min(xc + sd * 0.15, xc + sd * (d.pas))), Y(zc + 0.15), (d.pas - 0.15) * sc, 0.08 * sc, K.pass, K.ink, 0.6);
+    s += rc(X(Math.min(xc, xc + sd * 0.15)), Y(zc + mh), 0.15 * sc, (mh + 0.30) * sc, K.mf, K.ink, 0.8);
+    s += rc(X(Math.min(xc + sd * 0.15, xc + sd * (d.pas))), Y(zc + mh), (d.pas - 0.15) * sc, 0.08 * sc, K.pass, K.ink, 0.6);
   });
   // PV em corte
   const pvTopo = d.tp, xi = d.dpv / 2, xe = xi + d.parede;
@@ -2712,6 +2782,7 @@ function svgSecao(pvId, K, W = 1100) {
   // rótulos principais
   s += tx(X(0), Y(d.tp) - 22, d.pv.id + ' · tampão Ø0,60', {fs: 15, w: 700, a: 'middle', c: K.ink, halo: K.bg});
   s += tx(X(-d.larg / 4), Y(zR(d.larg / 4)) - 10, 'Pista ' + fmt(d.larg, 2) + ' m · i ' + fmt(d.it * 100, 1) + '%', {fs: 13, a: 'middle', c: K.ink, halo: K.soil});
+  s += tx(X(d.larg / 2 - 0.2), Y(zR(d.larg / 2) + mh) - 8, (MEIOFIO[d.rua.mf] && MEIOFIO[d.rua.mf].h != null ? 'Meio-fio ' : 'Meio-fio ') + 'h ' + fmt(mh * 100, 0) + ' cm' + (d.sjW > 0 ? ' · sarjeta ' + fmt(d.sjW, 2) + ' m a ' + fmt(d.sjI * 100, 1) + '%' : ''), {fs: 12, a: 'end', c: K.ink, halo: K.soil});
   s += tx(X(0), Y(d.fundoVala) + 22, 'Tubo Ø' + d.t.D + ' (' + d.t.id + ')', {fs: 13, w: 700, a: 'middle', c: K.aguaD, halo: K.soil});
   // cotas verticais à esquerda e à direita
   const xL = X(-half) + 30;
@@ -2774,7 +2845,8 @@ function quadroSecao(pvId) {
     ['Largura da vala B (no tubo)', fmt(d.B, 2) + ' m (folga ' + fmt(c.valaFolga, 2) + ' m/lado)'], ['Berço', fmt(c.berco, 2) + ' m'], ['Fundo da vala no tubo', fmt(fvT, 3) + ' m'], ['Profundidade da vala no tubo', fmt(d.tp - fvT, 2) + ' m' + (d.tp - fvT > 1.25 ? ' (escorar)' : '')],
     ['Escavação por metro de vala', fmt(d.B * (d.tp - fvT), 2) + ' m³/m'], ['Fundo da escavação no PV', fmt(d.fundoVala, 3) + ' m (largura ' + fmt(d.dpv + 2 * d.parede + 2 * c.valaFolga, 2) + ' m)']
   ];
-  d.bls.forEach(b => { L.push(['Boca-de-lobo ' + b.b.id + ' (' + (b.b.lado === 'D' ? 'direita' : 'esquerda') + ')', BLTIPOS[b.b.tipo].nome + ' · caixa ' + fmt(b.larg, 2) + ' × prof. ' + fmt(b.prof, 2) + ' m · fundo ' + fmt(b.fundo, 3) + ' m']);
+  L.push(['Meio-fio / sarjeta', ((MEIOFIO[d.rua.mf] || {}).nome || '—') + ' · espelho ' + fmt(d.mfH * 100, 0) + ' cm' + (d.sjW > 0 ? ' · sarjeta ' + fmt(d.sjW, 2) + ' m a ' + fmt(d.sjI * 100, 1) + ' %' : '')]);
+  d.bls.forEach(b => { L.push(['Boca-de-lobo ' + b.b.id + ' (' + (b.b.lado === 'D' ? 'direita' : 'esquerda') + ')', ((CAIXAS[b.b.modelo] || {}).nome || BLTIPOS[b.b.tipo].nome) + ' · caixa interna ' + fmt(b.larg, 2) + ' × ' + fmt(num(b.b.cxL) || 1, 2) + ' × prof. ' + fmt(b.prof, 2) + ' m · fundo ' + fmt(b.fundo, 3) + ' m']);
     L.push(['Ramal ' + b.b.id + ' → ' + d.pv.id, 'Ø ' + b.b.rD + ' mm · L ' + fmt(b.rL, 2) + ' m · i ' + fmt(b.rI * 100, 2) + ' % · CI ' + fmt(b.ciBL, 3) + ' → ' + fmt(b.ciPV, 3) + ' m']); });
   return `<div class="tbl-wrap"><table><thead><tr><th>Quadro de medidas</th><th>Valor</th></tr></thead><tbody>${L.map(([a, b]) => `<tr><td>${esc(a)}</td><td><b>${esc(b)}</b></td></tr>`).join('')}</tbody></table></div>`;
 }
@@ -2783,7 +2855,7 @@ function vSecao() {
   const pvs = P.pvs.filter(p => dadosSecao(p.id));
   if (!SEC_PV || !pvs.some(p => p.id === SEC_PV)) SEC_PV = pvs[0] ? pvs[0].id : null;
   return `<h3>Seção transversal — via, caixas de ralo, ramais e vala</h3>
-  <p class="lead">Corte no poço de visita escolhido, com a pista, os meios-fios, os passeios, as bocas-de-lobo (caixas de ralo) ligadas a este PV, os ramais chegando ao PV e a vala do tubo. Abaixo, o detalhe ampliado da vala com todas as medidas. A profundidade interna das caixas é ${fmt(P.crit.blProf, 2)} m (ajustável nos critérios).</p>
+  <p class="lead">Corte no poço de visita escolhido, com a pista, os meios-fios, os passeios, as bocas-de-lobo (caixas de ralo) ligadas a este PV, os ramais chegando ao PV e a vala do tubo. Abaixo, o detalhe ampliado da vala com todas as medidas. O meio-fio e a sarjeta vêm do tipo escolhido na rua (aba 3) e as caixas de ralo seguem o modelo e as dimensões escolhidos em cada boca-de-lobo (aba 5).</p>
   <div class="card" style="padding:.6rem">
     <div class="bar-btns"><label style="font-size:.82rem;font-weight:600;color:var(--muted)">Poço de visita</label>
       <select onchange="SEC_PV=this.value;drawSecao()" style="padding:.35rem .5rem;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)">${pvs.map(p => `<option value="${esc(p.id)}"${p.id === SEC_PV ? ' selected' : ''}>${esc(p.id)} — ${esc(ruaNome(p.rua))} est. ${estLabel(num(p.dist))}</option>`).join('')}</select></div>
@@ -3080,7 +3152,7 @@ function regras(cfg) {
       sinapi: [[/^ACRÉSCIMO PARA POÇO DE VISITA CIRCULAR PARA DRENAGEM, EM CONCRETO PRÉ-MOLDADO/, new RegExp('DIÂMETRO INTERNO = ' + s.replace(',0', '') + '(,0)? M')], []]});
   });
   [['gs', 'SIMPLES RETANGULAR'], ['gd', 'DUPLA RETANGULAR'], ['cb', 'COMBINADA COM GRELHA RETANGULAR'], ['gr', 'COMBINADA COM GRELHA RETANGULAR']].forEach(([t, s]) =>
-    [['Pré-moldada', 'EM CONCRETO PRÉ-MOLDADO', /pré-moldado/i], ['Blocos de concreto', 'EM ALVENARIA COM BLOCOS DE CONCRETO', /blocos de concreto/i], ['Concreto moldado in loco', 'EM ALVENARIA COM BLOCOS DE CONCRETO', /blocos de concreto/i]].forEach(([c, sc, rs]) =>
+    [['Pré-moldada', 'EM CONCRETO PRÉ-MOLDADO', /pré-moldado/i], ['Blocos de concreto', 'EM ALVENARIA COM BLOCOS DE CONCRETO', /blocos de concreto/i], ['Alvenaria de tijolo maciço', 'EM ALVENARIA COM TIJOLOS CERÂMICOS MACIÇOS', /tijolo maci/i], ['Concreto moldado in loco', 'EM ALVENARIA COM BLOCOS DE CONCRETO', /blocos de concreto/i]].forEach(([c, sc, rs]) =>
       L.push({k: `bl:${t}:${c}`, nome: 'Caixa de boca-de-lobo — ' + BLTIPOS[t].nome.toLowerCase() + ' — ' + c.toLowerCase(),
         sinapi: [[new RegExp('^CAIXA PARA BOCA DE LOBO ' + s)], [new RegExp(sc)]], sco: [[/^Caixa de ralo/, rs], []]})));
   return L;
