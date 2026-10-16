@@ -388,6 +388,26 @@ html body.mode-mobile #mobAviso{border-radius:999px;font-size:13px;padding:10px 
 html body.mode-mobile #mobRelatorio .mr-corpo{background:#eef2f7}
 html body.mode-mobile .rel-faixa{border:1px solid #e2e8f0;border-left:3px solid #f59e0b;border-radius:14px;box-shadow:0 1px 2px rgba(15,23,42,.05),0 4px 14px rgba(15,23,42,.06)}
 html body.mode-mobile .rel-linha.rel-ltit{border-radius:12px}
+/* 17/10/2026: todas as opções do computador à vista no celular */
+/* com tudo à vista, os passos Itens e Planilha rolam a página inteira (como Cabeçalho e Bancos) */
+html body.mode-mobile.mob-cat,html body.mode-mobile.mob-orc{height:auto;min-height:100vh;overflow:auto}
+html body.mode-mobile.mob-cat .main,html body.mode-mobile.mob-orc .main,html body.mode-mobile.mob-cat .left,html body.mode-mobile.mob-orc .right{overflow:visible!important;height:auto!important;flex:none!important;min-height:0}
+html body.mode-mobile.mob-cat .wrap,html body.mode-mobile.mob-orc .wrap{overflow:visible!important;height:auto!important;max-height:none!important;flex:none!important}
+html body.mode-mobile.mob-orc .footer{position:sticky;bottom:0;z-index:40;max-height:none}
+html body.mode-mobile .search{grid-template-columns:minmax(0,1fr)!important}
+html body.mode-mobile .search>*{grid-column:1/-1!important;width:100%!important}
+html body.mode-mobile.mob-ferr #patchBar1{display:flex!important;flex-wrap:wrap;gap:8px;padding:12px;margin:12px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 1px 2px rgba(15,23,42,.05),0 4px 14px rgba(15,23,42,.06);color:#0f172a}
+html body.mode-mobile #patchBar1::before{content:'Importar, exportar e ferramentas';flex-basis:100%;font-size:11px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:#64748b;padding-bottom:6px;border-bottom:1px solid #e2e8f0}
+html body.mode-mobile #patchBar1>*{flex:1 1 calc(50% - 8px);min-width:0}
+html body.mode-mobile #patchBar1 .btn,html body.mode-mobile #patchBar1 label.btn{white-space:normal;text-align:center;justify-content:center;border-radius:10px!important;min-height:40px;font-size:12px!important}
+html body.mode-mobile #patchBar1 input[type=text]{flex-basis:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px}
+html body.mode-mobile #patchBar1 #boxExportXlsx{flex-basis:100%;margin:0!important;display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px;border-radius:10px}
+html body.mode-mobile #patchBar1 #statusBackupPasta{flex-basis:100%;font-size:11px}
+html body.mode-mobile #patchBar1>span:empty:not(#statusBackupPasta){display:none}
+html body.mode-mobile #patchBar1 #statusBackupPasta:empty{display:none}
+html body.mode-mobile #patchBar1 #fileImportCodigos{flex-basis:100%;font-size:13px;padding:6px;border:1px dashed #cbd5e1;border-radius:10px}
+html body.mode-mobile #barFonte,html body.mode-mobile #barOnera{padding:10px 12px!important;gap:6px!important;background:#fff!important}
+html body.mode-mobile #barFonte .btn,html body.mode-mobile #barOnera .btn{flex:1 1 calc(50% - 6px);white-space:normal;min-height:36px!important}
 .rel-tab tr.rel-item td{background:#e0f2fe;font-weight:700}
 .rel-vazio{padding:24px;text-align:center;color:#64748b;font-size:14px}
 #mobAviso{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#0f172a;color:white;padding:10px 16px;border-radius:20px;font-size:13px;font-weight:700;z-index:13000;box-shadow:0 4px 14px rgba(0,0,0,.3);display:none;max-width:90vw;text-align:center}
@@ -489,7 +509,7 @@ function prepararCelular(mode){
   if (cabBotoes && !cabBotoes.id) cabBotoes.id = 'cabFerramentas';
   cabBotoes = document.getElementById('cabFerramentas');
   marca(cabBotoes, 'cab');
-  marca(document.getElementById('patchBar1'), 'nenhum'); // no celular as funções dela estão no ☰ Menu
+  marca(document.getElementById('patchBar1'), 'ferr'); // importar, exportar, cotação, histórico e backup também à vista (além do ☰ Menu)
   var barEmop = document.getElementById('barEmop'); marca(barEmop && barEmop.parentElement, 'ferr');
   var orcBar = document.querySelector('.orc-bar'); marca(orcBar, 'cab');
   // no celular, BDI e botões do cabeçalho vão para baixo dos dados da obra (passo 1)
@@ -564,25 +584,11 @@ function dobra(id, titulo, els, resumo, aberta){
   pinta(); b._pinta = pinta;
 }
 function prepararDobras(){
-  var v = function(id){ var e = document.getElementById(id); return e ? (e.value || '').trim() : ''; };
-  dobra('dobraFonte', 'Bancos e tipo', [document.getElementById('barFonte'), document.getElementById('barOnera')], function(){
-    var f = null; try{ f = localStorage.getItem('schueler_fonte_dados_v1'); }catch(e){}
-    var nomes = {EMOP: 'Somente EMOP', SINAPI: 'Somente SINAPI', SCO: 'Somente SCO', AMBOS: 'EMOP + SINAPI', TODOS: 'EMOP + SINAPI + SCO'};
-    return nomes[f] || 'toque para escolher';
-  }, false);
-  // na busca, só "Contém na descrição" fica sempre à vista
-  var fDesc = document.getElementById('fDesc'), busca = fDesc && fDesc.parentElement;
-  if (busca && !document.getElementById('dobraBusca')){
-    var outros = ['fCod', 'fDescNao', 'fUnid'].map(function(id){ return document.getElementById(id); });
-    var b = document.createElement('button'); b.type = 'button'; b.id = 'dobraBusca'; b.className = 'mob-dobra fechada'; b.setAttribute('data-mob', 'cat');
-    b.style.cssText = 'grid-column:1/-1;border:none;padding:4px 2px;background:none';
-    b.innerHTML = '<span>Mais filtros (código, não contém, unidade)</span><span class="mob-dobra-res"></span>';
-    busca.appendChild(b);
-    var pinta = function(){ var ab = !b.classList.contains('fechada'); outros.forEach(function(e){ if (e) e.classList.toggle('mob-escondido', !ab && !(e.tagName === 'SELECT' ? e.selectedIndex > 0 : (e.value || '').trim())); }); };
-    b.addEventListener('click', function(){ b.classList.toggle('fechada'); pinta(); }); pinta();
-  }
-  if (document.body.classList.contains('mode-mobile') && fDesc) fDesc.style.gridColumn = '1/-1';
-  else if (fDesc) fDesc.style.gridColumn = '';
+  // 17/10/2026: no celular nada fica escondido; todos os filtros e bancos ficam à vista, como no computador
+  ['dobraFonte', 'dobraBusca'].forEach(function(id){ var e = document.getElementById(id); if (e) e.remove(); });
+  ['barFonte', 'barOnera', 'fCod', 'fDescNao', 'fUnid'].forEach(function(id){ var e = document.getElementById(id); if (e) e.classList.remove('mob-escondido'); });
+  var fDesc = document.getElementById('fDesc');
+  if (fDesc) fDesc.style.gridColumn = '';
 }
 function rotularQuadros(tbl){
   if (!tbl || !tbl.tHead || !tbl.tBodies[0]) return;
@@ -603,24 +609,10 @@ function rotularQuadros(tbl){
         if (i === 4) rot = '';
       }
       if (rot && rot !== '+') td.setAttribute('data-rot', rot); else td.removeAttribute('data-rot');
-      if (ehOrc) td.classList.toggle('q-extra', [6, 7, 9, 10, 11].indexOf(i) >= 0);
+      td.classList.remove('q-extra');
     });
-    if (ehOrc){
-      var chave = tr.getAttribute('data-orc-idx');
-      tr.classList.toggle('q-aberto', !!_quadrosAbertos[chave]);
-      var alvo = tr.cells[8];
-      if (alvo && !alvo.querySelector('.q-mais')){
-        var b = document.createElement('button'); b.type = 'button'; b.className = 'q-mais';
-        b.textContent = _quadrosAbertos[chave] ? 'Menos ▴' : 'BDI, mercado e ações ▾';
-        b.addEventListener('click', function(ev){
-          ev.stopPropagation();
-          var k = tr.getAttribute('data-orc-idx'); _quadrosAbertos[k] = !_quadrosAbertos[k];
-          tr.classList.toggle('q-aberto', !!_quadrosAbertos[k]);
-          b.textContent = _quadrosAbertos[k] ? 'Menos ▴' : 'BDI, mercado e ações ▾';
-        });
-        alvo.appendChild(b);
-      }
-    }
+    tr.classList.remove('q-aberto');
+    var qm = tr.querySelector('.q-mais'); if (qm) qm.remove();
   });
 }
 function prepararQuadros(){
@@ -658,6 +650,7 @@ function moverBotoesPlanilha(){
     db.innerHTML = '<span>🧰 Botões da planilha</span><span class="mob-dobra-res">+Título, COMP, Curvas ABC, Memória</span>';
     db.addEventListener('click', function(){ db.classList.toggle('fechada'); barra.classList.toggle('mob-escondido', db.classList.contains('fechada')); });
     right.insertBefore(db, barra); barra.classList.add('mob-escondido');
+    db.remove(); barra.classList.remove('mob-escondido'); // 17/10/2026: botões sempre à vista
   }
   if (!_planBtns){
     _planBtns = botoesDaPlanilha().map(function(b){ return {el: b, pai: b.parentNode, prox: b.nextSibling}; });
