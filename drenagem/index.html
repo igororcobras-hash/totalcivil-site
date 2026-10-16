@@ -1852,19 +1852,37 @@ const RES = {
 
 /* ---------- 10. VERIFICAÇÃO ---------- */
 let VFILTRO = 'prob';
+function sugestaoCheck(c) {
+  const kind = {bls: 'bls', pvs: 'pvs', rede: 'trechos', perfil: 'pvs', bacias: 'bacias'}[c.tab];
+  if (!kind || !ROWFIELDS[kind]) return null;
+  const i = P[kind].findIndex(o => o.id === c.el); if (i < 0) return null;
+  const out = [], vis = new Set();
+  ROWFIELDS[kind](i).forEach(([p]) => { const f = fbFor(p); if (f && f.fix !== undefined && f.fix !== null && f.fixTxt && f.s !== 'ok' && !vis.has(p)) { vis.add(p); out.push({p, f}); } });
+  return out;
+}
 function vVerif() {
   const ch = R.checks, e = ch.filter(c => c.st === 'err').length, w = ch.filter(c => c.st === 'warn').length, o = ch.filter(c => c.st === 'ok').length;
   const lst = ch.filter(c => VFILTRO === 'todos' || (VFILTRO === 'prob' ? c.st !== 'ok' : c.st === VFILTRO));
   const nomes = {bacias: 'Bacias', bls: 'Sarjetas/BL/ramais', pvs: 'Poços de visita', rede: 'Rede tronco', perfil: 'Piezométrica'};
+  const aba = t => t === 'perfil' ? 'perfil' : t;
+  const corr = c => {
+    if (c.st === 'ok') return '';
+    const sg = sugestaoCheck(c) || [];
+    if (sg.length) return sg.map(({p, f}) => `<button type="button" class="fixbtn" title="${esc(f.t)}" onclick='event.stopPropagation();applyFix(${JSON.stringify(p)},${JSON.stringify(f.fix)})'>${esc(f.fixTxt)}</button>`).join(' ');
+    if (/Largura alagada|Lâmina na sarjeta|Vazão × admissível/.test(c.par)) return `<button type="button" class="fixbtn" title="Cria uma BL antes desta e divide as áreas que chegam nela" onclick="event.stopPropagation();addBLMontante('${esc(c.el)}')">Acrescentar BL a montante</button>`;
+    if (/deságue/.test(c.par)) return '<small style="color:var(--warn)">Decisão do projetista: rever o NA do receptor ou elevar a rede.</small>';
+    return `<button type="button" class="btn btn-secondary btn-sm" onclick="event.stopPropagation();showTab('${aba(c.tab)}')">Abrir ›</button>`;
+  };
   return `<h3>Verificação geral do projeto</h3>
   <div class="sumbar"><span class="badge badge-err">✕ ${e} erro(s)</span><span class="badge badge-warn">⚠ ${w} alerta(s)</span><span class="badge badge-ok">✓ ${o} atendido(s)</span></div>
-  ${e === 0 && w === 0 && ch.length ? '<div class="nota-tec nota-tec-info"><b>✓</b><span>Todos os critérios foram atendidos.</span></div>' : ''}
+  ${e === 0 && w === 0 && ch.length ? '<div class="nota-tec nota-tec-info"><b>✓</b><span>Todos os critérios foram atendidos.</span></div>' : `<div class="card" style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
+    <button class="btn btn-primary" onclick="autoCorrigir()">🛠 Corrigir automaticamente</button>
+    <span style="font-size:.8rem;color:var(--muted);flex:1;min-width:240px">Corrige cotas, declividades, diâmetros, ramais, bocas-de-lobo e PVs pela regra de menor custo (declividade até aprofundar 1/3 do Ø; depois troca de tubo; sem afogar a saída). Mostra um relatório com o que mudou e permite desfazer. Ou use o botão de cada linha abaixo.</span></div>`}
   <div class="bar-btns"><div class="seg">${[['prob', 'Pendências'], ['err', 'Erros'], ['warn', 'Alertas'], ['ok', 'Atendidos'], ['todos', 'Todos']].map(([k, t]) => `<button class="${VFILTRO === k ? 'on' : ''}" onclick="VFILTRO='${k}';renderTab()">${t}</button>`).join('')}</div></div>
-  ${lst.length ? `<div class="tbl-wrap"><table><thead><tr><th></th><th>Grupo</th><th>Elemento</th><th>Verificação</th><th>Calculado</th><th>Critério</th><th>Orientação</th></tr></thead><tbody>
-  ${lst.map(c => `<tr style="cursor:pointer" onclick="showTab('${c.tab === 'perfil' ? 'perfil' : c.tab}')"><td><span class="st ${c.st}">${c.st === 'ok' ? '✓' : c.st === 'warn' ? '⚠' : '✕'}</span></td><td>${nomes[c.tab] || c.tab}</td><td><b>${esc(c.el)}</b></td><td>${esc(c.par)}</td><td class="${c.st}">${esc(c.val)}</td><td>${esc(c.lim)}</td><td style="font-size:.75rem">${c.st === 'ok' ? '' : esc(c.nota)}</td></tr>`).join('')}
+  ${lst.length ? `<div class="tbl-wrap"><table><thead><tr><th></th><th>Grupo</th><th>Elemento</th><th>Verificação</th><th>Calculado</th><th>Critério</th><th>Orientação</th><th>Correção</th></tr></thead><tbody>
+  ${lst.map(c => `<tr style="cursor:pointer" onclick="showTab('${aba(c.tab)}')"><td><span class="st ${c.st}">${c.st === 'ok' ? '✓' : c.st === 'warn' ? '⚠' : '✕'}</span></td><td>${nomes[c.tab] || c.tab}</td><td><b>${esc(c.el)}</b></td><td>${esc(c.par)}</td><td class="${c.st}">${esc(c.val)}</td><td>${esc(c.lim)}</td><td style="font-size:.75rem;white-space:normal;min-width:200px">${c.st === 'ok' ? '' : esc(c.nota)}</td><td style="white-space:normal;min-width:170px">${corr(c)}</td></tr>`).join('')}
   </tbody></table></div>` : '<div class="empty">Nada nesta categoria.</div>'}`;
 }
-
 /* ---------- 12. MEMORIAL ---------- */
 const IMPR_ITENS = [
   ['crit', 'Critérios de projeto'], ['metod', 'Metodologia e fórmulas'], ['bacias', 'Bacias de contribuição'], ['bls', 'Sarjetas e bocas-de-lobo'], ['ramais', 'Ramais de ligação'],
@@ -2868,10 +2886,10 @@ function autoCorrigir() {
     const c = P.crit;
     for (let k = 0; k < 3; k++) {
       calc(); const r = R.bl[b.id]; if (!r) return;
-      if (r.Qbyp > 1e-4 && !b.prox) {
+      if (r.Qbyp > 1e-4) {
         if (b.tipo === 'gs') { b.tipo = 'gd'; b.L = Math.max(num(b.L) || 0, 2); b.fr = BLTIPOS.gd.fr; continue; }
         if (b.tipo === 'gd') { b.tipo = 'cb'; b.fr = BLTIPOS.cb.fr; continue; }
-        const viz = proximaBL(b); if (viz) { b.prox = viz.id; continue; }
+        if (!b.prox) { const viz = proximaBL(b); if (viz) { b.prox = viz.id; continue; } }
       }
       break;
     }
@@ -2940,6 +2958,27 @@ function proximaBL(b) {
   const S = greideDecl(b.rua, num(b.dist)); const dir = S == null || S >= 0 ? 1 : -1;
   return P.bls.filter(x => x.id !== b.id && x.rua === b.rua && x.lado === b.lado && (num(x.dist) - num(b.dist)) * dir > 0)
     .sort((x, y) => Math.abs(num(x.dist) - num(b.dist)) - Math.abs(num(y.dist) - num(b.dist)))[0] || null;
+}
+/* acrescenta uma boca-de-lobo a montante e divide as áreas que chegavam na BL original */
+function addBLMontante(id) {
+  const b = P.bls.find(x => x.id === id); if (!b) return;
+  const S = greideDecl(b.rua, num(b.dist)); const up = S == null || S >= 0 ? -1 : 1;
+  const ant = P.bls.filter(x => x.id !== b.id && x.rua === b.rua && x.lado === b.lado && (num(x.dist) - num(b.dist)) * up > 0)
+    .sort((x, y) => Math.abs(num(x.dist) - num(b.dist)) - Math.abs(num(y.dist) - num(b.dist)))[0];
+  let d = ant ? (num(ant.dist) + num(b.dist)) / 2 : num(b.dist) + up * 20;
+  const ests = estacasRua(b.rua); if (ests.length) d = Math.min(Math.max(d, ests[0].dist), ests[ests.length - 1].dist);
+  const bacs = P.bacias.filter(x => x.dest === b.id);
+  if (!confirm('Acrescentar uma boca-de-lobo a montante da ' + b.id + ' (estaca ' + estLabel(d) + ', lado ' + (b.lado === 'D' ? 'direito' : 'esquerdo') + ')?\n\n' +
+    (bacs.length ? 'As áreas que chegam na ' + b.id + ' (' + bacs.map(x => x.id).join(', ') + ') serão divididas ao meio entre as duas BLs. ' : '') + 'O excedente da nova BL seguirá para a ' + b.id + '.')) return;
+  const antes = JSON.stringify(P);
+  const pvs = P.pvs.filter(p => p.rua === b.rua && isNum(num(p.dist))).sort((x, y) => Math.abs(num(x.dist) - d) - Math.abs(num(y.dist) - d));
+  const nid = nextId(P.bls, 'BL-');
+  const nb = Object.assign(JSON.parse(JSON.stringify(b)), {id: nid, dist: +d.toFixed(2), prox: b.id, pv: pvs[0] ? pvs[0].id : b.pv});
+  P.bls.splice(P.bls.indexOf(b), 0, nb);
+  if (ant && ant.prox === b.id) ant.prox = nid;
+  bacs.forEach(x => { const A = num(x.A) || 0; x.A = +(A / 2).toFixed(4); P.bacias.push(Object.assign(JSON.parse(JSON.stringify(x)), {id: nextId(P.bacias, 'B', 1), nome: (x.nome || x.id) + ' (parte a montante)', A: +(A / 2).toFixed(4), dest: nid})); });
+  DESFAZER = antes; save(); calc(); renderTab();
+  toast(nid + ' acrescentada na estaca ' + estLabel(d) + '. Use Desfazer no relatório se não quiser.');
 }
 function desfazerCorrecao() {
   if (!DESFAZER) return; P = migrate(JSON.parse(DESFAZER)); DESFAZER = null;
