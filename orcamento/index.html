@@ -264,6 +264,42 @@ body.mode-mobile tr[data-quadro]>td.q-extra{display:none!important}
 body.mode-mobile tr[data-quadro].q-aberto>td.q-extra{display:block!important}
 body.mode-mobile .q-mais{display:block;margin-top:6px;border:1px solid #cbd5e1;background:#f8fafc;border-radius:8px;padding:6px 10px;font:inherit;font-size:11px;font-weight:700;color:#334155;cursor:pointer}
 .q-mais{display:none}
+/* Barra de botões da planilha (passo 3), menu em cascata e relatório (memória de cálculo) */
+#planFerramentas{display:none}
+body.mode-mobile #planFerramentas{display:flex;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:6px;padding:6px 8px;background:#f1f5f9;border-bottom:1px solid #e2e8f0;flex:none}
+body.mode-mobile #planFerramentas .btn{flex:none;white-space:nowrap;min-height:32px;padding:5px 9px!important;font-size:11px!important}
+body.mode-mobile .header h1>span{display:none}
+body.mode-mobile .header #device-toggle-btn{display:none}
+#mobMenuBtn{display:none}
+body.mode-mobile #mobMenuBtn{display:block;flex:none;background:#f59e0b;color:#0f172a;border:none;border-radius:8px;padding:6px 12px;font:inherit;font-size:13px;font-weight:800;min-height:34px;cursor:pointer}
+#mobMenu{position:fixed;inset:0;z-index:12500;background:rgba(15,23,42,.55);display:none}
+#mobMenu.aberto{display:block}
+#mobMenu .mm-caixa{position:absolute;top:0;right:0;bottom:0;left:0;background:#fff;overflow-y:auto;box-shadow:-6px 0 20px rgba(0,0,0,.25)}
+#mobMenu .mm-topo{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:#0f172a;color:#fff;font-weight:800;font-size:15px;position:sticky;top:0}
+#mobMenu .mm-topo button{background:#1e293b;color:#fff;border:1px solid #334155;border-radius:8px;padding:6px 12px;font:inherit;font-size:14px;cursor:pointer}
+#mobMenu .mm-grupo{border-bottom:1px solid #e2e8f0}
+#mobMenu .mm-gtit{display:flex;align-items:center;gap:8px;width:100%;border:none;background:#f8fafc;padding:13px 14px;font:inherit;font-size:14px;font-weight:800;color:#0f172a;text-align:left;cursor:pointer}
+#mobMenu .mm-gtit span{flex:1}
+#mobMenu .mm-gtit::after{content:'▸';color:#64748b}
+#mobMenu .mm-grupo.aberto .mm-gtit::after{content:'▾'}
+#mobMenu .mm-itens{display:none;padding:4px 0 8px}
+#mobMenu .mm-grupo.aberto .mm-itens{display:block}
+#mobMenu .mm-item{display:block;width:100%;border:none;background:none;padding:11px 14px 11px 28px;font:inherit;font-size:14px;color:#1e293b;text-align:left;cursor:pointer}
+#mobMenu .mm-item small{display:block;font-size:11px;color:#64748b;margin-top:1px}
+#mobMenu .mm-item:active{background:#fef3c7}
+#mobRelatorio{position:fixed;inset:0;z-index:12400;background:#fff;display:none;flex-direction:column}
+#mobRelatorio.aberto{display:flex}
+#mobRelatorio .mr-topo{display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;background:#0f172a;color:#fff}
+#mobRelatorio .mr-topo b{flex:1 1 100%;font-size:15px}
+#mobRelatorio .mr-topo button{border:none;border-radius:8px;padding:8px 12px;font:inherit;font-size:13px;font-weight:800;cursor:pointer;min-height:38px}
+#mobRelatorio .mr-corpo{flex:1;overflow:auto;padding:10px;-webkit-overflow-scrolling:touch}
+.rel-tab{border-collapse:collapse;width:100%;font-size:11px;font-family:Inter,Arial,sans-serif}
+.rel-tab td{border:1px solid #cbd5e1;padding:4px 6px;vertical-align:top}
+.rel-tab tr.rel-cab td{background:#0f172a;color:#fff;font-weight:700}
+.rel-tab tr.rel-tit td{background:#fef3c7;font-weight:800;font-size:13px;border:none}
+.rel-tab tr.rel-info td{border:none;font-weight:600}
+.rel-tab tr.rel-item td{background:#e0f2fe;font-weight:700}
+.rel-vazio{padding:24px;text-align:center;color:#64748b;font-size:14px}
 #mobAviso{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#0f172a;color:white;padding:10px 16px;border-radius:20px;font-size:13px;font-weight:700;z-index:13000;box-shadow:0 4px 14px rgba(0,0,0,.3);display:none;max-width:90vw;text-align:center}
 body.mode-android input,body.mode-android select,body.mode-android textarea{font-size:15px}
 body.mode-ios input,body.mode-ios select,body.mode-ios textarea{font-size:16px}
@@ -355,6 +391,7 @@ function prepararCelular(mode){
     body.classList.remove('mob-orc', 'mob-cat', 'mob-ferr', 'mob-cab');
     var ferr = document.getElementById('cabFerramentas');
     if (ferr && header && ferr.parentNode !== header) header.appendChild(ferr);
+    devolverBotoesPlanilha();
     if (btn && ferr && btn.parentNode !== ferr) ferr.appendChild(btn);
     return;
   }
@@ -362,7 +399,7 @@ function prepararCelular(mode){
   if (cabBotoes && !cabBotoes.id) cabBotoes.id = 'cabFerramentas';
   cabBotoes = document.getElementById('cabFerramentas');
   marca(cabBotoes, 'cab');
-  marca(document.getElementById('patchBar1'), 'ferr');
+  marca(document.getElementById('patchBar1'), 'nenhum'); // no celular as funções dela estão no ☰ Menu
   var barEmop = document.getElementById('barEmop'); marca(barEmop && barEmop.parentElement, 'ferr');
   var orcBar = document.querySelector('.orc-bar'); marca(orcBar, 'cab');
   // no celular, BDI e botões do cabeçalho vão para baixo dos dados da obra (passo 1)
@@ -375,6 +412,8 @@ function prepararCelular(mode){
     cabTitulo.insertBefore(f, btn && btn.parentNode === cabTitulo ? btn : null);
   }
   aplicarFonteCelular();
+  moverBotoesPlanilha();
+  prepararMenuCelular(cabTitulo);
   prepararDobras();
   prepararQuadros();
   var tabs = document.getElementById('mobTabs');
@@ -504,6 +543,190 @@ function prepararQuadros(){
   });
   [orc, cat].forEach(function(t){ if (t && t.tBodies[0]) _quadrosObs.observe(t.tBodies[0], {childList: true}); });
 }
+/* Botões que são da planilha (+ Título, COMP, curvas ABC) vão para o passo 3 no celular */
+var _planBtns = null;
+function botoesDaPlanilha(){
+  var fns = ['addTituloGlobal', 'expandAllOrc', 'collapseAllOrc', 'abrirCurvaABC_Codigos', 'abrirCurvaABC_Insumos'];
+  var cab = document.getElementById('cabFerramentas'); if (!cab) return [];
+  return Array.prototype.filter.call(cab.querySelectorAll('button'), function(b){
+    var oc = b.getAttribute('onclick') || '';
+    return b.id === 'btnDiagComp' || fns.some(function(f){ return oc.indexOf(f) >= 0; });
+  });
+}
+function moverBotoesPlanilha(){
+  var right = document.querySelector('.right'), pos = document.getElementById('barInsertPos');
+  if (!right) return;
+  var barra = document.getElementById('planFerramentas');
+  if (!barra){
+    barra = document.createElement('div'); barra.id = 'planFerramentas';
+    var mem = document.createElement('button'); mem.type = 'button'; mem.className = 'btn btn-primary'; mem.id = 'btnMemoriaCel';
+    mem.textContent = '📐 Memória de cálculo'; mem.onclick = function(){ abrirRelatorioCelular('memoria'); };
+    barra.appendChild(mem);
+    right.insertBefore(barra, pos || right.firstChild);
+  }
+  if (!_planBtns){
+    _planBtns = botoesDaPlanilha().map(function(b){ return {el: b, pai: b.parentNode, prox: b.nextSibling}; });
+  }
+  _planBtns.forEach(function(x){ barra.insertBefore(x.el, document.getElementById('btnMemoriaCel')); });
+}
+function devolverBotoesPlanilha(){
+  if (!_planBtns) return;
+  for (var i = _planBtns.length - 1; i >= 0; i--){ var x = _planBtns[i]; x.pai.insertBefore(x.el, x.prox && x.prox.parentNode === x.pai ? x.prox : null); }
+  _planBtns = null;
+}
+/* ☰ Menu: Arquivo, Importar, Exportar, Planilha e Ambiente, em cascata (só no celular) */
+function clicar(sel){ return function(){ var e = typeof sel === 'string' ? document.querySelector(sel) : sel(); if (e) e.click(); else alert('Função não encontrada nesta versão.'); }; }
+function botaoPorFuncao(fn){ return function(){ return Array.prototype.find.call(document.querySelectorAll('button'), function(b){ return (b.getAttribute('onclick') || '').indexOf(fn) >= 0; }); }; }
+function botaoPorTexto(txt){ return function(){ return Array.prototype.find.call(document.querySelectorAll('button,label.btn'), function(b){ return (b.textContent || '').indexOf(txt) >= 0 && !b.closest('#mobMenu'); }); }; }
+var MENU_CEL = [
+  {g: '📁 Arquivo', itens: [
+    {r: 'Salvar orçamento', d: 'grava no aparelho com o nome da obra', a: clicar(botaoPorFuncao('salvarOrcamentoAtual'))},
+    {r: 'Abrir (Meus orçamentos)', d: 'lista dos orçamentos salvos', a: clicar(botaoPorFuncao('abrirModalOrcamentos'))},
+    {r: 'Novo orçamento', a: clicar(botaoPorFuncao('novoOrcamento'))},
+    {r: 'Backup automático', d: 'escolher a pasta do backup', a: clicar('#btnBackupPasta')},
+    {r: 'Histórico / Auditoria', a: clicar(botaoPorFuncao('abrirModalHistorico'))}
+  ]},
+  {g: '📥 Importar', itens: [
+    {r: 'Backup XLSX', d: 'orçamento exportado antes por este programa', a: clicar(botaoPorTexto('Importar Backup XLSX'))},
+    {r: 'Lista de itens', d: 'planilha ou texto com códigos e quantidades', a: clicar('#fileImportCodigos')},
+    {r: 'Banco EMOP do mês (XLSX)', a: clicar('#fileEmopXLSX')},
+    {r: 'Banco SINAPI do mês (XLSX/PDF)', a: clicar('#fileSinapiPDF')},
+    {r: 'Banco SCO do mês', a: clicar('#fileScoXLSX')}
+  ]},
+  {g: '📤 Exportar', itens: [
+    {r: 'Excel', d: 'planilha orçamentária (e memória de cálculo, se houver)', a: function(){ window.exportXLSX(); }},
+    {r: 'Excel com composições', d: 'com as composições abertas', a: clicar('#btnXlsxComp')},
+    {r: 'Word', d: 'planilha orçamentária e memória de cálculo', a: function(){ exportarRelatorio('word'); }},
+    {r: 'PDF', d: 'abre a impressão: escolha “Salvar como PDF”', a: function(){ exportarRelatorio('pdf'); }}
+  ]},
+  {g: '🧮 Planilha', itens: [
+    {r: 'Memória de cálculo', d: 'como sai na exportação', a: function(){ abrirRelatorioCelular('memoria'); }},
+    {r: 'Ver planilha como é exportada', a: function(){ abrirRelatorioCelular('planilha'); }},
+    {r: 'Criar composição própria', a: clicar(botaoPorFuncao('abrirModalComp'))},
+    {r: 'Cotação (quartis)', a: clicar(botaoPorFuncao('abrirModalCotacaoGeral'))},
+    {r: 'Atualizar data base de todos os itens', a: function(){
+      var inp = document.getElementById('dataBaseTodos'); var v = prompt('Data base (MM/AAAA) para todos os itens:', inp ? inp.value : '');
+      if (v === null) return; if (inp) inp.value = v; clicar(botaoPorFuncao('atualizarDataBaseTodos'))(); }}
+  ]},
+  {g: '📱 Ambiente', itens: [
+    {r: 'Trocar o ambiente', d: 'Computador, Android ou iPhone', a: function(){ abrirSelecaoAmbiente(); }}
+  ]}
+];
+function prepararMenuCelular(cabTitulo){
+  if (cabTitulo && !document.getElementById('mobMenuBtn')){
+    var b = document.createElement('button'); b.type = 'button'; b.id = 'mobMenuBtn'; b.textContent = '☰ Menu';
+    b.onclick = function(){ document.getElementById('mobMenu').classList.add('aberto'); };
+    cabTitulo.appendChild(b);
+  }
+  if (document.getElementById('mobMenu')) return;
+  var m = document.createElement('div'); m.id = 'mobMenu'; m.setAttribute('role', 'dialog'); m.setAttribute('aria-label', 'Menu');
+  var html = '<div class="mm-caixa"><div class="mm-topo">Menu<button type="button" data-fechar>✕</button></div>';
+  MENU_CEL.forEach(function(g, gi){
+    html += '<div class="mm-grupo"><button type="button" class="mm-gtit"><span>' + g.g + '</span></button><div class="mm-itens">';
+    g.itens.forEach(function(it, ii){ html += '<button type="button" class="mm-item" data-g="' + gi + '" data-i="' + ii + '">' + it.r + (it.d ? '<small>' + it.d + '</small>' : '') + '</button>'; });
+    html += '</div></div>';
+  });
+  m.innerHTML = html + '</div>';
+  m.addEventListener('click', function(ev){
+    if (ev.target === m || ev.target.closest('[data-fechar]')) return m.classList.remove('aberto');
+    var gt = ev.target.closest('.mm-gtit'); if (gt){ gt.parentNode.classList.toggle('aberto'); return; }
+    var it = ev.target.closest('.mm-item'); if (!it) return;
+    m.classList.remove('aberto');
+    var acao = MENU_CEL[+it.getAttribute('data-g')].itens[+it.getAttribute('data-i')].a;
+    try{ acao(); }catch(e){ alert('Não foi possível: ' + (e && e.message || e)); }
+  });
+  document.body.appendChild(m);
+}
+/* Relatório: as mesmas abas do Excel exportado ("Orçamento" e "Memória de Cálculo"),
+   mostradas na tela e gravadas em Word ou PDF. */
+function workbookDoExport(){
+  if (typeof XLSX === 'undefined' || typeof window.exportXLSX !== 'function') throw new Error('Exportação indisponível.');
+  var orig = XLSX.writeFile, capt = null;
+  XLSX.writeFile = function(wb){ capt = wb; };
+  try{ window.exportXLSX(); } finally { XLSX.writeFile = orig; }
+  if (!capt) throw new Error('Não foi possível montar a planilha.');
+  return capt;
+}
+function escHtml(t){ return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+function abaEmHtml(ws, ehMemoria){
+  if (!ws) return '';
+  var rows = XLSX.utils.sheet_to_json(ws, {header: 1, raw: false, defval: ''});
+  var ncol = rows.reduce(function(n, r){ return Math.max(n, r.length); }, 0);
+  if (ehMemoria) ncol = Math.min(ncol, 9); // a coluna J (oculta) guarda dados para reimportar
+  var achouCab = false, out = '<table class="rel-tab">';
+  rows.forEach(function(r){
+    r = r.slice(0, ncol);
+    var cheias = r.filter(function(c){ return String(c).trim() !== ''; }).length;
+    if (!cheias){ out += '<tr><td colspan="' + ncol + '" style="border:none;height:6px"></td></tr>'; return; }
+    var primeira = String(r[0] || '');
+    var ehCab = !achouCab && cheias >= 3 && /^(ITEM|#|CÓDIGO|CODIGO)$/i.test(primeira.trim());
+    if (ehCab) achouCab = true;
+    if (!achouCab && cheias === 1){ out += '<tr class="' + (out.indexOf('rel-tit') < 0 ? 'rel-tit' : 'rel-info') + '"><td colspan="' + ncol + '">' + escHtml(primeira) + '</td></tr>'; return; }
+    var cls = ehCab ? 'rel-cab' : (ehMemoria && /^\d+$/.test(primeira.trim()) ? 'rel-item' : '');
+    out += '<tr' + (cls ? ' class="' + cls + '"' : '') + '>' + r.map(function(c){ return '<td>' + escHtml(c) + '</td>'; }).join('') + (r.length < ncol ? '<td colspan="' + (ncol - r.length) + '"></td>' : '') + '</tr>';
+  });
+  return out + '</table>';
+}
+function relatorioHtml(qual){
+  var wb = workbookDoExport(), partes = [];
+  var abaMem = wb.SheetNames.find(function(n){ return /mem[oó]ria de c[aá]lculo/i.test(n); });
+  if (qual !== 'memoria') partes.push('<h2>Planilha orçamentária</h2>' + abaEmHtml(wb.Sheets['Orçamento'], false));
+  if (qual !== 'planilha'){
+    if (abaMem) partes.push('<h2>Memória de cálculo</h2>' + abaEmHtml(wb.Sheets[abaMem], true));
+    else if (qual === 'memoria') partes.push('<div class="rel-vazio">Nenhum item tem memória de cálculo ainda.<br>No passo Planilha, toque no 📐 ao lado da quantidade de um item para montar a memória.</div>');
+  }
+  return partes.join('<div style="height:18px"></div>');
+}
+function nomeArquivoRel(){ var n = ((document.getElementById('nomeOrcAtual') || {}).value || 'Orcamento').trim().replace(/[^\w\u00C0-\u017F -]+/g, '').replace(/\s+/g, '_'); return (n || 'Orcamento') + '_' + new Date().toISOString().slice(0, 10); }
+function documentoRel(corpo){
+  var css = 'body{font-family:Arial,sans-serif;margin:18px;color:#0f172a}h2{font-size:15px;margin:10px 0 6px}.rel-tab{border-collapse:collapse;width:100%;font-size:10px}.rel-tab td{border:1px solid #94a3b8;padding:3px 5px;vertical-align:top}.rel-cab td{background:#0f172a;color:#fff;font-weight:bold}.rel-tit td{background:#fef3c7;font-weight:bold;font-size:13px;border:none}.rel-info td{border:none;font-weight:bold}.rel-item td{background:#e0f2fe;font-weight:bold}.rel-vazio{padding:20px;color:#64748b}@page{size:A4 landscape;margin:10mm}';
+  return '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + escHtml(nomeArquivoRel()) + '</title><style>' + css + '</style></head><body>' + corpo + '</body></html>';
+}
+function exportarRelatorio(tipo, qual){
+  var corpo = relatorioHtml(qual || 'tudo'), doc = documentoRel(corpo);
+  if (tipo === 'word'){
+    var blob = new Blob(['\ufeff', doc], {type: 'application/msword'});
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nomeArquivoRel() + '.doc';
+    document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+    return;
+  }
+  var w = window.open('', '_blank');
+  if (!w){ alert('O navegador bloqueou a janela de impressão. Permita janelas deste site e tente de novo.'); return; }
+  w.document.open(); w.document.write(doc); w.document.close();
+  setTimeout(function(){ try{ w.focus(); w.print(); }catch(e){} }, 400);
+}
+function abrirRelatorioCelular(qual){
+  var r = document.getElementById('mobRelatorio');
+  if (!r){
+    r = document.createElement('div'); r.id = 'mobRelatorio'; r.setAttribute('role', 'dialog');
+    r.innerHTML = '<div class="mr-topo"><b id="mrTit"></b><button type="button" data-a="word" style="background:#1d4ed8;color:#fff">Word</button><button type="button" data-a="pdf" style="background:#b91c1c;color:#fff">PDF</button><button type="button" data-a="xlsx" style="background:#15803d;color:#fff">Excel</button><button type="button" data-a="fechar" style="background:#334155;color:#fff;margin-left:auto">✕ Fechar</button></div><div class="mr-corpo" id="mrCorpo"></div>';
+    r.addEventListener('click', function(ev){
+      var b = ev.target.closest('button[data-a]'); if (!b) return;
+      var a = b.getAttribute('data-a'), q = r.getAttribute('data-qual');
+      if (a === 'fechar') r.classList.remove('aberto');
+      else if (a === 'xlsx') window.exportXLSX();
+      else exportarRelatorio(a, q);
+    });
+    document.body.appendChild(r);
+  }
+  r.setAttribute('data-qual', qual);
+  document.getElementById('mrTit').textContent = qual === 'memoria' ? '📐 Memória de cálculo (como é exportada)' : '📋 Planilha orçamentária (como é exportada)';
+  try{ document.getElementById('mrCorpo').innerHTML = relatorioHtml(qual); }
+  catch(e){ document.getElementById('mrCorpo').innerHTML = '<div class="rel-vazio">' + escHtml(e && e.message || e) + '</div>'; }
+  r.classList.add('aberto');
+}
+/* Word e PDF também no computador, ao lado do XLSX */
+window.addEventListener('load', function(){
+  setTimeout(function(){
+    var box = document.getElementById('boxExportXlsx'); if (!box || document.getElementById('btnWordRel')) return;
+    [['btnWordRel', '📄 Word', 'word'], ['btnPdfRel', '📄 PDF', 'pdf']].forEach(function(d){
+      var b = document.createElement('button'); b.type = 'button'; b.id = d[0]; b.className = 'btn btn-dark'; b.textContent = d[1];
+      b.title = 'Planilha orçamentária e memória de cálculo em ' + (d[2] === 'word' ? 'Word' : 'PDF (pela impressão)');
+      b.onclick = function(){ try{ exportarRelatorio(d[2]); }catch(e){ alert(e && e.message || e); } };
+      box.appendChild(b);
+    });
+  }, 1500);
+});
 function contarItensOrc(){ var k = document.getElementById('kItens'); var m = k && /\d+/.exec(k.textContent || ''); return m ? Number(m[0]) : 0; }
 function atualizarContCelular(){ var c = document.getElementById('mobContItens'); if (c) c.textContent = contarItensOrc(); }
 function mostrarAbaCelular(aba){
