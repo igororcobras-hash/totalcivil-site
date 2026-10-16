@@ -1,0 +1,82 @@
+name: Publicar site protegido
+
+# Publica totalcivil.com.br sem o código dos programas:
+#   1. envia cada <programa>/index.html para o Firestore (só quem está liberado recebe);
+#   2. publica o site com a tela de entrada no lugar de cada programa.
+# Precisa: segredo FIREBASE_SERVICE_ACCOUNT e Settings › Pages › Source = "GitHub Actions".
+on:
+  push:
+    branches: [main]
+  workflow_run:
+    # a rotina dos bancos grava na main com o token do Actions, que não dispara o "push" acima
+    workflows: ['Bancos mensais SINAPI e SCO']
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  # (pages: write também permite ler a configuração do Pages)
+  id-token: write
+
+concurrency:
+  group: publicar-site
+  cancel-in-progress: false
+
+jobs:
+  montar:
+    runs-on: ubuntu-latest
+    outputs:
+      pronto: ${{ steps.conf.outputs.pronto }}
+      pages: ${{ steps.conf.outputs.pages }}
+    steps:
+      # Enquanto o segredo não existir, nada muda: o site segue publicado pelo modo antigo (branch).
+      - id: conf
+        name: Conferir configuração
+        env:
+          TEM_SEGREDO: ${{ secrets.FIREBASE_SERVICE_ACCOUNT != '' }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pages=$(gh api "repos/${{ github.repository }}/pages" --jq .build_type 2>/dev/null || echo desconhecido)
+          echo "pages=$pages" >> "$GITHUB_OUTPUT"
+          if [ "$TEM_SEGREDO" != "true" ]; then
+            echo "pronto=nao" >> "$GITHUB_OUTPUT"
+            echo "::notice::Falta o segredo FIREBASE_SERVICE_ACCOUNT. Nada foi enviado; o site segue como estava."
+          else
+            echo "pronto=sim" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$pages" != "workflow" ]; then
+            echo "::notice::Settings › Pages › Source ainda não é 'GitHub Actions' (atual: $pages). Os programas são enviados ao Firestore, mas o site não é trocado."
+          fi
+      - if: steps.conf.outputs.pronto == 'sim'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - if: steps.conf.outputs.pronto == 'sim'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - if: steps.conf.outputs.pronto == 'sim'
+        name: Instalar firebase-admin
+        run: npm install --no-save --no-package-lock firebase-admin@13
+      - if: steps.conf.outputs.pronto == 'sim'
+        name: Enviar programas ao Firestore e montar o site público
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node scripts/publicar/montar-site.js _site --enviar
+      - if: steps.conf.outputs.pronto == 'sim' && steps.conf.outputs.pages == 'workflow'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  publicar:
+    needs: montar
+    if: needs.montar.outputs.pronto == 'sim' && needs.montar.outputs.pages == 'workflow'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
