@@ -1,0 +1,2019 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>Visitas Técnicas</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+<style>
+/* ===== DESIGN TOKENS — Total Civil ===== */
+:root {
+  --bg: #F6F4EF;
+  --surface: #FFFFFF;
+  --ink: #0F1E33;
+  --muted: #7A8599;
+  --line: #E6E0D6;
+  --orange: #FF6B1A;
+  --orange-2: #FF8A2E;
+  --blue: #12355F;
+  --blue-2: #1E4E8C;
+  --green: #166534;
+  --green-bg: #f0fdf4;
+  --red: #B54700;
+  --red-bg: #FFF0E6;
+  --yellow: #92400e;
+  --yellow-bg: #fffbeb;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1520;
+    --surface: #1a2535;
+    --ink: #e8e4dc;
+    --muted: #8a9ab0;
+    --line: #2a3a50;
+    --orange: #FF7A2F;
+    --blue: #4a8fd4;
+    --green: #4ade80;
+    --green-bg: #052e16;
+    --red: #fb923c;
+    --red-bg: #431407;
+    --yellow: #fcd34d;
+    --yellow-bg: #1c1102;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0d1520; --surface: #1a2535; --ink: #e8e4dc; --muted: #8a9ab0;
+  --line: #2a3a50; --orange: #FF7A2F; --blue: #4a8fd4;
+  --green: #4ade80; --green-bg: #052e16; --red: #fb923c;
+  --red-bg: #431407; --yellow: #fcd34d; --yellow-bg: #1c1102;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Plus Jakarta Sans', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+  padding-left: max(0px, env(safe-area-inset-left,0px));
+  padding-right: max(0px, env(safe-area-inset-right,0px));
+}
+h1,h2,h3,.display { font-family: 'Fraunces', serif; letter-spacing: -0.02em; }
+button { cursor: pointer; font-family: inherit; border: none; background: none; }
+input, select, textarea { font-family: inherit; font-size: 13px; color: var(--ink); background: var(--surface); }
+input:focus, select:focus, textarea:focus { outline: 2px solid var(--orange); outline-offset: -1px; }
+img { max-width: 100%; }
+a { color: var(--blue); }
+
+/* ===== HEADER PERSONALIZÁVEL ===== */
+#site-header {
+  position: sticky; top: 0; z-index: 50;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  padding: 0 max(16px, env(safe-area-inset-left,0px));
+}
+.header-inner {
+  max-width: 1280px; margin: 0 auto;
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; height: 60px;
+}
+.header-brand { display: flex; align-items: center; gap: 10px; }
+#header-logo-img { height: 36px; width: auto; border-radius: 6px; display: none; }
+#header-logo-text { font-family: 'Fraunces', serif; font-size: 20px; font-weight: 800; color: var(--ink); }
+#header-subtitle { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--muted); text-transform: uppercase; }
+.header-nav { display: flex; gap: 2px; align-items: center; }
+.header-nav button {
+  padding: 6px 14px; border-radius: 999px; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.04em; color: var(--muted); transition: all .15s;
+}
+.header-nav button.active { background: var(--ink); color: #fff; }
+.header-nav button:hover:not(.active) { color: var(--ink); }
+.header-actions { display: flex; align-items: center; gap: 8px; }
+.btn-nova-obra {
+  height: 36px; padding: 0 16px; border-radius: 999px;
+  background: var(--orange); color: #fff; font-size: 12px; font-weight: 800;
+  letter-spacing: 0.04em; display: flex; align-items: center; gap: 6px;
+  transition: background .15s;
+}
+.btn-nova-obra:hover { background: var(--blue); }
+.btn-icon {
+  width: 36px; height: 36px; border-radius: 999px; border: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: center; font-size: 16px;
+  color: var(--muted); transition: all .15s;
+}
+.btn-icon:hover { border-color: var(--ink); color: var(--ink); }
+
+/* Nav mobile */
+.nav-mobile {
+  border-top: 1px solid var(--line);
+  display: none; overflow-x: auto;
+  scrollbar-width: none;
+}
+.nav-mobile::-webkit-scrollbar { display: none; }
+.nav-mobile button {
+  flex-shrink: 0; padding: 10px 16px; font-size: 12px; font-weight: 700;
+  letter-spacing: 0.04em; border-bottom: 2px solid transparent;
+  white-space: nowrap; color: var(--muted); transition: all .15s;
+}
+.nav-mobile button.active { border-color: var(--orange); color: var(--ink); }
+
+/* ===== OFFLINE BANNER ===== */
+#offline-bar {
+  background: #059669; color: #fff; display: none;
+  padding: 8px max(16px, env(safe-area-inset-left,0px));
+  font-size: 12px; font-weight: 700; letter-spacing: 0.04em;
+}
+#offline-bar .inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; gap: 10px; }
+
+/* ===== LAYOUT PRINCIPAL ===== */
+.page-wrap { max-width: 1280px; margin: 0 auto; padding: 28px max(16px, env(safe-area-inset-left,0px)); }
+.section { display: none; }
+.section.active { display: block; }
+
+/* ===== CARDS ===== */
+.card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 20px; padding: 20px;
+}
+.card-sm { border-radius: 14px; padding: 14px; }
+
+/* ===== GRID ===== */
+.grid-2 { display: grid; grid-template-columns: repeat(2,1fr); gap: 16px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3,1fr); gap: 16px; }
+.grid-4 { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; }
+
+/* ===== STAT TILES ===== */
+.stat-tile {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 16px; padding: 18px 20px;
+}
+.stat-tile .val { font-family: 'Fraunces',serif; font-size: 36px; font-weight: 800; line-height: 1; color: var(--ink); font-variant-numeric: tabular-nums; }
+.stat-tile .lbl { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+.stat-tile .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+
+/* ===== BADGES ===== */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 800; letter-spacing: 0.06em; }
+.badge-conforme { background: var(--green-bg); color: var(--green); }
+.badge-nao-conforme { background: var(--red-bg); color: var(--red); }
+.badge-alta { background: #fef2f2; color: #dc2626; }
+.badge-media { background: var(--yellow-bg); color: var(--yellow); }
+.badge-baixa { background: var(--green-bg); color: var(--green); }
+.badge-aberta { background: #eff6ff; color: #1d4ed8; }
+.badge-tratamento { background: var(--yellow-bg); color: var(--yellow); }
+.badge-concluida { background: var(--green-bg); color: var(--green); }
+.badge-planejamento { background: #f0f4ff; color: var(--blue); }
+.badge-execucao { background: var(--green-bg); color: var(--green); }
+.badge-paralisada { background: var(--red-bg); color: var(--red); }
+
+/* ===== PROGRESS BAR ===== */
+.progress-wrap { background: var(--line); border-radius: 999px; height: 6px; overflow: hidden; }
+.progress-bar { height: 100%; border-radius: 999px; background: var(--orange); transition: width .3s; }
+
+/* ===== FORMULÁRIOS ===== */
+.form-group { display: flex; flex-direction: column; gap: 6px; }
+.form-label { font-size: 11px; font-weight: 800; letter-spacing: 0.07em; text-transform: uppercase; color: var(--muted); }
+.form-input {
+  width: 100%; height: 42px; border: 1px solid var(--line);
+  border-radius: 12px; padding: 0 12px; font-size: 13px;
+  background: var(--surface); color: var(--ink);
+}
+.form-input:focus { outline: 2px solid var(--orange); outline-offset: -1px; }
+textarea.form-input { height: auto; min-height: 80px; padding: 10px 12px; resize: vertical; }
+select.form-input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237A8599' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
+
+/* ===== BOTÕES ===== */
+.btn { height: 42px; padding: 0 18px; border-radius: 12px; font-size: 13px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; transition: all .15s; cursor: pointer; }
+.btn-primary { background: var(--ink); color: #fff; }
+.btn-primary:hover { background: var(--blue); }
+.btn-orange { background: var(--orange); color: #fff; }
+.btn-orange:hover { background: var(--orange-2); }
+.btn-outline { border: 1.5px solid var(--line); color: var(--ink); background: transparent; }
+.btn-outline:hover { border-color: var(--ink); }
+.btn-danger { background: #fee2e2; color: #dc2626; }
+.btn-danger:hover { background: #fca5a5; }
+.btn-sm { height: 32px; padding: 0 12px; font-size: 11px; border-radius: 8px; }
+
+/* ===== MODAL ===== */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(15,30,51,.55); backdrop-filter: blur(6px);
+  display: none; align-items: flex-end; justify-content: center;
+}
+.modal-overlay.open { display: flex; }
+@media (min-width: 640px) { .modal-overlay { align-items: center; } }
+.modal {
+  position: relative; width: 100%; max-width: 760px;
+  max-height: 92vh; overflow-y: auto;
+  border-radius: 28px 28px 0 0; background: #FFFCF7;
+  border: 1px solid var(--line); box-shadow: 0 24px 48px rgba(0,0,0,.18);
+}
+@media (min-width: 640px) { .modal { border-radius: 28px; max-height: 88vh; } }
+.modal-header {
+  position: sticky; top: 0; z-index: 10;
+  background: rgba(255,252,247,.92); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--line);
+  padding: 20px 24px; display: flex; align-items: center; justify-content: space-between;
+}
+.modal-body { padding: 24px; display: grid; gap: 18px; }
+.modal-footer { padding: 0 24px 24px; display: flex; gap: 12px; }
+.btn-close {
+  width: 36px; height: 36px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; color: var(--muted);
+}
+
+/* ===== TOAST ===== */
+#toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  z-index: 100; padding: 12px 20px; border-radius: 999px;
+  background: var(--ink); color: #fff; font-size: 13px; font-weight: 700;
+  display: none; align-items: center; gap: 8px; max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0,0,0,.25);
+}
+#toast.show { display: flex; }
+#toast .dot { width: 8px; height: 8px; border-radius: 50%; background: #4ade80; animation: pulse 1.2s infinite; }
+@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .4; } }
+
+/* ===== SECAO HEADER ===== */
+.section-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
+.section-title { font-family: 'Fraunces',serif; font-size: 26px; font-weight: 800; line-height: 1.1; }
+.hint-box { background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; }
+.hint-box p { font-size: 12px; color: var(--muted); line-height: 1.6; }
+.hint-box p + p { margin-top: 4px; }
+
+/* ===== OBRA CARD ===== */
+.obra-card {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: 20px; padding: 18px 20px;
+  display: flex; flex-direction: column; gap: 10px;
+  transition: border-color .15s;
+}
+.obra-card:hover { border-color: var(--ink); }
+.obra-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.obra-nome { font-weight: 800; font-size: 14px; line-height: 1.3; }
+.obra-meta { font-size: 11px; color: var(--muted); }
+.obra-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* ===== VISTORIA CARD ===== */
+.vistoria-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px; border-radius: 12px; border: 1px solid var(--line);
+  background: var(--surface);
+}
+.vistoria-item .nome { font-weight: 700; font-size: 13px; flex: 1; }
+
+/* ===== FOTO CARD ===== */
+.foto-card { border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: var(--surface); }
+.foto-card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; display: block; }
+.foto-card-info { padding: 10px 12px; }
+.foto-card-info .data { font-size: 11px; color: var(--muted); }
+.foto-card-info .desc { font-size: 12px; font-weight: 600; margin-top: 2px; }
+
+/* ===== DIÁRIO ===== */
+.diario-entry {
+  border: 1px solid var(--line); border-radius: 16px;
+  background: var(--surface); padding: 16px 18px;
+}
+.diario-entry-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.diario-data { font-family: 'Fraunces',serif; font-size: 16px; font-weight: 700; }
+.diario-clima { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; color: var(--muted); text-transform: uppercase; }
+
+/* ===== CHECKLIST ===== */
+.check-row {
+  display: grid; grid-template-columns: 1fr 130px;
+  gap: 8px; align-items: center; padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+}
+.check-row:last-child { border-bottom: none; }
+.check-label { font-size: 13px; font-weight: 600; }
+.check-buttons { display: flex; gap: 4px; }
+.check-btn {
+  flex: 1; height: 30px; border-radius: 8px; font-size: 10px; font-weight: 800;
+  letter-spacing: 0.04em; border: 1.5px solid var(--line); color: var(--muted);
+  transition: all .12s;
+}
+.check-btn.conforme { background: var(--green-bg); border-color: #bbf7d0; color: var(--green); }
+.check-btn.nao-conforme { background: var(--red-bg); border-color: #fed7aa; color: var(--red); }
+
+/* ===== RNC ===== */
+.rnc-card {
+  border: 1px solid var(--line); border-radius: 16px;
+  background: var(--surface); padding: 14px 16px;
+  display: grid; gap: 8px;
+}
+.rnc-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.rnc-desc { font-size: 13px; font-weight: 600; }
+
+/* ===== RODAPÉ PERSONALIZÁVEL ===== */
+#site-footer {
+  margin-top: 48px;
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  padding: 24px max(16px, env(safe-area-inset-left,0px));
+}
+#site-footer .footer-inner {
+  max-width: 1280px; margin: 0 auto;
+  display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: space-between; gap: 16px;
+}
+#footer-logo-img { height: 28px; display: none; }
+#footer-text { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.footer-stats { font-size: 11px; color: var(--muted); text-align: right; }
+
+/* ===== PAINEL DE CONFIGURAÇÃO ===== */
+.config-section { margin-bottom: 20px; }
+.config-section h4 { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+.logo-preview { width: 80px; height: 48px; border-radius: 8px; border: 1px dashed var(--line); display: flex; align-items: center; justify-content: center; font-size: 20px; color: var(--muted); overflow: hidden; }
+.logo-preview img { width: 100%; height: 100%; object-fit: contain; }
+
+/* ===== RELATÓRIO PDF ===== */
+.relatorio-preview {
+  background: #fff; border: 1px solid var(--line);
+  border-radius: 16px; overflow: hidden;
+}
+.relatorio-header-print {
+  background: var(--ink); color: #fff;
+  padding: 20px 24px; display: flex; align-items: center; gap: 16px;
+}
+.relatorio-body { padding: 24px; }
+.relatorio-body table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.relatorio-body th { background: var(--bg); padding: 8px 10px; text-align: left; font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.relatorio-body td { padding: 8px 10px; border-bottom: 1px solid var(--line); }
+
+/* ===== EMPTY STATE ===== */
+.empty-state { text-align: center; padding: 48px 24px; }
+.empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+.empty-state h3 { font-size: 16px; font-weight: 700; margin-bottom: 6px; }
+.empty-state p { font-size: 13px; color: var(--muted); margin-bottom: 20px; }
+
+/* ===== UTILITÁRIOS ===== */
+.flex { display: flex; }
+.flex-col { flex-direction: column; }
+.items-center { align-items: center; }
+.justify-between { justify-content: space-between; }
+.gap-2 { gap: 8px; }
+.gap-3 { gap: 12px; }
+.gap-4 { gap: 16px; }
+.mt-1 { margin-top: 4px; }
+.mt-2 { margin-top: 8px; }
+.mt-3 { margin-top: 12px; }
+.mt-4 { margin-top: 16px; }
+.text-sm { font-size: 12px; }
+.text-muted { color: var(--muted); }
+.font-bold { font-weight: 700; }
+.font-black { font-weight: 800; }
+.tracking-wide { letter-spacing: 0.06em; }
+.uppercase { text-transform: uppercase; }
+.divider { border: none; border-top: 1px solid var(--line); margin: 20px 0; }
+[hidden] { display: none !important; }
+
+/* ===== RESPONSIVO ===== */
+@media (max-width: 768px) {
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .header-nav { display: none; }
+  .nav-mobile { display: flex; }
+  .hide-mobile { display: none; }
+  .section-title { font-size: 22px; }
+}
+@media (max-width: 640px) {
+  .btn-nova-obra span.label { display: none; }
+  .modal-footer { flex-direction: column; }
+  .modal-footer .btn { justify-content: center; }
+  .check-row { grid-template-columns: 1fr; }
+}
+
+/* Print styles para relatório */
+@media print {
+  #site-header, #site-footer, .header-actions, .nav-mobile, #offline-bar,
+  .btn, button:not(.print-keep), .section-header .btn { display: none !important; }
+  body { background: #fff; color: #000; }
+  .card, .obra-card { box-shadow: none; border: 1px solid #ccc; }
+}
+</style>
+</head>
+<body>
+
+<!-- ===== HEADER PERSONALIZÁVEL ===== -->
+<header id="site-header">
+  <div class="header-inner">
+    <div class="header-brand">
+      <img id="header-logo-img" src="" alt="Logo">
+      <div>
+        <div id="header-logo-text">Visitas Técnicas</div>
+        <div id="header-subtitle">Total Civil · Gestão de Obras</div>
+      </div>
+    </div>
+    <nav class="header-nav">
+      <button class="active" onclick="showSection('home',this)">Início</button>
+      <button onclick="showSection('obras',this)">Obras</button>
+      <button onclick="showSection('vistoria',this)">Vistoria</button>
+      <button onclick="showSection('diario',this)">Diário</button>
+      <button onclick="showSection('fotos',this)">Fotos</button>
+      <button onclick="showSection('rnc',this)">Notificações</button>
+    </nav>
+    <div class="header-actions">
+      <button class="btn-icon hide-mobile" title="Modo escuro" onclick="toggleTheme()">🌙</button>
+      <button class="btn-icon hide-mobile" title="Personalizar cabeçalho/rodapé" onclick="openModal('modal-config')">⚙️</button>
+      <button class="btn-icon" title="Backup" onclick="openModal('modal-backup')">💾</button>
+      <button class="btn-nova-obra" onclick="openModal('modal-obra')">
+        <span>+</span><span class="label">Nova Obra</span>
+      </button>
+    </div>
+  </div>
+  <div class="nav-mobile">
+    <button class="active" onclick="showSection('home',this)">Início</button>
+    <button onclick="showSection('obras',this)">Obras</button>
+    <button onclick="showSection('vistoria',this)">Vistoria</button>
+    <button onclick="showSection('diario',this)">Diário</button>
+    <button onclick="showSection('fotos',this)">Fotos</button>
+    <button onclick="showSection('rnc',this)">Notificações</button>
+  </div>
+</header>
+
+<div id="offline-bar">
+  <div class="inner">
+    <span>●</span>
+    <span>MODO OFFLINE ATIVO — Dados salvos localmente. Exporte o backup ao retornar ao escritório.</span>
+  </div>
+</div>
+
+<!-- ===== CONTEÚDO PRINCIPAL ===== -->
+<div class="page-wrap">
+
+  <!-- == HOME == -->
+  <section id="sec-home" class="section active">
+    <div class="section-header">
+      <div>
+        <div class="section-title">Visitas Técnicas</div>
+        <div class="text-sm text-muted mt-1">Sistema de Gestão · PT-BR · Sem login necessário</div>
+      </div>
+      <button class="btn btn-orange" onclick="openModal('modal-obra')">+ Nova Obra</button>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid-4" id="stats-grid">
+      <div class="stat-tile">
+        <div class="val" id="stat-obras">0</div>
+        <div class="lbl">Obras cadastradas</div>
+        <div class="sub" id="stat-obras-sub">Nenhuma ainda</div>
+      </div>
+      <div class="stat-tile">
+        <div class="val" id="stat-vistorias">0</div>
+        <div class="lbl">Vistorias realizadas</div>
+        <div class="sub" id="stat-vis-sub">—</div>
+      </div>
+      <div class="stat-tile">
+        <div class="val" id="stat-fotos">0</div>
+        <div class="lbl">Fotos registradas</div>
+        <div class="sub" id="stat-fotos-sub">—</div>
+      </div>
+      <div class="stat-tile">
+        <div class="val" id="stat-rnc">0</div>
+        <div class="lbl">RNC abertas</div>
+        <div class="sub" id="stat-rnc-sub">—</div>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- Módulos -->
+    <div class="flex items-center justify-between" style="margin-bottom:14px">
+      <h2 style="font-family:'Fraunces',serif;font-size:18px;font-weight:800">6 Módulos Técnicos</h2>
+    </div>
+    <div class="grid-3" id="modulos-grid"></div>
+
+    <hr class="divider">
+
+    <!-- Fluxo operacional -->
+    <div class="card">
+      <div class="flex items-center justify-between" style="margin-bottom:16px;flex-wrap:wrap;gap:8px">
+        <h2 style="font-family:'Fraunces',serif;font-size:18px;font-weight:800">📘 Como usar em campo</h2>
+        <span class="badge" style="background:#FFF0E6;color:var(--orange);font-size:9px">FLUXO OPERACIONAL</span>
+      </div>
+      <div class="grid-3" id="fluxo-grid"></div>
+      <div class="mt-3 flex gap-2" style="flex-wrap:wrap">
+        <span class="badge" style="background:var(--bg);color:var(--muted);font-size:10px;padding:5px 10px">Filtro Infra/Predial para checklist correto</span>
+        <span class="badge" style="background:var(--bg);color:var(--muted);font-size:10px;padding:5px 10px">Georreferenciamento opcional</span>
+        <span class="badge" style="background:var(--bg);color:var(--muted);font-size:10px;padding:5px 10px">Offline · exporta JSON</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- == OBRAS == -->
+  <section id="sec-obras" class="section">
+    <div class="section-header">
+      <div class="section-title">Obras Cadastradas</div>
+      <div class="flex gap-2 items-center flex-wrap">
+        <select class="form-input" style="width:auto;height:36px" id="filtro-tipo" onchange="renderObras()">
+          <option value="">Todos os tipos</option>
+          <option value="INFRA">Infraestrutura Urbana</option>
+          <option value="PREDIAL">Obra Predial</option>
+        </select>
+        <select class="form-input" style="width:auto;height:36px" id="filtro-status" onchange="renderObras()">
+          <option value="">Todos os status</option>
+          <option value="Planejamento">Planejamento</option>
+          <option value="Em Execução">Em Execução</option>
+          <option value="Paralisada">Paralisada</option>
+          <option value="Concluída">Concluída</option>
+        </select>
+        <button class="btn btn-orange btn-sm" onclick="openModal('modal-obra')">+ Nova Obra</button>
+      </div>
+    </div>
+    <div class="hint-box">
+      <p>Cadastre obras por tipo: <strong>Infraestrutura Urbana</strong> (drenagem, pavimentação, urbanização) ou <strong>Predial</strong>. O checklist de vistoria muda conforme o tipo.</p>
+      <p>Progresso físico (%) pode ser atualizado a qualquer momento. Clique em <strong>Vistoria</strong> ou <strong>Diário</strong> para registrar diretamente na obra.</p>
+    </div>
+    <div id="obras-list" class="grid-3"></div>
+  </section>
+
+  <!-- == VISTORIA == -->
+  <section id="sec-vistoria" class="section">
+    <div class="section-header">
+      <div class="section-title">Vistoria Técnica</div>
+      <div class="flex gap-2 items-center flex-wrap">
+        <select class="form-input" style="width:auto;height:36px" id="filtro-obra-vis" onchange="renderVistorias()">
+          <option value="">Selecionar obra</option>
+        </select>
+        <button class="btn btn-orange btn-sm" onclick="openModal('modal-vistoria')" id="btn-nova-vistoria">+ Nova Vistoria</button>
+        <button class="btn btn-outline btn-sm" onclick="exportarRelatorioVistoria()">📄 Relatório PDF</button>
+      </div>
+    </div>
+    <div class="hint-box">
+      <p>Marque cada item como <strong>Conforme</strong> ou <strong>Não Conforme</strong>. Itens NC exigem ação corretiva e prazo. O checklist varia conforme o tipo da obra (Infra ou Predial).</p>
+    </div>
+    <div id="vistorias-list"></div>
+  </section>
+
+  <!-- == DIÁRIO == -->
+  <section id="sec-diario" class="section">
+    <div class="section-header">
+      <div class="section-title">Diário de Obra</div>
+      <div class="flex gap-2 items-center flex-wrap">
+        <select class="form-input" style="width:auto;height:36px" id="filtro-obra-diario" onchange="renderDiario()">
+          <option value="">Selecionar obra</option>
+        </select>
+        <input type="date" class="form-input" style="width:auto;height:36px" id="filtro-data-ini" onchange="renderDiario()" title="Data inicial">
+        <input type="date" class="form-input" style="width:auto;height:36px" id="filtro-data-fim" onchange="renderDiario()" title="Data final">
+        <button class="btn btn-orange btn-sm" onclick="openModal('modal-diario')">+ Registro</button>
+        <button class="btn btn-outline btn-sm" onclick="exportarDiario()">📄 Exportar Diário</button>
+      </div>
+    </div>
+    <div class="hint-box">
+      <p>Registre diariamente: data, clima, efetivo (pedreiros/serventes), equipamentos, atividades executadas e ocorrências. Base para relatório de fiscalização.</p>
+    </div>
+    <div id="diario-list" style="display:grid;gap:12px"></div>
+  </section>
+
+  <!-- == FOTOS == -->
+  <section id="sec-fotos" class="section">
+    <div class="section-header">
+      <div class="section-title">Relatório Fotográfico</div>
+      <div class="flex gap-2 items-center flex-wrap">
+        <select class="form-input" style="width:auto;height:36px" id="filtro-obra-foto">
+          <option value="">Todas as obras</option>
+        </select>
+        <button class="btn btn-orange btn-sm" onclick="document.getElementById('input-foto-camera').click()">📷 Câmera</button>
+        <button class="btn btn-outline btn-sm" onclick="document.getElementById('input-foto-galeria').click()">🖼 Galeria</button>
+        <input type="file" id="input-foto-camera" accept="image/*" capture="environment" style="display:none" onchange="addFoto(this,'camera')">
+        <input type="file" id="input-foto-galeria" accept="image/*" multiple style="display:none" onchange="addFoto(this,'galeria')">
+      </div>
+    </div>
+    <div class="hint-box">
+      <p>Fotos com carimbo de data/hora. GPS capturado automaticamente se o dispositivo permitir. Vincule à obra para o relatório fotográfico.</p>
+    </div>
+    <div id="fotos-grid" class="grid-3"></div>
+  </section>
+
+  <!-- == RNC == -->
+  <section id="sec-rnc" class="section">
+    <div class="section-header">
+      <div class="section-title">Notificações / RNC</div>
+      <div class="flex gap-2 items-center flex-wrap">
+        <select class="form-input" style="width:auto;height:36px" id="filtro-gravidade" onchange="renderRNC()">
+          <option value="">Todas as gravidades</option>
+          <option value="Alta">Alta</option>
+          <option value="Média">Média</option>
+          <option value="Baixa">Baixa</option>
+        </select>
+        <select class="form-input" style="width:auto;height:36px" id="filtro-status-rnc" onchange="renderRNC()">
+          <option value="">Todos os status</option>
+          <option value="Aberta">Aberta</option>
+          <option value="Em tratamento">Em tratamento</option>
+          <option value="Concluída">Concluída</option>
+        </select>
+        <button class="btn btn-orange btn-sm" onclick="openModal('modal-rnc')">+ Nova RNC</button>
+      </div>
+    </div>
+    <div class="hint-box">
+      <p>Registre não conformidades com gravidade e status. Vincule à obra para rastreabilidade. <strong>Alta</strong> = risco imediato. <strong>Média</strong> = impacta prazo. <strong>Baixa</strong> = observação técnica.</p>
+    </div>
+    <div id="rnc-list" style="display:grid;gap:10px"></div>
+  </section>
+
+</div><!-- /page-wrap -->
+
+<!-- ===== RODAPÉ PERSONALIZÁVEL ===== -->
+<footer id="site-footer">
+  <div class="footer-inner">
+    <div class="flex items-center gap-3">
+      <img id="footer-logo-img" src="" alt="Logo rodapé">
+      <span id="footer-text">Visitas Técnicas · Total Civil · PT-BR · Sem login</span>
+    </div>
+    <div class="footer-stats" id="footer-stats">0 obras · 0 fotos</div>
+  </div>
+</footer>
+
+<!-- ===== TOAST ===== -->
+<div id="toast"><span class="dot"></span><span id="toast-msg">Salvo!</span></div>
+
+<!-- ===== MODAL: NOVA OBRA ===== -->
+<div class="modal-overlay" id="modal-obra">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h2 class="display" style="font-size:20px;font-weight:800">Nova Obra</h2>
+        <div style="font-size:11px;font-weight:700;letter-spacing:.07em;color:var(--muted);margin-top:2px">FORMULÁRIO TÉCNICO</div>
+      </div>
+      <button class="btn-close" onclick="closeModal('modal-obra')">✕</button>
+    </div>
+    <div class="modal-body" id="form-obra-body">
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Tipo de Obra</label>
+          <select class="form-input" id="obra-tipo">
+            <option value="INFRA">Infraestrutura Urbana</option>
+            <option value="PREDIAL">Obra Predial</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-input" id="obra-status">
+            <option>Planejamento</option>
+            <option>Em Execução</option>
+            <option>Paralisada</option>
+            <option>Concluída</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Nome da Obra</label>
+        <input class="form-input" id="obra-nome" placeholder="Ex: Revitalização Praça Central - Etapa 2">
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Cliente / Contratante</label>
+          <input class="form-input" id="obra-cliente" placeholder="Ex: Prefeitura Municipal">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cidade</label>
+          <input class="form-input" id="obra-cidade" placeholder="Ex: Rio das Ostras/RJ">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Endereço Completo</label>
+        <input class="form-input" id="obra-endereco" placeholder="Rua, número, bairro, referência">
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Responsável Técnico</label>
+          <input class="form-input" id="obra-rt" placeholder="Eng. Nome — CREA/CAU">
+        </div>
+        <div class="form-group">
+          <label class="form-label">ART / RRT</label>
+          <input class="form-input" id="obra-art" placeholder="Ex: 1234567890">
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Data de Início</label>
+          <input class="form-input" type="date" id="obra-inicio">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Data Fim Prevista</label>
+          <input class="form-input" type="date" id="obra-fim">
+        </div>
+      </div>
+      <!-- MELHORIA 3: Progresso % -->
+      <div class="form-group">
+        <label class="form-label">Progresso Físico — <span id="prog-val">0</span>%</label>
+        <input type="range" id="obra-progresso" min="0" max="100" value="0" step="5"
+          style="width:100%;accent-color:var(--orange)"
+          oninput="document.getElementById('prog-val').textContent=this.value">
+      </div>
+      <!-- Georreferenciamento opcional -->
+      <div class="card card-sm" style="background:var(--bg)">
+        <div class="flex items-center justify-between">
+          <span style="font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase">Georreferenciamento Opcional</span>
+          <label class="flex items-center gap-2 text-sm">
+            <input type="checkbox" id="obra-geo-ativo"> Ativar
+          </label>
+        </div>
+        <div class="grid-2 mt-2" style="gap:8px">
+          <div class="form-group">
+            <label class="form-label">Latitude</label>
+            <input class="form-input" id="obra-lat" placeholder="-22.5275" style="font-family:monospace">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Longitude</label>
+            <input class="form-input" id="obra-lng" placeholder="-41.9414" style="font-family:monospace">
+          </div>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline mt-2" onclick="capturarGPS()" id="btn-gps">📍 Capturar GPS</button>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" style="flex:1" onclick="closeModal('modal-obra')">Cancelar</button>
+      <button class="btn btn-orange" style="flex:1" onclick="salvarObra()">Salvar Obra</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: NOVA VISTORIA ===== -->
+<div class="modal-overlay" id="modal-vistoria">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <h2 class="display" style="font-size:20px;font-weight:800">Nova Vistoria</h2>
+        <div style="font-size:11px;font-weight:700;letter-spacing:.07em;color:var(--muted);margin-top:2px">CHECKLIST TÉCNICO</div>
+      </div>
+      <button class="btn-close" onclick="closeModal('modal-vistoria')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Obra</label>
+          <select class="form-input" id="vis-obra"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Data da Vistoria</label>
+          <input class="form-input" type="date" id="vis-data">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Vistoriador</label>
+        <input class="form-input" id="vis-vistoriador" placeholder="Nome do fiscal / engenheiro">
+      </div>
+      <div id="checklist-container"></div>
+      <div class="form-group">
+        <label class="form-label">Observações Gerais</label>
+        <textarea class="form-input" id="vis-obs" placeholder="Observações gerais da vistoria..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" style="flex:1" onclick="closeModal('modal-vistoria')">Cancelar</button>
+      <button class="btn btn-orange" style="flex:1" onclick="salvarVistoria()">Salvar Vistoria</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: DIÁRIO ===== -->
+<div class="modal-overlay" id="modal-diario">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="display" style="font-size:20px;font-weight:800">Registro de Diário</h2>
+      <button class="btn-close" onclick="closeModal('modal-diario')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Obra</label>
+          <select class="form-input" id="diario-obra"></select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Data</label>
+          <input class="form-input" type="date" id="diario-data">
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Clima</label>
+          <input class="form-input" id="diario-clima" placeholder="Ex: Ensolarado 32°C">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Efetivo / Equipamentos</label>
+          <input class="form-input" id="diario-efetivo" placeholder="4 pedreiros, 1 retroescavadeira">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Atividades Executadas</label>
+        <textarea class="form-input" id="diario-atividades" placeholder="Ex: Concretagem vigas pavimento 2, 12m³. Assentamento de meio-fio trecho 3."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ocorrências</label>
+        <textarea class="form-input" id="diario-ocorrencias" placeholder="Ex: Chuva 14h–15h, atraso entrega aço. Sem ocorrências."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" style="flex:1" onclick="closeModal('modal-diario')">Cancelar</button>
+      <button class="btn btn-orange" style="flex:1" onclick="salvarDiario()">Salvar Registro</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: RNC ===== -->
+<div class="modal-overlay" id="modal-rnc">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 class="display" style="font-size:20px;font-weight:800">Nova RNC</h2>
+      <button class="btn-close" onclick="closeModal('modal-rnc')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Obra vinculada</label>
+        <select class="form-input" id="rnc-obra"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Descrição da Não Conformidade</label>
+        <textarea class="form-input" id="rnc-desc" placeholder="Ex: Fissura na viga V2 — cobrimento insuficiente"></textarea>
+      </div>
+      <div class="grid-2">
+        <div class="form-group">
+          <label class="form-label">Gravidade</label>
+          <select class="form-input" id="rnc-gravidade">
+            <option>Baixa</option>
+            <option>Média</option>
+            <option selected>Alta</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-input" id="rnc-status">
+            <option>Aberta</option>
+            <option>Em tratamento</option>
+            <option>Concluída</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ação Corretiva</label>
+        <textarea class="form-input" id="rnc-acao" placeholder="Descreva a ação corretiva a ser tomada..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Prazo para correção</label>
+        <input class="form-input" type="date" id="rnc-prazo">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" style="flex:1" onclick="closeModal('modal-rnc')">Cancelar</button>
+      <button class="btn btn-orange" style="flex:1" onclick="salvarRNC()">Criar RNC</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: BACKUP ===== -->
+<div class="modal-overlay" id="modal-backup">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <h2 class="display" style="font-size:18px;font-weight:800">Backup e Restauração</h2>
+      <button class="btn-close" onclick="closeModal('modal-backup')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="card card-sm" style="background:var(--bg)">
+        <h4 style="font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;margin-bottom:10px">Como usar em campo</h4>
+        <p class="text-sm text-muted">1. Trabalhe offline normalmente — tudo salvo no dispositivo.<br>
+        2. Ao voltar ao escritório, exporte o backup JSON.<br>
+        3. Para restaurar em outro dispositivo, importe o arquivo JSON.</p>
+      </div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="exportarBackup()">📤 Exportar Backup (JSON)</button>
+      <label class="btn btn-outline" style="width:100%;justify-content:center;cursor:pointer">
+        📥 Importar Backup
+        <input type="file" accept=".json" style="display:none" onchange="importarBackup(this)">
+      </label>
+      <div id="backup-status" class="text-sm text-muted" style="text-align:center"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: CONFIGURAR CABEÇALHO/RODAPÉ ===== -->
+<div class="modal-overlay" id="modal-config">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <h2 class="display" style="font-size:18px;font-weight:800">Personalizar Visual</h2>
+      <button class="btn-close" onclick="closeModal('modal-config')">✕</button>
+    </div>
+    <div class="modal-body">
+
+      <!-- Logo do cabeçalho -->
+      <div class="config-section">
+        <h4>Logo do Cabeçalho</h4>
+        <div class="flex gap-3 items-center">
+          <div class="logo-preview" id="prev-header-logo">
+            <span id="prev-header-icon">🏗</span>
+            <img id="prev-header-img" style="display:none;width:100%;height:100%;object-fit:contain">
+          </div>
+          <div style="flex:1">
+            <label class="btn btn-outline btn-sm" style="cursor:pointer">
+              Escolher imagem
+              <input type="file" accept="image/*" style="display:none" onchange="uploadLogo(this,'header')">
+            </label>
+            <button class="btn btn-sm" style="color:var(--red);margin-left:6px" onclick="removeLogo('header')">Remover</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Nome e subtítulo -->
+      <div class="form-group">
+        <label class="form-label">Nome no cabeçalho</label>
+        <input class="form-input" id="cfg-nome" value="Visitas Técnicas" oninput="atualizarPreview()">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Subtítulo / Empresa</label>
+        <input class="form-input" id="cfg-subtitulo" value="Total Civil · Gestão de Obras" oninput="atualizarPreview()">
+      </div>
+
+      <hr class="divider">
+
+      <!-- Logo do rodapé -->
+      <div class="config-section">
+        <h4>Logo do Rodapé</h4>
+        <div class="flex gap-3 items-center">
+          <div class="logo-preview" id="prev-footer-logo">
+            <span id="prev-footer-icon">🏗</span>
+            <img id="prev-footer-img" style="display:none;width:100%;height:100%;object-fit:contain">
+          </div>
+          <div style="flex:1">
+            <label class="btn btn-outline btn-sm" style="cursor:pointer">
+              Escolher imagem
+              <input type="file" accept="image/*" style="display:none" onchange="uploadLogo(this,'footer')">
+            </label>
+            <button class="btn btn-sm" style="color:var(--red);margin-left:6px" onclick="removeLogo('footer')">Remover</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Texto do rodapé</label>
+        <input class="form-input" id="cfg-footer-text" value="Visitas Técnicas · Total Civil · PT-BR · Sem login" oninput="atualizarPreview()">
+      </div>
+
+      <hr class="divider">
+
+      <!-- Cor de destaque -->
+      <div class="form-group">
+        <label class="form-label">Cor de destaque</label>
+        <div class="flex gap-2 items-center">
+          <input type="color" id="cfg-cor" value="#FF6B1A" onchange="aplicarCor(this.value)"
+            style="width:42px;height:42px;border:1px solid var(--line);border-radius:8px;cursor:pointer;padding:2px">
+          <span class="text-sm text-muted">Afeta botões e acentos do sistema</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-outline" style="flex:1" onclick="closeModal('modal-config')">Fechar</button>
+      <button class="btn btn-orange" style="flex:1" onclick="salvarConfig()">Aplicar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: RELATÓRIO PDF ===== -->
+<div class="modal-overlay" id="modal-relatorio">
+  <div class="modal" style="max-width:820px">
+    <div class="modal-header">
+      <h2 class="display" style="font-size:18px;font-weight:800">Relatório de Vistoria</h2>
+      <div class="flex gap-2">
+        <button class="btn btn-orange btn-sm" onclick="imprimirRelatorio()">🖨 Imprimir / PDF</button>
+        <button class="btn-close" onclick="closeModal('modal-relatorio')">✕</button>
+      </div>
+    </div>
+    <div class="modal-body" id="relatorio-content" style="padding:0"></div>
+  </div>
+</div>
+
+<script>
+// ===================================================================
+// DADOS — localStorage
+// ===================================================================
+const KEY_OBRAS    = 'vt_obras';
+const KEY_VISTORIAS= 'vt_vistorias';
+const KEY_DIARIO   = 'vt_diario';
+const KEY_FOTOS    = 'vt_fotos';
+const KEY_RNCS     = 'vt_rncs';
+const KEY_CONFIG   = 'vt_config';
+
+function load(key){ try{ return JSON.parse(localStorage.getItem(key)||'[]'); }catch(e){ return []; } }
+function loadObj(key){ try{ return JSON.parse(localStorage.getItem(key)||'{}'); }catch(e){ return {}; } }
+function save(key, val){ try{ localStorage.setItem(key, JSON.stringify(val)); }catch(e){} }
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+
+let obras     = load(KEY_OBRAS);
+let vistorias = load(KEY_VISTORIAS);
+let diario    = load(KEY_DIARIO);
+let fotos     = load(KEY_FOTOS);
+let rncs      = load(KEY_RNCS);
+let config    = loadObj(KEY_CONFIG);
+
+// ===================================================================
+// CHECKLISTS
+// ===================================================================
+const CHECKLIST_INFRA = [
+  'Drenagem Pluvial — bocas de lobo, sarjetas, declividade',
+  'Pavimentação — base, sub-base, revestimento',
+  'Urbanização / Sinalização — meio-fio, pintura, sinalização',
+  'Terraplenagem — compactação, taludes, aterros',
+  'Iluminação Pública — postes, luminárias, fiação',
+  'Meio Ambiente — proteção de vegetação, descarte de resíduos',
+];
+const CHECKLIST_PREDIAL = [
+  'Estrutura — armação, concretagem, formas, cura',
+  'Vedação — alvenaria, revestimento, argamassa',
+  'Instalações Hidráulicas — tubulação, conexões, testes',
+  'Instalações Elétricas — eletrodutos, quadros, aterramento',
+  'Cobertura — estrutura, telhas, calhas, rufos',
+  'Acabamentos — pintura, pisos, esquadrias',
+];
+
+// ===================================================================
+// MÓDULOS E FLUXO — dados estáticos
+// ===================================================================
+const MODULOS = [
+  { icon:'◧', titulo:'Cadastro e Gestão de Obras', desc:'Por tipo: Infraestrutura Urbana ou Predial. Campos técnicos completos com progresso físico %.' },
+  { icon:'☑', titulo:'Vistoria Técnica com Checklist', desc:'Checklist por tipo de obra. Conforme / Não Conforme, ação corretiva, prazo e vínculo com fotos.' },
+  { icon:'◨', titulo:'Diário de Obra', desc:'Data, clima, efetivo, equipamentos, atividades e ocorrências. Base para relatório de fiscalização.' },
+  { icon:'◐', titulo:'Relatório Fotográfico', desc:'Câmera ou galeria. Carimbo de data/hora, GPS opcional e link para Google Maps.', badge:'GPS OPCIONAL' },
+  { icon:'◑', titulo:'Notificações / RNC', desc:'Não conformidades com gravidade (Baixa/Média/Alta), status e obra vinculada.', badge:'' },
+  { icon:'◫', titulo:'Georreferenciamento Opcional', desc:'Coordenadas lat/long da obra e das fotos. Ativação opcional conforme exigência do edital.', badge:'OPCIONAL' },
+];
+const FLUXO = [
+  { n:1, t:'Criar obra', d:'Em Obras › Nova Obra. Selecione tipo e preencha dados completos.' },
+  { n:2, t:'Fazer vistoria', d:'Em Vistoria, selecione a obra e marque itens do checklist.' },
+  { n:3, t:'Preencher diário', d:'Em Diário, registre data, clima, efetivo e atividades.' },
+  { n:4, t:'Tirar fotos', d:'Em Fotos, capture com a câmera ou importe da galeria.' },
+  { n:5, t:'Criar RNCs', d:'Em Notificações, registre não conformidades com gravidade.' },
+  { n:6, t:'Exportar relatório', d:'Gere relatório de vistoria em PDF ou exporte backup JSON.' },
+];
+
+// ===================================================================
+// NAVEGAÇÃO
+// ===================================================================
+function showSection(id, btn) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('sec-'+id).classList.add('active');
+  // desktop nav
+  document.querySelectorAll('.header-nav button, .nav-mobile button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.header-nav button, .nav-mobile button').forEach(b => {
+    if (b.getAttribute('onclick') && b.getAttribute('onclick').includes("'"+id+"'")) b.classList.add('active');
+  });
+  // render seção
+  if (id==='home') renderHome();
+  if (id==='obras') renderObras();
+  if (id==='vistoria') { populateObraSelects(); renderVistorias(); }
+  if (id==='diario') { populateObraSelects(); renderDiario(); }
+  if (id==='fotos') { populateObraSelects(); renderFotos(); }
+  if (id==='rnc') { populateObraSelects(); renderRNC(); }
+}
+
+// ===================================================================
+// MODALS
+// ===================================================================
+function openModal(id) {
+  if (id === 'modal-obra') resetFormObra();
+  if (id === 'modal-vistoria') { populateObraSelects(); buildChecklist(); }
+  if (id === 'modal-diario') { populateObraSelects(); document.getElementById('diario-data').value = today(); }
+  if (id === 'modal-rnc') { populateObraSelects(); }
+  document.getElementById(id).classList.add('open');
+}
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+// Fechar ao clicar fora
+document.querySelectorAll('.modal-overlay').forEach(o => {
+  o.addEventListener('click', e => { if (e.target === o) o.classList.remove('open'); });
+});
+
+// ===================================================================
+// UTILITÁRIOS
+// ===================================================================
+function today() {
+  const d = new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const [y,m,d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  document.getElementById('toast-msg').textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2800);
+}
+function badgeStatus(s) {
+  const map = { 'Planejamento':'badge-planejamento','Em Execução':'badge-execucao','Paralisada':'badge-paralisada','Concluída':'badge-conforme','Cancelada':'badge-paralisada' };
+  return `<span class="badge ${map[s]||''}">${s}</span>`;
+}
+
+// ===================================================================
+// HOME
+// ===================================================================
+function renderHome() {
+  // Stats
+  const rncAbertas = rncs.filter(r => r.status === 'Aberta').length;
+  document.getElementById('stat-obras').textContent = obras.length;
+  document.getElementById('stat-vistorias').textContent = vistorias.length;
+  document.getElementById('stat-fotos').textContent = fotos.length;
+  document.getElementById('stat-rnc').textContent = rncAbertas;
+  document.getElementById('stat-obras-sub').textContent = obras.length ? obras[obras.length-1].nome.slice(0,28)+'…' : 'Nenhuma ainda';
+  document.getElementById('stat-rnc-sub').textContent = rncAbertas ? `${rncAbertas} pendente${rncAbertas>1?'s':''}` : 'Tudo em dia ✓';
+
+  // Módulos
+  const mg = document.getElementById('modulos-grid');
+  mg.innerHTML = MODULOS.map(m => `
+    <div class="card" style="display:flex;flex-direction:column;gap:10px;cursor:default">
+      <div class="flex items-center justify-between">
+        <div style="width:40px;height:40px;border-radius:12px;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px">${m.icon}</div>
+        ${m.badge ? `<span class="badge" style="background:#E8F0FF;color:var(--blue)">${m.badge}</span>` : ''}
+      </div>
+      <div style="font-weight:800;font-size:14px;line-height:1.3">${m.titulo}</div>
+      <div class="text-sm text-muted" style="line-height:1.5">${m.desc}</div>
+    </div>`).join('');
+
+  // Fluxo
+  const fg = document.getElementById('fluxo-grid');
+  fg.innerHTML = FLUXO.map(f => `
+    <div style="display:flex;gap:12px;background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:14px">
+      <div style="width:28px;height:28px;border-radius:50%;background:var(--ink);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;flex-shrink:0">${f.n}</div>
+      <div>
+        <div style="font-weight:800;font-size:13px">${f.t}</div>
+        <div class="text-sm text-muted mt-1" style="line-height:1.5">${f.d}</div>
+      </div>
+    </div>`).join('');
+
+  updateFooter();
+}
+
+// ===================================================================
+// OBRAS
+// ===================================================================
+function resetFormObra() {
+  ['obra-nome','obra-cliente','obra-cidade','obra-endereco','obra-rt','obra-art','obra-lat','obra-lng'].forEach(id => {
+    const el = document.getElementById(id); if(el) el.value = '';
+  });
+  document.getElementById('obra-tipo').value = 'INFRA';
+  document.getElementById('obra-status').value = 'Planejamento';
+  document.getElementById('obra-progresso').value = 0;
+  document.getElementById('prog-val').textContent = '0';
+  const di = document.getElementById('obra-inicio');
+  const df = document.getElementById('obra-fim');
+  if(di) di.value = today();
+  if(df) df.value = '';
+  const geo = document.getElementById('obra-geo-ativo');
+  if(geo) geo.checked = false;
+}
+
+function salvarObra() {
+  const nome = document.getElementById('obra-nome').value.trim();
+  if (!nome) { showToast('⚠ Informe o nome da obra'); return; }
+  const o = {
+    id: uid(),
+    tipo: document.getElementById('obra-tipo').value,
+    status: document.getElementById('obra-status').value,
+    nome,
+    cliente: document.getElementById('obra-cliente').value.trim(),
+    cidade: document.getElementById('obra-cidade').value.trim(),
+    endereco: document.getElementById('obra-endereco').value.trim(),
+    responsavel: document.getElementById('obra-rt').value.trim(),
+    art: document.getElementById('obra-art').value.trim(),
+    dataInicio: document.getElementById('obra-inicio').value,
+    dataFim: document.getElementById('obra-fim').value,
+    progresso: parseInt(document.getElementById('obra-progresso').value)||0,
+    geoAtivo: document.getElementById('obra-geo-ativo').checked,
+    lat: document.getElementById('obra-lat').value.trim(),
+    lng: document.getElementById('obra-lng').value.trim(),
+    criadoEm: new Date().toISOString(),
+  };
+  obras.push(o);
+  save(KEY_OBRAS, obras);
+  closeModal('modal-obra');
+  populateObraSelects();
+  renderObras();
+  renderHome();
+  showToast('✓ Obra salva com sucesso');
+}
+
+function renderObras() {
+  const container = document.getElementById('obras-list');
+  const filtTipo   = document.getElementById('filtro-tipo').value;
+  const filtStatus = document.getElementById('filtro-status').value;
+  let lista = obras.filter(o =>
+    (!filtTipo   || o.tipo === filtTipo) &&
+    (!filtStatus || o.status === filtStatus)
+  );
+  if (!lista.length) {
+    container.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="icon">🏗</div>
+      <h3>Nenhuma obra cadastrada</h3>
+      <p>Clique em "Nova Obra" para começar.</p>
+      <button class="btn btn-orange" onclick="openModal('modal-obra')">+ Nova Obra</button>
+    </div>`; return;
+  }
+  container.innerHTML = lista.map(o => {
+    const vis = vistorias.filter(v => v.obraId === o.id).length;
+    const dias = o.dataFim ? Math.ceil((new Date(o.dataFim)-new Date())/86400000) : null;
+    const atraso = dias !== null && dias < 0;
+    return `<div class="obra-card">
+      <div class="obra-card-top">
+        <div>
+          <div class="obra-nome">${o.nome}</div>
+          <div class="obra-meta">${o.cidade||'—'} · ${o.tipo==='INFRA'?'Infraestrutura':'Predial'}</div>
+        </div>
+        ${badgeStatus(o.status)}
+      </div>
+      ${o.progresso > 0 ? `
+        <div>
+          <div class="flex items-center justify-between" style="margin-bottom:4px">
+            <span class="text-sm" style="font-weight:700">Progresso físico</span>
+            <span class="text-sm" style="font-weight:800;color:var(--orange)">${o.progresso}%</span>
+          </div>
+          <div class="progress-wrap"><div class="progress-bar" style="width:${o.progresso}%"></div></div>
+        </div>` : ''}
+      <div class="text-sm text-muted">${o.responsavel||'—'} · ART: ${o.art||'—'}</div>
+      <div class="text-sm text-muted">Início: ${fmtDate(o.dataInicio)} · Fim: ${fmtDate(o.dataFim)}
+        ${atraso ? `<span class="badge badge-paralisada" style="margin-left:6px">⚠ ${Math.abs(dias)}d atraso</span>` : ''}</div>
+      <div class="text-sm" style="color:var(--muted)">${vis} vistoria${vis!==1?'s':''} realizadas</div>
+      <div class="obra-actions">
+        <button class="btn btn-sm btn-outline" onclick="abrirVistoria('${o.id}')">☑ Vistoria</button>
+        <button class="btn btn-sm btn-outline" onclick="abrirDiario('${o.id}')">📋 Diário</button>
+        ${o.lat && o.lng ? `<a class="btn btn-sm btn-outline" href="https://maps.google.com/?q=${o.lat},${o.lng}" target="_blank">📍 Mapa</a>` : ''}
+        <button class="btn btn-sm btn-danger" onclick="deletarObra('${o.id}')">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function deletarObra(id) {
+  if (!confirm('Excluir esta obra? Os dados de vistoria, diário e fotos vinculados não serão excluídos.')) return;
+  obras = obras.filter(o => o.id !== id);
+  save(KEY_OBRAS, obras);
+  renderObras(); renderHome();
+  showToast('Obra removida');
+}
+
+function abrirVistoria(obraId) {
+  showSection('vistoria', null);
+  setTimeout(() => {
+    document.getElementById('filtro-obra-vis').value = obraId;
+    renderVistorias();
+    openModal('modal-vistoria');
+    document.getElementById('vis-obra').value = obraId;
+    buildChecklist();
+  }, 100);
+}
+function abrirDiario(obraId) {
+  showSection('diario', null);
+  setTimeout(() => {
+    document.getElementById('filtro-obra-diario').value = obraId;
+    openModal('modal-diario');
+    document.getElementById('diario-obra').value = obraId;
+  }, 100);
+}
+
+// ===================================================================
+// POPULATE SELECTS
+// ===================================================================
+function populateObraSelects() {
+  const ids = ['vis-obra','diario-obra','rnc-obra','filtro-obra-vis','filtro-obra-diario','filtro-obra-foto'];
+  ids.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const isFilter = id.startsWith('filtro-');
+    const prev = el.value;
+    el.innerHTML = isFilter ? '<option value="">Todas as obras</option>' : '<option value="">— Selecionar —</option>';
+    obras.forEach(o => {
+      const opt = document.createElement('option');
+      opt.value = o.id;
+      opt.textContent = o.nome;
+      el.appendChild(opt);
+    });
+    if (prev) el.value = prev;
+  });
+}
+
+// ===================================================================
+// VISTORIA
+// ===================================================================
+function buildChecklist() {
+  const obraId = document.getElementById('vis-obra').value;
+  const obra = obras.find(o => o.id === obraId);
+  const items = obra && obra.tipo === 'PREDIAL' ? CHECKLIST_PREDIAL : CHECKLIST_INFRA;
+  const container = document.getElementById('checklist-container');
+  container.innerHTML = `
+    <div class="card card-sm" style="background:var(--bg)">
+      <div style="font-size:11px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;margin-bottom:10px;color:var(--muted)">
+        Checklist — ${obra ? (obra.tipo==='PREDIAL'?'Obra Predial':'Infraestrutura Urbana') : 'Selecione a obra'}
+      </div>
+      <div id="check-items">
+        ${items.map((item, i) => `
+          <div class="check-row" id="crow-${i}">
+            <div class="check-label">${item}</div>
+            <div class="check-buttons">
+              <button class="check-btn" onclick="setCheck(${i},'conforme')" id="ck-c-${i}">✓ Conf.</button>
+              <button class="check-btn" onclick="setCheck(${i},'nao-conforme')" id="ck-n-${i}">✗ NC</button>
+            </div>
+          </div>
+          <div id="acao-${i}" style="display:none;padding:6px 0 8px;gap:8px;display:none" class="grid-2">
+            <input class="form-input" style="height:34px" placeholder="Ação corretiva" id="ac-${i}">
+            <input class="form-input" type="date" style="height:34px" id="pr-${i}">
+          </div>`).join('')}
+      </div>
+    </div>`;
+}
+
+function setCheck(i, status) {
+  const c = document.getElementById('ck-c-'+i);
+  const n = document.getElementById('ck-n-'+i);
+  const acao = document.getElementById('acao-'+i);
+  c.classList.toggle('conforme', status === 'conforme');
+  n.classList.toggle('nao-conforme', status === 'nao-conforme');
+  if (acao) acao.style.display = status === 'nao-conforme' ? 'grid' : 'none';
+}
+
+document.getElementById('vis-obra').addEventListener('change', buildChecklist);
+
+function salvarVistoria() {
+  const obraId = document.getElementById('vis-obra').value;
+  if (!obraId) { showToast('⚠ Selecione a obra'); return; }
+  const obra = obras.find(o => o.id === obraId);
+  const items = obra && obra.tipo === 'PREDIAL' ? CHECKLIST_PREDIAL : CHECKLIST_INFRA;
+  const checklist = items.map((item, i) => {
+    const c = document.getElementById('ck-c-'+i);
+    const n = document.getElementById('ck-n-'+i);
+    let status = 'Pendente';
+    if (c && c.classList.contains('conforme')) status = 'Conforme';
+    if (n && n.classList.contains('nao-conforme')) status = 'Não Conforme';
+    return {
+      item,
+      status,
+      acao: document.getElementById('ac-'+i)?.value || '',
+      prazo: document.getElementById('pr-'+i)?.value || '',
+    };
+  });
+  const v = {
+    id: uid(),
+    obraId,
+    data: document.getElementById('vis-data').value || today(),
+    vistoriador: document.getElementById('vis-vistoriador').value.trim(),
+    obs: document.getElementById('vis-obs').value.trim(),
+    checklist,
+    criadoEm: new Date().toISOString(),
+  };
+  vistorias.push(v);
+  save(KEY_VISTORIAS, vistorias);
+  closeModal('modal-vistoria');
+  renderVistorias();
+  renderHome();
+  showToast('✓ Vistoria salva');
+}
+
+function renderVistorias() {
+  const container = document.getElementById('vistorias-list');
+  const filtObra = document.getElementById('filtro-obra-vis').value;
+  let lista = filtObra ? vistorias.filter(v => v.obraId === filtObra) : vistorias;
+  lista = [...lista].reverse();
+
+  if (!lista.length) {
+    container.innerHTML = `<div class="empty-state">
+      <div class="icon">☑</div>
+      <h3>Nenhuma vistoria registrada</h3>
+      <p>Selecione uma obra e clique em "Nova Vistoria".</p>
+    </div>`; return;
+  }
+  container.innerHTML = lista.map(v => {
+    const obra = obras.find(o => o.id === v.obraId);
+    const nc = v.checklist.filter(c => c.status === 'Não Conforme').length;
+    const conf = v.checklist.filter(c => c.status === 'Conforme').length;
+    return `<div class="card" style="margin-bottom:12px">
+      <div class="flex items-center justify-between flex-wrap gap-2" style="margin-bottom:12px">
+        <div>
+          <div style="font-weight:800;font-size:15px">${obra?.nome||'Obra removida'}</div>
+          <div class="text-sm text-muted">${fmtDate(v.data)} · ${v.vistoriador||'—'}</div>
+        </div>
+        <div class="flex gap-2">
+          <span class="badge badge-conforme">${conf} Conformes</span>
+          ${nc ? `<span class="badge badge-nao-conforme">${nc} NC</span>` : ''}
+          <button class="btn btn-sm btn-outline" onclick="gerarRelatorio('${v.id}')">📄 Rel.</button>
+          <button class="btn btn-sm btn-danger" onclick="deletarVistoria('${v.id}')">🗑</button>
+        </div>
+      </div>
+      <div style="display:grid;gap:4px">
+        ${v.checklist.map(c => `
+          <div class="vistoria-item">
+            <span class="nome">${c.item}</span>
+            <span class="badge ${c.status==='Conforme'?'badge-conforme':c.status==='Não Conforme'?'badge-nao-conforme':''}">${c.status}</span>
+            ${c.acao ? `<span class="text-sm text-muted" style="max-width:200px">${c.acao}${c.prazo?' · '+fmtDate(c.prazo):''}</span>` : ''}
+          </div>`).join('')}
+      </div>
+      ${v.obs ? `<div class="text-sm text-muted mt-2" style="padding-top:8px;border-top:1px solid var(--line)"><strong>Obs:</strong> ${v.obs}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function deletarVistoria(id) {
+  if (!confirm('Excluir esta vistoria?')) return;
+  vistorias = vistorias.filter(v => v.id !== id);
+  save(KEY_VISTORIAS, vistorias);
+  renderVistorias(); renderHome();
+  showToast('Vistoria removida');
+}
+
+// ===================================================================
+// DIÁRIO
+// ===================================================================
+function salvarDiario() {
+  const obraId = document.getElementById('diario-obra').value;
+  if (!obraId) { showToast('⚠ Selecione a obra'); return; }
+  const d = {
+    id: uid(),
+    obraId,
+    data: document.getElementById('diario-data').value || today(),
+    clima: document.getElementById('diario-clima').value.trim(),
+    efetivo: document.getElementById('diario-efetivo').value.trim(),
+    atividades: document.getElementById('diario-atividades').value.trim(),
+    ocorrencias: document.getElementById('diario-ocorrencias').value.trim(),
+    criadoEm: new Date().toISOString(),
+  };
+  diario.push(d);
+  save(KEY_DIARIO, diario);
+  closeModal('modal-diario');
+  renderDiario();
+  renderHome();
+  showToast('✓ Registro salvo');
+}
+
+function renderDiario() {
+  const container = document.getElementById('diario-list');
+  const filtObra = document.getElementById('filtro-obra-diario').value;
+  const filtIni  = document.getElementById('filtro-data-ini').value;
+  const filtFim  = document.getElementById('filtro-data-fim').value;
+  let lista = [...diario].filter(d =>
+    (!filtObra || d.obraId === filtObra) &&
+    (!filtIni  || d.data >= filtIni) &&
+    (!filtFim  || d.data <= filtFim)
+  ).reverse();
+
+  if (!lista.length) {
+    container.innerHTML = `<div class="empty-state">
+      <div class="icon">📋</div>
+      <h3>Nenhum registro de diário</h3>
+      <p>Clique em "+ Registro" para adicionar o primeiro.</p>
+    </div>`; return;
+  }
+  container.innerHTML = lista.map(d => {
+    const obra = obras.find(o => o.id === d.obraId);
+    return `<div class="diario-entry">
+      <div class="diario-entry-head">
+        <div>
+          <div class="diario-data">${fmtDate(d.data)}</div>
+          <div class="text-sm text-muted">${obra?.nome||'—'}</div>
+        </div>
+        <div class="flex gap-2 items-center">
+          ${d.clima ? `<span class="badge" style="background:var(--bg);color:var(--muted)">${d.clima}</span>` : ''}
+          <button class="btn btn-sm btn-danger" onclick="deletarDiario('${d.id}')">🗑</button>
+        </div>
+      </div>
+      ${d.efetivo ? `<div class="text-sm"><strong>Efetivo:</strong> ${d.efetivo}</div>` : ''}
+      ${d.atividades ? `<div class="text-sm mt-1"><strong>Atividades:</strong> ${d.atividades}</div>` : ''}
+      ${d.ocorrencias ? `<div class="text-sm mt-1" style="color:var(--red)"><strong>Ocorrências:</strong> ${d.ocorrencias}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function deletarDiario(id) {
+  if (!confirm('Excluir este registro?')) return;
+  diario = diario.filter(d => d.id !== id);
+  save(KEY_DIARIO, diario);
+  renderDiario();
+  showToast('Registro removido');
+}
+
+// ===================================================================
+// FOTOS
+// ===================================================================
+function addFoto(input, tipo) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  const obraId = document.getElementById('filtro-obra-foto').value || (obras[0]?.id||'');
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      const foto = {
+        id: uid(),
+        obraId,
+        src: e.target.result,
+        data: new Date().toISOString(),
+        tipo,
+        nome: file.name,
+      };
+      // Tentar GPS
+      if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(pos => {
+          foto.lat = pos.coords.latitude.toFixed(6);
+          foto.lng = pos.coords.longitude.toFixed(6);
+          fotos.push(foto);
+          save(KEY_FOTOS, fotos);
+          renderFotos(); renderHome();
+        }, () => {
+          fotos.push(foto);
+          save(KEY_FOTOS, fotos);
+          renderFotos(); renderHome();
+        }, { timeout: 5000 });
+      } else {
+        fotos.push(foto);
+        save(KEY_FOTOS, fotos);
+        renderFotos(); renderHome();
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+  input.value = '';
+  showToast('✓ Foto adicionada');
+}
+
+function renderFotos() {
+  const container = document.getElementById('fotos-grid');
+  const filtObra = document.getElementById('filtro-obra-foto').value;
+  let lista = filtObra ? fotos.filter(f => f.obraId === filtObra) : fotos;
+  lista = [...lista].reverse();
+
+  if (!lista.length) {
+    container.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="icon">📷</div>
+      <h3>Nenhuma foto registrada</h3>
+      <p>Clique em "Câmera" ou "Galeria" para adicionar fotos.</p>
+    </div>`; return;
+  }
+  container.innerHTML = lista.map(f => {
+    const obra = obras.find(o => o.id === f.obraId);
+    const d = new Date(f.data);
+    const dataStr = `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+    return `<div class="foto-card">
+      <img src="${f.src}" alt="Foto da obra" loading="lazy">
+      <div class="foto-card-info">
+        <div class="desc">${obra?.nome||'—'}</div>
+        <div class="data">${dataStr}</div>
+        ${f.lat ? `<div class="data"><a href="https://maps.google.com/?q=${f.lat},${f.lng}" target="_blank">📍 ${f.lat}, ${f.lng}</a></div>` : ''}
+        <div class="flex gap-2 mt-2">
+          <button class="btn btn-sm btn-danger" onclick="deletarFoto('${f.id}')">🗑 Excluir</button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function deletarFoto(id) {
+  if (!confirm('Excluir esta foto?')) return;
+  fotos = fotos.filter(f => f.id !== id);
+  save(KEY_FOTOS, fotos);
+  renderFotos(); renderHome();
+  showToast('Foto removida');
+}
+
+// ===================================================================
+// RNC
+// ===================================================================
+function salvarRNC() {
+  const obraId = document.getElementById('rnc-obra').value;
+  const desc   = document.getElementById('rnc-desc').value.trim();
+  if (!desc) { showToast('⚠ Descreva a não conformidade'); return; }
+  const r = {
+    id: uid(),
+    obraId,
+    desc,
+    gravidade: document.getElementById('rnc-gravidade').value,
+    status: document.getElementById('rnc-status').value,
+    acao: document.getElementById('rnc-acao').value.trim(),
+    prazo: document.getElementById('rnc-prazo').value,
+    criadoEm: new Date().toISOString(),
+  };
+  rncs.push(r);
+  save(KEY_RNCS, rncs);
+  closeModal('modal-rnc');
+  renderRNC(); renderHome();
+  showToast('✓ RNC criada');
+}
+
+function renderRNC() {
+  const container = document.getElementById('rnc-list');
+  const filtGrav  = document.getElementById('filtro-gravidade').value;
+  const filtStat  = document.getElementById('filtro-status-rnc').value;
+  let lista = [...rncs].filter(r =>
+    (!filtGrav || r.gravidade === filtGrav) &&
+    (!filtStat || r.status === filtStat)
+  ).reverse();
+
+  if (!lista.length) {
+    container.innerHTML = `<div class="empty-state">
+      <div class="icon">◑</div>
+      <h3>Nenhuma RNC registrada</h3>
+      <p>Clique em "+ Nova RNC" para registrar uma não conformidade.</p>
+    </div>`; return;
+  }
+  container.innerHTML = lista.map(r => {
+    const obra = obras.find(o => o.id === r.obraId);
+    const badgeGrav = { Alta:'badge-alta', Média:'badge-media', Baixa:'badge-baixa' };
+    const badgeStat = { Aberta:'badge-aberta', 'Em tratamento':'badge-tratamento', Concluída:'badge-concluida' };
+    return `<div class="rnc-card">
+      <div class="rnc-top">
+        <div class="rnc-desc">${r.desc}</div>
+        <div class="flex gap-2">
+          <span class="badge ${badgeGrav[r.gravidade]||''}">${r.gravidade}</span>
+          <span class="badge ${badgeStat[r.status]||''}">${r.status}</span>
+        </div>
+      </div>
+      <div class="text-sm text-muted">${obra?.nome||'Sem obra vinculada'} · ${fmtDate(r.criadoEm?.slice(0,10))}</div>
+      ${r.acao ? `<div class="text-sm"><strong>Ação:</strong> ${r.acao}${r.prazo?' · Prazo: '+fmtDate(r.prazo):''}</div>` : ''}
+      <div class="flex gap-2">
+        <select class="form-input" style="height:30px;font-size:11px;width:auto" onchange="atualizarStatusRNC('${r.id}',this.value)">
+          ${['Aberta','Em tratamento','Concluída'].map(s=>`<option${s===r.status?' selected':''}>${s}</option>`).join('')}
+        </select>
+        <button class="btn btn-sm btn-danger" onclick="deletarRNC('${r.id}')">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function atualizarStatusRNC(id, status) {
+  const r = rncs.find(r => r.id === id);
+  if (r) { r.status = status; save(KEY_RNCS, rncs); renderHome(); showToast('Status atualizado'); }
+}
+
+function deletarRNC(id) {
+  if (!confirm('Excluir esta RNC?')) return;
+  rncs = rncs.filter(r => r.id !== id);
+  save(KEY_RNCS, rncs);
+  renderRNC(); renderHome();
+  showToast('RNC removida');
+}
+
+// ===================================================================
+// RELATÓRIO DE VISTORIA (PDF)
+// ===================================================================
+function gerarRelatorio(visId) {
+  const v = vistorias.find(x => x.id === visId);
+  if (!v) return;
+  const obra = obras.find(o => o.id === v.obraId);
+  const nc = v.checklist.filter(c => c.status === 'Não Conforme').length;
+  const conf = v.checklist.filter(c => c.status === 'Conforme').length;
+  const logoSrc = config.headerLogoSrc || '';
+  const nomeOrg = config.nome || 'Visitas Técnicas';
+  const sub = config.subtitulo || 'Total Civil';
+
+  document.getElementById('relatorio-content').innerHTML = `
+    <div class="relatorio-preview" id="rel-print">
+      <div class="relatorio-header-print" style="background:var(--blue)">
+        ${logoSrc ? `<img src="${logoSrc}" style="height:40px;border-radius:6px;background:#fff;padding:4px">` : `<div style="width:40px;height:40px;border-radius:8px;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:20px">🏗</div>`}
+        <div style="flex:1">
+          <div style="font-family:'Fraunces',serif;font-size:18px;font-weight:800">${nomeOrg}</div>
+          <div style="font-size:11px;opacity:.8">${sub} · Relatório de Vistoria Técnica</div>
+        </div>
+        <div style="text-align:right;font-size:11px;opacity:.8">
+          <div>${fmtDate(v.data)}</div>
+          <div>${v.vistoriador||'—'}</div>
+        </div>
+      </div>
+      <div class="relatorio-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;background:var(--bg);border-radius:12px;padding:16px">
+          <div><div style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)">Obra</div><div style="font-weight:700;margin-top:2px">${obra?.nome||'—'}</div></div>
+          <div><div style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)">Cliente</div><div style="font-weight:700;margin-top:2px">${obra?.cliente||'—'}</div></div>
+          <div><div style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)">Endereço</div><div style="font-weight:700;margin-top:2px">${obra?.endereco||'—'} · ${obra?.cidade||'—'}</div></div>
+          <div><div style="font-size:10px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)">RT / ART</div><div style="font-weight:700;margin-top:2px">${obra?.responsavel||'—'} · ${obra?.art||'—'}</div></div>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:16px">
+          <div style="flex:1;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:12px;text-align:center">
+            <div style="font-size:28px;font-weight:800;color:#166534">${conf}</div>
+            <div style="font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#166534">Conformes</div>
+          </div>
+          <div style="flex:1;background:#FFF0E6;border:1px solid #fed7aa;border-radius:10px;padding:12px;text-align:center">
+            <div style="font-size:28px;font-weight:800;color:#B54700">${nc}</div>
+            <div style="font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#B54700">Não Conformes</div>
+          </div>
+          <div style="flex:1;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:12px;text-align:center">
+            <div style="font-size:28px;font-weight:800">${v.checklist.length}</div>
+            <div style="font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)">Total Itens</div>
+          </div>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Item Verificado</th>
+            <th style="width:110px">Status</th>
+            <th>Ação Corretiva</th>
+            <th style="width:90px">Prazo</th>
+          </tr></thead>
+          <tbody>
+            ${v.checklist.map(c => `<tr>
+              <td style="font-weight:600">${c.item}</td>
+              <td><span class="badge ${c.status==='Conforme'?'badge-conforme':'badge-nao-conforme'}">${c.status}</span></td>
+              <td>${c.acao||'—'}</td>
+              <td>${c.prazo?fmtDate(c.prazo):'—'}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+        ${v.obs ? `<div style="margin-top:16px;padding:12px;background:var(--bg);border-radius:10px"><strong>Observações:</strong> ${v.obs}</div>` : ''}
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--line);display:grid;grid-template-columns:1fr 1fr;gap:24px">
+          <div style="text-align:center">
+            <div style="border-top:1px solid var(--ink);padding-top:6px;margin-top:40px;font-size:11px">Responsável Técnico</div>
+            <div style="font-size:11px;color:var(--muted)">${obra?.responsavel||'_________________________'}</div>
+          </div>
+          <div style="text-align:center">
+            <div style="border-top:1px solid var(--ink);padding-top:6px;margin-top:40px;font-size:11px">Vistoriador</div>
+            <div style="font-size:11px;color:var(--muted)">${v.vistoriador||'_________________________'}</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+  openModal('modal-relatorio');
+}
+
+function exportarRelatorioVistoria() {
+  const filtObra = document.getElementById('filtro-obra-vis').value;
+  const lista = filtObra ? vistorias.filter(v => v.obraId === filtObra) : vistorias;
+  if (!lista.length) { showToast('⚠ Nenhuma vistoria para exportar'); return; }
+  gerarRelatorio(lista[lista.length-1].id);
+}
+
+function imprimirRelatorio() {
+  window.print();
+}
+
+// Exportar diário
+function exportarDiario() {
+  const filtObra = document.getElementById('filtro-obra-diario').value;
+  const lista = filtObra ? diario.filter(d => d.obraId === filtObra) : diario;
+  if (!lista.length) { showToast('⚠ Nenhum registro de diário'); return; }
+  const obra = filtObra ? obras.find(o => o.id === filtObra) : null;
+  const nomeOrg = config.nome || 'Visitas Técnicas';
+  const logoSrc = config.headerLogoSrc || '';
+
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Diário de Obra</title>
+  <style>body{font-family:sans-serif;padding:24px;color:#0F1E33} h1{font-size:22px} h2{font-size:16px;margin-top:20px;border-bottom:1px solid #ccc;padding-bottom:4px}
+  .entry{margin:12px 0;padding:12px;border:1px solid #E6E0D6;border-radius:8px}
+  .data{font-weight:800;font-size:14px} .clima{font-size:11px;color:#7A8599;text-transform:uppercase}
+  footer{margin-top:32px;font-size:10px;color:#999;border-top:1px solid #ccc;padding-top:8px}</style></head>
+  <body>
+  <div style="display:flex;align-items:center;gap:12px;margin-bottom:20px">
+    ${logoSrc?`<img src="${logoSrc}" style="height:40px">`:''}<div><h1 style="margin:0">${nomeOrg}</h1><p style="margin:0;font-size:12px;color:#7A8599">Diário de Obra · ${obra?.nome||'Todas as obras'}</p></div>
+  </div>
+  ${[...lista].sort((a,b)=>a.data.localeCompare(b.data)).map(d=>{
+    const ob = obras.find(o=>o.id===d.obraId);
+    return `<div class="entry">
+      <div class="data">${fmtDate(d.data)}</div>
+      <div class="clima">${d.clima||'—'}</div>
+      <p><strong>Obra:</strong> ${ob?.nome||'—'}</p>
+      ${d.efetivo?`<p><strong>Efetivo/Equipamentos:</strong> ${d.efetivo}</p>`:''}
+      ${d.atividades?`<p><strong>Atividades:</strong> ${d.atividades}</p>`:''}
+      ${d.ocorrencias?`<p><strong>Ocorrências:</strong> ${d.ocorrencias}</p>`:''}
+    </div>`;
+  }).join('')}
+  <footer>Gerado por ${nomeOrg} · ${new Date().toLocaleDateString('pt-BR')}</footer>
+  </body></html>`;
+
+  const blob = new Blob([html], {type:'text/html'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `diario-obra-${today()}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✓ Diário exportado');
+}
+
+// ===================================================================
+// GPS
+// ===================================================================
+function capturarGPS() {
+  const btn = document.getElementById('btn-gps');
+  if (btn) btn.textContent = '⏳ Capturando...';
+  navigator.geolocation?.getCurrentPosition(pos => {
+    document.getElementById('obra-lat').value = pos.coords.latitude.toFixed(6);
+    document.getElementById('obra-lng').value = pos.coords.longitude.toFixed(6);
+    if (btn) btn.textContent = '📍 GPS Capturado ✓';
+    showToast('✓ GPS capturado');
+  }, () => {
+    if (btn) btn.textContent = '📍 Capturar GPS';
+    showToast('⚠ GPS indisponível — insira manualmente');
+  }, { timeout: 8000 });
+}
+
+// ===================================================================
+// BACKUP
+// ===================================================================
+function exportarBackup() {
+  const data = {
+    versao: '1.0',
+    exportadoEm: new Date().toISOString(),
+    programa: 'Visitas Técnicas — Total Civil',
+    obras, vistorias, diario, fotos: fotos.map(f=>({...f, src: f.src.slice(0,200)+'...[imagem]'})), rncs
+  };
+  // Incluir fotos completas separado
+  const dataCompleto = { ...data, fotos };
+  const blob = new Blob([JSON.stringify(dataCompleto, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `visitas-tecnicas-backup-${today()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('✓ Backup exportado');
+}
+
+function importarBackup(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      const modo = document.getElementById('backup-modo')?.value || 'merge';
+      if (modo === 'substituir') {
+        if (!confirm('Substituir TODOS os dados? Esta ação não pode ser desfeita.')) return;
+        obras = data.obras||[]; vistorias = data.vistorias||[];
+        diario = data.diario||[]; fotos = data.fotos||[]; rncs = data.rncs||[];
+      } else {
+        // Merge — adicionar novos IDs
+        const existIds = new Set(obras.map(o=>o.id));
+        (data.obras||[]).forEach(o=>{ if(!existIds.has(o.id)) obras.push(o); });
+        const visIds = new Set(vistorias.map(v=>v.id));
+        (data.vistorias||[]).forEach(v=>{ if(!visIds.has(v.id)) vistorias.push(v); });
+        const dIds = new Set(diario.map(d=>d.id));
+        (data.diario||[]).forEach(d=>{ if(!dIds.has(d.id)) diario.push(d); });
+        const fIds = new Set(fotos.map(f=>f.id));
+        (data.fotos||[]).forEach(f=>{ if(!fIds.has(f.id)) fotos.push(f); });
+        const rIds = new Set(rncs.map(r=>r.id));
+        (data.rncs||[]).forEach(r=>{ if(!rIds.has(r.id)) rncs.push(r); });
+      }
+      save(KEY_OBRAS, obras); save(KEY_VISTORIAS, vistorias);
+      save(KEY_DIARIO, diario); save(KEY_FOTOS, fotos); save(KEY_RNCS, rncs);
+      closeModal('modal-backup');
+      renderHome(); populateObraSelects();
+      showToast('✓ Backup importado com sucesso');
+    } catch(err) {
+      showToast('⚠ Arquivo inválido');
+    }
+  };
+  reader.readAsText(file);
+  input.value = '';
+}
+
+// Adicionar seletor de modo no modal de backup
+document.getElementById('modal-backup').querySelector('.modal-body').insertAdjacentHTML('beforeend',`
+  <div class="form-group">
+    <label class="form-label">Modo de importação</label>
+    <select class="form-input" id="backup-modo">
+      <option value="merge">Mesclar (adicionar novos sem perder os existentes)</option>
+      <option value="substituir">Substituir tudo</option>
+    </select>
+  </div>`);
+
+// ===================================================================
+// CONFIGURAÇÃO VISUAL (CABEÇALHO/RODAPÉ)
+// ===================================================================
+function uploadLogo(input, tipo) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const src = e.target.result;
+    if (tipo === 'header') {
+      document.getElementById('prev-header-icon').style.display = 'none';
+      document.getElementById('prev-header-img').style.display = 'block';
+      document.getElementById('prev-header-img').src = src;
+      config.headerLogoSrc = src;
+    } else {
+      document.getElementById('prev-footer-icon').style.display = 'none';
+      document.getElementById('prev-footer-img').style.display = 'block';
+      document.getElementById('prev-footer-img').src = src;
+      config.footerLogoSrc = src;
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function removeLogo(tipo) {
+  if (tipo === 'header') {
+    document.getElementById('prev-header-icon').style.display = '';
+    document.getElementById('prev-header-img').style.display = 'none';
+    document.getElementById('prev-header-img').src = '';
+    delete config.headerLogoSrc;
+  } else {
+    document.getElementById('prev-footer-icon').style.display = '';
+    document.getElementById('prev-footer-img').style.display = 'none';
+    document.getElementById('prev-footer-img').src = '';
+    delete config.footerLogoSrc;
+  }
+}
+
+function atualizarPreview() {
+  document.getElementById('header-logo-text').textContent = document.getElementById('cfg-nome').value;
+  document.getElementById('header-subtitle').textContent  = document.getElementById('cfg-subtitulo').value;
+  document.getElementById('footer-text').textContent      = document.getElementById('cfg-footer-text').value;
+}
+
+function aplicarCor(cor) {
+  document.documentElement.style.setProperty('--orange', cor);
+}
+
+function salvarConfig() {
+  config.nome       = document.getElementById('cfg-nome').value;
+  config.subtitulo  = document.getElementById('cfg-subtitulo').value;
+  config.footerText = document.getElementById('cfg-footer-text').value;
+  config.cor        = document.getElementById('cfg-cor').value;
+  save(KEY_CONFIG, config);
+  atualizarPreview();
+  if (config.headerLogoSrc) {
+    document.getElementById('header-logo-img').src = config.headerLogoSrc;
+    document.getElementById('header-logo-img').style.display = 'block';
+  }
+  if (config.footerLogoSrc) {
+    document.getElementById('footer-logo-img').src = config.footerLogoSrc;
+    document.getElementById('footer-logo-img').style.display = 'block';
+  }
+  closeModal('modal-config');
+  showToast('✓ Visual atualizado');
+}
+
+// ===================================================================
+// TEMA
+// ===================================================================
+function toggleTheme() {
+  const root = document.documentElement;
+  const atual = root.getAttribute('data-theme');
+  const novo = atual === 'dark' ? 'light' : 'dark';
+  root.setAttribute('data-theme', novo);
+  document.querySelector('[onclick="toggleTheme()"]').textContent = novo==='dark'?'☀️':'🌙';
+  try { localStorage.setItem('vt_theme', novo); } catch(e) {}
+}
+
+// ===================================================================
+// FOOTER
+// ===================================================================
+function updateFooter() {
+  document.getElementById('footer-stats').textContent =
+    `${obras.length} obra${obras.length!==1?'s':''} · ${fotos.length} foto${fotos.length!==1?'s':''}`;
+}
+
+// ===================================================================
+// ONLINE/OFFLINE
+// ===================================================================
+window.addEventListener('offline', () => document.getElementById('offline-bar').style.display='block');
+window.addEventListener('online',  () => document.getElementById('offline-bar').style.display='none');
+
+// ===================================================================
+// INIT
+// ===================================================================
+(function init() {
+  // Restaurar configurações salvas
+  try {
+    const theme = localStorage.getItem('vt_theme');
+    if (theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      const btn = document.querySelector('[onclick="toggleTheme()"]');
+      if (btn) btn.textContent = theme==='dark'?'☀️':'🌙';
+    }
+  } catch(e) {}
+
+  if (config.nome) {
+    document.getElementById('header-logo-text').textContent = config.nome;
+    document.getElementById('cfg-nome').value = config.nome;
+  }
+  if (config.subtitulo) {
+    document.getElementById('header-subtitle').textContent = config.subtitulo;
+    document.getElementById('cfg-subtitulo').value = config.subtitulo;
+  }
+  if (config.footerText) {
+    document.getElementById('footer-text').textContent = config.footerText;
+    document.getElementById('cfg-footer-text').value = config.footerText;
+  }
+  if (config.cor) {
+    document.documentElement.style.setProperty('--orange', config.cor);
+    document.getElementById('cfg-cor').value = config.cor;
+  }
+  if (config.headerLogoSrc) {
+    document.getElementById('header-logo-img').src = config.headerLogoSrc;
+    document.getElementById('header-logo-img').style.display = 'block';
+    document.getElementById('prev-header-img').src = config.headerLogoSrc;
+    document.getElementById('prev-header-img').style.display = 'block';
+    document.getElementById('prev-header-icon').style.display = 'none';
+  }
+  if (config.footerLogoSrc) {
+    document.getElementById('footer-logo-img').src = config.footerLogoSrc;
+    document.getElementById('footer-logo-img').style.display = 'block';
+    document.getElementById('prev-footer-img').src = config.footerLogoSrc;
+    document.getElementById('prev-footer-img').style.display = 'block';
+    document.getElementById('prev-footer-icon').style.display = 'none';
+  }
+
+  // Setar data de hoje nos forms
+  document.getElementById('vis-data').value = today();
+  document.getElementById('diario-data').value = today();
+
+  populateObraSelects();
+  renderHome();
+
+  if (!navigator.onLine) document.getElementById('offline-bar').style.display = 'block';
+})();
+</script>
+</body>
+</html>
