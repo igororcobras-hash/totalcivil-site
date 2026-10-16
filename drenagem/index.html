@@ -742,14 +742,21 @@ function migrate(p) {
 function loadAll() {
   DB = lsGet(LS_PROJ, null) || {cur: null, list: {}};
   CFG = Object.assign({empresa: '', sub: '', rodape: '', logo: '', tema: '', device: ''}, lsGet(LS_CFG, {}));
-  if (!DB.list || !Object.keys(DB.list).length) {
-    const id = uid(); const ex = exampleProject();
-    DB = {cur: id, list: {[id]: {nome: ex.proj.nome, upd: Date.now(), data: ex}}};
-    P = migrate(ex); autoCotas(true);
-    saveNow();
+  if (!DB.list) DB.list = {};
+  // exemplo de bairro (6 ruas): acrescentado uma única vez e aberto na planta baixa
+  if (!DB.exBairro) {
+    const id = uid(); P = migrate(exampleBairro());
+    DB.list[id] = {nome: P.proj.nome, upd: Date.now(), data: P}; DB.cur = id; DB.exBairro = id;
+    BAIRRO_PENDENTE = true;
+    lsSet(LS_PROJ, DB);
   }
   if (!DB.list[DB.cur]) DB.cur = Object.keys(DB.list)[0];
   P = migrate(DB.list[DB.cur].data);
+}
+let BAIRRO_PENDENTE = false;
+function abrirBairro() {
+  if (DB.exBairro && DB.list[DB.exBairro]) { abrirProjeto(DB.exBairro); showTab('planta'); return; }
+  novoProjeto('bairro');
 }
 let saveTimer = null;
 function save() { clearTimeout(saveTimer); setStatus('salvando…'); saveTimer = setTimeout(saveNow, 400); }
@@ -1749,6 +1756,7 @@ function vProjeto() {
     desktop: '<b>Computador:</b> digite nas planilhas e veja os resultados na mesma linha. Toque em <b>?</b> para a explicação de cada campo e em ▸ para as sugestões de correção.'
   };
   return `<h3>Projeto</h3>
+  <div class="card" style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap;padding:.8rem 1rem"><button class="btn btn-primary btn-sm" onclick="abrirBairro()">🗺 Abrir exemplo de bairro (6 ruas)</button><span style="font-size:.8rem;color:var(--muted);flex:1;min-width:220px">3 ruas horizontais cruzadas por 3 verticais, com 9 cruzamentos, rede dimensionada, planta, perfis, seções e orçamento. Seus projetos ficam em <b>Projetos</b>.</span></div>
   ${dev && tips[dev] ? `<div class="dev-tip"><div>💡</div><div>${tips[dev]}</div></div>` : ''}
   <div class="card"><h4>Identificação</h4><div class="fgrid">
     ${fld('proj.nome', 'Nome do projeto', {type: 'txt', w2: true})}
@@ -2144,7 +2152,7 @@ function novoProjeto(ex) {
   if (ex === 'bairro') { calc(); autoDimensionar(); }
   else if (ex) autoCotas(true);
   DB.cur = id; saveNow(); afterLoad(); closeModal('modal-projetos');
-  if (ex === 'bairro') { autoCorrigir(); closeModal('modal-auto'); DESFAZER = null; showTab('planta'); toast('Exemplo de bairro criado e dimensionado automaticamente'); }
+  if (ex === 'bairro') { DB.exBairro = id; autoCorrigir(); closeModal('modal-auto'); DESFAZER = null; showTab('planta'); toast('Exemplo de bairro criado e dimensionado automaticamente'); }
   else showTab('projeto');
   verificarMesNovo();
 }
@@ -2247,6 +2255,7 @@ function exportCSV() {
    ===================================================================== */
 function init() {
   loadAll(); applyConfig(); calc();
+  if (BAIRRO_PENDENTE) { autoDimensionar(); calc(); try { localStorage.setItem('tc_dren_tab', 'planta'); } catch (e) {} }
   try { const t = localStorage.getItem('tc_dren_tab'); if (t && TABS.some(x => x[0] === t)) TAB = t; } catch (e) {}
   buildTabs();
   $('bar-nome').value = P.proj.nome || '';
@@ -2255,6 +2264,7 @@ function init() {
   document.addEventListener('change', e => { if (e.target.dataset && e.target.dataset.p && (e.target.tagName === 'SELECT' || e.target.dataset.full)) onField(e); });
   document.querySelectorAll('.modal-backdrop').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); }));
   matchMedia('(prefers-color-scheme: dark)').addEventListener && matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (TAB === 'perfil') drawPerfil(); });
+  if (BAIRRO_PENDENTE) { autoCorrigir(); closeModal('modal-auto'); DESFAZER = null; TAB = 'planta'; BAIRRO_PENDENTE = false; saveNow(); setTimeout(() => toast('Novo: exemplo de bairro com 6 ruas (3 horizontais × 3 verticais). Seus projetos anteriores continuam em Projetos.'), 900); }
   if (CFG.device) { $('screen-app').classList.add('active'); showTab(TAB); }
   else { $('screen-device').classList.add('active'); }
   window.addEventListener('beforeunload', saveNow);
