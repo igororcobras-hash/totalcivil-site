@@ -375,6 +375,7 @@ html body.mode-mobile tr[data-quadro]>td:not(.q-larga):not(:last-child) input,ht
 html body.mode-mobile tr[data-quadro]>td:first-child{font-weight:800}
 html body.mode-ios input,html body.mode-ios select,html body.mode-ios textarea,html body.mode-ios tr[data-quadro] input,html body.mode-ios tr[data-quadro] select{font-size:16px!important}
 html body.mode-mobile tr[data-quadro] .desc{border-radius:10px;font-size:14px}
+html body.mode-mobile tr[data-quadro] textarea.desc{display:block;width:100%!important;box-sizing:border-box;resize:none;overflow:hidden;line-height:1.35;font-family:inherit;color:#0f172a;padding:8px 10px;min-height:44px;white-space:pre-wrap;word-break:break-word}
 html body.mode-mobile tr[data-quadro].row-insert-pos{box-shadow:0 0 0 2px #f59e0b,0 4px 14px rgba(15,23,42,.08)!important}
 html body.mode-mobile .q-mais{border-radius:999px;padding:6px 12px;background:#fff}
 /* totais */
@@ -388,6 +389,27 @@ html body.mode-mobile #mobAviso{border-radius:999px;font-size:13px;padding:10px 
 html body.mode-mobile #mobRelatorio .mr-corpo{background:#eef2f7}
 html body.mode-mobile .rel-faixa{border:1px solid #e2e8f0;border-left:3px solid #f59e0b;border-radius:14px;box-shadow:0 1px 2px rgba(15,23,42,.05),0 4px 14px rgba(15,23,42,.06)}
 html body.mode-mobile .rel-linha.rel-ltit{border-radius:12px}
+/* 17/10/2026: todas as opções do computador à vista no celular */
+/* com tudo à vista, os passos Itens e Planilha rolam a página inteira (como Cabeçalho e Bancos) */
+html body.mode-mobile.mob-cat,html body.mode-mobile.mob-orc{height:auto;min-height:100vh;overflow:auto}
+html body.mode-mobile.mob-cat .main,html body.mode-mobile.mob-orc .main,html body.mode-mobile.mob-cat .left,html body.mode-mobile.mob-orc .right{overflow:visible!important;height:auto!important;flex:none!important;min-height:0}
+html body.mode-mobile.mob-cat .wrap,html body.mode-mobile.mob-orc .wrap{overflow:visible!important;height:auto!important;max-height:none!important;flex:none!important}
+html body.mode-mobile.mob-orc .footer{position:static;max-height:none;margin-top:8px}
+html body.mode-mobile .search{grid-template-columns:minmax(0,1fr)!important}
+html body.mode-mobile .search>*{grid-column:1/-1!important;width:100%!important}
+html body.mode-mobile.mob-ferr #patchBar1{display:flex!important;flex-wrap:wrap;gap:8px;padding:12px;margin:12px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 1px 2px rgba(15,23,42,.05),0 4px 14px rgba(15,23,42,.06);color:#0f172a}
+html body.mode-mobile #patchBar1::before{content:'Importar, exportar e ferramentas';flex-basis:100%;font-size:11px;font-weight:800;letter-spacing:.8px;text-transform:uppercase;color:#64748b;padding-bottom:6px;border-bottom:1px solid #e2e8f0}
+html body.mode-mobile #patchBar1>*{flex:1 1 calc(50% - 8px);min-width:0}
+html body.mode-mobile #patchBar1 .btn,html body.mode-mobile #patchBar1 label.btn{white-space:normal;text-align:center;justify-content:center;border-radius:10px!important;min-height:40px;font-size:12px!important}
+html body.mode-mobile #patchBar1 input[type=text]{flex-basis:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px}
+html body.mode-mobile #patchBar1 #boxExportXlsx{flex-basis:100%;margin:0!important;display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:8px;border-radius:10px}
+html body.mode-mobile #patchBar1 #statusBackupPasta{flex-basis:100%;font-size:11px}
+html body.mode-mobile #patchBar1>span:empty:not(#statusBackupPasta){display:none}
+html body.mode-mobile #patchBar1 #statusBackupPasta:empty{display:none}
+html body.mode-mobile #patchBar1 #fileImportCodigos{display:none!important} /* o botão "Importar Lista" abre o mesmo seletor; o campo nativo mostrava texto em inglês */
+html body.mode-mobile #barFonte,html body.mode-mobile #barOnera{padding:10px 12px!important;gap:6px!important;background:#fff!important}
+html body.mode-mobile #barFonte .btn,html body.mode-mobile #barOnera .btn{flex:1 1 calc(50% - 6px);white-space:normal;min-height:36px!important}
+html body.mode-mobile #barFonte .btn{flex:1 1 calc(33% - 6px)}
 .rel-tab tr.rel-item td{background:#e0f2fe;font-weight:700}
 .rel-vazio{padding:24px;text-align:center;color:#64748b;font-size:14px}
 #mobAviso{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);background:#0f172a;color:white;padding:10px 16px;border-radius:20px;font-size:13px;font-weight:700;z-index:13000;box-shadow:0 4px 14px rgba(0,0,0,.3);display:none;max-width:90vw;text-align:center}
@@ -489,7 +511,7 @@ function prepararCelular(mode){
   if (cabBotoes && !cabBotoes.id) cabBotoes.id = 'cabFerramentas';
   cabBotoes = document.getElementById('cabFerramentas');
   marca(cabBotoes, 'cab');
-  marca(document.getElementById('patchBar1'), 'nenhum'); // no celular as funções dela estão no ☰ Menu
+  marca(document.getElementById('patchBar1'), 'ferr'); // importar, exportar, cotação, histórico e backup também à vista (além do ☰ Menu)
   var barEmop = document.getElementById('barEmop'); marca(barEmop && barEmop.parentElement, 'ferr');
   var orcBar = document.querySelector('.orc-bar'); marca(orcBar, 'cab');
   // no celular, BDI e botões do cabeçalho vão para baixo dos dados da obra (passo 1)
@@ -564,25 +586,11 @@ function dobra(id, titulo, els, resumo, aberta){
   pinta(); b._pinta = pinta;
 }
 function prepararDobras(){
-  var v = function(id){ var e = document.getElementById(id); return e ? (e.value || '').trim() : ''; };
-  dobra('dobraFonte', 'Bancos e tipo', [document.getElementById('barFonte'), document.getElementById('barOnera')], function(){
-    var f = null; try{ f = localStorage.getItem('schueler_fonte_dados_v1'); }catch(e){}
-    var nomes = {EMOP: 'Somente EMOP', SINAPI: 'Somente SINAPI', SCO: 'Somente SCO', AMBOS: 'EMOP + SINAPI', TODOS: 'EMOP + SINAPI + SCO'};
-    return nomes[f] || 'toque para escolher';
-  }, false);
-  // na busca, só "Contém na descrição" fica sempre à vista
-  var fDesc = document.getElementById('fDesc'), busca = fDesc && fDesc.parentElement;
-  if (busca && !document.getElementById('dobraBusca')){
-    var outros = ['fCod', 'fDescNao', 'fUnid'].map(function(id){ return document.getElementById(id); });
-    var b = document.createElement('button'); b.type = 'button'; b.id = 'dobraBusca'; b.className = 'mob-dobra fechada'; b.setAttribute('data-mob', 'cat');
-    b.style.cssText = 'grid-column:1/-1;border:none;padding:4px 2px;background:none';
-    b.innerHTML = '<span>Mais filtros (código, não contém, unidade)</span><span class="mob-dobra-res"></span>';
-    busca.appendChild(b);
-    var pinta = function(){ var ab = !b.classList.contains('fechada'); outros.forEach(function(e){ if (e) e.classList.toggle('mob-escondido', !ab && !(e.tagName === 'SELECT' ? e.selectedIndex > 0 : (e.value || '').trim())); }); };
-    b.addEventListener('click', function(){ b.classList.toggle('fechada'); pinta(); }); pinta();
-  }
-  if (document.body.classList.contains('mode-mobile') && fDesc) fDesc.style.gridColumn = '1/-1';
-  else if (fDesc) fDesc.style.gridColumn = '';
+  // 17/10/2026: no celular nada fica escondido; todos os filtros e bancos ficam à vista, como no computador
+  ['dobraFonte', 'dobraBusca'].forEach(function(id){ var e = document.getElementById(id); if (e) e.remove(); });
+  ['barFonte', 'barOnera', 'fCod', 'fDescNao', 'fUnid'].forEach(function(id){ var e = document.getElementById(id); if (e) e.classList.remove('mob-escondido'); });
+  var fDesc = document.getElementById('fDesc');
+  if (fDesc) fDesc.style.gridColumn = '';
 }
 function rotularQuadros(tbl){
   if (!tbl || !tbl.tHead || !tbl.tBodies[0]) return;
@@ -603,25 +611,25 @@ function rotularQuadros(tbl){
         if (i === 4) rot = '';
       }
       if (rot && rot !== '+') td.setAttribute('data-rot', rot); else td.removeAttribute('data-rot');
-      if (ehOrc) td.classList.toggle('q-extra', [6, 7, 9, 10, 11].indexOf(i) >= 0);
+      td.classList.remove('q-extra');
     });
-    if (ehOrc){
-      var chave = tr.getAttribute('data-orc-idx');
-      tr.classList.toggle('q-aberto', !!_quadrosAbertos[chave]);
-      var alvo = tr.cells[8];
-      if (alvo && !alvo.querySelector('.q-mais')){
-        var b = document.createElement('button'); b.type = 'button'; b.className = 'q-mais';
-        b.textContent = _quadrosAbertos[chave] ? 'Menos ▴' : 'BDI, mercado e ações ▾';
-        b.addEventListener('click', function(ev){
-          ev.stopPropagation();
-          var k = tr.getAttribute('data-orc-idx'); _quadrosAbertos[k] = !_quadrosAbertos[k];
-          tr.classList.toggle('q-aberto', !!_quadrosAbertos[k]);
-          b.textContent = _quadrosAbertos[k] ? 'Menos ▴' : 'BDI, mercado e ações ▾';
-        });
-        alvo.appendChild(b);
-      }
-    }
+    tr.classList.remove('q-aberto');
+    var qm = tr.querySelector('.q-mais'); if (qm) qm.remove();
+    if (ehOrc && document.body.classList.contains('mode-mobile')) descEmCaixa(tr);
   });
+}
+/* No celular a descrição do item vira uma caixa de várias linhas, para ler o texto inteiro
+   (mesmos eventos do campo original: digitar grava, Esc desfaz; Enter só sai do campo) */
+function ajustarAlturaDesc(t){ t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
+function descEmCaixa(tr){
+  var inp = tr.querySelector('input.desc'); if (!inp) return;
+  var t = document.createElement('textarea');
+  Array.prototype.forEach.call(inp.attributes, function(a){ if (a.name !== 'value' && a.name !== 'type') t.setAttribute(a.name, a.value); });
+  t.value = inp.value; t.rows = 2; t.setAttribute('enterkeyhint', 'done');
+  t.addEventListener('keydown', function(ev){ if (ev.key === 'Enter'){ ev.preventDefault(); t.blur(); } });
+  t.addEventListener('input', function(){ if (/\n/.test(t.value)){ var c = t.selectionStart; t.value = t.value.replace(/\n/g, ' '); t.selectionStart = t.selectionEnd = c; t.dispatchEvent(new Event('input')); return; } ajustarAlturaDesc(t); });
+  inp.parentNode.replaceChild(t, inp);
+  requestAnimationFrame(function(){ ajustarAlturaDesc(t); });
 }
 function prepararQuadros(){
   var orc = document.getElementById('tblOrc'), cat = document.getElementById('tblCat');
@@ -658,6 +666,7 @@ function moverBotoesPlanilha(){
     db.innerHTML = '<span>🧰 Botões da planilha</span><span class="mob-dobra-res">+Título, COMP, Curvas ABC, Memória</span>';
     db.addEventListener('click', function(){ db.classList.toggle('fechada'); barra.classList.toggle('mob-escondido', db.classList.contains('fechada')); });
     right.insertBefore(db, barra); barra.classList.add('mob-escondido');
+    db.remove(); barra.classList.remove('mob-escondido'); // 17/10/2026: botões sempre à vista
   }
   if (!_planBtns){
     _planBtns = botoesDaPlanilha().map(function(b){ return {el: b, pai: b.parentNode, prox: b.nextSibling}; });
@@ -868,6 +877,7 @@ function mostrarAbaCelular(aba){
   if (bA){ bA.disabled = !ant; bA.textContent = ant ? '‹ ' + ant.curto : '‹'; bA.title = ant ? 'Voltar para ' + ant.nome : ''; }
   if (bP){ bP.disabled = !prox; bP.textContent = prox ? prox.curto + ' ›' : '›'; bP.title = prox ? 'Ir para ' + prox.nome : ''; }
   window.scrollTo(0, 0);
+  if (aba === 'orc') document.querySelectorAll('#tbodyOrc textarea.desc').forEach(ajustarAlturaDesc);
 }
 function avisoCelular(txt){
   var a = document.getElementById('mobAviso');
@@ -1012,7 +1022,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
 </div>
 <span id="dbList" style="display:none"></span>
 <div id="barFonte" style="display:flex;gap:5px;padding:6px 8px;background:#f1f5f9;border-bottom:2px solid #cbd5e1;flex-wrap:wrap;align-items:center">
-  <span style="font-size:9px;font-weight:800;color:#334155">Fonte de dados (o que aparece na busca/inserção de itens):</span>
+  <span style="font-size:9px;font-weight:800;color:#334155">Fonte de dados (marque os bancos desejados):</span>
   <button id="btnFonteEmop" class="btn" style="padding:3px 7px;font-size:9px;font-weight:800" onclick="definirFonteDados('EMOP')" title="Usa somente os bancos importados (DIPR/COMP/Insumos EMOP)">🏛️ Somente EMOP</button>
   <button id="btnFonteSinapi" class="btn" style="padding:3px 7px;font-size:9px;font-weight:800" onclick="definirFonteDados('SINAPI')" title="Usa somente o banco SINAPI embutido/importado">🏗️ Somente SINAPI</button>
   <button id="btnFonteSco" class="btn" style="padding:3px 7px;font-size:9px;font-weight:800" onclick="definirFonteDados('SCO')" title="Usa somente o banco SCO-FGV (PCRJ) embutido/importado">🏗️ Somente SCO</button>
@@ -5850,6 +5860,8 @@ window.SINAPI_COMP_MAP_GZ_B64 = "H4sIACk1tWoC/+y9WY8kOZYe+lcM9VRV8LTgvjQwDxYenpH
 var FONTE_KEY = 'schueler_fonte_dados_v1';
 function fonteAtual(){ return localStorage.getItem(FONTE_KEY) || 'EMOP'; }
 function atualizarBotoesFonte(){
+  // a versão nova (bancos marcáveis, mais abaixo) é a que vale quando já existe
+  if (window.atualizarBotoesFonte && window.atualizarBotoesFonte !== atualizarBotoesFonte) return window.atualizarBotoesFonte();
   var f = fonteAtual();
   var map = {EMOP:'btnFonteEmop', SINAPI:'btnFonteSinapi', AMBOS:'btnFonteAmbos'};
   ['EMOP','SINAPI','AMBOS'].forEach(function(k){
@@ -6845,6 +6857,22 @@ window.SCO_COMPMAP_GZ_B64 = "H4sIABMitWoC/+y93XLcRpYu+ioIRewYKU4RQv7hp+8oWnZr2rI
 // fonteAtual() do patch SINAPI (PATCH V1-02-07) é local à IIFE dele, não é
 // acessível a partir daqui - lemos a mesma chave do localStorage diretamente.
 function _scoFonteAtual(){ try{ return localStorage.getItem('schueler_fonte_dados_v1') || 'EMOP'; }catch(e){ return 'EMOP'; } }
+// 16/10/2026: os bancos se marcam um a um e se acumulam. A chave guarda a combinação:
+// EMOP, SINAPI, SCO, AMBOS (EMOP+SINAPI, nome antigo), TODOS (os três), EMOP+SCO e SINAPI+SCO.
+function _fonteBancos(f){
+  f = f || _scoFonteAtual();
+  if (f === 'TODOS') return ['EMOP', 'SINAPI', 'SCO'];
+  if (f === 'AMBOS') return ['EMOP', 'SINAPI'];
+  return String(f).split('+').filter(function(b){ return b === 'EMOP' || b === 'SINAPI' || b === 'SCO'; });
+}
+function _fonteTem(b, f){ return _fonteBancos(f).indexOf(b) >= 0; }
+function _fonteChave(lista){
+  var t = {EMOP: lista.indexOf('EMOP') >= 0, SINAPI: lista.indexOf('SINAPI') >= 0, SCO: lista.indexOf('SCO') >= 0};
+  if (t.EMOP && t.SINAPI && t.SCO) return 'TODOS';
+  if (t.EMOP && t.SINAPI) return 'AMBOS';
+  return ['EMOP', 'SINAPI', 'SCO'].filter(function(b){ return t[b]; }).join('+') || 'EMOP';
+}
+window._fonteBancos = _fonteBancos;
 
 async function _scoGunzipB64(b64){
   var binStr = atob(b64);
@@ -6923,13 +6951,13 @@ function _scoBaseEmop(){
 // -------- era) / TODOS (EMOP+SINAPI+SCO) --------
 window.getFullCatalog = function(){
   var f = _scoFonteAtual();
-  var emopItems = (f==='EMOP' || f==='AMBOS' || f==='TODOS') ? _scoBaseEmop() : [];
+  var emopItems = _fonteTem('EMOP', f) ? _scoBaseEmop() : [];
   // V1-02-23: composições SINAPI (abrem pelo 📦) vêm ANTES dos insumos SINAPI, igual à EMOP
   // (serviços primeiro). Antes os 4.876 insumos vinham na frente e a lista inicial não mostrava
   // nenhuma composição.
-  var sinapiItems = (f==='SINAPI' || f==='AMBOS' || f==='TODOS') ?
+  var sinapiItems = _fonteTem('SINAPI', f) ?
     [].concat(Array.isArray(window.SINAPI_COMPOSICOES)?window.SINAPI_COMPOSICOES:[], Array.isArray(window.SINAPI_INSUMOS)?window.SINAPI_INSUMOS:[]) : [];
-  var scoItems = (f==='SCO' || f==='TODOS') ?
+  var scoItems = _fonteTem('SCO', f) ?
     [].concat(Array.isArray(window.SCO_ITENS)?window.SCO_ITENS:[], Array.isArray(window.SCO_INSUMOS)?window.SCO_INSUMOS:[]) : [];
   var combined = emopItems.concat(sinapiItems).concat(scoItems);
   var vistos = new Map();
@@ -7000,13 +7028,20 @@ window.renderCat = function(){
 // -------- botões de fonte: adiciona SCO e TODOS ao mapa de destaque visual --------
 window.atualizarBotoesFonte = function(){
   var f = _scoFonteAtual();
-  var map = {EMOP:'btnFonteEmop', SINAPI:'btnFonteSinapi', SCO:'btnFonteSco', AMBOS:'btnFonteAmbos', TODOS:'btnFonteTodos'};
-  ['EMOP','SINAPI','SCO','AMBOS','TODOS'].forEach(function(k){
+  var map = {EMOP:'btnFonteEmop', SINAPI:'btnFonteSinapi', SCO:'btnFonteSco'};
+  ['EMOP','SINAPI','SCO'].forEach(function(k){
     var el = document.getElementById(map[k]);
     if(!el) return;
-    if(k===f){ el.style.background='#7c3aed'; el.style.color='white'; el.style.border='2px solid #581c87'; }
-    else { el.style.background='#0f172a'; el.style.color='white'; el.style.border='2px solid transparent'; }
+    if(!el.dataset.rot) el.dataset.rot = el.textContent.trim().replace(/Somente\s+/i, '');
+    var on = _fonteTem(k, f);
+    el.textContent = (on ? '☑ ' : '☐ ') + el.dataset.rot;
+    el.setAttribute('aria-pressed', on ? 'true' : 'false');
+    el.title = (on ? 'Marcado: o banco ' : 'Desmarcado: toque para incluir o banco ') + k + ' na busca e inserção de itens (os bancos marcados se somam)';
+    if(on){ el.style.background='#7c3aed'; el.style.color='white'; el.style.border='2px solid #581c87'; }
+    else { el.style.background='#fff'; el.style.color='#334155'; el.style.border='2px solid #cbd5e1'; }
   });
+  // "EMOP + SINAPI" e "Todos" não são mais necessários: basta marcar os bancos
+  ['btnFonteAmbos','btnFonteTodos'].forEach(function(id){ var el = document.getElementById(id); if(el) el.style.display = 'none'; });
 };
 
 // -------- definirFonteDados: o original (definido dentro da IIFE do patch SINAPI) chama
@@ -7016,6 +7051,15 @@ window.atualizarBotoesFonte = function(){
 // -------- window.atualizarBotoesFonte acima. Por isso redefinimos aqui também, chamando
 // -------- explicitamente window.atualizarBotoesFonte(). --------
 window.definirFonteDados = function(f){
+  if (f === 'EMOP' || f === 'SINAPI' || f === 'SCO'){
+    // marcar/desmarcar um banco; pelo menos um fica marcado
+    var lista = _fonteBancos(), i = lista.indexOf(f);
+    if (i >= 0){
+      if (lista.length === 1){ alert('Pelo menos um banco precisa ficar marcado.'); return; }
+      lista.splice(i, 1);
+    } else lista.push(f);
+    f = _fonteChave(lista);
+  }
   try{ localStorage.setItem('schueler_fonte_dados_v1', f); }catch(e){}
   window.atualizarBotoesFonte();
   try{ rebuildAll(); }catch(e){}
