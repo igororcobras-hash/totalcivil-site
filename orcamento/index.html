@@ -395,6 +395,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
   <input type="file" id="fileSinapiPDF" accept=".xlsx,.xls,.pdf" multiple style="display:none">
   <button class="btn btn-primary" style="padding:3px 7px;font-size:9px;font-weight:800" onclick="document.getElementById('fileSinapiPDF').click()" title="Recomendado: selecione o arquivo oficial 'Referência' (.xlsx, abas ISD/ICD/CSD/CCD/Analítico) do mês — traz composições com insumos detalhados e SEM/COM desoneração. Também aceita os PDFs de Insumos/Composições como alternativa.">📥 Atualizar SINAPI (XLSX oficial mensal)</button>
   <button class="btn" style="padding:3px 7px;font-size:9px;font-weight:700;background:white;color:#1e293b;border:1px solid #94a3b8" onclick="reverterSinapiParaEmbutido()" title="Descarta um XLSX/PDF importado e volta a usar o banco SINAPI que já vem no programa">↩️ Usar SINAPI embutido</button>
+  <label style="font-size:9px;font-weight:700;color:#334155;display:flex;gap:3px;align-items:center">📅 Mês: <select id="selMesSinapi" onchange="BancoMensal.escolher('sinapi', this.value)" style="font-size:9px;padding:1px 3px;max-width:190px"><option value="">carregando...</option></select></label>
   <span id="infoFonteSinapi" style="font-size:8px;color:#334155;width:100%">SINAPI RJ • Insumos e Composições • Ref. 08/2026 (SEM desoneração)</span>
   <div id="statusImportSinapi" style="font-size:9px;width:100%;display:none;padding:6px;border-radius:6px"></div>
 </div>
@@ -403,6 +404,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
   <input type="file" id="fileScoXLSX" accept=".xlsx,.xls,.pdf,.txt" multiple style="display:none">
   <button class="btn btn-primary" style="padding:3px 7px;font-size:9px;font-weight:800" onclick="document.getElementById('fileScoXLSX').click()" title="Selecione os arquivos do mês: Catálogo de Itens de Serviço (FGV06), Relação de Itens Elementares (FGV04) e, opcionalmente, o Vínculo de Composições x Insumos (FGV07, para abrir composição) - Onerado e Desonerado de cada um. Pode selecionar todos juntos.">📥 Atualizar SCO (mensal)</button>
   <button class="btn" style="padding:3px 7px;font-size:9px;font-weight:700;background:white;color:#1e293b;border:1px solid #94a3b8" onclick="reverterScoParaEmbutido()" title="Descarta o que você importou e volta a usar o banco SCO que já vem no programa">↩️ Usar SCO embutido</button>
+  <label style="font-size:9px;font-weight:700;color:#334155;display:flex;gap:3px;align-items:center">📅 Mês: <select id="selMesSco" onchange="BancoMensal.escolher('sco', this.value)" style="font-size:9px;padding:1px 3px;max-width:190px"><option value="">carregando...</option></select></label>
   <div style="display:flex;gap:8px;align-items:center;width:100%;font-size:8px;color:#7c2d12;background:#ffedd5;border:1px solid #fdba74;border-radius:5px;padding:3px 6px">
     <b>Tipo do(s) arquivo(s) que vou selecionar:</b>
     <label style="display:flex;gap:2px;align-items:center;cursor:pointer"><input type="radio" name="scoTipoOD" value="auto" checked style="margin:0"> Detectar automaticamente</label>
@@ -5089,6 +5091,110 @@ setTimeout(function(){
 </script>
 <!-- FIM PATCH V1-02-06 -->
 
+<!-- ==================== PATCH V1-02-35 - BANCOS MENSAIS SINAPI/SCO: o site baixa cada mês novo sozinho (orcamento/dados) e o usuário escolhe o mês ==================== -->
+<script>
+// A rotina "Bancos mensais SINAPI e SCO" (GitHub, scripts/bancos) baixa da Caixa e da Prefeitura
+// do Rio cada mês novo, confere (abas, colunas, Onerado/Desonerado, mês, preços contra o mês
+// anterior) e grava um arquivo por mês em orcamento/dados/, sem apagar os anteriores.
+// Ordem de escolha do banco (SINAPI e SCO, cada um com a sua):
+//   1. o mês escolhido no seletor "📅 Mês" (fica salvo neste navegador);
+//   2. sem escolha: o arquivo importado pelo usuário (botão 📥), se houver;
+//   3. o mês mais recente do site;
+//   4. o banco embutido no programa (08/2026), se o site não responder (ex.: sem internet).
+(function(){
+  var CHAVE = { sinapi: 'schueler_mes_sinapi_v1', sco: 'schueler_mes_sco_v1' };
+  var SITE = 'https://totalcivil.com.br/orcamento/dados/';
+  function base(){
+    if(!/^https?:$/.test(location.protocol)) return SITE;           // arquivo aberto no computador
+    if(/(^|\.)totalcivil\.com\.br$/.test(location.hostname)) return /^\/orcamento(\/|$)/.test(location.pathname) ? '/orcamento/dados/' : SITE;
+    return 'dados/';
+  }
+  var _indice = null;
+  function indice(){
+    if(!_indice){
+      _indice = fetch(base() + 'indice.json', { cache: 'no-cache' })
+        .then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .catch(function(e){ console.warn('Bancos mensais do site indisponíveis:', e); _indice = null; return null; });
+    }
+    return _indice;
+  }
+  async function lerGz(url){
+    var r = await fetch(url);
+    if(!r.ok) throw new Error('HTTP ' + r.status + ' em ' + url);
+    var buf = new Uint8Array(await r.arrayBuffer());
+    var texto;
+    if(buf[0] === 0x1f && buf[1] === 0x8b){
+      if(!window.DecompressionStream) throw new Error('Seu navegador não suporta descompressão nativa (DecompressionStream).');
+      texto = await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream('gzip'))).text();
+    } else {
+      texto = new TextDecoder('utf-8').decode(buf);   // servidor já entregou descomprimido
+    }
+    return JSON.parse(texto);
+  }
+  function escolha(tipo){ try{ return localStorage.getItem(CHAVE[tipo]) || null; }catch(e){ return null; } }
+  function salvarEscolha(tipo, v){ try{ if(v) localStorage.setItem(CHAVE[tipo], v); else localStorage.removeItem(CHAVE[tipo]); }catch(e){} }
+  function listaMeses(ind, tipo){ return (ind && Array.isArray(ind[tipo]) ? ind[tipo].slice() : []).sort(function(a, b){ return String(b.ref).localeCompare(String(a.ref)); }); }
+  async function aplicar(tipo, ref){
+    try{
+      var lista = listaMeses(await indice(), tipo);
+      if(!lista.length) return false;
+      var e = (!ref || ref === 'ultimo') ? lista[0] : lista.filter(function(x){ return x.ref === ref; })[0];
+      if(!e) return false;
+      var d = await lerGz(base() + e.arquivo);
+      var meta = { origem: 'mensal', referencia: e.competencia, competencia: e.competencia, ref: e.ref, localidade: 'RJ', geradoEm: e.geradoEm, escolhido: ref || 'ultimo', maisRecente: lista[0].ref === e.ref };
+      // tira do COMP_MAP global as composições do mês que estava carregado antes (as que não
+      // existem no mês novo não podem continuar abrindo com o conteúdo antigo)
+      var prefixo = tipo === 'sinapi' ? 'SC-' : 'SCO-';
+      var novo = d.compMap || {};
+      if(typeof COMP_MAP !== 'undefined') Object.keys(COMP_MAP).forEach(function(k){ if(k.indexOf(prefixo) === 0 && !novo[k]) delete COMP_MAP[k]; });
+      if(tipo === 'sinapi'){
+        if(typeof window._aplicarDadosSinapi !== 'function') return false;
+        await window._aplicarDadosSinapi(d.insumos, d.composicoes, novo, meta);
+      } else {
+        if(typeof window._aplicarDadosSco !== 'function') return false;
+        await window._aplicarDadosSco(d.itens, d.insumos, novo, meta);
+      }
+      return true;
+    }catch(err){
+      console.error('Erro ao carregar o banco mensal ' + tipo + ' ' + ref + ':', err);
+      return false;
+    }
+  }
+  // Seletor "📅 Mês" de cada barra
+  async function atualizarSeletor(tipo){
+    var sel = document.getElementById(tipo === 'sinapi' ? 'selMesSinapi' : 'selMesSco');
+    if(!sel) return;
+    var ind = await indice();
+    var lista = listaMeses(ind, tipo);
+    var metaAtual = tipo === 'sinapi' ? window._sinapiImportMeta : window._scoImportMeta;
+    var emb = (tipo === 'sinapi' ? window.SINAPI_EMBUTIDO_META : window.SCO_EMBUTIDO_META) || {};
+    var opcoes = [];
+    if(lista.length) opcoes.push(['ultimo', 'Sempre o mais recente (' + lista[0].competencia + ')']);
+    lista.forEach(function(x){ opcoes.push([x.ref, x.competencia]); });
+    opcoes.push(['importado', 'Arquivo que eu importei (📥)']);
+    opcoes.push(['embutido', 'Banco do programa (' + (emb.competencia || '08/2026') + ')']);
+    var atual = escolha(tipo);
+    if(!atual){
+      if(metaAtual && metaAtual.origem === 'mensal') atual = 'ultimo';
+      else if(metaAtual && metaAtual.origem === 'importado') atual = 'importado';
+      else atual = 'embutido';
+    }
+    sel.innerHTML = opcoes.map(function(o){ return '<option value="' + o[0] + '"' + (o[0] === atual ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('');
+    sel.title = lista.length
+      ? 'Bancos do site: ' + lista.map(function(x){ return x.competencia; }).join(', ') + '. Um mês novo entra sozinho quando a ' + (tipo === 'sinapi' ? 'Caixa' : 'Prefeitura do Rio') + ' publica; os meses anteriores continuam disponíveis aqui.'
+      : 'Os bancos mensais do site não responderam (sem internet?). Usando o banco do programa ou o arquivo importado.';
+  }
+  async function escolher(tipo, valor){
+    salvarEscolha(tipo, valor);
+    var init = tipo === 'sinapi' ? window._inicializarBancoSinapi : window._inicializarBancoSco;
+    if(typeof init === 'function') await init();
+    atualizarSeletor(tipo);
+  }
+  window.BancoMensal = { indice: indice, aplicar: aplicar, escolha: escolha, salvarEscolha: salvarEscolha, escolher: escolher, atualizarSeletor: atualizarSeletor };
+})();
+</script>
+<!-- FIM PATCH V1-02-35 -->
+
 <!-- ==================== PATCH V1-02-07 - BANCO SINAPI (RJ) + SELETOR DE FONTE (EMOP/SINAPI/AMBOS) ==================== -->
 <script>
 // Banco SINAPI embutido - Rio de Janeiro/RJ - Referência 08/2026 (preços SEM desoneração; COM desoneração em CUSTO_COM)
@@ -5393,6 +5499,10 @@ function atualizarLinhaInfoSinapi(){
   var nc = Array.isArray(window.SINAPI_COMPOSICOES) ? window.SINAPI_COMPOSICOES.length : 0;
   var nm = window.SINAPI_COMP_MAP ? Object.keys(window.SINAPI_COMP_MAP).length : 0;
   var meta = window._sinapiImportMeta;
+  if(meta && meta.origem === 'mensal'){ // V1-02-35
+    el.textContent = 'SINAPI RJ • Ref. ' + meta.competencia + ' (SEM/COM desoneração) • ' + fmtNum(ni) + ' insumos + ' + fmtNum(nc) + ' composições (' + fmtNum(nm) + ' com insumos detalhados) • banco mensal do site' + (meta.maisRecente ? ' (o mais recente)' : '');
+    return;
+  }
   if(meta && meta.origem === 'importado'){
     el.textContent = 'SINAPI ' + (meta.localidade||'') + ' • Ref. ' + (meta.referencia||'?') +
       ' • ' + fmtNum(ni) + ' insumos + ' + fmtNum(nc) + ' composições' + (nm?(' ('+fmtNum(nm)+' com insumos detalhados)'):'') +
@@ -5447,8 +5557,12 @@ async function aplicarDadosSinapi(insumos, composicoes, compMap, meta){
 }
 
 async function inicializarBancoSinapi(){
+  var escolhaMes = (window.BancoMensal && window.BancoMensal.escolha('sinapi')) || null; // V1-02-35
+  if(escolhaMes && escolhaMes !== 'importado' && escolhaMes !== 'embutido'){
+    if(await window.BancoMensal.aplicar('sinapi', escolhaMes)){ window.BancoMensal.atualizarSeletor('sinapi'); return; }
+  }
   try{
-    if(window.SchuelerDB){
+    if(window.SchuelerDB && escolhaMes !== 'embutido'){
       var rows = await Promise.all([
         window.SchuelerDB.get('settings', 'sinapiInsumosOverride'),
         window.SchuelerDB.get('settings', 'sinapiComposicoesOverride'),
@@ -5478,6 +5592,7 @@ async function inicializarBancoSinapi(){
         var temFormatoNovo = !!(primeiroInsumo && Object.prototype.hasOwnProperty.call(primeiroInsumo, 'CUSTO_COM'));
         if(temCompMapValido && temFormatoNovo){
           await aplicarDadosSinapi(insumosRow.value, compRow?compRow.value:[], mapRow.value, metaRow.value);
+          if(window.BancoMensal) window.BancoMensal.atualizarSeletor('sinapi'); // V1-02-35
           return;
         }
         console.warn('Banco SINAPI salvo no navegador está em formato antigo (sem composições detalhadas / sem preço com desoneração) — revertendo automaticamente para o banco embutido atualizado. Para usar um arquivo próprio, reimporte pelo XLSX oficial.');
@@ -5490,8 +5605,11 @@ async function inicializarBancoSinapi(){
       }
     }
   }catch(e){ console.error('Erro ao checar SINAPI importado salvo:', e); }
+  // V1-02-35: sem arquivo importado, usa o mês mais recente do site
+  if(escolhaMes !== 'embutido' && window.BancoMensal && await window.BancoMensal.aplicar('sinapi', 'ultimo')){ window.BancoMensal.atualizarSeletor('sinapi'); return; }
   try{
     await carregarBancoSinapiEmbutido();
+    if(window.BancoMensal) window.BancoMensal.atualizarSeletor('sinapi');
   }catch(e){
     console.error('Erro ao carregar banco SINAPI embutido:', e);
     var el = document.getElementById('infoFonteSinapi');
@@ -5520,7 +5638,21 @@ function acharLinhaHeader(rows, marcador, maxLinhas){
 function sheetToRows(wb, nome){
   var ws = wb.Sheets[nome];
   if(!ws) return null;
-  return XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true});
+  var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null, raw:true});
+  // V1-02-35: na planilha da Caixa de 09/2026 o código da composição (coluna B das abas CSD/CCD)
+  // vem como fórmula (link para a ficha) sem o valor salvo, e era lido como 0. Nesse caso o
+  // código é o último número escrito dentro da fórmula.
+  try{
+    var rg = XLSX.utils.decode_range(ws['!ref']);
+    for(var R=rg.s.r; R<=rg.e.r; R++){
+      var cel = ws[XLSX.utils.encode_cell({r:R, c:1})];
+      if(!cel || !cel.f || (cel.v!==undefined && cel.v!==null && cel.v!=='' && cel.v!==0)) continue;
+      var m = /([0-9]{3,})[^0-9]*$/.exec(String(cel.f));
+      var lin = rows[R-rg.s.r];
+      if(m && lin) lin[1] = Number(m[1]);
+    }
+  }catch(e){}
+  return rows;
 }
 function parseInsumosOficial(rows, uf){
   var hIdx = acharLinhaHeader(rows, 'Classificação', 15);
@@ -5659,9 +5791,11 @@ window.reverterSinapiParaEmbutido = async function(){
       await window.SchuelerDB.deleteRecord('settings', 'sinapiImportMeta');
     }catch(e){}
   }
+  if(window.BancoMensal) window.BancoMensal.salvarEscolha('sinapi', 'embutido'); // V1-02-35
   try{
     await carregarBancoSinapiEmbutido();
-    setStatusImport('✅ Revertido para o banco SINAPI embutido no programa.', 'ok');
+    if(window.BancoMensal) window.BancoMensal.atualizarSeletor('sinapi');
+    setStatusImport('✅ Revertido para o banco SINAPI embutido no programa. Para voltar aos meses do site, escolha em "📅 Mês".', 'ok');
   }catch(e){
     setStatusImport('❌ Erro ao restaurar: ' + e.message, 'erro');
   }
@@ -5684,6 +5818,7 @@ async function processarArquivosSinapi(fileList){
       var meta = { origem:'importado', referencia: r.referencia||'?', localidade: r.localidade||'RJ', importadoEm: agora.toLocaleString('pt-BR') };
       await aplicarDadosSinapi(r.insumos, r.composicoes, r.compMap, meta);
       await persistirSinapiImportado(r.insumos, r.composicoes, r.compMap, meta);
+      if(window.BancoMensal){ window.BancoMensal.salvarEscolha('sinapi', 'importado'); window.BancoMensal.atualizarSeletor('sinapi'); } // V1-02-35
       setStatusImport('✅ ' + xlsxFile.name + ': ' + fmtNum(r.insumos.length) + ' insumos + ' + fmtNum(r.composicoes.length) + ' composições (' + fmtNum(Object.keys(r.compMap).length) + ' com insumos detalhados) — banco atualizado e salvo.', 'ok');
     }catch(err){
       console.error(err);
@@ -5752,6 +5887,7 @@ async function processarArquivosSinapi(fileList){
 
   await aplicarDadosSinapi(insumosFinal, composicoesFinal, compMapFinal, meta);
   await persistirSinapiImportado(insumosFinal, composicoesFinal, compMapFinal, meta);
+  if(window.BancoMensal){ window.BancoMensal.salvarEscolha('sinapi', 'importado'); window.BancoMensal.atualizarSeletor('sinapi'); } // V1-02-35
 
   setStatusImport(relatorio.join('\n') + '\n\n✅ Banco SINAPI atualizado e salvo (fica disponível nas próximas vezes que você abrir o programa neste navegador).', 'ok');
 }
@@ -5763,6 +5899,8 @@ document.addEventListener('change', function(e){
   }
 });
 
+window._aplicarDadosSinapi = aplicarDadosSinapi;       // V1-02-35 (usados pelo BancoMensal)
+window._inicializarBancoSinapi = inicializarBancoSinapi;
 setTimeout(inicializarBancoSinapi, 200);
 
 document.addEventListener('DOMContentLoaded', atualizarLinhaInfoSinapi);
@@ -6117,6 +6255,11 @@ function atualizarLinhaInfoSco(){
   var origemInfo = (nO>0 && nD>0) ? (nO.toLocaleString('pt-BR')+' via Onerado + '+nD.toLocaleString('pt-BR')+' via Desonerado') : (nO>0 ? 'via arquivo Onerado' : (nD>0 ? 'via arquivo Desonerado' : ''));
   var compInfo = nc>0 ? (' • ' + nc.toLocaleString('pt-BR') + ' itens com composição aberta (📦) — vínculo '+origemInfo+' (FGV07); coeficientes válidos para SEM e COM desoneração') : ' • sem abertura de composição (arquivo de vínculo não enviado)';
   var meta = window._scoImportMeta;
+  if(meta && meta.origem==='mensal'){ // V1-02-35
+    el.textContent = 'SCO-FGV (PCRJ) • banco mensal do site (referência ' + meta.competencia + (meta.maisRecente ? ', o mais recente' : '') + ') • ' +
+      ni.toLocaleString('pt-BR') + ' itens de serviço + ' + nu.toLocaleString('pt-BR') + ' insumos' + compInfo;
+    return;
+  }
   if(meta && meta.origem==='importado'){
     el.textContent = 'SCO-FGV (PCRJ) • ' + ni.toLocaleString('pt-BR') + ' itens de serviço + ' + nu.toLocaleString('pt-BR') +
       ' insumos • importado por você em ' + meta.importadoEm + compInfo;
@@ -6521,6 +6664,7 @@ window.processarArquivosSco = async function(fileList){
         if(novoCompMap) await window.SchuelerDB.put('settings', {key:'scoCompMapOverride', value: novoCompMap});
       }catch(e){ console.error('Erro ao salvar SCO importado no IndexedDB:', e); }
     }
+    if(window.BancoMensal){ window.BancoMensal.salvarEscolha('sco', 'importado'); window.BancoMensal.atualizarSeletor('sco'); } // V1-02-35
     // conjunto completo processado com sucesso - limpa a área de espera pra um próximo import começar do zero
     window._scoPendingImport = {catO:null, catD:null, insO:null, insD:null, vincO:null, vincD:null};
     atualizarLinhaInfoSco();
@@ -6544,16 +6688,32 @@ window.reverterScoParaEmbutido = async function(){
       await window.SchuelerDB.deleteRecord('settings', 'scoCompMapOverride');
     }catch(e){}
   }
+  if(window.BancoMensal) window.BancoMensal.salvarEscolha('sco', 'embutido'); // V1-02-35
   try{
     await carregarBancoScoEmbutido();
-    setStatusImportSco('✅ Revertido para o banco SCO embutido no programa.', 'ok');
+    if(window.BancoMensal) window.BancoMensal.atualizarSeletor('sco');
+    setStatusImportSco('✅ Revertido para o banco SCO embutido no programa. Para voltar aos meses do site, escolha em "📅 Mês".', 'ok');
   }catch(e){
     setStatusImportSco('❌ Erro ao restaurar: '+e.message, 'erro');
   }
 };
+window._aplicarDadosSco = async function(itens, insumos, compMap, meta){ // V1-02-35 (usado pelo BancoMensal)
+  window.SCO_ITENS = itens || [];
+  window.SCO_INSUMOS = insumos || [];
+  window.SCO_COMP_MAP = compMap || {};
+  if(typeof COMP_MAP!=='undefined') Object.assign(COMP_MAP, window.SCO_COMP_MAP);
+  window._scoImportMeta = meta || null;
+  atualizarLinhaInfoSco();
+  try{ rebuildAll(); }catch(e){}
+  try{ if(typeof applyFilter==='function') applyFilter(); }catch(e){}
+};
 async function inicializarBancoSco(){
+  var escolhaMes = (window.BancoMensal && window.BancoMensal.escolha('sco')) || null; // V1-02-35
+  if(escolhaMes && escolhaMes !== 'importado' && escolhaMes !== 'embutido'){
+    if(await window.BancoMensal.aplicar('sco', escolhaMes)){ window.BancoMensal.atualizarSeletor('sco'); return; }
+  }
   try{
-    if(window.SchuelerDB){
+    if(window.SchuelerDB && escolhaMes !== 'embutido'){
       var rows = await Promise.all([
         window.SchuelerDB.get('settings', 'scoItensOverride'),
         window.SchuelerDB.get('settings', 'scoInsumosOverride'),
@@ -6564,7 +6724,7 @@ async function inicializarBancoSco(){
       if(itensRow && itensRow.value && insumosRow && insumosRow.value){
         window.SCO_ITENS = itensRow.value;
         window.SCO_INSUMOS = insumosRow.value;
-        if(metaRow && metaRow.value) window._scoImportMeta = metaRow.value;
+        window._scoImportMeta = (metaRow && metaRow.value) || null; // V1-02-35: não fica a meta de um mês do site
         // vínculo (composição->insumos): usa o importado se existir, senão cai pro embutido
         // (o recipiente de coeficientes muda pouco mês a mês, então o embutido ainda serve de base)
         if(compMapRow && compMapRow.value){
@@ -6579,12 +6739,16 @@ async function inicializarBancoSco(){
         atualizarLinhaInfoSco();
         try{ rebuildAll(); }catch(e){}
         try{ if(typeof applyFilter==='function') applyFilter(); }catch(e){}
+        if(window.BancoMensal) window.BancoMensal.atualizarSeletor('sco'); // V1-02-35
         return;
       }
     }
   }catch(e){ console.error('Erro ao checar override SCO salvo:', e); }
+  // V1-02-35: sem arquivo importado, usa o mês mais recente do site
+  if(escolhaMes !== 'embutido' && window.BancoMensal && await window.BancoMensal.aplicar('sco', 'ultimo')){ window.BancoMensal.atualizarSeletor('sco'); return; }
   try{
     await carregarBancoScoEmbutido();
+    if(window.BancoMensal) window.BancoMensal.atualizarSeletor('sco');
   }catch(e){
     console.error('Erro ao carregar banco SCO embutido:', e);
     var el = document.getElementById('infoFonteSco');
@@ -6598,6 +6762,7 @@ document.addEventListener('change', function(e){
   }
 });
 
+window._inicializarBancoSco = inicializarBancoSco; // V1-02-35
 setTimeout(inicializarBancoSco, 200);
 
 })();
@@ -6672,10 +6837,11 @@ setTimeout(inicializarBancoSco, 200);
     var nSin = keys.filter(function(k){ return k.indexOf('SC-')===0; }).length;
     var nSco = keys.filter(function(k){ return k.indexOf('SCO-')===0; }).length;
     var nEmop = keys.length - nSin - nSco;
-    var sinOrig = window._sinapiImportMeta ? ('importado por você'+(window._sinapiImportMeta.importadoEm?' em '+window._sinapiImportMeta.importadoEm:'')) : 'embutido no programa';
-    var scoOrig = window._scoImportMeta ? ('importado por você'+(window._scoImportMeta.importadoEm?' em '+window._scoImportMeta.importadoEm:'')) : 'embutido no programa';
+    function origemMeta(m){ return m && m.origem==='mensal' ? ('banco mensal do site, ref. '+m.competencia) : null; } // V1-02-35
+    var sinOrig = origemMeta(window._sinapiImportMeta) || (window._sinapiImportMeta ? ('importado por você'+(window._sinapiImportMeta.importadoEm?' em '+window._sinapiImportMeta.importadoEm:'')) : 'embutido no programa');
+    var scoOrig = origemMeta(window._scoImportMeta) || (window._scoImportMeta ? ('importado por você'+(window._scoImportMeta.importadoEm?' em '+window._scoImportMeta.importadoEm:'')) : 'embutido no programa');
     var geral = [
-      ['Versão do programa', 'V1-02-34'],
+      ['Versão do programa', 'V1-02-35'],
       ['Navegador', navegador()],
       ['Tela (largura)', window.innerWidth+' px'],
       ['Descompressão nativa (bancos embutidos)', window.DecompressionStream ? 'sim' : 'NÃO — atualize o navegador'],
