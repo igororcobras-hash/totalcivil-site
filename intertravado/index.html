@@ -243,6 +243,13 @@ body.mode-mobile .tab-pane{padding:10px 8px;overflow-x:auto;}
 body.mode-mobile .tab-export-bar .tb-btn{flex:1;min-width:80px;text-align:center;}
 body.mode-android input,body.mode-android select{font-size:15px;}
 body.mode-ios input,body.mode-ios select,body.mode-ios textarea{font-size:16px;}
+.fonte-grupo{display:inline-flex}
+.fonte-grupo .hdr-btn{border-radius:0;margin:0}
+.fonte-grupo .hdr-btn:first-child{border-radius:4px 0 0 4px}.fonte-grupo .hdr-btn:last-child{border-radius:0 4px 4px 0}
+body.mode-mobile .hdr-btn{font-size:13px;padding:6px 10px}
+body.mode-mobile #hdr-title{font-size:15px}
+body.mode-mobile .sec{padding:12px}
+body.mode-mobile .f label{font-size:11px}
 body.mode-ios select{-webkit-appearance:none;appearance:none;}
 
 /* ── LOGIN ── */
@@ -354,6 +361,7 @@ function initApp(mode){
   document.body.classList.remove('mode-desktop', 'mode-mobile', 'mode-android', 'mode-ios');
   document.body.classList.add('mode-' + mode);
   if (mode !== 'desktop') document.body.classList.add('mode-mobile');
+  try{ aplicarFonte(); }catch(e){}
   var btn = document.getElementById('device-toggle-btn');
   if (btn){ btn.hidden = false; btn.textContent = 'Ambiente: ' + ROTULO_AMBIENTE[mode]; btn.title = 'Ambiente atual: ' + NOMES_AMBIENTE[mode] + '. Toque para trocar.'; }
   var s = document.getElementById('splash');
@@ -408,8 +416,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
   <button class="hdr-btn" id="btn-sair" onclick="confirmarSair()" hidden>Sair</button>
   <button class="hdr-btn" id="device-toggle-btn" onclick="abrirSelecaoAmbiente()" hidden title="Trocar o ambiente de uso">Ambiente</button>
   <button class="hdr-btn" onclick="toggleTheme()">☀ Tema</button>
-  <button class="hdr-btn" onclick="ajusteFont(-1)">A−</button>
-  <button class="hdr-btn" onclick="ajusteFont(1)">A+</button>
+  <span class="fonte-grupo" role="group" aria-label="Tamanho do texto"><button class="hdr-btn" onclick="ajusteFont(-1)" aria-label="Diminuir o texto">A−</button><button class="hdr-btn" id="fonte-pct" onclick="ajusteFont(0)" title="Voltar ao tamanho padrão">100%</button><button class="hdr-btn" onclick="ajusteFont(1)" aria-label="Aumentar o texto">A+</button></span>
 </div>
 
 <!-- APP (oculto até login ser validado) -->
@@ -1719,8 +1726,23 @@ function importarArquivo(ev){
 /* ══════════════════════════════════════════════════════
    TEMA E FONTE
 ══════════════════════════════════════════════════════ */
-let fontSize=14;
-function ajusteFont(d){fontSize=Math.max(11,Math.min(20,fontSize+d));document.body.style.fontSize=fontSize+'px';try{localStorage.setItem('pint_fs',fontSize);}catch(e){}}
+/* Tamanho do texto (igual ao Pavimento Flexível): CSS zoom na barra, nas abas e no conteúdo,
+   que amplia texto e campos juntos. O cabeçalho não muda, para os botões ficarem no lugar.
+   No celular o padrão já é maior (100% no botão = 25% maior que no computador). */
+const FONTE_PASSOS=[0.8,0.9,1,1.1,1.25,1.4,1.6];
+let fonteEscala=1;
+function fonteBase(){return document.body.classList.contains('mode-mobile')?1.25:1;}
+function aplicarFonte(){
+  const piso=document.body.classList.contains('mode-ios')?1:0.5;
+  const f=Math.max(fonteEscala,piso)*fonteBase();
+  ['#toolbar','#tabs-bar','#tabs-content','#modal .cx'].forEach(sel=>{const el=document.querySelector(sel);if(el)el.style.zoom=f===1?'':String(f);});
+  const pct=document.getElementById('fonte-pct');if(pct)pct.textContent=Math.round(Math.max(fonteEscala,piso)*100)+'%';
+}
+function ajusteFont(d){
+  if(d===0)fonteEscala=1;else{let i=FONTE_PASSOS.indexOf(fonteEscala);if(i<0)i=2;fonteEscala=FONTE_PASSOS[Math.max(0,Math.min(FONTE_PASSOS.length-1,i+d))];}
+  try{localStorage.setItem('pint_fonte',String(fonteEscala));}catch(e){}
+  aplicarFonte();
+}
 function toggleTheme(){const root=document.documentElement,cur=root.getAttribute('data-theme');root.setAttribute('data-theme',cur==='dark'?'light':'dark');try{localStorage.setItem('pint_theme',root.getAttribute('data-theme'));}catch(e){}}
 
 /* ══════════════════════════════════════════════════════
@@ -1739,7 +1761,7 @@ document.querySelectorAll('.tab').forEach(t=>{
    INIT
 ══════════════════════════════════════════════════════ */
 (function init(){
-  try{const th=localStorage.getItem('pint_theme');if(th)document.documentElement.setAttribute('data-theme',th);const fs=localStorage.getItem('pint_fs');if(fs){fontSize=+fs;document.body.style.fontSize=fontSize+'px';}}catch(e){}
+  try{const th=localStorage.getItem('pint_theme');if(th)document.documentElement.setAttribute('data-theme',th);const fe=parseFloat(localStorage.getItem('pint_fonte'));if(FONTE_PASSOS.indexOf(fe)>=0)fonteEscala=fe;aplicarFonte();}catch(e){}
   topoRows=[{est:0,tEsq:100,tEixo:100,tDir:100,greide:100,larg:6},{est:20,tEsq:100,tEixo:100,tDir:100,greide:100,larg:6}];
   renderTopoTable();
   iniciarAjuda();
