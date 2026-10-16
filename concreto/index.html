@@ -1,0 +1,1715 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<!-- Acesso: login da página principal e liberação no painel Usuários -->
+<script src="/firebase-config.js"></script>
+<script src="/acesso-programa.js" data-campo="estruturaAtivo" data-nome="Estrutura em Concreto Armado" data-voltar="/concreto/"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calculadora de Fundações e Estrutura em Concreto Armado · Total Civil</title>
+<style>
+:root {
+  --bg:#f4f6f9;--bg2:#ffffff;--fg:#1a2130;--fg2:#4a5568;--fg3:#718096;
+  --border:#d1d8e0;--accent:#17365D;--accent2:#2563EB;--accent-fg:#ffffff;
+  --inp:#FFFFF0;--inp-border:#b8a800;--out:#D9EAF7;--out-border:#17365D;
+  --ok:#E2F0D9;--ok-fg:#276024;--ok-border:#5a8a3c;
+  --warn:#FCE4D6;--warn-fg:#7a2e0e;--warn-border:#d9541e;
+  --danger:#FCE4E4;--danger-fg:#9b1c1c;--danger-border:#f87171;
+  --nav-bg:#17365D;--nav-fg:#ffffff;--tab-active:#2563EB;--tab-hover:#EBF4FF;
+  --shadow:0 2px 8px rgba(0,0,0,.10);
+  color-scheme:light;
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1520;--bg2:#1a2235;--fg:#e2e8f0;--fg2:#a0aec0;--fg3:#718096;
+  --border:#2d3748;--accent:#2563EB;--accent2:#60a5fa;--accent-fg:#ffffff;
+  --inp:#2d2a00;--inp-border:#a08000;--out:#0f2340;--out-border:#2563EB;
+  --ok:#0f2a10;--ok-fg:#86efac;--ok-border:#15803d;
+  --warn:#2d0f00;--warn-fg:#fca572;--warn-border:#c2410c;
+  --danger:#2d0a0a;--danger-fg:#fca5a5;--danger-border:#ef4444;
+  --nav-bg:#0f1c2e;--nav-fg:#e2e8f0;--tab-active:#2563EB;--tab-hover:#1e2d45;
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --bg:#0f1520;--bg2:#1a2235;--fg:#e2e8f0;--fg2:#a0aec0;--fg3:#718096;
+  --border:#2d3748;--accent:#2563EB;--accent2:#60a5fa;--accent-fg:#ffffff;
+  --inp:#2d2a00;--inp-border:#a08000;--out:#0f2340;--out-border:#2563EB;
+  --ok:#0f2a10;--ok-fg:#86efac;--ok-border:#15803d;
+  --warn:#2d0f00;--warn-fg:#fca572;--warn-border:#c2410c;
+  --danger:#2d0a0a;--danger-fg:#fca5a5;--danger-border:#ef4444;
+  --nav-bg:#0f1c2e;--nav-fg:#e2e8f0;--tab-active:#2563EB;--tab-hover:#1e2d45;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{-webkit-text-size-adjust:100%;}
+body{background:var(--bg);color:var(--fg);font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;font-size:14px;line-height:1.5;}
+[hidden]{display:none!important;}
+
+/* ── SPLASH ── */
+#splash{position:fixed;inset:0;z-index:9999;overflow-y:auto;background:var(--nav-bg);color:#fff;display:flex;padding:32px 16px;transition:opacity .25s;}
+#splash.hiding{opacity:0;pointer-events:none;}
+.splash-box{width:100%;max-width:760px;margin:auto;}
+.splash-norma{font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.62);}
+.splash-titulo{font-size:26px;font-weight:700;line-height:1.2;margin:6px 0 4px;}
+.splash-sub{font-size:13.5px;color:rgba(255,255,255,.78);}
+.splash-linha{height:1px;background:rgba(255,255,255,.18);margin:22px 0 18px;}
+.splash-prompt{font-size:12px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:rgba(255,255,255,.7);margin-bottom:12px;}
+.splash-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+@media(max-width:600px){.splash-cards{grid-template-columns:1fr;}}
+.splash-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:6px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.22);border-radius:8px;padding:16px;color:#fff;cursor:pointer;font:inherit;transition:background .15s,border-color .15s;}
+.splash-card:hover{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.55);}
+.splash-card.sel{border-color:#9cc3ff;background:rgba(156,195,255,.10);}
+.splash-card svg{width:28px;height:28px;}
+.splash-card-label{font-size:16px;font-weight:700;}
+.splash-card-desc{font-size:12px;color:rgba(255,255,255,.75);}
+.splash-tag{display:none;position:absolute;top:10px;right:10px;font-size:10px;font-weight:700;text-transform:uppercase;color:#0f2340;background:#9cc3ff;border-radius:3px;padding:2px 6px;}
+.splash-card.sel .splash-tag{display:inline-block;}
+.splash-note{font-size:11.5px;color:rgba(255,255,255,.6);margin-top:18px;line-height:1.5;}
+
+/* ── HEADER ── */
+.app-header{background:var(--nav-bg);color:var(--nav-fg);padding:10px 20px;display:flex;align-items:center;gap:12px;box-shadow:0 2px 4px rgba(0,0,0,.3);}
+.app-header h1{font-size:15px;font-weight:700;}
+.app-header .sub{font-size:11px;opacity:.7;}
+.hdr-right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+.theme-btn{background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);color:var(--nav-fg);padding:4px 10px;border-radius:4px;cursor:pointer;font-size:12px;font-family:inherit;}
+.theme-btn:hover{background:rgba(255,255,255,.25);}
+.fonte-ctl{display:inline-flex;}
+.fonte-ctl .theme-btn{border-radius:0;min-width:34px;}
+.fonte-ctl .theme-btn:first-child{border-radius:4px 0 0 4px;}
+.fonte-ctl .theme-btn:last-child{border-radius:0 4px 4px 0;}
+
+/* ── TOOLBAR ── */
+.toolbar{background:var(--bg2);border-bottom:1px solid var(--border);padding:8px 16px;display:flex;flex-wrap:wrap;align-items:center;gap:6px;}
+.tb-lbl{font-size:11px;font-weight:600;color:var(--fg3);text-transform:uppercase;letter-spacing:.5px;}
+.tb-btn{padding:5px 11px;border-radius:5px;border:1px solid var(--border);background:var(--bg);color:var(--fg);cursor:pointer;font-size:12px;font-weight:500;font-family:inherit;transition:all .15s;}
+.tb-btn:hover{opacity:.85;}
+.tb-save{background:var(--accent);color:#fff;border-color:var(--accent);}
+.tb-excel{background:#1a7340;color:#fff;border-color:#155d33;}
+.tb-word{background:#1d5fa5;color:#fff;border-color:#164d8a;}
+.tb-pdf{background:#b91c1c;color:#fff;border-color:#991b1b;}
+.tb-sep{width:1px;height:22px;background:var(--border);margin:0 4px;}
+
+/* ── ABAS ── */
+.tabs-nav{background:var(--bg2);border-bottom:2px solid var(--border);display:flex;flex-wrap:wrap;padding:0 12px;gap:2px;}
+.tab-btn{padding:9px 14px;font-size:12.5px;font-weight:500;color:var(--fg2);border:none;background:none;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:all .15s;font-family:inherit;}
+.tab-btn:hover{color:var(--accent2);background:var(--tab-hover);}
+.tab-btn.active{color:var(--tab-active);border-bottom-color:var(--tab-active);font-weight:600;}
+.tab-content{display:none;padding:16px;}
+.tab-content.active{display:block;}
+
+/* ── LAYOUT ── */
+.sec{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:14px;box-shadow:var(--shadow);}
+.sec-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--fg3);margin-bottom:10px;border-bottom:1px solid var(--border);padding-bottom:6px;}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;}
+.g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;}
+.g5{display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr;gap:12px;}
+@media(max-width:800px){.g3,.g4,.g5{grid-template-columns:1fr 1fr;}}
+@media(max-width:500px){.g2,.g3,.g4,.g5{grid-template-columns:1fr;}}
+
+/* ── CAMPOS ── */
+.field{display:flex;flex-direction:column;gap:3px;}
+.field label{font-size:11px;font-weight:600;color:var(--fg2);}
+.field input,.field select{padding:6px 8px;border:1px solid var(--inp-border);border-radius:5px;background:var(--inp);color:var(--fg);font-size:13px;font-family:inherit;width:100%;}
+.field input:focus,.field select:focus{outline:2px solid var(--accent2);outline-offset:1px;}
+.field .unit{font-size:10px;color:var(--fg3);margin-top:2px;}
+.out-cell{background:var(--out);border:1px solid var(--out-border);border-radius:5px;padding:6px 9px;min-height:32px;}
+.out-cell .val{font-weight:700;font-size:14px;}
+.out-cell .lbl{font-size:10px;color:var(--fg3);}
+.out-cell.ok{background:var(--ok);border-color:var(--ok-border);}
+.out-cell.ok .val{color:var(--ok-fg);}
+.out-cell.warn{background:var(--warn);border-color:var(--warn-border);}
+.out-cell.warn .val{color:var(--warn-fg);}
+.out-cell.danger{background:var(--danger);border-color:var(--danger-border);}
+.out-cell.danger .val{color:var(--danger-fg);}
+.out-cell.info{background:var(--out);border-color:var(--out-border);}
+.out-cell.info .val{color:var(--accent);}
+
+/* ── TABELAS ── */
+.tbl-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-size:12.5px;}
+th{background:var(--accent);color:#fff;padding:7px 10px;text-align:left;font-size:11px;font-weight:600;letter-spacing:.4px;white-space:nowrap;}
+td{padding:5px 8px;border-bottom:1px solid var(--border);vertical-align:middle;}
+tr:hover td{background:var(--tab-hover);}
+.td-inp{background:var(--inp);}
+.td-out{background:var(--out);font-weight:600;}
+.td-ok{background:var(--ok);color:var(--ok-fg);font-weight:700;}
+.td-warn{background:var(--warn);color:var(--warn-fg);font-weight:700;}
+.td-danger{background:var(--danger);color:var(--danger-fg);font-weight:700;}
+.td-info{background:var(--out);color:var(--accent);font-weight:600;}
+
+/* ── BADGES ── */
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:700;}
+.badge-ok{background:var(--ok);color:var(--ok-fg);border:1px solid var(--ok-border);}
+.badge-warn{background:var(--warn);color:var(--warn-fg);border:1px solid var(--warn-border);}
+.badge-danger{background:var(--danger);color:var(--danger-fg);border:1px solid var(--danger-border);}
+.badge-info{background:var(--out);color:var(--accent);border:1px solid var(--out-border);}
+.val-bar{padding:8px 12px;border-radius:6px;font-size:12px;font-weight:500;border:1px solid;margin-bottom:6px;}
+.val-bar.ok{background:var(--ok);color:var(--ok-fg);border-color:var(--ok-border);}
+.val-bar.warn{background:var(--warn);color:var(--warn-fg);border-color:var(--warn-border);}
+.val-bar.danger{background:var(--danger);color:var(--danger-fg);border-color:var(--danger-border);}
+.val-bar.info{background:var(--out);color:var(--accent);border-color:var(--out-border);}
+
+/* ── BOTÕES ── */
+.btn-add{background:var(--ok);color:var(--ok-fg);border:1px solid var(--ok-border);padding:5px 12px;border-radius:5px;cursor:pointer;font-size:12px;font-weight:600;font-family:inherit;}
+.btn-rem{background:var(--warn);color:var(--warn-fg);border:1px solid var(--warn-border);padding:2px 7px;border-radius:4px;cursor:pointer;font-size:11px;font-family:inherit;}
+.btn-calc{background:var(--accent);color:#fff;border:none;padding:6px 16px;border-radius:5px;cursor:pointer;font-size:13px;font-weight:600;font-family:inherit;}
+
+/* ── PALETA DE FUNDAÇÕES ── */
+.paleta{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:10px;}
+.paleta-card{border:2px solid var(--border);border-radius:8px;padding:12px;cursor:pointer;transition:all .15s;position:relative;}
+.paleta-card:hover{border-color:var(--accent2);background:var(--tab-hover);}
+.paleta-card.rec-sim{border-color:var(--ok-border);background:var(--ok);}
+.paleta-card.rec-pos{border-color:var(--warn-border);background:var(--warn);}
+.paleta-card.rec-nao{border-color:var(--border);opacity:.5;cursor:not-allowed;}
+.paleta-card.ativo{border-color:var(--accent2);background:var(--out);box-shadow:0 0 0 3px rgba(37,99,235,.2);}
+.paleta-icon{font-size:28px;margin-bottom:4px;}
+.paleta-nome{font-weight:700;font-size:13px;color:var(--accent);}
+.paleta-desc{font-size:10px;color:var(--fg2);margin-top:2px;line-height:1.4;}
+.paleta-rec{position:absolute;top:8px;right:8px;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px;}
+.paleta-rec.sim{background:var(--ok-border);color:#fff;}
+.paleta-rec.pos{background:var(--warn-border);color:#fff;}
+.paleta-rec.nao{background:var(--fg3);color:#fff;}
+
+/* ── PLANTA SVG ── */
+.planta-wrap{border:1px solid var(--border);border-radius:8px;overflow:hidden;background:var(--bg);position:relative;}
+.planta-wrap svg{display:block;width:100%;cursor:grab;}
+.planta-wrap svg:active{cursor:grabbing;}
+.planta-toolbar{display:flex;gap:6px;margin-bottom:8px;align-items:center;flex-wrap:wrap;}
+.planta-toolbar button{padding:4px 10px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--fg);font-size:11px;cursor:pointer;font-family:inherit;}
+.planta-toolbar button:hover{background:var(--tab-hover);}
+.planta-toolbar button.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.planta-info{font-size:10px;color:var(--fg3);margin-top:4px;}
+
+/* ── CANVAS 3D ── */
+#canvas3d{width:100%;border:1px solid var(--border);border-radius:6px;background:var(--bg);display:block;cursor:grab;}
+#canvas3d:active{cursor:grabbing;}
+.view-btns{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;}
+.view-btns button{padding:4px 12px;border-radius:4px;border:1px solid var(--border);background:var(--bg);color:var(--fg);font-size:12px;cursor:pointer;font-family:inherit;}
+.view-btns button.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+/* ── SAPATA CARD ── */
+.sap-card{border:1px solid var(--border);border-radius:8px;margin-bottom:10px;overflow:hidden;}
+.sap-card-header{background:var(--accent);color:#fff;padding:8px 12px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;}
+.sap-card-header .sap-id{font-weight:700;font-size:13px;}
+.sap-card-header .sap-status{font-size:11px;padding:2px 8px;border-radius:10px;font-weight:700;}
+.sap-card-body{padding:12px;background:var(--bg2);}
+.sap-resultado{background:var(--out);border:1px solid var(--out-border);border-radius:6px;padding:10px;margin-top:10px;font-size:12px;line-height:1.8;}
+.sap-resultado b{color:var(--accent);}
+
+/* ── BARRA DE PROGRESSO σ ── */
+.sigma-wrap{height:8px;background:var(--border);border-radius:4px;overflow:hidden;margin-top:3px;}
+.sigma-bar{height:100%;border-radius:4px;transition:width .3s;}
+
+/* ── AVISO TOAST ── */
+#aviso{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);
+  max-width:min(92vw,560px);background:var(--fg);color:var(--bg);
+  padding:10px 14px;border-radius:6px;font-size:13px;box-shadow:0 4px 16px rgba(0,0,0,.25);
+  z-index:10000;opacity:0;transition:opacity .2s;pointer-events:none;white-space:pre-wrap;}
+#aviso.vis{opacity:1;}
+#aviso.err{background:#9C2B0E;color:#fff;}
+
+/* ── MOBILE ── */
+body.mob .tabs-nav{overflow-x:auto;flex-wrap:nowrap;padding:0 8px;}
+body.mob .tab-btn{padding:8px 11px;font-size:11.5px;}
+body.mob .g4,.mob .g5{grid-template-columns:1fr 1fr;}
+body.mob .paleta{grid-template-columns:1fr 1fr;}
+body.and .field input,.and .field select{font-size:15px;padding:8px 10px;}
+body.ios .field input,.ios .field select{font-size:16px;}
+
+/* ── EXPORT BAR ── */
+.export-bar{background:var(--bg);border-top:1px solid var(--border);padding:8px 16px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:16px;border-radius:0 0 8px 8px;}
+</style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+</head>
+<body>
+
+<!-- SPLASH -->
+<div id="splash" role="dialog" aria-modal="true" aria-labelledby="sp-titulo">
+  <div class="splash-box">
+    <div class="splash-norma">NBR 6118:2023 · NBR 6122:2022 · Total Civil</div>
+    <div class="splash-titulo" id="sp-titulo">Calculadora de Fundações e Estrutura em Concreto Armado</div>
+    <div class="splash-sub">Todos os tipos de fundação · Dimensionamento completo · Planta interativa · Visualização 3D</div>
+    <div class="splash-linha"></div>
+    <div class="splash-prompt">Selecione o ambiente de uso</div>
+    <div class="splash-cards">
+      <button class="splash-card" data-modo="desktop" onclick="iniciar('desktop')">
+        <span class="splash-tag">Este aparelho</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2.5" y="3.5" width="19" height="13" rx="1.5"/><path d="M8 20.5h8M12 16.5v4"/></svg>
+        <span class="splash-card-label">Computador</span>
+        <span class="splash-card-desc">Windows, macOS ou Linux. Tela completa.</span>
+      </button>
+      <button class="splash-card" data-modo="android" onclick="iniciar('android')">
+        <span class="splash-tag">Este aparelho</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="6" y="2" width="12" height="20" rx="1.8"/><path d="M10 18.8h4"/></svg>
+        <span class="splash-card-label">Android</span>
+        <span class="splash-card-desc">Campos empilhados, botões maiores.</span>
+      </button>
+      <button class="splash-card" data-modo="ios" onclick="iniciar('ios')">
+        <span class="splash-tag">Este aparelho</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10.5 4.6h3"/><circle cx="12" cy="19" r=".6"/></svg>
+        <span class="splash-card-label">iPhone / iPad</span>
+        <span class="splash-card-desc">Safari. Campos ajustados para não ampliar a tela.</span>
+      </button>
+    </div>
+    <div class="splash-note">O ambiente pode ser trocado pelo botão "Ambiente" no cabeçalho a qualquer momento. · Versão 2.1 · totalcivil.com.br</div>
+  </div>
+</div>
+
+<div id="aviso" role="status" aria-live="polite"></div>
+
+<!-- HEADER -->
+<div class="app-header">
+  <div>
+    <h1>Calculadora de Fundações e Estrutura em Concreto Armado</h1>
+    <div class="sub">NBR 6118:2023 · NBR 6122:2022 · Total Civil</div>
+  </div>
+  <div class="hdr-right">
+    <span class="fonte-ctl">
+      <button class="theme-btn" onclick="fnt(-1)">A−</button>
+      <button class="theme-btn" id="fnt-pct" onclick="fntR()">100%</button>
+      <button class="theme-btn" onclick="fnt(1)">A+</button>
+    </span>
+    <button class="theme-btn" id="btn-amb" onclick="abrirSplash()" hidden>Ambiente</button>
+    <button class="theme-btn" onclick="toggleTheme()">Tema</button>
+  </div>
+</div>
+
+<!-- TOOLBAR -->
+<div class="toolbar">
+  <span class="tb-lbl">Projeto:</span>
+  <button class="tb-btn" onclick="novoCalc()">Novo</button>
+  <button class="tb-btn tb-save" onclick="salvarJSON()">Salvar</button>
+  <button class="tb-btn" onclick="document.getElementById('inp-file').click()">Abrir</button>
+  <input type="file" id="inp-file" accept=".json" hidden onchange="abrirJSON(event)">
+  <span class="tb-sep"></span>
+  <span class="tb-lbl">Exportar:</span>
+  <button class="tb-btn tb-excel" onclick="expExcel()">Excel</button>
+  <button class="tb-btn tb-word" onclick="expWord()">Word</button>
+  <button class="tb-btn tb-pdf" onclick="expPDF()">PDF</button>
+</div>
+
+<!-- ABAS -->
+<div class="tabs-nav">
+  <button class="tab-btn active"  onclick="aba('solo')">Solo e Materiais</button>
+  <button class="tab-btn"         onclick="aba('paleta')">🏗 Tipo de Fundação</button>
+  <button class="tab-btn"         onclick="aba('pilares')">Cargas e Pilares</button>
+  <button class="tab-btn"         onclick="aba('sapatas')">Sapatas Isoladas</button>
+  <button class="tab-btn"         onclick="aba('corrida')">Sapata Corrida</button>
+  <button class="tab-btn"         onclick="aba('radier')">Radier</button>
+  <button class="tab-btn"         onclick="aba('estacas')">Blocos e Estacas</button>
+  <button class="tab-btn"         onclick="aba('vis3d')">Visualização 3D</button>
+  <button class="tab-btn"         onclick="aba('mem')">Memória</button>
+  <button class="tab-btn"         onclick="aba('ref')">Referências NBR</button>
+</div>
+
+<!-- ═══════════════ ABA: SOLO E MATERIAIS ═══════════════ -->
+<div id="tab-solo" class="tab-content active">
+  <div class="sec">
+    <div class="sec-title">A) Solo — Sondagem SPT · NBR 6122:2022</div>
+    <div class="g4">
+      <div class="field"><label>σ_adm solo (kPa)</label>
+        <input type="number" id="sigma_adm" value="200" step="10" oninput="calc()">
+        <span class="unit">Tensão admissível com FS ≥ 3</span></div>
+      <div class="field"><label>SPT médio (golpes/30 cm)</label>
+        <input type="number" id="spt" value="12" step="1" min="1" max="60" oninput="calc()">
+        <span class="unit">N<sub>SPT</sub> da camada de apoio</span></div>
+      <div class="field"><label>Profundidade D (m)</label>
+        <input type="number" id="D" value="1.5" step="0.1" min="0.3" oninput="calc()">
+        <span class="unit">Assentamento da sapata</span></div>
+      <div class="field"><label>Nível d'água NA (m)</label>
+        <input type="number" id="NA" value="5.0" step="0.1" min="0" oninput="calc()">
+        <span class="unit">Profundidade do lençol freático</span></div>
+      <div class="field"><label>γ solo (kN/m³)</label>
+        <input type="number" id="gama_s" value="18" step="0.5" oninput="calc()">
+        <span class="unit">Peso específico do solo</span></div>
+      <div class="field"><label>Coesão c (kPa)</label>
+        <input type="number" id="coesao" value="20" step="1" min="0" oninput="calc()">
+        <span class="unit">Solo argiloso</span></div>
+      <div class="field"><label>Ângulo φ (°)</label>
+        <input type="number" id="phi" value="25" step="1" min="0" max="45" oninput="calc()">
+        <span class="unit">Atrito interno</span></div>
+      <div class="field"><label>Tipo de solo</label>
+        <select id="tipo_solo" onchange="calc()">
+          <option>Argiloso</option><option>Arenoso</option>
+          <option>Siltoso</option><option>Rochoso</option><option>Aterro compactado</option>
+        </select></div>
+      <div class="field"><label>Endereço / obra</label>
+        <input type="text" id="endereco" placeholder="Ex.: Rio das Ostras/RJ"></div>
+      <div class="field"><label>Responsável técnico</label>
+        <input type="text" id="responsavel" placeholder="Nome e CREA"></div>
+    </div>
+    <div id="solo-alertas" style="margin-top:10px;display:flex;flex-direction:column;gap:6px;"></div>
+  </div>
+  <div class="sec">
+    <div class="sec-title">B) Materiais — Concreto e Aço · NBR 6118:2023</div>
+    <div class="g4">
+      <div class="field"><label>fck (MPa)</label>
+        <input type="number" id="fck" value="25" step="1" min="20" max="90" oninput="calc()">
+        <span class="unit">Resistência característica 28 dias</span></div>
+      <div class="field"><label>Aço</label>
+        <select id="fyk" onchange="calc()">
+          <option value="500">CA-50 — fyk = 500 MPa</option>
+          <option value="600">CA-60 — fyk = 600 MPa</option>
+        </select></div>
+      <div class="field"><label>γc — concreto</label>
+        <select id="gc" onchange="calc()">
+          <option value="1.4">1,40 — normal</option>
+          <option value="1.2">1,20 — controle rigoroso</option>
+        </select></div>
+      <div class="field"><label>γs — aço</label>
+        <select id="gs" onchange="calc()">
+          <option value="1.15">1,15 — normal</option>
+          <option value="1.0">1,00 — acidental</option>
+        </select></div>
+      <div class="field"><label>γf permanente (Gk)</label>
+        <select id="gfg" onchange="calc()">
+          <option value="1.4">1,40</option>
+          <option value="1.3">1,30</option>
+        </select></div>
+      <div class="field"><label>γf variável (Qk)</label>
+        <select id="gfq" onchange="calc()">
+          <option value="1.4">1,40</option>
+          <option value="1.5">1,50</option>
+        </select></div>
+      <div class="field"><label>Classe de agressividade</label>
+        <select id="cl_agr" onchange="calc()">
+          <option value="I">I — Fraca (rural)</option>
+          <option value="II" selected>II — Moderada (urbana)</option>
+          <option value="III">III — Forte (marinha)</option>
+          <option value="IV">IV — Muito forte</option>
+        </select></div>
+    </div>
+    <div style="margin-top:10px;" id="mat-out"></div>
+  </div>
+</div>
+
+<!-- ═══════════════ ABA: PALETA DE FUNDAÇÕES ═══════════════ -->
+<div id="tab-paleta" class="tab-content">
+  <div class="sec">
+    <div class="sec-title">🏗 Escolha o Tipo de Fundação — Recomendação automática pelo solo</div>
+    <p style="font-size:11.5px;color:var(--fg2);margin-bottom:6px;">
+      Com base nos dados do solo informados na aba <b>Solo e Materiais</b>, o programa indica abaixo os tipos adequados.
+      Clique no tipo desejado para ir direto ao dimensionamento.
+    </p>
+    <div id="paleta-rec" style="margin-bottom:12px;"></div>
+    <div class="paleta" id="paleta-cards"></div>
+    <div style="margin-top:16px;" id="paleta-detalhe"></div>
+  </div>
+</div>
+
+<!-- ═══════════════ ABA: CARGAS E PILARES ═══════════════ -->
+<div id="tab-pilares" class="tab-content">
+  <div class="sec">
+    <div class="sec-title">C) Cargas por Pilar · NBR 6118 §11</div>
+    <p style="font-size:11px;color:var(--fg3);margin-bottom:8px;">
+      Informe Gk (permanente) e Qk (variável) separados. O programa aplica γf automaticamente para Fd.
+      Posições X e Y em planta (metros a partir da origem S1).
+    </p>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+      <button class="btn-add" onclick="addPilar()">+ Adicionar pilar</button>
+      <button class="btn-calc" onclick="otimizar()">⚡ Otimizar B×L×h</button>
+      <button class="btn-calc" onclick="calc()">⟳ Recalcular</button>
+    </div>
+    <div class="tbl-wrap">
+      <table><thead><tr>
+        <th>ID</th><th>Gk (kN)</th><th>Qk (kN)</th>
+        <th>Nk (kN)</th><th>Fd (kN)</th>
+        <th>Mkx (kN·m)</th><th>Mky (kN·m)</th>
+        <th>bp (m)</th><th>hp (m)</th>
+        <th>X (m)</th><th>Y (m)</th><th></th>
+      </tr></thead>
+      <tbody id="tb-pilares"></tbody></table>
+    </div>
+    <div style="margin-top:10px;" class="g4" id="pilares-resumo"></div>
+  </div>
+</div>
+
+<!-- ═══════════════ ABA: SAPATAS ISOLADAS ═══════════════ -->
+<div id="tab-sapatas" class="tab-content">
+  <div class="sec">
+    <div class="sec-title">D) Sapatas Isoladas — NBR 6122:2022 · NBR 6118:2023 §22</div>
+    <p style="font-size:11px;color:var(--fg3);margin-bottom:8px;">
+      Dimensionamento completo: σ biaxial nos 4 cantos · punção pelo perímetro crítico a 2d (NBR 6118 §19.5) ·
+      armadura Asx e Asy · volume tronco-piramidal exato · verificação de levantamento.
+    </p>
+    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
+      <button class="btn-calc" onclick="otimizar()">⚡ Otimizar B×L×h automaticamente</button>
+      <button class="btn-calc" onclick="calc()">⟳ Recalcular</button>
+    </div>
+
+    <!-- SUBTIPO DE SAPATA -->
+    <div style="margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;color:var(--fg2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Subtipo de Sapata Isolada</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;" id="subtipo-sap">
+        <button class="tb-btn active" id="sbt-iso" onclick="setSubtipo('iso')">Isolada Rígida</button>
+        <button class="tb-btn" id="sbt-div" onclick="setSubtipo('div')">De Divisa</button>
+        <button class="tb-btn" id="sbt-ass" onclick="setSubtipo('ass')">Associada (2 pilares)</button>
+        <button class="tb-btn" id="sbt-col" onclick="setSubtipo('col')">Com Colarinho (pré-moldado)</button>
+      </div>
+      <div id="subtipo-desc" style="font-size:11px;color:var(--fg2);margin-top:6px;padding:8px;background:var(--bg);border-radius:6px;border:1px solid var(--border);"></div>
+    </div>
+
+    <!-- PLANTA INTERATIVA -->
+    <div class="sec" style="margin-bottom:12px;">
+      <div class="sec-title" style="margin-bottom:8px;">Planta das Sapatas — interativa (arraste para mover · scroll para zoom)</div>
+      <div class="planta-toolbar">
+        <button onclick="plantaZoom(1.2)">＋ Zoom</button>
+        <button onclick="plantaZoom(0.8)">－ Zoom</button>
+        <button onclick="plantaReset()">⟳ Centralizar</button>
+        <span style="font-size:10px;color:var(--fg3);margin-left:8px;">Clique numa sapata para selecioná-la e editar abaixo</span>
+        <span id="planta-esc" style="font-size:10px;color:var(--fg3);margin-left:auto;"></span>
+      </div>
+      <div class="planta-wrap">
+        <svg id="svg-planta" viewBox="0 0 800 420" xmlns="http://www.w3.org/2000/svg"
+             onmousedown="plantaMD(event)" onmousemove="plantaMM(event)"
+             onmouseup="plantaMU()" onmouseleave="plantaMU()"
+             ontouchstart="plantaTD(event)" ontouchmove="plantaTM(event)" ontouchend="plantaMU()">
+        </svg>
+      </div>
+      <div class="planta-info">
+        <span>🟩 OK (50–80% σadm)</span> &nbsp;
+        <span>🟦 Sub-utilizada (&lt;50%)</span> &nbsp;
+        <span>🟧 Próxima ao limite (80–100%)</span> &nbsp;
+        <span>🟥 Subdimensionada (&gt;σadm)</span>
+      </div>
+    </div>
+
+    <!-- CARDS DE SAPATA (um por pilar, expansível) -->
+    <div id="sapatas-cards"></div>
+
+    <!-- RESUMO GLOBAL -->
+    <div class="sec" style="margin-top:4px;">
+      <div class="sec-title">Resumo Global da Fundação</div>
+      <div class="g4" id="sap-resumo"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ ABA: SAPATA CORRIDA ═══════════════ -->
+<div id="tab-corrida" class="tab-content">
+  <div class="sec">
+    <div class="sec-title">E) Sapata Corrida / Viga de Fundação — NBR 6122:2022</div>
+    <p style="font-size:11px;color:var(--fg3);margin-bottom:10px;">
+      Usada sob paredes de alvenaria estrutural ou fileiras de pilares alinhados.
+      Dimensionada como viga invertida apoiada no solo.
+    </p>
+    <div class="g4">
+      <div class="field"><label>qk linear (kN/m)</label>
+        <input type="number" id="cor_qk" value="150" step="10" oninput="calcCorreida()">
+        <span class="unit">Carga distribuída da parede/pilares</span></div>
+      <div class="field"><label>Largura B (m)</label>
+        <input type="number" id="cor_B" value="0.8" step="0.1" min="0.3" oninput="calcCorreida()">
+        <span class="unit">Largura da base</span></div>
+      <div class="field"><label>Altura h (m)</label>
+        <input type="number" id="cor_h" value="0.4" step="0.05" oninput="calcCorreida()">
+        <span class="unit">Altura da sapata</span></div>
+      <div class="field"><label>Comprimento total L (m)</label>
+        <input type="number" id="cor_L" value="10" step="0.5" oninput="calcCorreida()">
+        <span class="unit">Extensão da parede/alinhamento</span></div>
+    </div>
+    <div id="cor-out" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+<!-- ═══════════════ ABA: RADIER ═══════════════ -->
+<div id="tab-radier" class="tab-content">
+  <div class="sec">
+    <div class="sec-title">F) Radier (Laje de Fundação) — NBR 6122:2022 §8.5</div>
+    <p style="font-size:11px;color:var(--fg3);margin-bottom:10px;">
+      Indicado quando a soma das áreas das sapatas isoladas ultrapassa ~50% da área da construção,
+      ou quando o solo é muito fraco. Calculado como laje invertida sobre o solo (método de Winkler).
+    </p>
+    <div class="g4">
+      <div class="field"><label>Carga total ΣNk (kN)</label>
+        <input type="number" id="rad_N" value="2000" step="100" oninput="calcRadier()">
+        <span class="unit">Calculada automaticamente dos pilares</span></div>
+      <div class="field"><label>Área da planta (m²)</label>
+        <input type="number" id="rad_A" value="120" step="5" oninput="calcRadier()">
+        <span class="unit">Área total da laje de radier</span></div>
+      <div class="field"><label>Espessura h (m)</label>
+        <input type="number" id="rad_h" value="0.35" step="0.05" min="0.15" oninput="calcRadier()">
+        <span class="unit">Mín. L/20 do vão entre pilares</span></div>
+      <div class="field"><label>kv Winkler (kN/m³)</label>
+        <input type="number" id="rad_kv" value="20000" step="1000" oninput="calcRadier()">
+        <span class="unit">Coeficiente de recalque vertical</span></div>
+    </div>
+    <div id="rad-out" style="margin-top:12px;"></div>
+  </div>
+</div>
+
+<!-- ═══════════════ ABA: BLOCOS E ESTACAS ═══════════════ -->
+<div id="tab-estacas" class="tab-content">
+  <div class="sec">
+    <div class="sec-title">G) Fundação Profunda — Estacas e Blocos de Coroamento · NBR 6122:2022</div>
+    <p style="font-size:11px;color:var(--fg3);margin-bottom:10px;">
+      Usada quando camada resistente está profunda, solo superficial é fraco ou há risco de recalque diferencial.
+    </p>
+
+    <!-- SUBTIPO DE ESTACA -->
+    <div style="margin-bottom:12px;">
+      <div style="font-size:11px;font-weight:700;color:var(--fg2);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px;">Tipo de Estaca</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;" id="tipo-estaca-btns">
+        <button class="tb-btn active" id="est-helice"  onclick="setEstaca('helice')">Hélice Contínua</button>
+        <button class="tb-btn" id="est-franki"   onclick="setEstaca('franki')">Franki</button>
+        <button class="tb-btn" id="est-strauss"  onclick="setEstaca('strauss')">Strauss</button>
+        <button class="tb-btn" id="est-escav"    onclick="setEstaca('escav')">Escavada</button>
+        <button class="tb-btn" id="est-premold"  onclick="setEstaca('premold')">Pré-moldada</button>
+        <button class="tb-btn" id="est-raiz"     onclick="setEstaca('raiz')">Estaca Raiz</button>
+        <button class="tb-btn" id="est-tubulao"  onclick="setEstaca('tubulao')">Tubulão</button>
+      </div>
+      <div id="estaca-desc" style="font-size:11px;color:var(--fg2);margin-top:6px;padding:8px;background:var(--bg);border-radius:6px;border:1px solid var(--border);"></div>
+    </div>
+
+    <div class="g4">
+      <div class="field"><label>Diâmetro / lado D (m)</label>
+        <input type="number" id="est_D" value="0.4" step="0.05" min="0.1" oninput="calcEstaca()">
+        <span class="unit">Diâmetro da estaca</span></div>
+      <div class="field"><label>Comprimento L (m)</label>
+        <input type="number" id="est_L" value="12" step="0.5" min="1" oninput="calcEstaca()">
+        <span class="unit">Penetração na camada resistente</span></div>
+      <div class="field"><label>Carga por estaca Nk (kN)</label>
+        <input type="number" id="est_Nk" value="500" step="50" oninput="calcEstaca()">
+        <span class="unit">Carga de cada pilar</span></div>
+      <div class="field"><label>Nº de estacas por bloco</label>
+        <select id="est_n" onchange="calcEstaca()">
+          <option value="1">1 — unipé</option>
+          <option value="2">2 — balizas</option>
+          <option value="3" selected>3 — triangular</option>
+          <option value="4">4 — quadrangular</option>
+          <option value="5">5 — quincôncio</option>
+          <option value="6">6 — hexagonal</option>
+          <option value="7">7 — central + 6</option>
+        </select></div>
+      <div class="field"><label>fck bloco (MPa)</label>
+        <input type="number" id="est_fck" value="25" step="1" min="20" oninput="calcEstaca()">
+        <span class="unit">Resistência do bloco de coroamento</span></div>
+      <div class="field"><label>Espaçamento (× D)</label>
+        <input type="number" id="est_esp" value="2.5" step="0.1" min="2" oninput="calcEstaca()">
+        <span class="unit">Norma: mín. 2,5D entre eixos</span></div>
+    </div>
+    <div id="est-out" style="margin-top:12px;"></div>
+  </div>
+  <div class="sec">
+    <div class="sec-title">Capacidade de Carga — Método SPT (Aoki-Velloso simplificado)</div>
+    <div id="est-cap" style="margin-top:8px;"></div>
+  </div>
+</div>
+
+<!-- ═══════════════ ABA: VISUALIZAÇÃO 3D ═══════════════ -->
+<div id="tab-vis3d" class="tab-content">
+  <div class="sec">
+    <div class="sec-title">H) Visualização 3D — Sapatas + Pilares</div>
+    <div class="view-btns">
+      <button class="active" id="vb-topo"    onclick="setView('topo')">Topo (Planta)</button>
+      <button id="vb-frente"  onclick="setView('frente')">Frente</button>
+      <button id="vb-lateral" onclick="setView('lateral')">Lateral</button>
+      <button id="vb-iso"     onclick="setView('iso')">Isométrica</button>
+      <button onclick="resetView()" style="margin-left:auto;">⟳ Centralizar</button>
+    </div>
+    <div style="font-size:11px;color:var(--fg3);margin-bottom:6px;display:flex;gap:12px;flex-wrap:wrap;">
+      <span>🟩 OK</span><span>🟦 Sub-util.</span><span>🟧 Próxima</span><span>🟥 Subdimens.</span>
+      <span style="margin-left:auto;color:var(--fg2)">Arraste para girar (iso) · Scroll para zoom</span>
+    </div>
+    <canvas id="canvas3d" width="900" height="520"></canvas>
+    <div class="g4" id="leg3d" style="margin-top:10px;"></div>
+  </div>
+</div>
+
+<!-- ═══════════════ ABA: MEMÓRIA ═══════════════ -->
+<div id="tab-mem" class="tab-content">
+  <div class="sec">
+    <div class="sec-title">I) Memória de Cálculo — NBR 6118:2023 · NBR 6122:2022</div>
+    <div id="mem-content" style="font-size:12.5px;line-height:1.8;color:var(--fg2);">
+      <p style="color:var(--fg3);font-style:italic;">Preencha as abas anteriores para gerar a memória.</p>
+    </div>
+  </div>
+  <div class="export-bar">
+    <button class="tb-btn tb-excel" onclick="expExcel()">Excel</button>
+    <button class="tb-btn tb-word"  onclick="expWord()">Word</button>
+    <button class="tb-btn tb-pdf"   onclick="expPDF()">PDF</button>
+  </div>
+</div>
+
+<!-- ═══════════════ ABA: REFERÊNCIAS ═══════════════ -->
+<div id="tab-ref" class="tab-content">
+  <div class="sec">
+    <div class="sec-title">Equações e Normas Utilizadas</div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Verificação</th><th>Equação</th><th>Norma</th><th>Limite</th></tr></thead>
+      <tbody>
+        <tr><td>σ biaxial — 4 cantos</td><td>σ = N/A ± Mky/Wx ± Mkx/Wy</td><td>NBR 6122:2022 §8</td><td>σmax ≤ σadm</td></tr>
+        <tr><td>σ triangular (e &gt; L/6)</td><td>σmax = 2N / [3·(L/2−e)·B]</td><td>NBR 6122:2022 §8.3</td><td>—</td></tr>
+        <tr><td>Armadura sapata</td><td>As = Msd / (0,9·d·fyd)</td><td>NBR 6118:2023 §22.7</td><td>As ≥ 0,15%·bw·d</td></tr>
+        <tr><td>Punção — perímetro crítico</td><td>u₁ = 2(bp+hp) + 4π·2d</td><td>NBR 6118:2023 §19.5</td><td>τSd ≤ τRd2</td></tr>
+        <tr><td>Punção — resistência</td><td>τRd2 = 0,27·(1−fck/250)·fcd</td><td>NBR 6118:2023 §19.5.2</td><td>—</td></tr>
+        <tr><td>Volume tronco-piramidal</td><td>V = h/3·(A1+A2+√(A1·A2))</td><td>Geometria</td><td>—</td></tr>
+        <tr><td>Linha neutra viga</td><td>0,8x·bw·fcd·(d−0,4x) = Md</td><td>NBR 6118:2023 §17.3</td><td>x/d ≤ 0,45</td></tr>
+        <tr><td>Capacidade estaca (Aoki-Velloso)</td><td>R = Rp + Rs = α·Np·Ap + β·Nl·U·L</td><td>NBR 6122:2022 §7</td><td>—</td></tr>
+        <tr><td>Capacidade corrida</td><td>σ = q/B ≤ σadm</td><td>NBR 6122:2022 §8</td><td>—</td></tr>
+        <tr><td>Radier — recalque Winkler</td><td>w = q/kv</td><td>NBR 6122:2022 §8.5</td><td>w ≤ wlim</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+  <div class="sec">
+    <div class="sec-title">Fontes Normativas</div>
+    <div class="tbl-wrap"><table>
+      <thead><tr><th>Norma</th><th>Título</th><th>Ano</th></tr></thead>
+      <tbody>
+        <tr><td>NBR 6118:2023</td><td>Projeto de estruturas de concreto — Procedimento</td><td>2023</td></tr>
+        <tr><td>NBR 6122:2022</td><td>Projeto e execução de fundações</td><td>2022</td></tr>
+        <tr><td>NBR 6120:2019</td><td>Ações para o cálculo de estruturas de edificações</td><td>2019</td></tr>
+        <tr><td>NBR 6484:2020</td><td>Solo — Sondagens de simples reconhecimento com SPT</td><td>2020</td></tr>
+        <tr><td>NBR 7480:2007</td><td>Aço — armaduras para estruturas de concreto</td><td>2007</td></tr>
+        <tr><td>NBR 12655:2022</td><td>Concreto de cimento Portland — Preparo, controle, recebimento e aceitação</td><td>2022</td></tr>
+      </tbody>
+    </table></div>
+  </div>
+</div>
+
+<script async src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script async src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+'use strict';
+/* ═══════════════════════════════════════════════════════════
+   ESTADO GLOBAL
+═══════════════════════════════════════════════════════════ */
+let _modo = 'desktop';
+let _fntBase = 14;
+let _pilares = [];   // [{id,gk,qk,mkx,mky,bp,hp,x,y,B,L,h}]
+let _sapatas = [];   // resultados calculados
+let _subtipo = 'iso';
+let _tipoEstaca = 'helice';
+let _sapSel = null;  // id sapata selecionada na planta
+
+// planta SVG
+let _svgScale = 1, _svgPanX = 0, _svgPanY = 0;
+let _svgDrag = null;
+
+// 3D
+let _viewMode = 'topo';
+let _rotX = 25, _rotZ = 30, _zoom3 = 1, _pan3X = 0, _pan3Y = 0, _drag3 = null;
+
+/* ═══════════════════════════════════════════════════════════
+   INICIALIZAÇÃO
+═══════════════════════════════════════════════════════════ */
+(function boot() {
+  const ua = navigator.userAgent;
+  let m = /iPhone|iPad|iPod/.test(ua) ? 'ios' : /Android/.test(ua) ? 'android' : 'desktop';
+  document.querySelector(`.splash-card[data-modo="${m}"]`)?.classList.add('sel');
+  const s = document.getElementById('splash');
+  s.hidden = false;
+  // Se já escolheu ambiente antes, pula o splash automaticamente
+  let saved = null;
+  try { saved = localStorage.getItem('tc_concreto_modo'); } catch(e) {}
+  if (saved) setTimeout(() => iniciar(saved), 200);
+})();
+
+function iniciar(modo) {
+  // 1) ESCONDE O SPLASH IMEDIATAMENTE — antes de qualquer outra lógica
+  const s = document.getElementById('splash');
+  if (s) {
+    s.classList.add('hiding');
+    // Remove do DOM após a transição (280ms), garantido mesmo se calc() falhar
+    setTimeout(() => { try { s.hidden = true; } catch(e){} }, 280);
+  }
+
+  // 2) Aplica modo e classe do body
+  _modo = modo;
+  try { localStorage.setItem('tc_concreto_modo', modo); } catch(e) {}
+  document.body.className = (modo !== 'desktop' ? 'mob ' : '') + (modo === 'android' ? 'and' : modo === 'ios' ? 'ios' : '');
+
+  // 3) Mostra botão de ambiente
+  const btnAmb = document.getElementById('btn-amb');
+  if (btnAmb) btnAmb.hidden = false;
+
+  // 4) Carrega dados e calcula — em try-catch para não travar
+  try { carregarLocal(); } catch(e) { console.warn('carregarLocal:', e); }
+  try { if (!_pilares.length) exemplosPadrao(); } catch(e) { console.warn('exemplosPadrao:', e); }
+  try { calc(); } catch(e) { console.warn('calc():', e); }
+}
+function abrirSplash() {
+  const s = document.getElementById('splash');
+  s.hidden = false; s.classList.remove('hiding');
+}
+function toggleTheme() {
+  const r = document.documentElement;
+  r.dataset.theme = r.dataset.theme === 'dark' ? 'light' : 'dark';
+  setTimeout(() => {
+    if (document.getElementById('tab-vis3d').classList.contains('active')) desenhar3D();
+    if (document.getElementById('tab-sapatas').classList.contains('active')) desenharPlanta();
+  }, 50);
+}
+function fnt(d) { _fntBase = Math.max(10,Math.min(22,_fntBase+d)); document.body.style.fontSize=_fntBase+'px'; document.getElementById('fnt-pct').textContent=Math.round(_fntBase/14*100)+'%'; }
+function fntR() { _fntBase=14; document.body.style.fontSize='14px'; document.getElementById('fnt-pct').textContent='100%'; }
+
+/* ═══════════════════════════════════════════════════════════
+   UTILITÁRIOS
+═══════════════════════════════════════════════════════════ */
+let _avisoT = null;
+function aviso(msg, tipo) {
+  const el = document.getElementById('aviso');
+  el.textContent = msg;
+  el.className = (tipo==='err'?'err ':'')+'vis';
+  clearTimeout(_avisoT);
+  _avisoT = setTimeout(()=>el.className=tipo==='err'?'err':'', tipo==='err'?7000:4000);
+}
+const fmt = (n,d=2) => (n===undefined||n===null||isNaN(n))?'—':Number(n).toFixed(d).replace('.',',');
+const V = id => parseFloat(document.getElementById(id)?.value)||0;
+const S = id => document.getElementById(id)?.value||'';
+const setEl = (id,txt) => { const e=document.getElementById(id); if(e) e.textContent=txt; };
+
+function outCell(lbl, val, cls='') {
+  return `<div><div class="out-cell ${cls}"><div class="lbl">${lbl}</div><div class="val">${val}</div></div></div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   NAVEGAÇÃO
+═══════════════════════════════════════════════════════════ */
+function aba(id) {
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  const tabs=['solo','paleta','pilares','sapatas','corrida','radier','estacas','vis3d','mem','ref'];
+  const idx=tabs.indexOf(id);
+  document.getElementById('tab-'+id)?.classList.add('active');
+  document.querySelectorAll('.tab-btn')[idx]?.classList.add('active');
+  if(id==='paleta') renderPaleta();
+  if(id==='vis3d') setTimeout(desenhar3D,50);
+  if(id==='mem') gerarMem();
+  if(id==='sapatas') { calc(); setTimeout(desenharPlanta,50); }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PARÂMETROS DO CONCRETO
+═══════════════════════════════════════════════════════════ */
+function getP() {
+  const fck=V('fck'), fyk=parseFloat(S('fyk')||500), gc=parseFloat(S('gc')||1.4), gs=parseFloat(S('gs')||1.15);
+  const gfg=parseFloat(S('gfg')||1.4), gfq=parseFloat(S('gfq')||1.4), cl=S('cl_agr');
+  const cobBase={I:25,II:30,III:40,IV:50}[cl]||30;
+  return {
+    fck,fyk,gc,gs,gfg,gfq,cl,
+    fcd:fck/gc, fyd:fyk/gs,
+    cob:cobBase+10,           // mm — fundação
+    cobEst:cobBase,           // mm — superestrutura
+    Ecs:5600*Math.sqrt(fck)/1000, // GPa
+    sigma_adm:V('sigma_adm'),
+    spt:V('spt'), D:V('D'), NA:V('NA'),
+    gama_s:V('gama_s')
+  };
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CÁLCULO DA SAPATA ISOLADA — CORRIGIDO
+   • σ biaxial nos 4 cantos
+   • Punção pelo perímetro crítico real a 2d
+   • Volume tronco-piramidal exato
+   • Fd separado de Nk para armadura
+═══════════════════════════════════════════════════════════ */
+function calcSapata(pil, p) {
+  const {gk,qk,mkx=0,mky=0,bp=0.25,hp=0.3,B=1.5,L=1.5,h=0.6} = pil;
+  const Nk = gk+qk;
+  const Fd = p.gfg*gk + p.gfq*qk;
+  const {fck,fcd,fyd,cob,sigma_adm} = p;
+
+  const A = B*L;
+  // Momentos de inércia da seção da sapata
+  const Wx = B*B*L/6;   // resistência à flexão em torno de Y (excentricidade ex)
+  const Wy = B*L*L/6;   // resistência à flexão em torno de X (excentricidade ey)
+  // Excentricidades
+  const ex = Nk>0 ? Math.abs(mky)/Nk : 0;  // ex → mky → verifica B/6
+  const ey = Nk>0 ? Math.abs(mkx)/Nk : 0;  // ey → mkx → verifica L/6
+
+  // σ nos 4 cantos — fórmula biaxial completa
+  const s0 = Nk/A;
+  const dsx = Nk>0 ? Math.abs(mky)/Wx : 0;
+  const dsy = Nk>0 ? Math.abs(mkx)/Wy : 0;
+  const sigmas = [s0+dsx+dsy, s0+dsx-dsy, s0-dsx+dsy, s0-dsx-dsy];
+  const sigma_max = Math.max(...sigmas);
+  const sigma_min = Math.min(...sigmas);
+  const levanta = sigma_min < 0;
+
+  // Altura útil d
+  const d = Math.max(0.1, h - cob/1000 - 0.010); // m
+
+  // Momentos para armadura (sapata rígida — balanço em relação à face do pilar)
+  const cb_x = (B - bp) / 2;  // balanço em X
+  const cb_y = (L - hp) / 2;  // balanço em Y
+  const smax_u = Math.max(sigma_max, s0); // usa σmax da sapata
+  // Msd por unidade de largura → total pelo B ou L
+  const MsdX = smax_u * cb_x * cb_x / 2 * L; // kN·m
+  const MsdY = smax_u * cb_y * cb_y / 2 * B; // kN·m
+
+  // Armadura (cm²)
+  const AsX = d>0 ? MsdX*1000/(0.9*d*fyd)/100 : 0;
+  const AsY = d>0 ? MsdY*1000/(0.9*d*fyd)/100 : 0;
+  // Mínima: 0,15% bw·d (por m de largura)
+  const AsMinX = 0.0015*B*1000*d*1000/100;
+  const AsMinY = 0.0015*L*1000*d*1000/100;
+  const AsXa = Math.max(AsX, AsMinX);
+  const AsYa = Math.max(AsY, AsMinY);
+
+  // Punção — NBR 6118:2023 §19.5
+  // Perímetro crítico a 2d do contorno do pilar
+  const u1 = 2*(bp+hp) + 4*Math.PI*(2*d);  // m
+  const tau_sd = Fd/(u1*d)*1000;            // kPa
+  const tau_rd2 = 0.27*(1-fck/250)*fcd*1000; // kPa
+  const puncOk = tau_sd <= tau_rd2;
+
+  // Volume tronco-piramidal exato
+  const A1 = B*L, A2 = bp*hp;
+  const vol = (h/3)*(A1+A2+Math.sqrt(A1*A2));
+
+  // Status
+  const taxa = sigma_max/sigma_adm;
+  let st, stCl;
+  if(sigma_max>sigma_adm){st='SUBDIMENSIONADA';stCl='danger';}
+  else if(taxa>0.8){st='Próxima ao limite';stCl='warn';}
+  else if(taxa<0.5){st='Sub-utilizada';stCl='info';}
+  else{st='OK';stCl='ok';}
+
+  return {id:pil.id,gk,qk,Nk,Fd,mkx,mky,bp,hp,B,L,h,x:pil.x||0,y:pil.y||0,
+    A,Wx,Wy,ex,ey,sigma_max,sigma_min,sigmas,levanta,
+    d,MsdX,MsdY,AsX,AsY,AsXa,AsYa,AsMinX,AsMinY,
+    u1,tau_sd,tau_rd2,puncOk,vol,taxa,st,stCl};
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CALC PRINCIPAL
+═══════════════════════════════════════════════════════════ */
+function calc() {
+  const p = getP();
+
+  // Info materiais
+  const matOut = document.getElementById('mat-out');
+  if(matOut) matOut.innerHTML = `<div class="g4">
+    ${outCell('fcd = fck/γc (MPa)', fmt(p.fcd))}
+    ${outCell('fyd = fyk/γs (MPa)', fmt(p.fyd))}
+    ${outCell('Cobrimento fund. (mm)', p.cob)}
+    ${outCell('Ecs (GPa)', fmt(p.Ecs,1))}
+  </div>`;
+
+  // Alertas solo
+  const alertas = [];
+  if(p.NA < p.D+0.3) alertas.push({c:'danger',t:'⚠ Lençol freático ('+fmt(p.NA,1)+'m) abaixo da sapata (D='+fmt(p.D,1)+'m) — verificar rebaixamento ou mudar para fundação profunda.'});
+  const sptSigma = p.spt<=5?50:p.spt<=10?100:p.spt<=20?200:300;
+  if(p.sigma_adm>sptSigma*1.3) alertas.push({c:'warn',t:'⚠ σ_adm ('+p.sigma_adm+'kPa) pode ser alta para SPT '+p.spt+' — verificar laudo de sondagem.'});
+  if(p.spt<=4) alertas.push({c:'warn',t:'⚠ SPT ≤ 4 — solo muito fraco. Considerar fundação profunda ou radier.'});
+  const aDiv = document.getElementById('solo-alertas');
+  if(aDiv) aDiv.innerHTML = alertas.map(a=>`<div class="val-bar ${a.c}">${a.t}</div>`).join('');
+
+  // Sapatas
+  _sapatas = _pilares.map(pil => calcSapata(pil, p));
+
+  // Tabela de pilares
+  renderTbPilares(p);
+  renderSapatas();
+  calcCorreida(); calcRadier(); calcEstaca();
+  salvarLocal();
+
+  // Resumo pilares
+  const srp = document.getElementById('pilares-resumo');
+  if(srp && _pilares.length) {
+    const sNk=_pilares.reduce((s,p)=>s+p.gk+p.qk,0);
+    const sFd=_pilares.reduce((s,pl)=>s+p.gfg*pl.gk+p.gfq*pl.qk,0);
+    srp.innerHTML=`${outCell('Σ Nk (kN)',fmt(sNk,0))}${outCell('Σ Fd (kN)',fmt(sFd,0))}${outCell('Nk médio (kN)',fmt(sNk/_pilares.length,0))}${outCell('Nº pilares',_pilares.length)}`;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════
+   TABELA DE PILARES
+═══════════════════════════════════════════════════════════ */
+function renderTbPilares(p) {
+  const tb = document.getElementById('tb-pilares'); if(!tb) return;
+  p = p||getP();
+  tb.innerHTML='';
+  _pilares.forEach((pil,i)=>{
+    const Nk=pil.gk+pil.qk, Fd=p.gfg*pil.gk+p.gfq*pil.qk;
+    const inp=(campo,val,step,min='')=>`<td class="td-inp"><input type="number" value="${val}" step="${step}" ${min?'min="'+min+'"':''} style="width:60px;padding:2px 4px;border:1px solid var(--inp-border);background:var(--inp);border-radius:3px;font-size:11px;font-family:inherit" oninput="_pilares[${i}].${campo}=parseFloat(this.value)||0;calc()"></td>`;
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td><b>${pil.id}</b></td>
+      ${inp('gk',pil.gk,50)}${inp('qk',pil.qk,20)}
+      <td class="td-out">${fmt(Nk,0)}</td><td class="td-out">${fmt(Fd,0)}</td>
+      ${inp('mkx',pil.mkx||0,1)}${inp('mky',pil.mky||0,1)}
+      ${inp('bp',pil.bp||0.25,0.05,0.15)}${inp('hp',pil.hp||0.30,0.05,0.15)}
+      ${inp('x',pil.x||0,0.5)}${inp('y',pil.y||0,0.5)}
+      <td><button class="btn-rem" onclick="remPilar(${i})">✕</button></td>`;
+    tb.appendChild(tr);
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   CARDS DE SAPATA + PLANTA
+═══════════════════════════════════════════════════════════ */
+function setSubtipo(t) {
+  _subtipo=t;
+  document.querySelectorAll('#subtipo-sap button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('sbt-'+t)?.classList.add('active');
+  const descs={
+    iso:'<b>Isolada Rígida:</b> Sapata quadrada ou retangular sob um único pilar. Dimensionada como bloco rígido (ruptura por punção e flexão nos balanços). Mais comum em edificações com boa resistência do solo (σadm ≥ 150 kPa).',
+    div:'<b>De Divisa:</b> Pilar na borda do terreno — sapata não pode avançar para um lado. O centro de pressão é deslocado; necessita viga de equilíbrio ligando à sapata interna adjacente para evitar tombamento.',
+    ass:'<b>Associada:</b> Dois ou mais pilares próximos sobre uma única sapata comum. Usada quando as sapatas individuais se sobrepõem ou quando se quer uniformizar recalques.',
+    col:'<b>Com Colarinho:</b> Para pilares pré-moldados. O pilar encaixa no colarinho da sapata com comprimento de embutimento ≥ 1,3·hp. Transferência de carga por atrito e aderência no colarinho.',
+  };
+  document.getElementById('subtipo-desc').innerHTML = descs[t]||'';
+  renderSapatas();
+}
+
+function renderSapatas() {
+  const div = document.getElementById('sapatas-cards'); if(!div) return;
+  div.innerHTML='';
+  const p = getP();
+  _sapatas.forEach((sa,i)=>{
+    const pil=_pilares[i];
+    const clrH = {ok:'background:var(--ok);color:var(--ok-fg)',warn:'background:var(--warn);color:var(--warn-fg)',
+                  danger:'background:var(--danger);color:var(--danger-fg)',info:'background:var(--out);color:var(--accent)'}[sa.stCl];
+    const card=document.createElement('div');
+    card.className='sap-card';
+    card.id='sap-card-'+sa.id;
+    const taxa100=Math.round(sa.taxa*100);
+    const barW=Math.min(100,taxa100);
+    const barClr=sa.taxa>1?'var(--danger-fg)':sa.taxa>0.8?'var(--warn-fg)':sa.taxa<0.5?'var(--accent2)':'var(--ok-fg)';
+    const inp=(campo,val,step,min='0.1')=>`<input type="number" value="${val}" step="${step}" min="${min}" style="width:70px;padding:4px 6px;border:1px solid var(--inp-border);background:var(--inp);border-radius:4px;font-size:12px;font-family:inherit" oninput="_pilares[${i}].${campo}=parseFloat(this.value)||${val};calc()">`;
+
+    card.innerHTML=`
+    <div class="sap-card-header" onclick="toggleCard('${sa.id}')">
+      <div>
+        <span class="sap-id">${sa.id}</span>
+        <span style="font-size:11px;opacity:.8;margin-left:8px;">Nk ${fmt(sa.Nk,0)} kN · ${fmt(sa.B,2)}×${fmt(sa.L,2)}×${fmt(sa.h,2)} m</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div style="width:80px;text-align:right;font-size:11px">${taxa100}% σadm</div>
+        <span class="sap-status badge badge-${sa.stCl}">${sa.st}</span>
+        <span style="font-size:12px;opacity:.7" id="sap-arr-${sa.id}">▼</span>
+      </div>
+    </div>
+    <div class="sap-card-body" id="sap-body-${sa.id}" ${_sapSel!==sa.id?'':''}style="">
+      <div style="margin-bottom:2px">
+        <div class="sigma-wrap"><div class="sigma-bar" style="width:${barW}%;background:${barClr}"></div></div>
+        <div style="font-size:10px;color:var(--fg3);margin-top:2px">σmax=${fmt(sa.sigma_max,1)} kPa · σmin=${fmt(sa.sigma_min,1)} kPa · σadm=${p.sigma_adm} kPa</div>
+      </div>
+      <div class="g4" style="margin-top:10px;">
+        <div class="field"><label>B — largura (m)</label>${inp('B',pil.B||1.5,0.05)}</div>
+        <div class="field"><label>L — comprimento (m)</label>${inp('L',pil.L||1.5,0.05)}</div>
+        <div class="field"><label>h — altura (m)</label>${inp('h',pil.h||0.6,0.05)}</div>
+        <div class="field"><label>bp — pilar menor (m)</label>${inp('bp',pil.bp||0.25,0.05)}</div>
+        <div class="field"><label>hp — pilar maior (m)</label>${inp('hp',pil.hp||0.30,0.05)}</div>
+        <div class="field"><label>X em planta (m)</label>${inp('x',pil.x||0,0.5,'-99')}</div>
+        <div class="field"><label>Y em planta (m)</label>${inp('y',pil.y||0,0.5,'-99')}</div>
+        <div class="field"><label>Mkx (kN·m)</label>${inp('mkx',pil.mkx||0,1,'-999')}</div>
+        <div class="field"><label>Mky (kN·m)</label>${inp('mky',pil.mky||0,1,'-999')}</div>
+      </div>
+      <div class="sap-resultado">
+        <b>Excentricidades:</b> ex = ${fmt(sa.ex,3)} m (lim B/6=${fmt(sa.B/6,3)} m) · ey = ${fmt(sa.ey,3)} m (lim L/6=${fmt(sa.L/6,3)} m)<br>
+        <b>σ nos 4 cantos (kPa):</b> ${sa.sigmas.map(s=>fmt(s,1)).join(' | ')} ${sa.levanta?'<span style="color:var(--danger-fg)">⚠ Levantamento!</span>':''}<br>
+        <b>σmax = ${fmt(sa.sigma_max,1)} kPa</b> → ${sa.taxa*100<=80?'✅':'⚠'} ${fmt(sa.taxa*100,0)}% de σadm = ${p.sigma_adm} kPa<br>
+        <b>Altura útil d:</b> ${fmt(sa.d,3)} m (cob. ${p.cob} mm + Ø10 mm)<br>
+        <b>Armadura em X (vence L):</b> Asx = ${fmt(sa.AsXa,2)} cm² (calc ${fmt(sa.AsX,2)} · mín ${fmt(sa.AsMinX,2)} cm²)<br>
+        <b>Armadura em Y (vence B):</b> Asy = ${fmt(sa.AsYa,2)} cm² (calc ${fmt(sa.AsY,2)} · mín ${fmt(sa.AsMinY,2)} cm²)<br>
+        <b>Punção:</b> τSd = ${fmt(sa.tau_sd,1)} kPa · τRd2 = ${fmt(sa.tau_rd2,1)} kPa · u₁ = ${fmt(sa.u1,2)} m →
+        <span class="${sa.puncOk?'badge badge-ok':'badge badge-danger'}">${sa.puncOk?'OK':'NÃO ATENDE — aumentar d ou fck'}</span><br>
+        <b>Volume concreto (tronco-piramidal):</b> ${fmt(sa.vol,3)} m³ · Peso ≈ ${fmt(sa.vol*25,0)} kN
+      </div>
+      ${(_subtipo==='div')?`<div class="val-bar warn" style="margin-top:8px;">⚠ Sapata de Divisa: verificar viga de equilíbrio. O momento de tombamento My=${fmt(sa.mky,1)} kN·m deve ser equilibrado pelo par de forças pilar-divisa → pilar-interno.</div>`:''}
+      ${(_subtipo==='col')?`<div class="val-bar info" style="margin-top:8px;">ℹ Colarinho: embutimento mínimo = ${fmt(Math.max(pil.hp||0.3,0.4)*1.3,2)} m. Verificar transferência de momento pelo atrito lateral no colarinho (NBR 9062).</div>`:''}
+    </div>`;
+    div.appendChild(card);
+    // Fechar por padrão exceto selecionada
+    if(_sapSel !== sa.id) {
+      const body = card.querySelector('.sap-card-body');
+      if(body) body.style.display='none';
+    }
+  });
+
+  // Resumo global
+  const sr=document.getElementById('sap-resumo');
+  if(sr) {
+    const vt=_sapatas.reduce((s,a)=>s+a.vol,0);
+    const at=_sapatas.reduce((s,a)=>s+a.A,0);
+    const sm=at>0?_sapatas.reduce((s,a)=>s+a.sigma_max*a.A,0)/at:0;
+    const nd=_sapatas.filter(a=>a.stCl==='danger').length;
+    sr.innerHTML=`${outCell('Volume total concreto (m³)',fmt(vt,2),nd?'':'ok')}
+    ${outCell('Área total de fundação (m²)',fmt(at,2))}
+    ${outCell('σ médio (kPa)',fmt(sm,1))}
+    ${outCell('Subdimensionadas',nd,nd?'danger':'')}`;
+  }
+  desenharPlanta();
+}
+
+function toggleCard(id) {
+  const body=document.getElementById('sap-body-'+id);
+  const arr=document.getElementById('sap-arr-'+id);
+  if(!body) return;
+  const vis = body.style.display!=='none';
+  body.style.display = vis?'none':'';
+  if(arr) arr.textContent = vis?'▶':'▼';
+  _sapSel = vis?null:id;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PLANTA SVG INTERATIVA
+═══════════════════════════════════════════════════════════ */
+const SVG_W=800, SVG_H=420;
+
+function plantaCoords() {
+  if(!_sapatas.length) return {minX:0,maxX:10,minY:0,maxY:10,scale:30,cx:SVG_W/2,cy:SVG_H/2};
+  const xs=_sapatas.map(s=>s.x), ys=_sapatas.map(s=>s.y);
+  const minX=Math.min(...xs)-2, maxX=Math.max(...xs)+2;
+  const minY=Math.min(...ys)-2, maxY=Math.max(...ys)+2;
+  const rX=maxX-minX||4, rY=maxY-minY||4;
+  const scale=Math.min((SVG_W-80)/rX,(SVG_H-80)/rY)*_svgScale;
+  const cx=SVG_W/2 + _svgPanX, cy=SVG_H/2 + _svgPanY;
+  return{minX,maxX,minY,maxY,rX,rY,scale,cx,cy};
+}
+
+function w2s(wx,wy,C){
+  return{
+    px:C.cx+(wx-(C.minX+C.rX/2))*C.scale,
+    py:C.cy-(wy-(C.minY+C.rY/2))*C.scale
+  };
+}
+
+function desenharPlanta() {
+  const svg=document.getElementById('svg-planta'); if(!svg) return;
+  const C=plantaCoords();
+  const dk=document.documentElement.dataset.theme==='dark'||
+    (!document.documentElement.dataset.theme&&window.matchMedia('(prefers-color-scheme:dark)').matches);
+  const fgClr=dk?'#e2e8f0':'#1a2130';
+  const gridClr=dk?'rgba(100,116,139,0.2)':'rgba(100,116,139,0.15)';
+  const bgClr=dk?'#0f1520':'#f4f6f9';
+
+  let out=`<rect width="${SVG_W}" height="${SVG_H}" fill="${bgClr}"/>`;
+
+  // Grade
+  for(let gx=Math.floor(C.minX);gx<=Math.ceil(C.maxX);gx++){
+    const p0=w2s(gx,C.minY,C), p1=w2s(gx,C.maxY,C);
+    out+=`<line x1="${p0.px}" y1="${p0.py}" x2="${p1.px}" y2="${p1.py}" stroke="${gridClr}" stroke-width="${gx%5===0?1:0.5}"/>`;
+    if(gx%5===0){const pm=w2s(gx,C.minY,C); out+=`<text x="${pm.px}" y="${SVG_H-6}" text-anchor="middle" font-size="9" fill="${fgClr}" opacity=".6">${gx}m</text>`;}
+  }
+  for(let gy=Math.floor(C.minY);gy<=Math.ceil(C.maxY);gy++){
+    const p0=w2s(C.minX,gy,C), p1=w2s(C.maxX,gy,C);
+    out+=`<line x1="${p0.px}" y1="${p0.py}" x2="${p1.px}" y2="${p1.py}" stroke="${gridClr}" stroke-width="${gy%5===0?1:0.5}"/>`;
+    if(gy%5===0){const pm=w2s(C.minX,gy,C); out+=`<text x="8" y="${pm.py}" dominant-baseline="middle" font-size="9" fill="${fgClr}" opacity=".6">${gy}m</text>`;}
+  }
+
+  // Eixos
+  const o=w2s(0,0,C), xe=w2s(C.maxX,0,C), ye=w2s(0,C.maxY,C);
+  out+=`<line x1="${o.px}" y1="${o.py}" x2="${xe.px}" y2="${xe.py}" stroke="#2563EB" stroke-width="1.5" opacity=".4"/>`;
+  out+=`<line x1="${o.px}" y1="${o.py}" x2="${ye.px}" y2="${ye.py}" stroke="#2563EB" stroke-width="1.5" opacity=".4"/>`;
+  out+=`<text x="${xe.px+6}" y="${xe.py}" font-size="11" font-weight="700" fill="#2563EB">X→</text>`;
+  out+=`<text x="${ye.px}" y="${ye.py-6}" font-size="11" font-weight="700" fill="#2563EB" text-anchor="middle">Y→</text>`;
+
+  // Sapatas
+  const FILL={ok:'rgba(34,197,94,0.65)',info:'rgba(59,130,246,0.55)',warn:'rgba(251,146,60,0.75)',danger:'rgba(239,68,68,0.8)'};
+  const STROKE={ok:'#15803d',info:'#1d4ed8',warn:'#c2410c',danger:'#991b1b'};
+
+  _sapatas.forEach(sa=>{
+    const {x,y,B,L,bp,hp,st,stCl,id}=sa;
+    const tl=w2s(x-B/2,y+L/2,C), tr=w2s(x+B/2,y+L/2,C);
+    const br=w2s(x+B/2,y-L/2,C), bl=w2s(x-B/2,y-L/2,C);
+    const sel=_sapSel===id;
+    // Sapata
+    out+=`<polygon points="${tl.px},${tl.py} ${tr.px},${tr.py} ${br.px},${br.py} ${bl.px},${bl.py}"
+      fill="${FILL[stCl]||FILL.ok}" stroke="${STROKE[stCl]||STROKE.ok}" stroke-width="${sel?3:1.5}"
+      style="cursor:pointer" onclick="selecionarSapata('${id}')"/>`;
+    // Pilar
+    const ptl=w2s(x-bp/2,y+hp/2,C), ptr=w2s(x+bp/2,y+hp/2,C);
+    const pbr=w2s(x+bp/2,y-hp/2,C), pbl=w2s(x-bp/2,y-hp/2,C);
+    out+=`<polygon points="${ptl.px},${ptl.py} ${ptr.px},${ptr.py} ${pbr.px},${pbr.py} ${pbl.px},${pbl.py}" fill="#374151" opacity=".9"/>`;
+    // Cota diagonal B × L
+    const ctr=w2s(x,y,C);
+    out+=`<text x="${ctr.px}" y="${ctr.py-C.scale*L/2-8}" text-anchor="middle" font-size="${Math.max(9,Math.min(12,C.scale*B/3))}" font-weight="700" fill="${fgClr}">${id}</text>`;
+    out+=`<text x="${ctr.px}" y="${ctr.py+C.scale*L/2+14}" text-anchor="middle" font-size="9" fill="${fgClr}" opacity=".8">${fmt(B,2)}×${fmt(L,2)} m</text>`;
+    out+=`<text x="${ctr.px}" y="${ctr.py+C.scale*L/2+24}" text-anchor="middle" font-size="9" fill="${STROKE[stCl]}">${fmt(sa.sigma_max,0)} kPa</text>`;
+    // Cotas de posição (apenas para sapata selecionada)
+    if(sel && _sapatas.length>1) {
+      _sapatas.filter(s=>s.id!==id).forEach(s2=>{
+        const p2=w2s(s2.x,s2.y,C);
+        const dist=Math.hypot(x-s2.x,y-s2.y);
+        if(dist<15){
+          const mx=(ctr.px+p2.px)/2, my=(ctr.py+p2.py)/2;
+          out+=`<line x1="${ctr.px}" y1="${ctr.py}" x2="${p2.px}" y2="${p2.py}" stroke="#2563EB" stroke-width=".8" stroke-dasharray="4 3" opacity=".5"/>`;
+          out+=`<text x="${mx}" y="${my}" text-anchor="middle" font-size="9" fill="#2563EB">${fmt(dist,2)}m</text>`;
+        }
+      });
+    }
+  });
+
+  // Escala gráfica
+  const escPx=C.scale*5, escPt=w2s(C.maxX-1,C.minY+0.5,C);
+  const ex0=escPt.px-escPx, ex1=escPt.px;
+  out+=`<line x1="${ex0}" y1="${escPt.py}" x2="${ex1}" y2="${escPt.py}" stroke="${fgClr}" stroke-width="2"/>`;
+  out+=`<line x1="${ex0}" y1="${escPt.py-4}" x2="${ex0}" y2="${escPt.py+4}" stroke="${fgClr}" stroke-width="2"/>`;
+  out+=`<line x1="${ex1}" y1="${escPt.py-4}" x2="${ex1}" y2="${escPt.py+4}" stroke="${fgClr}" stroke-width="2"/>`;
+  out+=`<text x="${(ex0+ex1)/2}" y="${escPt.py+14}" text-anchor="middle" font-size="10" fill="${fgClr}">5 m</text>`;
+
+  svg.innerHTML=out;
+  const escInfo=document.getElementById('planta-esc');
+  if(escInfo) escInfo.textContent=`Escala: ${(C.scale).toFixed(0)} px/m · ${_sapatas.length} sapatas`;
+}
+
+function selecionarSapata(id) {
+  const old=_sapSel;
+  _sapSel = _sapSel===id?null:id;
+  // abrir o card
+  if(_sapSel&&_sapSel!==old) {
+    const b=document.getElementById('sap-body-'+_sapSel);
+    const a=document.getElementById('sap-arr-'+_sapSel);
+    if(b){b.style.display='';if(a)a.textContent='▼';}
+    setTimeout(()=>{
+      const c=document.getElementById('sap-card-'+_sapSel);
+      if(c) c.scrollIntoView({behavior:'smooth',block:'nearest'});
+    },100);
+  }
+  desenharPlanta();
+}
+
+// Drag planta
+function plantaMD(e){_svgDrag={x:e.clientX,y:e.clientY,px:_svgPanX,py:_svgPanY};}
+function plantaMM(e){
+  if(!_svgDrag)return;
+  _svgPanX=_svgDrag.px+(e.clientX-_svgDrag.x);
+  _svgPanY=_svgDrag.py+(e.clientY-_svgDrag.y);
+  desenharPlanta();
+}
+function plantaMU(){_svgDrag=null;}
+function plantaTD(e){if(e.touches.length===1)_svgDrag={x:e.touches[0].clientX,y:e.touches[0].clientY,px:_svgPanX,py:_svgPanY};}
+function plantaTM(e){if(e.touches.length===1&&_svgDrag){_svgPanX=_svgDrag.px+(e.touches[0].clientX-_svgDrag.x);_svgPanY=_svgDrag.py+(e.touches[0].clientY-_svgDrag.y);desenharPlanta();}}
+document.getElementById('svg-planta')?.addEventListener('wheel',e=>{e.preventDefault();_svgScale=Math.max(.2,Math.min(6,_svgScale*(e.deltaY<0?1.1:.9)));desenharPlanta();},{passive:false});
+function plantaZoom(f){_svgScale=Math.max(.2,Math.min(6,_svgScale*f));desenharPlanta();}
+function plantaReset(){_svgScale=1;_svgPanX=0;_svgPanY=0;desenharPlanta();}
+
+/* ═══════════════════════════════════════════════════════════
+   PALETA DE FUNDAÇÕES — RECOMENDAÇÃO AUTOMÁTICA
+═══════════════════════════════════════════════════════════ */
+const TIPOS_FUND = [
+  {id:'sap-iso',  ico:'⬛', nome:'Sapata Isolada',      aba:'sapatas', desc:'Um pilar, solo firme. Mais econômica quando σadm ≥ 100 kPa e SPT ≥ 8.',
+   rec:(spt,D,NA,sigma,areaRel)=>spt>=8&&sigma>=100&&NA>D+0.3&&areaRel<0.5},
+  {id:'sap-div',  ico:'↗️', nome:'Sapata de Divisa',    aba:'sapatas', desc:'Pilar na borda do lote. Necessita viga de equilíbrio com pilar interno.',
+   rec:(spt,D,NA,sigma)=>spt>=8&&sigma>=100&&NA>D+0.3},
+  {id:'sap-ass',  ico:'⬛⬛',nome:'Sapata Associada',   aba:'sapatas', desc:'2 pilares próximos sobre uma sapata comum. Usada quando sapatas individuais se sobrepõem.',
+   rec:(spt,D,NA,sigma)=>spt>=8&&sigma>=100&&NA>D+0.3},
+  {id:'sap-cor',  ico:'▬', nome:'Sapata Corrida',       aba:'corrida', desc:'Sob paredes ou fileira de pilares. Solo firme, carga distribuída.',
+   rec:(spt,D,NA,sigma)=>spt>=6&&sigma>=80&&NA>D+0.3},
+  {id:'radier',   ico:'🟦', nome:'Radier (Laje)',        aba:'radier',  desc:'Área de sapatas > 50% da planta, ou solo muito fraco. Distribui carga uniformemente.',
+   rec:(spt,D,NA,sigma,areaRel)=>spt<8||areaRel>=0.5||sigma<100},
+  {id:'helice',   ico:'🌀', nome:'Hélice Contínua',     aba:'estacas', desc:'Execução rápida, sem vibração, sem lama. Solo arenoso ou mole. SPT qualquer.',
+   rec:(spt,D,NA,sigma)=>spt<10||NA<=D+0.3},
+  {id:'franki',   ico:'💪', nome:'Franki',               aba:'estacas', desc:'Alta capacidade de ponta. Solo granular compacto ou com pedregulhos.',
+   rec:(spt,D,NA,sigma)=>spt<15||sigma<100},
+  {id:'strauss',  ico:'🔩', nome:'Strauss',              aba:'estacas', desc:'Execução manual ou mecânica, pequeno porte. Obra com restrição de vibrações.',
+   rec:(spt,D,NA,sigma)=>spt>=4&&spt<=20},
+  {id:'escav',    ico:'⭕', nome:'Estaca Escavada',      aba:'estacas', desc:'Grandes cargas, fluido estabilizador. Elimina vibração.',
+   rec:(spt,D,NA,sigma)=>spt>=10},
+  {id:'premold',  ico:'⬜', nome:'Pré-moldada Concreto', aba:'estacas', desc:'Cravada por percussão. Solos sem obstáculos. Resistência por ponta + atrito lateral.',
+   rec:(spt,D,NA,sigma)=>spt>=5&&spt<=40},
+  {id:'raiz',     ico:'🌿', nome:'Estaca Raiz',          aba:'estacas', desc:'Obras em locais de difícil acesso, subrecalque, reforço de fundações existentes.',
+   rec:()=>false},
+  {id:'tubulao',  ico:'🕳', nome:'Tubulão',              aba:'estacas', desc:'Grandes cargas axiais. Escavação aberta ou sob ar comprimido. SPT > 30 em camadas profundas.',
+   rec:(spt,D,NA,sigma)=>spt>=20},
+];
+
+function renderPaleta() {
+  const p=getP();
+  const sigma=p.sigma_adm, spt=p.spt, D=p.D, NA=p.NA;
+  // Área relativa: estimar baseado em Nk total e σadm
+  const sumNk=_pilares.reduce((s,p)=>s+p.gk+p.qk,0);
+  const areaEdif=_pilares.reduce((s,p)=>s+p.B*p.L,0)||1;
+  const areaTotal=_sapatas.length?_sapatas.reduce((s,a)=>s+a.A,0):sumNk/sigma;
+  const areaRel=areaTotal/(areaEdif||100);
+
+  // Recomendação geral
+  const recDiv=document.getElementById('paleta-rec');
+  let recTxt='';
+  if(NA<=D+0.3) recTxt+='<div class="val-bar warn">⚠ <b>Lençol freático raso</b> (NA='+fmt(NA,1)+'m) — sapata deve ficar acima; rebaixamento ou fundação profunda podem ser necessários.</div>';
+  if(spt<=4) recTxt+='<div class="val-bar warn">⚠ <b>Solo muito fraco</b> (SPT≤4) — radier ou estacas recomendados.</div>';
+  if(spt>=8&&sigma>=150&&NA>D+0.3) recTxt+='<div class="val-bar ok">✅ <b>Solo apto para sapatas isoladas</b> — SPT='+spt+' e σadm='+sigma+' kPa são adequados.</div>';
+  if(areaRel>=0.5) recTxt+='<div class="val-bar info">ℹ Área das sapatas ≥ 50% da planta — <b>radier</b> pode ser mais econômico.</div>';
+  if(recDiv) recDiv.innerHTML=recTxt;
+
+  // Cards
+  const cont=document.getElementById('paleta-cards'); if(!cont) return;
+  cont.innerHTML='';
+  TIPOS_FUND.forEach(t=>{
+    const r=t.rec(spt,D,NA,sigma,areaRel);
+    const cl=r?'paleta-card rec-sim':'paleta-card rec-pos';
+    const recLbl=r?'Recomendado':'Possível';
+    const recCl=r?'sim':'pos';
+    const card=document.createElement('div');
+    card.className=cl;
+    card.innerHTML=`<span class="paleta-rec ${recCl}">${recLbl}</span>
+    <div class="paleta-icon">${t.ico}</div>
+    <div class="paleta-nome">${t.nome}</div>
+    <div class="paleta-desc">${t.desc}</div>`;
+    card.onclick=()=>{ aba(t.aba); if(t.aba==='estacas') setEstaca(t.id.replace('helice','helice').replace('franki','franki')||'helice'); };
+    cont.appendChild(card);
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SAPATA CORRIDA
+═══════════════════════════════════════════════════════════ */
+function calcCorreida() {
+  const p=getP();
+  const qk=V('cor_qk'), B=V('cor_B'), h=V('cor_h'), L=V('cor_L');
+  const Fd=p.gfg*qk;
+  const sigma=qk/B;
+  const sigmaF=Fd/B;
+  const ok=sigma<=p.sigma_adm;
+  const d=Math.max(0.1,h-p.cob/1000-0.01);
+  const Msd=sigmaF*(B-0.2)*(B-0.2)/8; // balanço simplificado
+  const As=(Msd*1000)/(0.9*d*p.fyd)/100;
+  const vol=B*h*L;
+  const div=document.getElementById('cor-out'); if(!div)return;
+  div.innerHTML=`<div class="g4">
+    ${outCell('Fd linear (kN/m)',fmt(Fd,1))}
+    ${outCell('σ solo (kPa)',fmt(sigma,1),ok?'':'danger')}
+    ${outCell('σadm (kPa)',p.sigma_adm)}
+    ${outCell('Status',ok?'OK ✅':'SUBDIM. ❌',ok?'ok':'danger')}
+    ${outCell('Altura útil d (m)',fmt(d,3))}
+    ${outCell('As transversal (cm²/m)',fmt(As,2))}
+    ${outCell('Volume concreto (m³)',fmt(vol,2))}
+    ${outCell('Peso sapata corrida (kN)',fmt(vol*25,1))}
+  </div>
+  <div class="val-bar ${ok?'ok':'danger'}" style="margin-top:8px;">
+    σ = ${fmt(sigma,1)} kPa ${ok?'≤':'>'} σadm = ${p.sigma_adm} kPa → ${ok?'ATENDE':'NÃO ATENDE — aumentar B'}
+  </div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   RADIER
+═══════════════════════════════════════════════════════════ */
+function calcRadier() {
+  const p=getP();
+  const N=V('rad_N')||(_sapatas.length?_sapatas.reduce((a,s)=>a+s.Nk,0):0);
+  const A=V('rad_A'), h=V('rad_h'), kv=V('rad_kv');
+  const sigma=N/A;
+  const ok=sigma<=p.sigma_adm;
+  const recalque=sigma/kv*100; // cm
+  const d=Math.max(0.1,h-p.cob/1000-0.012);
+  const Msd=sigma*1*1/10; // simplificado: laje em duas direções
+  const As=(Msd*1000)/(0.9*d*p.fyd)/100;
+  const As_min=0.0015*1000*d*1000/100; // por metro
+  const Asa=Math.max(As,As_min);
+  const vol=A*h;
+  const div=document.getElementById('rad-out'); if(!div)return;
+  div.innerHTML=`<div class="g4">
+    ${outCell('σ media no radier (kPa)',fmt(sigma,1),ok?'':'danger')}
+    ${outCell('σadm solo (kPa)',p.sigma_adm)}
+    ${outCell('Recalque estimado w (cm)',fmt(recalque,2),recalque>2.5?'warn':'')}
+    ${outCell('Status',ok?'OK ✅':'SUBDIM. ❌',ok?'ok':'danger')}
+    ${outCell('Altura útil d (m)',fmt(d,3))}
+    ${outCell('As (cm²/m) cada direção',fmt(Asa,2))}
+    ${outCell('Volume concreto (m³)',fmt(vol,2))}
+    ${outCell('Peso radier (kN)',fmt(vol*25,0))}
+  </div>
+  <div class="val-bar ${ok?'ok':'danger'}" style="margin-top:8px;">
+    σ = ${fmt(sigma,1)} kPa ${ok?'≤':'>'} σadm = ${p.sigma_adm} kPa → ${ok?'ATENDE':'AUMENTAR ÁREA'}
+  </div>
+  ${recalque>2.5?`<div class="val-bar warn">⚠ Recalque estimado ${fmt(recalque,2)} cm > 2,5 cm — verificar recalque diferencial (NBR 6122 §7.2).</div>`:''}
+  <div style="font-size:11px;color:var(--fg3);margin-top:6px;">Obs.: Cálculo de radier pelo método de Winkler simplificado. Para projeto executivo, usar análise por elementos finitos.</div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   ESTACAS — AOKI-VELLOSO SIMPLIFICADO
+═══════════════════════════════════════════════════════════ */
+const EST_INFO = {
+  helice:{nome:'Hélice Contínua Monitorada',F1:0.23,F2:0.45,alpha:{areia:1.0,argila:0.6},desc:'Execução contínua sem vibração, com monitoramento eletrônico. Não há extração de amostras. Indica para SPT qualquer. Fator de segurança FS=4 para cálculo pela fórmula dinâmica ou FS=2 a 2,5 pelo Aoki-Velloso.',FS:2.5},
+  franki:{nome:'Estaca Franki (Compressão de Base)',F1:0.18,F2:0.23,alpha:{areia:0.8,argila:0.5},desc:'Base alargada por martelamento do bulbo. Alta resistência de ponta. Indicada para solos granulares e pedregulhosos. Vibração pode ser problemática em áreas urbanas. FS=2.',FS:2.0},
+  strauss:{nome:'Estaca Strauss (Escavação Simples)',F1:0.28,F2:0.5,alpha:{areia:0.7,argila:0.5},desc:'Escavação com trado tipo Strauss, concreto lançado por gravidade. Obras de pequeno e médio porte. Sem lama bentonítica. Limitada a ~12 m de profundidade. FS=2.',FS:2.0},
+  escav:{nome:'Estaca Escavada (Fluido Estabilizador)',F1:0.35,F2:0.5,alpha:{areia:0.8,argila:0.6},desc:'Escavação com fluido bentonítico ou polímero. Grandes diâmetros e profundidades. Sem vibração ou percussão. Indicada para obras próximas a edificações. FS=3.',FS:3.0},
+  premold:{nome:'Estaca Pré-moldada de Concreto',F1:0.2,F2:0.3,alpha:{areia:1.0,argila:0.6},desc:'Cravada por percussão ou prensagem. Resistência confirmada por fórmula dinâmica. Necessita espaço para transporte e içamento. FS=2 para PDA ou fórmula dinâmica.',FS:2.0},
+  raiz:{nome:'Estaca Raiz (Micropilote)',F1:0.45,F2:0.6,alpha:{areia:0.5,argila:0.4},desc:'Executada por injeção de calda de cimento sob pressão. Alta resistência ao atrito lateral. Para recuperação de fundações, obras em locais de difícil acesso, carga inclinada.',FS:3.0},
+  tubulao:{nome:'Tubulão a Céu Aberto / Ar Comprimido',F1:0.12,F2:0.18,alpha:{areia:0.5,argila:0.35},desc:'Grande diâmetro, inspecionado manualmente. Alta capacidade de ponta pela base alargada (sino). Indicado quando camada rochosa ou muito resistente está acessível. FS=2,5.',FS:2.5},
+};
+
+function setEstaca(t) {
+  _tipoEstaca=t;
+  document.querySelectorAll('#tipo-estaca-btns button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('est-'+t)?.classList.add('active');
+  const info=EST_INFO[t]||EST_INFO.helice;
+  document.getElementById('estaca-desc').innerHTML=`<b>${info.nome}</b><br>${info.desc}`;
+  calcEstaca();
+}
+
+function calcEstaca() {
+  const p=getP(), info=EST_INFO[_tipoEstaca]||EST_INFO.helice;
+  const D_est=V('est_D'), L_est=V('est_L'), Nk=V('est_Nk'), n=parseInt(S('est_n'))||3;
+  const esp=V('est_esp'), fck_bl=V('est_fck');
+  const spt=p.spt;
+
+  // Capacidade Aoki-Velloso simplificado
+  // Rp = (K × Np) / F1 × Ap   onde K = fator de resistência (areia~500, argila~170)
+  // Rs = (α/F2) × Nl × U × L
+  const tipo_solo=S('tipo_solo');
+  const K = tipo_solo.includes('Argiloso')||tipo_solo.includes('Siltoso') ? 170 : 500; // kPa
+  const alpha_lat = (tipo_solo.includes('Argiloso')||tipo_solo.includes('Siltoso'))
+    ? info.alpha.argila : info.alpha.areia;
+  const Ap = Math.PI*(D_est/2)*(D_est/2); // m²
+  const U  = Math.PI*D_est;               // m
+  const Rp_bruto = (K*spt/info.F1)*Ap;    // kN
+  const Rs_bruto = (alpha_lat/info.F2)*spt*U*L_est; // kN (Nl=SPT médio simplificado)
+  const R_bruto  = Rp_bruto + Rs_bruto;
+  const R_adm    = R_bruto / info.FS;     // kN — admissível
+
+  // Número de estacas necessárias
+  const n_nec = Math.ceil(Nk / R_adm);
+  const ok = n >= n_nec;
+
+  // Bloco de coroamento — dimensionamento simplificado
+  // Alturas recomendadas: h_bl = 0,5 × espaçamento + d_estaca (Montoya)
+  const esp_m = esp*D_est;
+  const esp_diag = n===1?esp_m:Math.sqrt(2)*esp_m; // diagonal para n>2
+  const h_bl_rec = Math.max(0.3, esp_diag/2);
+  const d_bl = Math.max(0.1, h_bl_rec - p.cob/1000 - 0.012);
+  // Momento no bloco (biela-tirante simplificado)
+  const Fd_bl = p.gfg*Nk; // kN (aproximado, Gk≈Nk, Qk=0 no exemplo)
+  const Msd_bl = Fd_bl*esp_m/n/4; // kN·m — tirante horizontal simplificado
+  const As_bl = d_bl>0 ? Msd_bl*1000/(0.9*d_bl*p.fyd)/100 : 0;
+
+  // Verificação à compressão da estaca
+  const Ac_est=Ap;
+  const sigma_est_adm = 0.25*fck_bl*1000; // kPa
+  const sigma_est = Nk/n/Ac_est;
+  const estOk = sigma_est <= sigma_est_adm;
+
+  const div=document.getElementById('est-out'); if(!div)return;
+  div.innerHTML=`<div class="g4">
+    ${outCell('R ponta Rp (kN)',fmt(Rp_bruto,0))}
+    ${outCell('R lateral Rs (kN)',fmt(Rs_bruto,0))}
+    ${outCell('R total bruto (kN)',fmt(R_bruto,0))}
+    ${outCell('R admissível (kN) — FS='+info.FS,fmt(R_adm,0))}
+    ${outCell('Estacas necessárias',n_nec,n>=n_nec?'ok':'danger')}
+    ${outCell('Estacas adotadas',n,n>=n_nec?'ok':'warn')}
+    ${outCell('Espaçamento (m)',fmt(esp_m,2),esp_m>=2.5*D_est?'ok':'warn')}
+    ${outCell('h bloco recomendada (m)',fmt(h_bl_rec,2))}
+    ${outCell('As bloco (cm²)',fmt(As_bl,2))}
+    ${outCell('σ estaca (kPa)',fmt(sigma_est,0),estOk?'ok':'danger')}
+    ${outCell('σadm comp. estaca (kPa)',fmt(sigma_est_adm,0))}
+    ${outCell('Status bloco',estOk?'OK':'REVISAR',estOk?'ok':'danger')}
+  </div>`;
+
+  const cap=document.getElementById('est-cap'); if(!cap)return;
+  cap.innerHTML=`<div class="val-bar ${ok?'ok':'danger'}">
+    ${n} estacas adotadas ${ok?'≥':'<'} ${n_nec} necessárias — Carga/estaca = ${fmt(Nk/n,0)} kN ${ok?'≤':'>'} Radm = ${fmt(R_adm,0)} kN → ${ok?'ATENDE':'AUMENTAR NÚMERO OU COMPRIMENTO DE ESTACAS'}
+  </div>
+  <div class="val-bar ${esp_m>=2.5*D_est?'ok':'warn'}">
+    Espaçamento entre eixos: ${fmt(esp_m,2)} m ${esp_m>=2.5*D_est?'≥':'<'} 2,5D = ${fmt(2.5*D_est,2)} m (NBR 6122 §7.8) → ${esp_m>=2.5*D_est?'OK':'AUMENTAR ESPAÇAMENTO'}
+  </div>
+  <div style="font-size:11px;color:var(--fg3);margin-top:6px;">Método Aoki-Velloso simplificado (K=${K} kPa para ${tipo_solo}, α=${alpha_lat}, F1=${info.F1}, F2=${info.F2}). Para projeto executivo, complementar com provas de carga (NBR 12131:2022) ou ensaios PDA.</div>`;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   VISUALIZAÇÃO 3D
+═══════════════════════════════════════════════════════════ */
+function setView(v){
+  _viewMode=v;
+  document.querySelectorAll('.view-btns button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('vb-'+v)?.classList.add('active');
+  _zoom3=1;_pan3X=0;_pan3Y=0;
+  if(v==='iso'){_rotX=25;_rotZ=30;}
+  desenhar3D();
+}
+function resetView(){_zoom3=1;_pan3X=0;_pan3Y=0;if(_viewMode==='iso'){_rotX=25;_rotZ=30;}desenhar3D();}
+
+function proj3(x,y,z,cx,cy,sc){
+  if(_viewMode==='topo')    return{px:cx+x*sc, py:cy-y*sc};
+  if(_viewMode==='frente')  return{px:cx+x*sc, py:cy-z*sc};
+  if(_viewMode==='lateral') return{px:cx+y*sc, py:cy-z*sc};
+  // isométrica
+  const rx=_rotX*Math.PI/180, rz=_rotZ*Math.PI/180;
+  const x2=x*Math.cos(rz)-y*Math.sin(rz);
+  const y2=x*Math.sin(rz)+y*Math.cos(rz);
+  const y3=y2*Math.cos(rx)-z*Math.sin(rx);
+  return{px:cx+x2*sc, py:cy-y3*sc};
+}
+
+function desenhar3D(){
+  const canvas=document.getElementById('canvas3d'); if(!canvas)return;
+  const ctx=canvas.getContext('2d');
+  const W=canvas.width, H=canvas.height;
+  const dk=document.documentElement.dataset.theme==='dark'||(!document.documentElement.dataset.theme&&window.matchMedia('(prefers-color-scheme:dark)').matches);
+  ctx.fillStyle=dk?'#0f1520':'#f4f6f9'; ctx.fillRect(0,0,W,H);
+  if(!_sapatas.length){
+    ctx.fillStyle=dk?'#a0aec0':'#718096'; ctx.font='13px Inter,sans-serif'; ctx.textAlign='center';
+    ctx.fillText('Sem dados — preencha a aba "Cargas e Pilares" e acesse "Sapatas Isoladas".', W/2, H/2); return;
+  }
+  const xs=_sapatas.map(s=>s.x), ys=_sapatas.map(s=>s.y);
+  const mnX=Math.min(...xs), mxX=Math.max(...xs);
+  const mnY=Math.min(...ys), mxY=Math.max(...ys);
+  const rX=mxX-mnX||1, rY=mxY-mnY||1;
+  const sc=Math.min((W-120)/rX,(H-120)/rY)*_zoom3*0.35;
+  const cx=W/2+_pan3X, cy=H/2+_pan3Y;
+  const lx=x=>(x-(mnX+rX/2))*sc, ly=y=>(y-(mnY+rY/2))*sc;
+  const P=(x,y,z)=>proj3(lx(x),ly(y),z*sc*2,cx,cy,1);
+
+  // Grade
+  const gridClr=dk?'rgba(100,116,139,0.18)':'rgba(100,116,139,0.12)';
+  ctx.strokeStyle=gridClr; ctx.lineWidth=.6;
+  for(let i=Math.floor(mnX)-1;i<=Math.ceil(mxX)+1;i++){const a=P(i,mnY-1,0),b=P(i,mxY+1,0);ctx.beginPath();ctx.moveTo(a.px,a.py);ctx.lineTo(b.px,b.py);ctx.stroke();}
+  for(let j=Math.floor(mnY)-1;j<=Math.ceil(mxY)+1;j++){const a=P(mnX-1,j,0),b=P(mxX+1,j,0);ctx.beginPath();ctx.moveTo(a.px,a.py);ctx.lineTo(b.px,b.py);ctx.stroke();}
+
+  // Eixos
+  const oa=P(mnX-.5,mnY-.5,0), xA=P(mxX+.5,mnY-.5,0), yA=P(mnX-.5,mxY+.5,0);
+  ctx.strokeStyle='rgba(37,99,235,.35)'; ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(oa.px,oa.py);ctx.lineTo(xA.px,xA.py);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(oa.px,oa.py);ctx.lineTo(yA.px,yA.py);ctx.stroke();
+  ctx.fillStyle='#3b82f6'; ctx.font='bold 11px Inter,sans-serif'; ctx.textAlign='center';
+  ctx.fillText('X→',xA.px+10,xA.py); ctx.fillText('Y→',yA.px,yA.py-8);
+
+  const CL={ok:[[34,197,94],[21,128,61]],info:[[59,130,246],[29,78,216]],warn:[[251,146,60],[194,65,12]],danger:[[239,68,68],[153,27,27]]};
+  const HPil=V('D')*0.55||0.8;
+
+  _sapatas.forEach(sa=>{
+    const{x,y,B,L,h,bp,hp,stCl}=sa;
+    const cl=CL[stCl]||CL.ok;
+    if(_viewMode==='topo'){
+      // Sapata
+      const[tl,tr,br,bl]=[P(x-B/2,y+L/2,0),P(x+B/2,y+L/2,0),P(x+B/2,y-L/2,0),P(x-B/2,y-L/2,0)];
+      ctx.beginPath();ctx.moveTo(tl.px,tl.py);[tr,br,bl].forEach(p=>ctx.lineTo(p.px,p.py));ctx.closePath();
+      ctx.fillStyle=`rgba(${cl[0].join(',')},0.7)`;ctx.fill();
+      ctx.strokeStyle=`rgb(${cl[1].join(',')})`;ctx.lineWidth=_sapSel===sa.id?2.5:1.5;ctx.stroke();
+      // Pilar
+      const[pl,pr,pbr,pbl]=[P(x-bp/2,y+hp/2,0),P(x+bp/2,y+hp/2,0),P(x+bp/2,y-hp/2,0),P(x-bp/2,y-hp/2,0)];
+      ctx.beginPath();ctx.moveTo(pl.px,pl.py);[pr,pbr,pbl].forEach(p=>ctx.lineTo(p.px,p.py));ctx.closePath();
+      ctx.fillStyle='#374151';ctx.fill();
+      const c=P(x,y,0); ctx.fillStyle=dk?'#e2e8f0':'#1a2130';ctx.font='bold 10px Inter,sans-serif';ctx.textAlign='center';
+      ctx.fillText(sa.id,c.px,c.py-sc*L/2-8);
+      ctx.font='9px Inter,sans-serif'; ctx.fillText(fmt(sa.sigma_max,0)+' kPa',c.px,c.py+sc*L/2+14);
+    } else {
+      // 3 faces do paralelepípedo
+      const fa=[[P(x-B/2,y-L/2,-h),P(x+B/2,y-L/2,-h),P(x+B/2,y-L/2,0),P(x-B/2,y-L/2,0)],
+                 [P(x+B/2,y-L/2,-h),P(x+B/2,y+L/2,-h),P(x+B/2,y+L/2,0),P(x+B/2,y-L/2,0)],
+                 [P(x-B/2,y-L/2,0), P(x+B/2,y-L/2,0), P(x+B/2,y+L/2,0),P(x-B/2,y+L/2,0)]];
+      const br=[.75,.88,1.0];
+      fa.forEach((face,fi)=>{
+        const b=br[fi]; const r=cl[0];
+        ctx.beginPath();ctx.moveTo(face[0].px,face[0].py);face.forEach(p=>ctx.lineTo(p.px,p.py));ctx.closePath();
+        ctx.fillStyle=`rgba(${Math.round(r[0]*b)},${Math.round(r[1]*b)},${Math.round(r[2]*b)},0.85)`;ctx.fill();
+        ctx.strokeStyle=`rgb(${cl[1].join(',')})`;ctx.lineWidth=.8;ctx.stroke();
+      });
+      // Pilar (coluna)
+      const pf=[[P(x-bp/2,y-hp/2,0),P(x+bp/2,y-hp/2,0),P(x+bp/2,y-hp/2,HPil),P(x-bp/2,y-hp/2,HPil)],
+                 [P(x+bp/2,y-hp/2,0),P(x+bp/2,y+hp/2,0),P(x+bp/2,y+hp/2,HPil),P(x+bp/2,y-hp/2,HPil)],
+                 [P(x-bp/2,y-hp/2,HPil),P(x+bp/2,y-hp/2,HPil),P(x+bp/2,y+hp/2,HPil),P(x-bp/2,y+hp/2,HPil)]];
+      const pb=[.65,.82,1.0];
+      pf.forEach((face,fi)=>{
+        const v=Math.round(55*pb[fi]+20);
+        ctx.beginPath();ctx.moveTo(face[0].px,face[0].py);face.forEach(p=>ctx.lineTo(p.px,p.py));ctx.closePath();
+        ctx.fillStyle=`rgba(${v+20},${v+20},${v+20},0.9)`;ctx.fill();
+        ctx.strokeStyle='#6b7280';ctx.lineWidth=.6;ctx.stroke();
+      });
+      // Rótulo topo
+      const top=P(x,y,0.2); ctx.fillStyle=dk?'#e2e8f0':'#1a2130';ctx.font='bold 10px Inter,sans-serif';ctx.textAlign='center';
+      ctx.fillText(sa.id,top.px,top.py-4);
+    }
+  });
+
+  // Legenda 3D
+  const lg=document.getElementById('leg3d'); if(!lg)return;
+  const tot=_sapatas.length;
+  const [nok,nw,ni,nd]=['ok','warn','info','danger'].map(c=>_sapatas.filter(s=>s.stCl===c).length);
+  lg.innerHTML=`${outCell('Total sapatas',tot)}${outCell('OK ✅',nok,'ok')}${outCell('Atenção ⚠️',nw+ni,'warn')}${outCell('Subdim. ❌',nd,nd?'danger':'')}`;
+}
+
+// Drag 3D
+const cv=document.getElementById('canvas3d');
+if(cv){
+  cv.addEventListener('mousedown',e=>{_drag3={x:e.clientX,y:e.clientY,rx:_rotX,rz:_rotZ,px:_pan3X,py:_pan3Y};});
+  cv.addEventListener('mousemove',e=>{if(!_drag3)return;const dx=e.clientX-_drag3.x,dy=e.clientY-_drag3.y;if(_viewMode==='iso'){_rotZ=_drag3.rz+dx*.5;_rotX=Math.max(5,Math.min(85,_drag3.rx+dy*.3));}else{_pan3X=_drag3.px+dx;_pan3Y=_drag3.py+dy;}desenhar3D();});
+  cv.addEventListener('mouseup',()=>_drag3=null);cv.addEventListener('mouseleave',()=>_drag3=null);
+  cv.addEventListener('wheel',e=>{e.preventDefault();_zoom3=Math.max(.3,Math.min(5,_zoom3*(e.deltaY<0?1.1:.9)));desenhar3D();},{passive:false});
+  let _lt=null;
+  cv.addEventListener('touchstart',e=>{if(e.touches.length===1)_lt={x:e.touches[0].clientX,y:e.touches[0].clientY,rx:_rotX,rz:_rotZ,px:_pan3X,py:_pan3Y};},{passive:true});
+  cv.addEventListener('touchmove',e=>{if(e.touches.length===1&&_lt){const dx=e.touches[0].clientX-_lt.x,dy=e.touches[0].clientY-_lt.y;if(_viewMode==='iso'){_rotZ=_lt.rz+dx*.5;_rotX=Math.max(5,Math.min(85,_lt.rx+dy*.3));}else{_pan3X=_lt.px+dx;_pan3Y=_lt.py+dy;}desenhar3D();}},{passive:true});
+}
+
+/* ═══════════════════════════════════════════════════════════
+   PILARES — ADICIONAR / REMOVER
+═══════════════════════════════════════════════════════════ */
+let _nextId=1;
+function addPilar(){
+  const last=_pilares[_pilares.length-1];
+  _pilares.push({id:'P'+(_nextId++),gk:300,qk:80,mkx:10,mky:10,bp:.25,hp:.30,x:last?(last.x+5):0,y:last?last.y:0,B:1.5,L:1.5,h:.6});
+  calc();
+}
+function remPilar(i){if(_pilares.length<=1){aviso('Mínimo 1 pilar.','err');return;}_pilares.splice(i,1);calc();}
+
+/* ═══════════════════════════════════════════════════════════
+   OTIMIZAR B×L
+═══════════════════════════════════════════════════════════ */
+function otimizar(){
+  const p=getP();
+  _pilares.forEach(pil=>{
+    const Nk=pil.gk+pil.qk;
+    const Anec=Nk*1.05/p.sigma_adm;
+    const lado=Math.sqrt(Anec);
+    pil.B=Math.max(.6,Math.round(lado*10)/10);
+    pil.L=Math.max(.6,Math.round(lado*1.05*10)/10);
+    pil.h=Math.max(.4,Math.round(Math.max(pil.bp*2.5,0.4)*10)/10);
+  });
+  calc(); aviso('B×L×h otimizados para todos os pilares.');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EXEMPLOS PADRÃO
+═══════════════════════════════════════════════════════════ */
+function exemplosPadrao(){
+  _pilares=[
+    {id:'P1',gk:280,qk:60,mkx:12,mky:15,bp:.20,hp:.30,x:0,  y:0,  B:1.5,L:1.5,h:.60},
+    {id:'P2',gk:420,qk:90,mkx:8, mky:10,bp:.25,hp:.40,x:5,  y:0,  B:1.8,L:1.8,h:.65},
+    {id:'P3',gk:350,qk:80,mkx:15,mky:18,bp:.25,hp:.35,x:10, y:0,  B:1.7,L:1.7,h:.60},
+    {id:'P4',gk:260,qk:55,mkx:10,mky:12,bp:.20,hp:.30,x:0,  y:5,  B:1.4,L:1.4,h:.55},
+    {id:'P5',gk:480,qk:100,mkx:5,mky:8, bp:.30,hp:.40,x:5,  y:5,  B:1.9,L:1.9,h:.65},
+    {id:'P6',gk:310,qk:70,mkx:12,mky:14,bp:.25,hp:.35,x:10, y:5,  B:1.6,L:1.6,h:.60},
+  ];
+  _nextId=7;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   MEMÓRIA DE CÁLCULO
+═══════════════════════════════════════════════════════════ */
+function gerarMem(){
+  const p=getP();
+  const div=document.getElementById('mem-content'); if(!div)return;
+  if(!_sapatas.length){div.innerHTML='<p style="color:var(--fg3);font-style:italic">Preencha as abas anteriores para gerar a memória.</p>';return;}
+  let h=`<div style="border-bottom:2px solid var(--accent);padding-bottom:8px;margin-bottom:12px">
+    <div style="font-size:16px;font-weight:700;color:var(--accent)">MEMÓRIA DE CÁLCULO — FUNDAÇÕES E ESTRUTURA EM CONCRETO ARMADO</div>
+    <div style="font-size:12px;color:var(--fg2)">NBR 6118:2023 · NBR 6122:2022 &nbsp;|&nbsp; Local: ${S('endereco')||'—'}</div>
+    <div style="font-size:12px;color:var(--fg2)">Responsável: ${S('responsavel')||'—'} &nbsp;|&nbsp; Data: ${new Date().toLocaleDateString('pt-BR')}</div>
+  </div>`;
+  h+=`<div style="margin-bottom:12px"><b style="color:var(--accent2)">1. PARÂMETROS DO SOLO E MATERIAIS</b><br>
+    σadm = ${p.sigma_adm} kPa · SPT = ${p.spt} golpes · D = ${fmt(p.D,1)} m · NA = ${fmt(p.NA,1)} m<br>
+    fck = ${p.fck} MPa → fcd = ${fmt(p.fcd,2)} MPa · fyk = ${p.fyk} MPa → fyd = ${fmt(p.fyd,2)} MPa<br>
+    γc = ${p.gc} · γs = ${p.gs} · γfg = ${p.gfg} · γfq = ${p.gfq} · Cobrimento fundação = ${p.cob} mm
+  </div>`;
+  h+=`<div style="margin-bottom:12px"><b style="color:var(--accent2)">2. SAPATAS ISOLADAS</b><br>`;
+  _sapatas.forEach(sa=>{
+    h+=`<div style="border-left:3px solid var(--${sa.stCl==='ok'?'ok-border':sa.stCl==='danger'?'danger-border':'warn-border'});padding:6px 10px;margin:6px 0;background:var(--bg);border-radius:0 6px 6px 0">
+      <b>${sa.id}</b> — Nk=${fmt(sa.Nk,0)} kN · Fd=${fmt(sa.Fd,0)} kN · B×L×h=${fmt(sa.B,2)}×${fmt(sa.L,2)}×${fmt(sa.h,2)} m<br>
+      ex=${fmt(sa.ex,3)} m (lim ${fmt(sa.B/6,3)} m) · ey=${fmt(sa.ey,3)} m (lim ${fmt(sa.L/6,3)} m)<br>
+      σ nos 4 cantos: ${sa.sigmas.map(s=>fmt(s,1)).join(' | ')} kPa ${sa.levanta?'⚠ LEVANTAMENTO':''}<br>
+      σmax=${fmt(sa.sigma_max,1)} kPa = ${fmt(sa.taxa*100,0)}% de σadm → <b>${sa.st}</b><br>
+      d=${fmt(sa.d,3)} m · Asx=${fmt(sa.AsXa,2)} cm² · Asy=${fmt(sa.AsYa,2)} cm²<br>
+      Punção: τSd=${fmt(sa.tau_sd,1)} kPa · τRd2=${fmt(sa.tau_rd2,1)} kPa → ${sa.puncOk?'OK':'NÃO ATENDE'}<br>
+      Volume=${fmt(sa.vol,3)} m³ (tronco-piramidal exato)
+    </div>`;
+  });
+  h+='</div>';
+  const vt=_sapatas.reduce((s,a)=>s+a.vol,0);
+  const at=_sapatas.reduce((s,a)=>s+a.A,0);
+  h+=`<div class="val-bar info">Resumo: ${_sapatas.length} sapatas · Volume total = ${fmt(vt,2)} m³ · Área total = ${fmt(at,2)} m²</div>`;
+  div.innerHTML=h;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   SALVAR / ABRIR JSON
+═══════════════════════════════════════════════════════════ */
+function salvarLocal(){
+  try{localStorage.setItem('tc_conc_v2',JSON.stringify({pilares:_pilares,solo:{sigma_adm:V('sigma_adm'),spt:V('spt'),D:V('D'),NA:V('NA'),gama_s:V('gama_s'),coesao:V('coesao'),phi:V('phi'),tipo_solo:S('tipo_solo'),endereco:S('endereco'),responsavel:S('responsavel')},mat:{fck:V('fck'),fyk:S('fyk'),gc:S('gc'),gs:S('gs'),gfg:S('gfg'),gfq:S('gfq'),cl_agr:S('cl_agr')}}));}catch(e){}
+}
+function carregarLocal(){
+  try{
+    const d=JSON.parse(localStorage.getItem('tc_conc_v2')||'{}');
+    if(d.pilares?.length){_pilares=d.pilares;_nextId=Math.max(..._pilares.map(p=>parseInt(p.id.replace(/\D/g,''))||0))+1;}
+    if(d.solo){Object.entries(d.solo).forEach(([k,v])=>{const e=document.getElementById(k);if(e)e.value=v;});}
+    if(d.mat){Object.entries(d.mat).forEach(([k,v])=>{const e=document.getElementById(k);if(e)e.value=v;});}
+  }catch(e){}
+}
+function novoCalc(){
+  if(!confirm('Iniciar novo cálculo? Os dados atuais serão perdidos.'))return;
+  _pilares=[];_nextId=1;exemplosPadrao();calc();aviso('Novo cálculo com dados de exemplo.');
+}
+function salvarJSON(){
+  const d={tipo:'tc_concreto_v2',data:new Date().toISOString(),pilares:_pilares,
+    solo:{sigma_adm:V('sigma_adm'),spt:V('spt'),D:V('D'),NA:V('NA'),gama_s:V('gama_s'),coesao:V('coesao'),phi:V('phi'),tipo_solo:S('tipo_solo'),endereco:S('endereco'),responsavel:S('responsavel')},
+    mat:{fck:V('fck'),fyk:S('fyk'),gc:S('gc'),gs:S('gs'),gfg:S('gfg'),gfq:S('gfq'),cl_agr:S('cl_agr')}};
+  const blob=new Blob([JSON.stringify(d,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='fundacoes_'+new Date().toISOString().slice(0,10)+'.json';a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),60000);aviso('Projeto salvo.');
+}
+function abrirJSON(e){
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();r.onload=ev=>{
+    try{
+      const d=JSON.parse(ev.target.result);
+      if(d.pilares?.length){_pilares=d.pilares;_nextId=Math.max(..._pilares.map(p=>parseInt(p.id.replace(/\D/g,''))||0))+1;}
+      if(d.solo)Object.entries(d.solo).forEach(([k,v])=>{const el=document.getElementById(k);if(el)el.value=v;});
+      if(d.mat)Object.entries(d.mat).forEach(([k,v])=>{const el=document.getElementById(k);if(el)el.value=v;});
+      calc();aviso('Projeto aberto: '+f.name);
+    }catch(err){aviso('Erro ao abrir: '+err.message,'err');}
+  };r.readAsText(f);e.target.value='';
+}
+
+/* ═══════════════════════════════════════════════════════════
+   EXPORTAR
+═══════════════════════════════════════════════════════════ */
+function expExcel(){
+  if(typeof XLSX==='undefined'){aviso('Aguarde a biblioteca Excel carregar.','err');return;}
+  const p=getP();
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([
+    ['CALCULADORA DE FUNDAÇÕES E ESTRUTURA EM CONCRETO ARMADO · Total Civil'],
+    ['Local: '+S('endereco'),'','Responsável: '+S('responsavel'),'','Data: '+new Date().toLocaleDateString('pt-BR')],
+    [],
+    ['SAPATAS ISOLADAS — NBR 6118:2023 + NBR 6122:2022'],
+    ['ID','Gk (kN)','Qk (kN)','Nk (kN)','Fd (kN)','B (m)','L (m)','h (m)','d (m)',
+     'ex (m)','ey (m)','σmax (kPa)','σmin (kPa)','Taxa (%)','Asx (cm²)','Asy (cm²)',
+     'τSd (kPa)','τRd2 (kPa)','Punção','Vol (m³)','Status'],
+    ..._sapatas.map(sa=>[sa.id,fmt(sa.gk,0),fmt(sa.qk,0),fmt(sa.Nk,0),fmt(sa.Fd,0),
+      fmt(sa.B,2),fmt(sa.L,2),fmt(sa.h,2),fmt(sa.d,3),
+      fmt(sa.ex,3),fmt(sa.ey,3),fmt(sa.sigma_max,1),fmt(sa.sigma_min,1),fmt(sa.taxa*100,0)+'%',
+      fmt(sa.AsXa,2),fmt(sa.AsYa,2),fmt(sa.tau_sd,1),fmt(sa.tau_rd2,1),sa.puncOk?'OK':'NOK',fmt(sa.vol,3),sa.st]),
+    [],
+    ['PARÂMETROS'],
+    ['fck',p.fck,'fcd',fmt(p.fcd,2),'fyk',p.fyk,'fyd',fmt(p.fyd,2)],
+    ['σadm',p.sigma_adm,'SPT',p.spt,'D (m)',p.D,'NA (m)',p.NA],
+    ['Cobrimento (mm)',p.cob,'Classe',p.cl,'γfg',p.gfg,'γfq',p.gfq],
+  ]);
+  XLSX.utils.book_append_sheet(wb,ws,'Sapatas');
+  XLSX.writeFile(wb,'fundacoes_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  aviso('Exportado para Excel.');
+}
+function expPDF(){
+  if(typeof window.jspdf==='undefined'){aviso('Aguarde a biblioteca PDF.','err');return;}
+  const{jsPDF}=window.jspdf; const p=getP();
+  const doc=new jsPDF({orientation:'landscape',unit:'mm',format:'a4'});
+  doc.setFont('helvetica','bold');doc.setFontSize(13);
+  doc.text('MEMÓRIA DE CÁLCULO – FUNDAÇÕES · Total Civil',14,15);
+  doc.setFont('helvetica','normal');doc.setFontSize(9);
+  doc.text('NBR 6118:2023 · NBR 6122:2022  |  '+S('endereco'),14,22);
+  doc.text('Responsável: '+S('responsavel')+'  |  '+new Date().toLocaleDateString('pt-BR'),14,27);
+  doc.setFontSize(11);doc.setFont('helvetica','bold');doc.text('SAPATAS ISOLADAS',14,36);
+  let y=42;
+  const cols=['ID','Nk','Fd','B','L','h','σmax','Taxa','Asx','Asy','Punção','Status'];
+  const ws=[14,18,18,12,12,12,18,14,14,14,20,22];
+  doc.setFontSize(8);doc.setFillColor(23,54,93);doc.rect(14,y-5,ws.reduce((a,b)=>a+b),7,'F');
+  doc.setTextColor(255);let cx=14;
+  cols.forEach((c,i)=>{doc.text(c,cx+1,y);cx+=ws[i];});
+  doc.setTextColor(0);doc.setFont('helvetica','normal');
+  _sapatas.forEach(sa=>{
+    y+=7;if(y>190){doc.addPage();y=20;}
+    if(sa.stCl==='danger')doc.setTextColor(153,27,27);else if(sa.stCl==='warn')doc.setTextColor(124,45,18);else doc.setTextColor(0);
+    const row=[sa.id,fmt(sa.Nk,0),fmt(sa.Fd,0),fmt(sa.B,2),fmt(sa.L,2),fmt(sa.h,2),fmt(sa.sigma_max,1),fmt(sa.taxa*100,0)+'%',fmt(sa.AsXa,2),fmt(sa.AsYa,2),sa.puncOk?'OK':'NOK',sa.st];
+    cx=14;row.forEach((c,i)=>{doc.text(String(c),cx+1,y);cx+=ws[i];});
+  });
+  doc.save('fundacoes_'+new Date().toISOString().slice(0,10)+'.pdf');aviso('Exportado para PDF.');
+}
+function expWord(){
+  gerarMem();
+  const d=document.getElementById('mem-content');
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <style>body{font-family:Calibri,sans-serif;font-size:11pt;margin:2cm}b{color:#17365D}table{border-collapse:collapse;width:100%}td,th{border:1px solid #d1d8e0;padding:4px 8px}th{background:#17365D;color:#fff}</style>
+  </head><body><h2>Memória de Cálculo – Fundações e Estrutura em Concreto Armado</h2>
+  <p>Total Civil · NBR 6118:2023 · NBR 6122:2022</p>${d.innerHTML}</body></html>`;
+  const blob=new Blob([html],{type:'application/msword'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='fundacoes_'+new Date().toISOString().slice(0,10)+'.doc';a.click();aviso('Exportado para Word.');
+}
+
+/* ═══════════════════════════════════════════════════════════
+   INIT DESCRIÇÕES
+═══════════════════════════════════════════════════════════ */
+setSubtipo('iso');
+setEstaca('helice');
+</script>
+</body>
+</html>
