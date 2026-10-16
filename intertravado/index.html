@@ -1356,12 +1356,25 @@ function calcular(){
     ref_teo,ref:ref_adot,refInfo,calc,total,pressao,cond,alertas,sugest};
 
   atualizarResultados();
+  atualizarPlaceholders();
   atualizarCorte();
   atualizarFig61();
   atualizarMemoria();
   calcTopo();
 }
 
+/* Campos "vazio = automático": mostram o valor que o programa usa quando ficam vazios */
+function atualizarPlaceholders(){
+  const r=resultado, ph=(id,t)=>{const e=document.getElementById(id); if(e) e.placeholder=t;};
+  // valores que o cálculo usa quando estes campos ficam vazios (ver calcular)
+  ph('areia-cm','Vazio = automático (5 cm)'); ph('fpk','Vazio = automático (35 MPa)'); ph('sub-ccr','Vazio = automático (15 cm)');
+  if(!r){ ph('reforco','Vazio = automática'); ph('h-conf','Vazio = automático'); return; }
+  const up=x=>x<=0?0:(r.passo===5?Math.ceil(x/5-1e-9)*5:Math.ceil(x-1e-9));
+  if(!r.usaRef) ph('reforco','Vazio = automática (informe o CBR do reforço)');
+  else if(r.CBR<2) ph('reforco','Vazio = automática (CBR < 2%: informe pelo estudo geotécnico)');
+  else ph('reforco','Vazio = automática ('+up(r.ref_teo)+' cm'+(fmt(r.ref_teo,1)!==fmt(up(r.ref_teo),1)?'; calc. '+fmt(r.ref_teo,1)+' cm':'')+')');
+  ph('h-conf',r.h_est!=null?'Vazio = automático ('+fmt(r.h_est,1)+' cm · '+r.figRef+')':'Vazio = automático');
+}
 function limparResultados(){
   ['res-n','r-h-est','r-h-usado','r-cbr-min-sb','r-fpk-min','r-proc','r-cond','tc-blocos-teo','tc-blocos-adot','tc-blocos-sit','tc-areia-teo','tc-areia-adot','tc-areia-sit','tc-base-teo','tc-base-adot','tc-base-sit','tc-sb-teo','tc-sb-adot','tc-sb-sit','tc-ref-teo','tc-ref-adot','tc-ref-sit','tc-total','tc-peso']
     .forEach(id=>{const e=document.getElementById(id); if(e){e.textContent='—'; if(e.tagName==='TD') e.className='to';}});
@@ -1370,7 +1383,7 @@ function limparResultados(){
   const ms=document.getElementById('memo-status'); ms.textContent='Preencha N e CBR e calcule.'; ms.className='vbar info';
   document.getElementById('svg-corte').innerHTML='';
   const cs=document.getElementById('corte-status'); cs.textContent='Aguardando dimensionamento.'; cs.className='vbar info';
-  atualizarFig61();
+  atualizarFig61(); atualizarPlaceholders();
 }
 function atualizarResultados(){
   const r=resultado;if(!r)return;
