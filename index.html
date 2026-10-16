@@ -453,8 +453,8 @@ const PROGRAMAS = [
   {key:'intertravado', campo:'intertravadoAtivo', solic:'intertravadoSolicitado', nome:'Pavimento Intertravado',      url:'/intertravado/', disp:true,
    desc:'Dimensionamento de pavimentos de blocos de concreto intertravados conforme IP-06/2004 e ABNT NBR 9781.',
    ico:'<rect x="5" y="10" width="15" height="8" rx="1.5"/><rect x="24" y="10" width="17" height="8" rx="1.5"/><rect x="5" y="22" width="9" height="8" rx="1.5"/><rect x="18" y="22" width="15" height="8" rx="1.5"/><rect x="37" y="22" width="4" height="8" rx="1"/><rect x="5" y="34" width="15" height="6" rx="1.5"/><rect x="24" y="34" width="17" height="6" rx="1.5"/>'},
-  {key:'drenagem',     campo:'drenagemAtivo',     solic:null,                     nome:'Drenagem Pluvial',            url:null,             disp:false,
-   desc:'Cálculo de vazões, sarjetas, bocas de lobo e redes de águas pluviais.',
+  {key:'drenagem',     campo:'drenagemAtivo',     solic:'drenagemSolicitado',     nome:'Drenagem Pluvial',            url:'/drenagem/',     disp:true,
+   desc:'Microdrenagem completa: chuva IDF, bacias, sarjetas, bocas-de-lobo, ramais, PVs, rede tronco, linha piezométrica e memorial.',
    ico:'<path d="M23 5C23 5 11 19 11 28a12 12 0 0 0 24 0C35 19 23 5 23 5Z"/><path d="M17 29a6 6 0 0 0 6 6"/>'},
   {key:'estrutura',    campo:'estruturaAtivo',    solic:'estruturaSolicitado',    nome:'Estrutura em Concreto Armado', url:'https://concreto.totalcivil.com.br', disp:true,
    desc:'Dimensionamento de fundações e estruturas de concreto armado. Sapatas, estacas, radier, corrida. NBR 6118:2023 · NBR 6122:2022.',
@@ -654,6 +654,7 @@ $('form-cadastro').addEventListener('submit', async ev => {
         orcamentoSolicitado: ks.includes('orcamento'), orcamentoAtivo: false,
         intertravadoSolicitado: ks.includes('intertravado'), intertravadoAtivo: false,
         visitasSolicitado: ks.includes('visitas'), visitasAtivo: false,
+        drenagemSolicitado: ks.includes('drenagem'), drenagemAtivo: false,
         programasPedidos: ks, formaPagamento: pag, plano, tipoPedido, pedidoEm: fs.serverTimestamp()
       };
       if(indic && indic !== codigoDe(uid)) perfil.indicadoPor = indic;
@@ -668,6 +669,7 @@ $('form-cadastro').addEventListener('submit', async ev => {
         orcamentoSolicitado: ks.includes('orcamento'), orcamentoAtivo: false,
         intertravadoSolicitado: ks.includes('intertravado'), intertravadoAtivo: false,
         visitasSolicitado: ks.includes('visitas'), visitasAtivo: false,
+        drenagemSolicitado: ks.includes('drenagem'), drenagemAtivo: false,
         programasPedidos: ks, formaPagamento: pag, plano, tipoPedido, pedidoEm: fs.serverTimestamp()};
       if(indic && indic !== codigoDe(uid)) perfil.indicadoPor = indic;
       msg('cd-msg', 'Enviando pedido…', 'info');
@@ -681,6 +683,7 @@ $('form-cadastro').addEventListener('submit', async ev => {
       if(ks.includes('orcamento') && !eu.orcamentoSolicitado) upd.orcamentoSolicitado = true;
       if(ks.includes('intertravado') && !eu.intertravadoSolicitado) upd.intertravadoSolicitado = true;
       if(ks.includes('visitas') && !eu.visitasSolicitado) upd.visitasSolicitado = true;
+      if(ks.includes('drenagem') && !eu.drenagemSolicitado) upd.drenagemSolicitado = true;
       if(indic && !eu.indicadoPor && indic !== codigoDe(uid)) upd.indicadoPor = indic;
       msg('cd-msg', 'Enviando pedido…', 'info');
       await gravar('update', fs.doc(d, 'usuarios', uid), upd);

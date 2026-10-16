@@ -1,0 +1,1815 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-theme="">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Drenagem Pluvial — Total Civil</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,wght@0,400;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+<style>
+/* ── TOKENS ───────────────────────────────── */
+:root{
+  --bg:#F6F4EF; --surface:#FFFFFF; --surface2:#F0EDE7;
+  --ink:#0F1E33; --muted:#7A8599; --line:#E6E0D6;
+  --orange:#FF6B1A; --orange2:#FF8A2E;
+  --blue:#12355F;  --blue2:#1E4E8C;
+  --agua:#0E7490;  --agua2:#0891B2; --agua-lt:#ECFEFF;
+  --ok:#16A34A; --warn:#D97706; --err:#DC2626;
+  --ok-bg:#F0FDF4; --warn-bg:#FFFBEB; --err-bg:#FEF2F2;
+  --r:10px; --r-sm:6px; --r-lg:16px;
+  --sh:0 2px 8px rgba(15,30,51,.08);
+  --sh-md:0 4px 20px rgba(15,30,51,.12);
+  --fh:Fraunces,Georgia,serif;
+  --fb:'Plus Jakarta Sans',system-ui,sans-serif;
+  --tr:.18s ease;
+}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0C1929; --surface:#111E2E; --surface2:#162236;
+  --ink:#E8EAF0; --muted:#6B7A8D; --line:#1E2E42;
+  --orange:#FF7A2E; --blue:#4A8CC9;
+  --agua:#22D3EE; --agua-lt:#0C2834;
+  --ok:#4ADE80; --warn:#FCD34D; --err:#F87171;
+  --ok-bg:#052E16; --warn-bg:#1C1400; --err-bg:#2D0A0A;
+  --sh:0 2px 8px rgba(0,0,0,.3);
+}}
+[data-theme="dark"]{
+  --bg:#0C1929; --surface:#111E2E; --surface2:#162236;
+  --ink:#E8EAF0; --muted:#6B7A8D; --line:#1E2E42;
+  --orange:#FF7A2E; --blue:#4A8CC9;
+  --agua:#22D3EE; --agua-lt:#0C2834;
+  --ok:#4ADE80; --warn:#FCD34D; --err:#F87171;
+  --ok-bg:#052E16; --warn-bg:#1C1400; --err-bg:#2D0A0A;
+  --sh:0 2px 8px rgba(0,0,0,.3);
+}
+
+/* ── RESET ───────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:16px;scroll-behavior:smooth}
+body{font-family:var(--fb);background:var(--bg);color:var(--ink);min-height:100vh;line-height:1.6}
+button{font-family:var(--fb);cursor:pointer;border:none;background:none}
+input,select,textarea{font-family:var(--fb)}
+h1,h2,h3,h4{font-family:var(--fh);line-height:1.2}
+a{color:var(--agua);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* ── SCREENS ──────────────────────────────── */
+.screen{display:none;min-height:100vh;flex-direction:column}
+.screen.active{display:flex}
+
+/* ── DEVICE SELECT ────────────────────────── */
+#screen-device{align-items:center;justify-content:center;background:linear-gradient(135deg,var(--blue) 0%,var(--agua) 100%);padding:2rem}
+.device-card{background:var(--surface);border-radius:var(--r-lg);padding:3rem 2rem;max-width:500px;width:100%;text-align:center;box-shadow:var(--sh-md)}
+.device-card .logo-wrap{margin-bottom:1.5rem}
+.device-card .logo-wrap img{height:48px;object-fit:contain}
+.device-card .logo-wrap .logo-text{font-family:var(--fh);font-size:1.8rem;font-weight:700;color:var(--blue)}
+.device-card h2{font-size:1.4rem;margin-bottom:.5rem;color:var(--ink)}
+.device-card p{color:var(--muted);margin-bottom:2rem;font-size:.95rem}
+.device-btns{display:flex;flex-direction:column;gap:.75rem}
+.device-btn{display:flex;align-items:center;gap:1rem;padding:1rem 1.5rem;border-radius:var(--r);border:2px solid var(--line);background:var(--surface);transition:var(--tr);text-align:left}
+.device-btn:hover{border-color:var(--agua);background:var(--agua-lt)}
+.device-btn svg{flex-shrink:0;color:var(--agua)}
+.device-btn .dev-info b{display:block;color:var(--ink);font-size:1rem}
+.device-btn .dev-info small{color:var(--muted);font-size:.82rem}
+
+/* ── MAIN APP LAYOUT ──────────────────────── */
+#screen-app{flex-direction:column}
+
+/* HEADER */
+.app-header{background:var(--surface);border-bottom:1px solid var(--line);padding:.75rem 1.25rem;display:flex;align-items:center;gap:.75rem;position:sticky;top:0;z-index:100;box-shadow:var(--sh)}
+.app-header .h-logo{display:flex;align-items:center;gap:.5rem;text-decoration:none}
+.app-header .h-logo img{height:36px;object-fit:contain}
+.app-header .h-logo .h-text{font-family:var(--fh);font-weight:700;color:var(--blue);font-size:1.1rem;line-height:1}
+.app-header .h-logo .h-sub{font-size:.72rem;color:var(--agua);font-family:var(--fb);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
+.h-spacer{flex:1}
+.h-btn{width:36px;height:36px;border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;color:var(--muted);transition:var(--tr)}
+.h-btn:hover{background:var(--surface2);color:var(--ink)}
+.h-btn svg{pointer-events:none}
+
+/* PROJECT NAME */
+.project-bar{background:var(--agua);color:#fff;padding:.5rem 1.25rem;display:flex;align-items:center;gap:.5rem;font-size:.85rem;font-weight:600}
+.project-bar input{background:transparent;border:none;color:#fff;font-family:var(--fb);font-size:.85rem;font-weight:600;flex:1;min-width:0;outline:none}
+.project-bar input::placeholder{color:rgba(255,255,255,.6)}
+
+/* TABS */
+.tabs-wrap{background:var(--surface);border-bottom:1px solid var(--line);overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+.tabs-wrap::-webkit-scrollbar{display:none}
+.tabs-list{display:flex;min-width:max-content;padding:0 .5rem}
+.tab-btn{padding:.7rem 1rem;font-size:.8rem;font-weight:600;color:var(--muted);border-bottom:2px solid transparent;transition:var(--tr);white-space:nowrap;letter-spacing:.02em}
+.tab-btn:hover{color:var(--ink)}
+.tab-btn.active{color:var(--agua);border-bottom-color:var(--agua)}
+
+/* TAB PANELS */
+.tab-panels{flex:1;overflow-y:auto}
+.tab-panel{display:none;padding:1.25rem}
+.tab-panel.active{display:block}
+.tab-panel>h3{font-size:1.15rem;color:var(--blue);margin-bottom:1rem;padding-bottom:.5rem;border-bottom:2px solid var(--agua)}
+
+/* ── FOOTER ───────────────────────────────── */
+.app-footer{background:var(--surface);border-top:1px solid var(--line);padding:.75rem 1.25rem;text-align:center;font-size:.75rem;color:var(--muted)}
+.app-footer a{color:var(--agua)}
+
+/* ── CARDS / SECTIONS ─────────────────────── */
+.card{background:var(--surface);border-radius:var(--r);border:1px solid var(--line);padding:1.25rem;margin-bottom:1rem;box-shadow:var(--sh)}
+.card h4{font-size:.95rem;color:var(--blue);margin-bottom:.75rem;font-family:var(--fh)}
+.section-title{font-size:.8rem;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--agua);margin:1.25rem 0 .5rem}
+
+/* ── FORM ELEMENTS ────────────────────────── */
+.form-grid{display:grid;gap:.75rem}
+.form-grid-2{grid-template-columns:1fr 1fr}
+.form-grid-3{grid-template-columns:1fr 1fr 1fr}
+@media(max-width:480px){.form-grid-2,.form-grid-3{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:.3rem}
+.field label{font-size:.8rem;font-weight:600;color:var(--muted)}
+.field label span.unit{font-weight:400;font-size:.75rem;color:var(--muted)}
+.field input,.field select,.field textarea{
+  padding:.5rem .75rem;border-radius:var(--r-sm);border:1.5px solid var(--line);
+  background:var(--surface);color:var(--ink);font-size:.9rem;
+  transition:border-color var(--tr);width:100%
+}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--agua)}
+.field textarea{resize:vertical;min-height:80px}
+.field .hint{font-size:.73rem;color:var(--muted)}
+
+/* ── BADGES / CHIPS ───────────────────────── */
+.badge{display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .6rem;border-radius:20px;font-size:.75rem;font-weight:600}
+.badge-ok{background:var(--ok-bg);color:var(--ok)}
+.badge-warn{background:var(--warn-bg);color:var(--warn)}
+.badge-err{background:var(--err-bg);color:var(--err)}
+.badge-info{background:var(--agua-lt);color:var(--agua)}
+
+/* ── TABLES ───────────────────────────────── */
+.tbl-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;border-radius:var(--r);border:1px solid var(--line)}
+table{width:100%;border-collapse:collapse;font-size:.82rem}
+thead th{background:var(--surface2);padding:.5rem .75rem;text-align:left;font-weight:700;color:var(--blue);white-space:nowrap;border-bottom:2px solid var(--line)}
+tbody tr:hover{background:var(--surface2)}
+td{padding:.45rem .75rem;border-bottom:1px solid var(--line);color:var(--ink);vertical-align:middle}
+td input,td select{padding:.25rem .4rem;border:1.5px solid var(--line);border-radius:var(--r-sm);font-size:.8rem;background:var(--surface);color:var(--ink);width:100%}
+td input:focus,td select:focus{outline:none;border-color:var(--agua)}
+.td-num{text-align:right;font-variant-numeric:tabular-nums;font-family:monospace;font-size:.8rem}
+.td-status td:last-child{white-space:nowrap}
+
+/* ── BUTTONS ──────────────────────────────── */
+.btn{display:inline-flex;align-items:center;gap:.4rem;padding:.55rem 1.1rem;border-radius:var(--r-sm);font-size:.85rem;font-weight:600;transition:var(--tr)}
+.btn-primary{background:var(--agua);color:#fff}
+.btn-primary:hover{background:var(--agua2)}
+.btn-secondary{background:var(--surface2);color:var(--ink);border:1.5px solid var(--line)}
+.btn-secondary:hover{border-color:var(--agua);color:var(--agua)}
+.btn-danger{background:var(--err-bg);color:var(--err);border:1.5px solid var(--err)}
+.btn-danger:hover{background:var(--err);color:#fff}
+.btn-sm{padding:.35rem .75rem;font-size:.78rem}
+.btn-icon{width:30px;height:30px;padding:0;border-radius:var(--r-sm);display:inline-flex;align-items:center;justify-content:center;background:var(--surface2);color:var(--muted);border:1.5px solid var(--line)}
+.btn-icon:hover{color:var(--agua);border-color:var(--agua)}
+.bar-btns{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;margin-bottom:.75rem}
+
+/* ── RESULT BOXES ─────────────────────────── */
+.result-box{background:var(--agua-lt);border:1.5px solid var(--agua);border-radius:var(--r);padding:.75rem 1rem;margin-top:.5rem}
+.result-box .rb-label{font-size:.75rem;color:var(--agua);font-weight:700;text-transform:uppercase;letter-spacing:.06em}
+.result-box .rb-val{font-family:var(--fh);font-size:1.6rem;color:var(--agua);font-weight:600}
+.result-box .rb-unit{font-size:.85rem;color:var(--muted);margin-left:.25rem}
+.result-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.5rem;margin-top:.5rem}
+.result-item{background:var(--surface2);border-radius:var(--r-sm);padding:.5rem .75rem;border:1px solid var(--line)}
+.result-item .ri-label{font-size:.72rem;color:var(--muted);font-weight:600}
+.result-item .ri-val{font-size:1rem;font-weight:700;color:var(--ink);font-variant-numeric:tabular-nums}
+.result-item.ri-ok .ri-val{color:var(--ok)}
+.result-item.ri-warn .ri-val{color:var(--warn)}
+.result-item.ri-err .ri-val{color:var(--err)}
+
+/* ── NOTA TÉCNICA ─────────────────────────── */
+.nota-tec{background:var(--warn-bg);border-left:3px solid var(--warn);border-radius:0 var(--r-sm) var(--r-sm) 0;padding:.6rem .85rem;font-size:.8rem;color:var(--ink);margin:.5rem 0;display:flex;gap:.5rem}
+.nota-tec b{color:var(--warn);flex-shrink:0}
+.nota-tec-info{background:var(--agua-lt);border-left:3px solid var(--agua)}
+.nota-tec-info b{color:var(--agua)}
+
+/* ── MODAL ────────────────────────────────── */
+.modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;display:none;align-items:center;justify-content:center;padding:1rem}
+.modal-backdrop.open{display:flex}
+.modal{background:var(--surface);border-radius:var(--r-lg);width:100%;max-width:500px;max-height:90vh;overflow-y:auto;box-shadow:var(--sh-md)}
+.modal-header{padding:1rem 1.25rem;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:.75rem}
+.modal-header h3{flex:1;font-size:1rem;color:var(--blue)}
+.modal-body{padding:1.25rem}
+.modal-footer{padding:1rem 1.25rem;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:.5rem}
+
+/* ── TOAST ────────────────────────────────── */
+#toast{position:fixed;bottom:1.5rem;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;padding:.6rem 1.2rem;border-radius:20px;font-size:.85rem;font-weight:600;z-index:999;transition:opacity .3s;opacity:0;pointer-events:none;white-space:nowrap}
+#toast.show{opacity:1}
+
+/* ── PRINT ────────────────────────────────── */
+@media print{
+  @page{size:A4;margin:15mm 12mm}
+  .app-header,.tabs-wrap,.project-bar,.bar-btns,.app-footer,#toast,.modal-backdrop{display:none!important}
+  .tab-panel{display:none!important}
+  #tab-memorial{display:block!important;padding:0}
+  #tab-memorial>h3{display:none}
+  .card{box-shadow:none;border:none;padding:0}
+  body,:root{background:#fff!important;color:#000!important;--ink:#000;--surface:#fff;--surface2:#f3f3f3;--line:#bbb;--blue:#12355F;--agua:#0E7490}
+  table{font-size:9pt;page-break-inside:auto}
+  tr{page-break-inside:avoid}
+  .mem-sec{page-break-inside:avoid}
+}
+
+/* ── RESPONSIVE ADJUSTMENTS ───────────────── */
+@media(max-width:600px){
+  .tab-btn{padding:.6rem .75rem;font-size:.75rem}
+  .tab-panel{padding:1rem}
+  .card{padding:1rem}
+  .result-grid{grid-template-columns:1fr 1fr}
+}
+
+/* ── PIEZOMETRIC ALERT ────────────────────── */
+.piez-alert{background:var(--err-bg);border:2px solid var(--err);border-radius:var(--r);padding:.75rem 1rem;margin:.5rem 0;display:flex;gap:.5rem;align-items:flex-start;font-size:.82rem;color:var(--err)}
+
+/* ── PROFILE CHART ────────────────────────── */
+.profile-svg-wrap{overflow-x:auto;background:var(--surface);border-radius:var(--r);border:1px solid var(--line);padding:.75rem}
+.profile-svg-wrap svg{min-width:600px}
+
+/* ── LOGO UPLOAD ──────────────────────────── */
+.logo-upload-zone{border:2px dashed var(--line);border-radius:var(--r);padding:1.5rem;text-align:center;cursor:pointer;transition:var(--tr)}
+.logo-upload-zone:hover{border-color:var(--agua);background:var(--agua-lt)}
+.logo-upload-zone input{display:none}
+.logo-upload-zone .lz-icon{color:var(--muted);margin-bottom:.5rem}
+.logo-upload-zone .lz-text{font-size:.85rem;color:var(--muted)}
+.logo-upload-zone img{max-height:60px;max-width:200px;object-fit:contain}
+
+/* ── LOADING SPINNER ──────────────────────── */
+.spinner{width:20px;height:20px;border:2.5px solid var(--line);border-top-color:var(--agua);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── ITENS (cartões de cadastro) ──────────── */
+.item{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);margin-bottom:.75rem;box-shadow:var(--sh);overflow:hidden}
+.item-h{display:flex;align-items:center;gap:.5rem;padding:.6rem .9rem;background:var(--surface2);border-bottom:1px solid var(--line);flex-wrap:wrap}
+.item-h .t{font-family:var(--fh);font-weight:600;color:var(--blue);font-size:1rem}
+.item-h .s{font-size:.75rem;color:var(--muted)}
+.item-h .sp{flex:1}
+.item-b{padding:.8rem .9rem}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:.55rem .65rem}
+.fgrid .field label{font-size:.72rem;line-height:1.25}
+.fgrid .field input,.fgrid .field select{padding:.4rem .5rem;font-size:.85rem}
+.fgrid .field.w2{grid-column:span 2}
+.res{margin-top:.7rem;padding-top:.7rem;border-top:1px dashed var(--line)}
+.kv{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:.4rem}
+.kv>div{background:var(--surface2);border:1px solid var(--line);border-radius:var(--r-sm);padding:.35rem .55rem;min-width:0}
+.kv small{display:block;font-size:.68rem;color:var(--muted);font-weight:600;line-height:1.2}
+.kv b{font-size:.92rem;font-variant-numeric:tabular-nums;color:var(--ink);font-weight:700}
+.kv .ok b{color:var(--ok)} .kv .warn b{color:var(--warn)} .kv .err b{color:var(--err)}
+.kv .ok{border-color:color-mix(in srgb,var(--ok) 35%,var(--line))}
+.kv .warn{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+.kv .err{border-color:color-mix(in srgb,var(--err) 45%,var(--line))}
+.msgs{margin-top:.5rem;display:flex;flex-direction:column;gap:.3rem}
+.msg{font-size:.78rem;padding:.35rem .6rem;border-radius:var(--r-sm);display:flex;gap:.4rem;align-items:flex-start}
+.msg.ok{background:var(--ok-bg);color:var(--ok)} .msg.warn{background:var(--warn-bg);color:var(--warn)} .msg.err{background:var(--err-bg);color:var(--err)}
+.msg span{color:var(--ink)}
+.empty{text-align:center;color:var(--muted);padding:2rem 1rem;font-size:.9rem;border:1.5px dashed var(--line);border-radius:var(--r)}
+.lead{font-size:.88rem;color:var(--muted);margin:-.4rem 0 1rem;max-width:860px}
+.st{display:inline-block;min-width:1.4em;text-align:center;font-weight:700}
+.st.ok{color:var(--ok)} .st.warn{color:var(--warn)} .st.err{color:var(--err)}
+td.ok{color:var(--ok);font-weight:700} td.warn{color:var(--warn);font-weight:700} td.err{color:var(--err);font-weight:700}
+.sumbar{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:1rem}
+.sumbar .badge{font-size:.82rem;padding:.35rem .8rem}
+.seg{display:inline-flex;border:1.5px solid var(--line);border-radius:var(--r-sm);overflow:hidden}
+.seg button{padding:.35rem .8rem;font-size:.8rem;font-weight:600;color:var(--muted)}
+.seg button.on{background:var(--agua);color:#fff}
+.formula{font-family:'Cambria Math',Georgia,serif;font-style:italic;background:var(--surface2);border-radius:var(--r-sm);padding:.15rem .45rem;white-space:nowrap}
+details.ajuda{margin:.25rem 0 1rem;border:1px solid var(--line);border-radius:var(--r);background:var(--surface)}
+details.ajuda summary{cursor:pointer;padding:.55rem .9rem;font-size:.82rem;font-weight:700;color:var(--agua);list-style:none}
+details.ajuda summary::-webkit-details-marker{display:none}
+details.ajuda summary::before{content:'＋ ';}
+details.ajuda[open] summary::before{content:'－ ';}
+details.ajuda .in{padding:0 .9rem .8rem;font-size:.82rem;line-height:1.65}
+details.ajuda .in p{margin:.35rem 0}
+.h-logo img{height:34px;max-width:120px;object-fit:contain}
+.proj-btn{background:rgba(255,255,255,.18);color:#fff;border-radius:var(--r-sm);padding:.2rem .6rem;font-size:.75rem;font-weight:700;white-space:nowrap}
+.proj-btn:hover{background:rgba(255,255,255,.3)}
+.dev-tip{background:var(--agua-lt);border:1px solid var(--agua);border-radius:var(--r);padding:.75rem 1rem;font-size:.82rem;margin-bottom:1rem;display:flex;gap:.75rem;align-items:flex-start}
+.dev-tip b{color:var(--agua)}
+.plist{display:flex;flex-direction:column;gap:.4rem;max-height:46vh;overflow:auto}
+.plist .pi{display:flex;align-items:center;gap:.5rem;padding:.55rem .7rem;border:1.5px solid var(--line);border-radius:var(--r-sm);cursor:pointer}
+.plist .pi.cur{border-color:var(--agua);background:var(--agua-lt)}
+.plist .pi .n{flex:1;font-weight:600;font-size:.88rem;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plist .pi small{color:var(--muted);font-size:.72rem}
+table.tbl-r th:not(:first-child){text-align:right}
+@media(max-width:700px){#svg-secao text{font-size:24px}#svg-secao .lbl{font-size:26px}}
+/* SVG perfil */
+.svgbox{width:100%;height:auto;display:block}
+.svgbox text{font-family:var(--fb);fill:var(--ink)}
+.svgbox .grid{stroke:var(--line);stroke-width:1}
+.svgbox .terr{fill:none;stroke:#8B5A2B;stroke-width:2}
+.svgbox .tubo{fill:color-mix(in srgb,var(--agua) 18%,transparent);stroke:var(--agua);stroke-width:1.5}
+.svgbox .piez{fill:none;stroke:var(--orange);stroke-width:2.2;stroke-dasharray:7 4}
+.svgbox .pv{fill:var(--surface);stroke:var(--ink);stroke-width:1.3}
+.svgbox .lbl{font-size:11px;font-weight:700}
+.svgbox .sm{font-size:10px;fill:var(--muted)}
+.legend{display:flex;gap:1rem;flex-wrap:wrap;font-size:.75rem;color:var(--muted);margin-top:.5rem}
+.legend i{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:.3rem;border-radius:2px}
+/* memorial */
+#memorial-print{background:#fff;color:#111;padding:1.5rem;border-radius:var(--r);border:1px solid var(--line);font-size:.86rem;line-height:1.6}
+#memorial-print h1{font-size:1.45rem;color:#12355F;margin-bottom:.2rem}
+#memorial-print h2{font-size:1.05rem;color:#0E7490;margin:1.4rem 0 .5rem;padding-bottom:.25rem;border-bottom:2px solid #0E7490}
+#memorial-print h3{font-size:.92rem;color:#12355F;margin:.9rem 0 .35rem}
+#memorial-print p{margin:.35rem 0;text-align:justify}
+#memorial-print table{font-size:.72rem;margin:.4rem 0 .8rem}
+#memorial-print thead th{background:#EEF2F6;color:#12355F;padding:.3rem .4rem}
+#memorial-print td{padding:.25rem .4rem;color:#111;border-bottom:1px solid #ddd}
+#memorial-print .mhead{display:flex;align-items:center;gap:1rem;border-bottom:3px solid #FF6B1A;padding-bottom:.75rem;margin-bottom:1rem}
+#memorial-print .mhead img{max-height:56px;max-width:180px;object-fit:contain}
+#memorial-print .assin{margin-top:3rem;display:flex;justify-content:center}
+#memorial-print .assin div{border-top:1px solid #111;padding-top:.3rem;text-align:center;min-width:280px;font-size:.82rem}
+#memorial-print .mfoot{margin-top:2rem;font-size:.7rem;color:#666;border-top:1px solid #ddd;padding-top:.4rem;text-align:center}
+@media(max-width:600px){
+  input,select,textarea{font-size:16px!important}
+  .fgrid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .fgrid .field.w2{grid-column:span 2}
+  .kv{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #memorial-print{padding:.8rem}
+  .app-header{padding:.6rem .75rem}
+}
+@media print{
+  @page{size:A4;margin:14mm 12mm}
+  body *{visibility:hidden}
+  #memorial-print,#memorial-print *{visibility:visible}
+  #memorial-print{position:absolute;left:0;top:0;width:100%;border:none;padding:0;font-size:10pt}
+  #memorial-print table{page-break-inside:auto}
+  #memorial-print tr{page-break-inside:avoid}
+  #memorial-print h2{page-break-after:avoid}
+  .tab-panel{display:block!important}
+}
+</style>
+</head>
+<body>
+<div id="toast"></div>
+
+<!-- TELA 1 — AMBIENTE -->
+<section class="screen" id="screen-device">
+  <div class="device-card">
+    <div class="logo-wrap" id="dev-logo"><div class="logo-text">Total Civil</div></div>
+    <h2>Drenagem Pluvial</h2>
+    <p>Microdrenagem urbana completa: chuva, bacias, sarjetas, bocas-de-lobo, ramais, poços de visita, rede tronco e linha piezométrica. Escolha onde vai usar o programa.</p>
+    <div class="device-btns">
+      <button class="device-btn" onclick="chooseDevice('desktop')">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        <div class="dev-info"><b>Computador</b><small>Tela ampla, tabelas completas e impressão do memorial</small></div>
+      </button>
+      <button class="device-btn" onclick="chooseDevice('android')">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="2" width="14" height="20" rx="3"/><circle cx="12" cy="18" r=".8" fill="currentColor"/></svg>
+        <div class="dev-info"><b>Android</b><small>Cartões empilhados, campos grandes para o toque</small></div>
+      </button>
+      <button class="device-btn" onclick="chooseDevice('iphone')">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="2" width="14" height="20" rx="3"/><path d="M10 5h4"/><circle cx="12" cy="18.5" r=".8" fill="currentColor"/></svg>
+        <div class="dev-info"><b>iPhone / iPad</b><small>Otimizado para Safari, sem zoom ao digitar</small></div>
+      </button>
+    </div>
+  </div>
+</section>
+
+<!-- TELA 2 — PROGRAMA -->
+<section class="screen" id="screen-app">
+  <header class="app-header">
+    <a class="h-logo" href="https://totalcivil.com.br" title="Total Civil">
+      <img id="hdr-logo" alt="" style="display:none"/>
+      <div>
+        <div class="h-text" id="hdr-empresa">Total Civil</div>
+        <div class="h-sub">Drenagem Pluvial</div>
+      </div>
+    </a>
+    <div class="h-spacer"></div>
+    <button class="h-btn" title="Projetos salvos" onclick="openProjetos()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+    </button>
+    <button class="h-btn" title="Backup e restauração" onclick="openModal('modal-backup')">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </button>
+    <button class="h-btn" title="Cabeçalho, rodapé e tema" onclick="openConfig()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </button>
+    <button class="h-btn" title="Alternar tema claro/escuro" onclick="toggleTheme()">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+    </button>
+  </header>
+
+  <div class="project-bar">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+    <input type="text" id="bar-nome" placeholder="Nome do projeto…" maxlength="90"/>
+    <span id="bar-status" style="font-size:.72rem;opacity:.9;white-space:nowrap"></span>
+    <button class="proj-btn" onclick="openProjetos()">Projetos</button>
+  </div>
+
+  <nav class="tabs-wrap"><div class="tabs-list" id="tabs-list"></div></nav>
+
+  <main class="tab-panels">
+    <div class="tab-panel" id="tab-projeto"></div>
+    <div class="tab-panel" id="tab-chuva"></div>
+    <div class="tab-panel" id="tab-ruas"></div>
+    <div class="tab-panel" id="tab-bacias"></div>
+    <div class="tab-panel" id="tab-bls"></div>
+    <div class="tab-panel" id="tab-pvs"></div>
+    <div class="tab-panel" id="tab-rede"></div>
+    <div class="tab-panel" id="tab-perfil"></div>
+    <div class="tab-panel" id="tab-secao"></div>
+    <div class="tab-panel" id="tab-verif"></div>
+    <div class="tab-panel" id="tab-memorial"></div>
+  </main>
+
+  <footer class="app-footer"><span id="ftr-text"></span></footer>
+</section>
+
+<!-- MODAL: cabeçalho/rodapé -->
+<div class="modal-backdrop" id="modal-config">
+  <div class="modal">
+    <div class="modal-header"><h3>Cabeçalho, rodapé e tema</h3><button class="btn-icon" onclick="closeModal('modal-config')">✕</button></div>
+    <div class="modal-body">
+      <div class="field" style="margin-bottom:.9rem"><label>Logotipo (aparece no topo e no memorial)</label>
+        <div class="logo-upload-zone" onclick="document.getElementById('logo-input').click()">
+          <input type="file" id="logo-input" accept="image/*" onchange="handleLogo(this)"/>
+          <img id="logo-prev" style="display:none;margin:0 auto .4rem"/>
+          <div class="lz-text">Toque para escolher a imagem (PNG, JPG ou SVG, até 600 KB)</div>
+        </div>
+        <button class="btn btn-secondary btn-sm" style="margin-top:.4rem;align-self:flex-start" onclick="removeLogo()">Remover logo</button>
+      </div>
+      <div class="field" style="margin-bottom:.9rem"><label>Nome da empresa / órgão</label><input type="text" id="cfg-empresa" placeholder="Total Civil Engenharia"/></div>
+      <div class="field" style="margin-bottom:.9rem"><label>Linha secundária do cabeçalho do memorial</label><input type="text" id="cfg-sub" placeholder="Ex.: Secretaria de Obras · CNPJ · endereço"/></div>
+      <div class="field" style="margin-bottom:.9rem"><label>Texto do rodapé</label><input type="text" id="cfg-rodape" placeholder="Total Civil · totalcivil.com.br"/></div>
+      <div class="field" style="margin-bottom:.9rem"><label>Tema</label>
+        <select id="cfg-tema"><option value="">Automático (do aparelho)</option><option value="light">Claro</option><option value="dark">Escuro</option></select></div>
+      <div class="field"><label>Dispositivo</label>
+        <select id="cfg-device"><option value="desktop">Computador</option><option value="android">Android</option><option value="iphone">iPhone / iPad</option></select></div>
+    </div>
+    <div class="modal-footer"><button class="btn btn-primary" onclick="saveConfig()">Salvar</button></div>
+  </div>
+</div>
+
+<!-- MODAL: projetos -->
+<div class="modal-backdrop" id="modal-projetos">
+  <div class="modal">
+    <div class="modal-header"><h3>Projetos salvos neste aparelho</h3><button class="btn-icon" onclick="closeModal('modal-projetos')">✕</button></div>
+    <div class="modal-body">
+      <div class="plist" id="plist"></div>
+      <div class="bar-btns" style="margin-top:1rem">
+        <button class="btn btn-primary btn-sm" onclick="novoProjeto(false)">＋ Novo em branco</button>
+        <button class="btn btn-secondary btn-sm" onclick="novoProjeto(true)">＋ Novo com exemplo</button>
+        <button class="btn btn-secondary btn-sm" onclick="duplicarProjeto()">⧉ Duplicar atual</button>
+      </div>
+      <p class="hint" style="font-size:.75rem;color:var(--muted)">Os projetos ficam guardados no navegador deste aparelho. Use Backup para levar para outro aparelho.</p>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: backup -->
+<div class="modal-backdrop" id="modal-backup">
+  <div class="modal">
+    <div class="modal-header"><h3>Backup e restauração</h3><button class="btn-icon" onclick="closeModal('modal-backup')">✕</button></div>
+    <div class="modal-body">
+      <p style="font-size:.85rem;color:var(--muted);margin-bottom:1rem">Salve um arquivo JSON para guardar ou levar para outro aparelho. Na importação, os projetos do arquivo são <b>somados</b> aos existentes (nada é apagado).</p>
+      <div style="display:flex;flex-direction:column;gap:.6rem">
+        <button class="btn btn-primary" onclick="exportBackup(false)">⬇ Exportar projeto atual</button>
+        <button class="btn btn-secondary" onclick="exportBackup(true)">⬇ Exportar todos os projetos</button>
+        <label class="btn btn-secondary" style="justify-content:center;cursor:pointer">⬆ Importar arquivo JSON<input type="file" accept=".json,application/json" style="display:none" onchange="importBackup(this)"/></label>
+        <button class="btn btn-secondary" onclick="exportCSV()">⬇ Planilha da rede (CSV)</button>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+'use strict';
+/* =====================================================================
+   TOTAL CIVIL · DRENAGEM PLUVIAL — núcleo de dados e cálculo
+   Unidades internas: m, m/s, m³/s, ha, mm/h, min. Diâmetros em mm.
+   ===================================================================== */
+const G = 9.81;
+const DIAMS = [300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1500, 2000];
+const LS_PROJ = 'tc_dren_projetos_v1', LS_CFG = 'tc_dren_cfg_v1';
+
+const DEFL = {
+  reta: 'Passagem reta (0–22°)', d45: 'Deflexão 45°', d90: 'Deflexão 90°',
+  T: 'Confluência em T', X: 'Confluência em X', ini: 'Início de rede (cabeceira)'
+};
+const BLTIPOS = {
+  gs: {nome: 'Guia simples', fr: 0.80, L: 1.00},
+  gd: {nome: 'Guia dupla', fr: 0.80, L: 2.00},
+  gr: {nome: 'Grelha', fr: 0.50, L: 0},
+  cb: {nome: 'Combinada (guia + grelha)', fr: 0.65, L: 1.00}
+};
+const PVTIPOS = ['Pré-moldado anel Ø1000', 'Pré-moldado anel Ø1200', 'Alvenaria de blocos Ø1200', 'Concreto armado Ø1200', 'Pré-moldado anel Ø1500', 'Câmara retangular'];
+const TAMPAS = ['T-400 / Classe D400 (pista)', 'T-200 / Classe C250 (borda de pista)', 'T-125 / Classe B125 (passeio)'];
+const MATS = ['CA-1 (concreto armado)', 'CA-2 (concreto armado)', 'CA-3 (concreto armado)', 'PS-1 (concreto simples)', 'PEAD corrugado', 'PVC rígido'];
+
+function defaultCrit() {
+  return {
+    tr: 10, nTubo: 0.013, nSarj: 0.016, gama: 9810,
+    vmin: 0.60, vmax: 5.00, yD: 0.75, tauMin: 1.0, imin: 0.50, recob: 1.00, espF: 0.10,
+    dmin: 400, profMaxPV: 4.00, folgaPV: 0.30, tcMin: 5,
+    ymax: 0.13, Tmax: 2.50, Cw: 1.66, Co: 2.91,
+    ramalDmin: 400, ramalLmax: 15, ramalImin: 1.0,
+    valaFolga: 0.30, berco: 0.10,
+    K: {reta: 0.15, d45: 0.40, d90: 0.70, T: 0.75, X: 1.25, ini: 0.50},
+    dz: {reta: 0.05, d45: 0.10, d90: 0.15, T: 0.15, X: 0.15, ini: 0}
+  };
+}
+function blankProject(nome) {
+  return {
+    v: 1,
+    proj: {nome: nome || 'Novo projeto', municipio: '', local: '', resp: '', crea: '', art: '', data: new Date().toISOString().slice(0, 10), obs: ''},
+    crit: defaultCrit(),
+    idf: {a: 1239, b: 0.15, c: 20, d: 0.74, fonte: 'Rio de Janeiro – Jardim Botânico (Ulysses Alcântara)', kL: 300, kH: 3},
+    ruas: [], estacas: [], bacias: [], bls: [], pvs: [], trechos: []
+  };
+}
+function exampleProject() {
+  const p = blankProject('Exemplo — Rua João Barros × Rua Joaquim Azevedo');
+  p.proj.municipio = 'Município / UF'; p.proj.local = 'Bairro Centro';
+  p.proj.obs = 'Projeto de exemplo para conhecer o programa. Substitua pelos dados do seu levantamento.';
+  p.ruas = [
+    {id: 'R1', nome: 'Rua João Barros', larg: 7.0, passeio: 2.0, it: 3.0},
+    {id: 'R2', nome: 'Rua Joaquim Azevedo', larg: 6.0, passeio: 1.5, it: 3.0}
+  ];
+  const e = (rua, dist, cota) => ({rua, dist, cota, obs: ''});
+  p.estacas = [e('R1', 0, 10.40), e('R1', 20, 10.21), e('R1', 40, 10.02), e('R1', 60, 9.86), e('R1', 80, 9.70),
+               e('R2', 0, 9.70), e('R2', 20, 9.50), e('R2', 40, 9.31), e('R2', 60, 9.14)];
+  p.pvs = [
+    {id: 'PV-01', rua: 'R1', dist: 0, tipo: PVTIPOS[0], dpv: 1000, tampaCl: TAMPAS[0], tampa: '', defl: 'ini', na: '', obs: ''},
+    {id: 'PV-02', rua: 'R1', dist: 40, tipo: PVTIPOS[0], dpv: 1000, tampaCl: TAMPAS[0], tampa: '', defl: 'reta', na: '', obs: ''},
+    {id: 'PV-CRUZ-01', rua: 'R1', dist: 80, tipo: PVTIPOS[2], dpv: 1200, tampaCl: TAMPAS[0], tampa: '', defl: 'd90', na: '', obs: 'Cruzamento com Rua Joaquim Azevedo'},
+    {id: 'PV-03', rua: 'R2', dist: 60, tipo: PVTIPOS[3], dpv: 1200, tampaCl: TAMPAS[0], tampa: '', defl: 'reta', na: '', obs: 'Lançamento na galeria existente'}
+  ];
+  p.trechos = [
+    {id: 'T1', m: 'PV-01', j: 'PV-02', L: 40, D: 400, cm: '', cj: '', mat: MATS[1]},
+    {id: 'T2', m: 'PV-02', j: 'PV-CRUZ-01', L: 40, D: 400, cm: '', cj: '', mat: MATS[1]},
+    {id: 'T3', m: 'PV-CRUZ-01', j: 'PV-03', L: 60, D: 500, cm: '', cj: '', mat: MATS[1]}
+  ];
+  const bl = (id, rua, dist, lado, tipo, pv, prox) => ({id, rua, dist, lado, tipo, L: BLTIPOS[tipo].L, a: 0.05, gL: 0.90, gB: 0.40, ga: 60, fr: BLTIPOS[tipo].fr, S: '', z: '', prox: prox || '', pv, rL: 6, rD: 400, rI: 2.0, constr: 'Pré-moldada'});
+  p.bls = [
+    bl('BL-01', 'R1', 38, 'E', 'gs', 'PV-02', 'BL-03'), bl('BL-02', 'R1', 38, 'D', 'gd', 'PV-02', 'BL-04'),
+    bl('BL-03', 'R1', 78, 'E', 'gd', 'PV-CRUZ-01'), bl('BL-04', 'R1', 78, 'D', 'gd', 'PV-CRUZ-01'),
+    bl('BL-05', 'R2', 58, 'E', 'gd', 'PV-03')
+  ];
+  const b = (id, nome, A, C, dest, tc) => ({id, nome, A, C, dest, tcMode: 'man', tc: tc || 10, kL: '', kH: ''});
+  p.bacias = [
+    b('B1', 'Quadra 1 + meia pista (E)', 0.28, 0.70, 'BL-01'), b('B2', 'Quadra 2 + meia pista (D)', 0.24, 0.70, 'BL-02'),
+    b('B3', 'Quadra 3 + meia pista (E)', 0.20, 0.70, 'BL-03'), b('B4', 'Quadra 4 + meia pista (D)', 0.22, 0.70, 'BL-04'),
+    b('B5', 'Rua J. Azevedo + quadras', 0.45, 0.65, 'BL-05', 12), b('B6', 'Praça a montante', 0.30, 0.35, 'PV-01', 15)
+  ];
+  return p;
+}
+
+/* ---------------- estado ---------------- */
+let DB = {cur: null, list: {}};   // projetos
+let P = null;                      // projeto atual (dados)
+let CFG = {empresa: '', sub: '', rodape: '', logo: '', tema: '', device: ''};
+let R = null;                      // resultados do último cálculo
+
+function uid() { return 'p' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+function lsGet(k, d) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch (e) { return d; } }
+function lsSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { toast('Não foi possível salvar no navegador (memória cheia?)'); return false; } }
+
+function migrate(p) {
+  const b = blankProject();
+  p = Object.assign(b, p || {});
+  p.proj = Object.assign(blankProject().proj, p.proj || {});
+  const dc = defaultCrit();
+  p.crit = Object.assign(dc, p.crit || {});
+  p.crit.K = Object.assign(defaultCrit().K, (p.crit && p.crit.K) || {});
+  p.crit.dz = Object.assign(defaultCrit().dz, (p.crit && p.crit.dz) || {});
+  p.idf = Object.assign(blankProject().idf, p.idf || {});
+  ['ruas', 'estacas', 'bacias', 'bls', 'pvs', 'trechos'].forEach(k => { if (!Array.isArray(p[k])) p[k] = []; });
+  return p;
+}
+function loadAll() {
+  DB = lsGet(LS_PROJ, null) || {cur: null, list: {}};
+  CFG = Object.assign({empresa: '', sub: '', rodape: '', logo: '', tema: '', device: ''}, lsGet(LS_CFG, {}));
+  if (!DB.list || !Object.keys(DB.list).length) {
+    const id = uid(); const ex = exampleProject();
+    DB = {cur: id, list: {[id]: {nome: ex.proj.nome, upd: Date.now(), data: ex}}};
+    P = migrate(ex); autoCotas(true);
+    saveNow();
+  }
+  if (!DB.list[DB.cur]) DB.cur = Object.keys(DB.list)[0];
+  P = migrate(DB.list[DB.cur].data);
+}
+let saveTimer = null;
+function save() { clearTimeout(saveTimer); setStatus('salvando…'); saveTimer = setTimeout(saveNow, 400); }
+function saveNow() {
+  if (!DB.cur) DB.cur = uid();
+  DB.list[DB.cur] = {nome: P.proj.nome || 'Sem nome', upd: Date.now(), data: P};
+  if (lsSet(LS_PROJ, DB)) setStatus('salvo ✓');
+}
+function setStatus(t) { const el = document.getElementById('bar-status'); if (el) el.textContent = t; }
+
+/* ---------------- utilidades ---------------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
+const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
+const isNum = v => typeof v === 'number' && isFinite(v);
+function fmt(x, d = 2) { if (!isNum(x)) return '—'; return x.toLocaleString('pt-BR', {minimumFractionDigits: d, maximumFractionDigits: d}); }
+const fL = q => isNum(q) ? fmt(q * 1000, 1) : '—';           // m³/s → L/s
+function estLabel(dist) {
+  if (!isNum(dist)) return '—';
+  const n = Math.floor(dist / 20 + 1e-9), r = dist - n * 20;
+  return n + '+' + r.toFixed(2).replace('.', ',');
+}
+function toast(m) { const t = $('toast'); t.textContent = m; t.classList.add('show'); clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 2600); }
+function worst(a, b) { const o = {ok: 0, warn: 1, err: 2}; return (o[b] || 0) > (o[a] || 0) ? b : a; }
+
+/* ---------------- hidrologia ---------------- */
+function idf(tc, tr) {
+  const f = P.idf; tr = tr || P.crit.tr;
+  return f.a * Math.pow(tr, f.b) / Math.pow(tc + f.c, f.d);
+}
+// Kirpich: tc (min) = 57 · (L³/H)^0,385 — L em km, H em m
+function kirpich(Lm, H) { if (!(Lm > 0) || !(H > 0)) return null; return 57 * Math.pow(Math.pow(Lm / 1000, 3) / H, 0.385); }
+function baciaTc(b) {
+  let t = b.tcMode === 'kir' ? kirpich(num(b.kL), num(b.kH)) : num(b.tc);
+  if (!isNum(t)) t = P.crit.tcMin;
+  return Math.max(P.crit.tcMin, t);
+}
+
+/* ---------------- greide ---------------- */
+function estacasRua(rua) { return P.estacas.filter(e => e.rua === rua && isNum(num(e.dist))).sort((a, b) => a.dist - b.dist); }
+function greideCota(rua, dist) {
+  const es = estacasRua(rua).filter(e => isNum(num(e.cota)));
+  if (!es.length || !isNum(dist)) return null;
+  if (dist <= es[0].dist) return es.length > 1 ? +es[0].cota + (+es[1].cota - es[0].cota) * (dist - es[0].dist) / (es[1].dist - es[0].dist || 1) : +es[0].cota;
+  for (let i = 0; i < es.length - 1; i++) {
+    const a = es[i], b = es[i + 1];
+    if (dist >= a.dist && dist <= b.dist) return +a.cota + (+b.cota - a.cota) * (dist - a.dist) / ((b.dist - a.dist) || 1);
+  }
+  const a = es[es.length - 2] || es[0], b = es[es.length - 1];
+  return es.length > 1 ? +b.cota + (+b.cota - a.cota) * (dist - b.dist) / ((b.dist - a.dist) || 1) : +b.cota;
+}
+// declividade longitudinal (m/m, positiva = desce no sentido do estaqueamento) no ponto
+function greideDecl(rua, dist) {
+  const es = estacasRua(rua).filter(e => isNum(num(e.cota)));
+  if (es.length < 2 || !isNum(dist)) return null;
+  let a = es[0], b = es[1];
+  for (let i = 0; i < es.length - 1; i++) { if (dist >= es[i].dist - 1e-6) { a = es[i]; b = es[i + 1]; } }
+  if (dist > a.dist && dist <= b.dist) {/* ok */}
+  // no ponto exato de uma estaca, usa o segmento que chega nela (sentido do escoamento)
+  for (let i = 1; i < es.length; i++) if (Math.abs(es[i].dist - dist) < 1e-6) { a = es[i - 1]; b = es[i]; }
+  return (a.cota - b.cota) / ((b.dist - a.dist) || 1);
+}
+function ruaById(id) { return P.ruas.find(r => r.id === id); }
+function ruaNome(id) { const r = ruaById(id); return r ? r.nome : '—'; }
+function pvById(id) { return P.pvs.find(p => p.id === id); }
+function tampaPV(pv) {
+  if (!pv) return null;
+  const t = num(pv.tampa); if (isNum(t)) return t;
+  return greideCota(pv.rua, num(pv.dist));
+}
+
+/* ---------------- hidráulica de condutos circulares ---------------- */
+function secaoCirc(D, th) {            // D em m, ângulo central th (rad)
+  const A = D * D / 8 * (th - Math.sin(th));
+  const Pm = D * th / 2;
+  const Rh = Pm > 0 ? A / Pm : 0;
+  const y = D / 2 * (1 - Math.cos(th / 2));
+  return {A, P: Pm, R: Rh, y, B: D * Math.sin(th / 2)};
+}
+function manningQ(A, Rh, S, n) { return A * Math.pow(Rh, 2 / 3) * Math.sqrt(Math.max(S, 0)) / n; }
+// escoamento uniforme em seção parcialmente cheia
+function partFlow(Q, Dmm, S, n) {
+  const D = Dmm / 1000;
+  const full = secaoCirc(D, 2 * Math.PI);
+  const r = {D, Qp: null, Vp: null, yD: null, y: null, V: null, R: null, A: null, carga: false, Sf: null, Fr: null};
+  if (!(D > 0) || !(n > 0)) return r;
+  r.Sf = isNum(Q) ? Math.pow(Q * n / (full.A * Math.pow(full.R, 2 / 3)), 2) : null; // perda unitária a seção plena
+  if (!(S > 0)) return r;
+  r.Qp = manningQ(full.A, full.R, S, n); r.Vp = r.Qp / full.A;
+  if (!isNum(Q) || Q <= 0) { r.yD = 0; r.y = 0; r.V = 0; r.R = 0; r.A = 0; return r; }
+  const thMax = 5.2786; // y/D ≈ 0,938 (vazão máxima)
+  const qMax = manningQ(...(s => [s.A, s.R])(secaoCirc(D, thMax)), S, n);
+  if (Q > qMax) { r.carga = true; r.yD = 1; r.y = D; r.A = full.A; r.R = full.R; r.V = Q / full.A; }
+  else {
+    let lo = 1e-6, hi = thMax;
+    for (let k = 0; k < 70; k++) { const m = (lo + hi) / 2; const s = secaoCirc(D, m); if (manningQ(s.A, s.R, S, n) < Q) lo = m; else hi = m; }
+    const s = secaoCirc(D, (lo + hi) / 2);
+    r.y = s.y; r.yD = s.y / D; r.A = s.A; r.R = s.R; r.V = Q / s.A;
+    r.Fr = s.B > 0 ? r.V / Math.sqrt(G * s.A / s.B) : null;
+  }
+  return r;
+}
+
+/* ---------------- sarjeta (Izzard) e boca-de-lobo ---------------- */
+// Q = 0,375 · (z/n) · S^½ · y^(8/3)
+function izzardQ(y, z, n, S) { return 0.375 * (z / n) * Math.sqrt(S) * Math.pow(y, 8 / 3); }
+function izzardY(Q, z, n, S) { return Math.pow(Q / (0.375 * (z / n) * Math.sqrt(S)), 3 / 8); }
+// Fator de redução da capacidade da sarjeta (DAEE/CETESB) em função da declividade (%)
+const FSARJ = [[0, 0.50], [0.4, 0.50], [1.0, 0.80], [3.0, 0.80], [5.0, 0.50], [6.0, 0.40], [8.0, 0.27], [10.0, 0.20], [100, 0.20]];
+function fatorSarjeta(Spct) {
+  for (let i = 0; i < FSARJ.length - 1; i++) {
+    const [x0, y0] = FSARJ[i], [x1, y1] = FSARJ[i + 1];
+    if (Spct >= x0 && Spct <= x1) return y0 + (y1 - y0) * (Spct - x0) / ((x1 - x0) || 1);
+  }
+  return 0.2;
+}
+// capacidade teórica de engolimento para lâmina y (m) junto à guia
+function blCapacidade(bl, y) {
+  const c = P.crit, a = num(bl.a) || 0, t = bl.tipo;
+  let qg = 0, qr = 0;
+  if (t === 'gs' || t === 'gd' || t === 'cb') qg = c.Cw * (num(bl.L) || 0) * Math.pow(y + a, 1.5);       // vertedor lateral
+  if (t === 'gr' || t === 'cb') {
+    const L = num(bl.gL) || 0, B = num(bl.gB) || 0, Pr = L + 2 * B, Au = L * B * (num(bl.ga) || 60) / 100, h = y + a;
+    const qv = c.Cw * Pr * Math.pow(h, 1.5), qo = c.Co * Au * Math.sqrt(h);
+    qr = h <= 0.12 ? qv : h >= 0.42 ? qo : qv + (qo - qv) * (h - 0.12) / 0.30;
+  }
+  return {qg, qr, q: qg + qr};
+}
+
+/* =====================================================================
+   MOTOR DE CÁLCULO
+   ===================================================================== */
+function ordemTrechos() {
+  // ordenação topológica de montante para jusante (rede ramificada)
+  const ts = P.trechos.filter(t => t.m && t.j && t.m !== t.j);
+  const indeg = {}; ts.forEach(t => { indeg[t.id] = 0; });
+  ts.forEach(t => { ts.forEach(u => { if (u.j === t.m) indeg[t.id]++; }); });
+  const fila = ts.filter(t => indeg[t.id] === 0), out = [], seen = new Set();
+  while (fila.length) {
+    const t = fila.shift(); if (seen.has(t.id)) continue; seen.add(t.id); out.push(t);
+    ts.forEach(u => { if (u.m === t.j && !seen.has(u.id)) { indeg[u.id]--; if (indeg[u.id] <= 0) fila.push(u); } });
+  }
+  const ciclo = ts.filter(t => !seen.has(t.id));
+  return {ordem: out, ciclo};
+}
+function ordemBLs() {
+  const bls = P.bls.slice(), byId = {}; bls.forEach(b => { byId[b.id] = b; });
+  const out = [], vis = {}, ciclo = [];
+  function visit(b, stack) {
+    if (vis[b.id] === 2) return; if (vis[b.id] === 1) { ciclo.push(b.id); return; }
+    vis[b.id] = 1;
+    bls.forEach(u => { if (u.prox === b.id && u.id !== b.id) visit(u, stack); }); // montantes primeiro
+    vis[b.id] = 2; out.push(b);
+  }
+  bls.forEach(b => visit(b));
+  return {ordem: out, ciclo};
+}
+
+function calc() {
+  const c = P.crit, n = +c.nTubo || 0.013;
+  const res = {bac: {}, bl: {}, tr: {}, pv: {}, checks: [], erros: [], ordem: [], outlets: [], quant: {}};
+  const chk = (tab, el, par, val, lim, st, nota) => res.checks.push({tab, el, par, val, lim, st, nota: nota || ''});
+
+  /* 1. Bacias */
+  P.bacias.forEach(b => {
+    const A = num(b.A) || 0, C = num(b.C) || 0, tc = baciaTc(b), i = idf(tc);
+    const CA = C * A, Q = CA * i / 360;
+    const tk = b.tcMode === 'kir' ? kirpich(num(b.kL), num(b.kH)) : null;
+    res.bac[b.id] = {A, C, CA, tc, i, Q, tk};
+    if (!(C > 0 && C <= 1)) chk('bacias', b.id, 'Coeficiente C', fmt(C, 2), '0 < C ≤ 1', 'err', 'Revise o coeficiente de escoamento.');
+    if (!(A > 0)) chk('bacias', b.id, 'Área', fmt(A, 3) + ' ha', '> 0', 'err', 'Informe a área de contribuição.');
+    const destOk = P.bls.some(x => x.id === b.dest) || P.pvs.some(x => x.id === b.dest);
+    if (!destOk) chk('bacias', b.id, 'Destino', b.dest || '—', 'BL ou PV existente', 'err', 'A bacia não está ligada a nenhuma boca-de-lobo ou PV — sua vazão não entra na rede.');
+  });
+
+  /* 2. Sarjetas e bocas-de-lobo (com vazão remanescente passando para a BL seguinte) */
+  const ob = ordemBLs();
+  if (ob.ciclo.length) chk('bls', ob.ciclo.join(', '), 'Encadeamento', 'circular', 'sem ciclos', 'err', 'A "BL seguinte" forma um ciclo. Corrija o encadeamento.');
+  ob.ordem.forEach(bl => {
+    const r = {CAin: 0, tc: c.tcMin, Qafl: 0, msgs: []};
+    P.bacias.filter(b => b.dest === bl.id).forEach(b => { const x = res.bac[b.id]; r.CAin += x.CA; r.tc = Math.max(r.tc, x.tc); });
+    P.bls.filter(u => u.prox === bl.id && res.bl[u.id]).forEach(u => { const x = res.bl[u.id]; r.CAin += x.CAbyp; r.tc = Math.max(r.tc, x.tc); });
+    r.i = idf(r.tc); r.Qafl = r.CAin * r.i / 360;
+    // sarjeta
+    const Sauto = greideDecl(bl.rua, num(bl.dist));
+    const Sp = num(bl.S) != null ? num(bl.S) : (isNum(Sauto) ? Sauto * 100 : null);
+    const rua = ruaById(bl.rua);
+    const z = num(bl.z) != null ? num(bl.z) : (rua && num(rua.it) > 0 ? 100 / num(rua.it) : 33);
+    r.Sp = Sp; r.Sauto = isNum(Sauto) ? Sauto * 100 : null; r.z = z;
+    const ns = +c.nSarj || 0.016;
+    if (isNum(Sp) && Sp > 0) {
+      const S = Sp / 100;
+      r.F = fatorSarjeta(Sp);
+      r.Qsarj = izzardQ(c.ymax, z, ns, S);           // capacidade teórica com lâmina máxima
+      r.Qadm = r.F * r.Qsarj;                          // admissível (DAEE)
+      r.y = r.Qafl > 0 ? izzardY(r.Qafl, z, ns, S) : 0; r.T = r.y * z;
+      r.Vs = r.y > 0 ? r.Qafl / (r.y * r.y * z / 2) : 0;
+    } else { r.F = null; r.y = null; }
+    // engolimento
+    const fr = num(bl.fr) != null ? num(bl.fr) : BLTIPOS[bl.tipo].fr;
+    const yCalc = isNum(r.y) ? Math.min(r.y, 0.5) : c.ymax;
+    const cap = blCapacidade(bl, yCalc);
+    r.Qteo = cap.q; r.Qcap = cap.q * fr; r.fr = fr;
+    r.Qeng = Math.min(r.Qafl, r.Qcap); r.Qbyp = Math.max(0, r.Qafl - r.Qeng);
+    r.ef = r.Qafl > 0 ? r.Qeng / r.Qafl : 1;
+    r.CAeng = r.CAin * r.ef; r.CAbyp = r.CAin - r.CAeng;
+    // ramal BL → PV (Manning em seção parcialmente cheia)
+    const rS = (num(bl.rI) || 0) / 100;
+    r.ram = partFlow(r.Qeng, num(bl.rD) || 0, rS, n);
+    if (r.ram.R != null) r.ram.tau = c.gama * r.ram.R * rS;
+    res.bl[bl.id] = r;
+    // verificações
+    let st = 'ok';
+    const add = (par, val, lim, s, nota) => { chk('bls', bl.id, par, val, lim, s, nota); r.msgs.push({s, t: par + ': ' + val + ' (' + lim + ')' + (s !== 'ok' && nota ? ' — ' + nota : '')}); st = worst(st, s); };
+    if (!isNum(Sp) || Sp <= 0) add('Declividade da sarjeta', '—', 'informe ou cadastre o greide', 'err', 'Sem declividade não é possível calcular a lâmina.');
+    else {
+      add('Declividade da sarjeta', fmt(Sp, 2) + ' %', '≥ ' + fmt(c.imin, 2) + ' %', Sp >= c.imin ? 'ok' : 'warn', 'Sarjeta muito plana: risco de empoçamento.');
+      add('Lâmina na sarjeta', fmt(r.y * 100, 1) + ' cm', '≤ ' + fmt(c.ymax * 100, 1) + ' cm', r.y <= c.ymax ? 'ok' : 'err', 'A água ultrapassa o limite junto à guia. Antecipe a BL ou reduza a área.');
+      add('Largura alagada T', fmt(r.T, 2) + ' m', '≤ ' + fmt(c.Tmax, 2) + ' m', r.T <= c.Tmax ? 'ok' : 'warn', 'Espalhamento acima do admitido sobre a pista.');
+      add('Vazão × admissível da sarjeta', fL(r.Qafl) + ' L/s', '≤ ' + fL(r.Qadm) + ' L/s', r.Qafl <= r.Qadm ? 'ok' : 'err', 'Vazão maior que a admissível (com fator de redução F).');
+    }
+    if (r.Qbyp > 1e-4) add('Vazão que passa da BL', fL(r.Qbyp) + ' L/s', bl.prox ? 'segue para ' + bl.prox : 'sem BL a jusante', bl.prox ? 'warn' : 'err', bl.prox ? 'A BL não engole tudo; o excedente foi somado à próxima.' : 'Excedente se perde na via. Aumente a BL ou indique a BL seguinte.');
+    else add('Engolimento', fL(r.Qeng) + ' L/s', 'capacidade ' + fL(r.Qcap) + ' L/s', 'ok');
+    if (!pvById(bl.pv)) add('PV de destino', bl.pv || '—', 'PV existente', 'err', 'O ramal não está ligado a um PV.');
+    const rd = num(bl.rD) || 0, rl = num(bl.rL) || 0, ri = num(bl.rI) || 0;
+    add('Ramal — diâmetro', rd + ' mm', '≥ ' + c.ramalDmin + ' mm', rd >= c.ramalDmin ? 'ok' : 'err');
+    add('Ramal — comprimento', fmt(rl, 1) + ' m', '≤ ' + fmt(c.ramalLmax, 1) + ' m', rl <= c.ramalLmax ? 'ok' : 'warn', 'Ramal longo: preveja caixa de passagem ou PV.');
+    add('Ramal — declividade', fmt(ri, 2) + ' %', '≥ ' + fmt(c.ramalImin, 2) + ' %', ri >= c.ramalImin ? 'ok' : 'err');
+    if (r.Qeng > 0 && r.ram.V != null) {
+      add('Ramal — velocidade', fmt(r.ram.V, 2) + ' m/s', fmt(c.vmin, 2) + ' a ' + fmt(c.vmax, 2) + ' m/s', r.ram.V < c.vmin ? 'warn' : r.ram.V > c.vmax ? 'err' : 'ok', r.ram.V < c.vmin ? 'Velocidade baixa: risco de assoreamento.' : 'Velocidade alta: risco de erosão.');
+      add('Ramal — lâmina y/D', fmt(r.ram.yD, 2), '≤ ' + fmt(c.yD, 2), r.ram.carga ? 'err' : r.ram.yD <= c.yD ? 'ok' : 'warn', r.ram.carga ? 'Ramal funciona em carga: aumente diâmetro ou declividade.' : 'Lâmina alta no ramal.');
+    }
+    r.st = st;
+  });
+
+  /* 3. Rede tronco — método racional acumulado de montante para jusante */
+  const ot = ordemTrechos(); res.ordem = ot.ordem;
+  if (ot.ciclo.length) chk('rede', ot.ciclo.map(t => t.id).join(', '), 'Topologia', 'circular', 'rede sem ciclos', 'err', 'Os trechos formam um ciclo; confira PV de montante/jusante.');
+  const localPV = id => {
+    let CA = 0, tc = 0, Qr = 0, nb = 0;
+    P.bls.filter(b => b.pv === id && res.bl[b.id]).forEach(b => { const x = res.bl[b.id]; CA += x.CAeng; Qr += x.Qeng; if (x.CAeng > 0) tc = Math.max(tc, x.tc); nb++; });
+    P.bacias.filter(b => b.dest === id).forEach(b => { const x = res.bac[b.id]; CA += x.CA; tc = Math.max(tc, x.tc); });
+    return {CA, tc, Qr, nb};
+  };
+  res.ordem.forEach(t => {
+    const L = num(t.L) || 0, D = num(t.D) || 0, cm = num(t.cm), cj = num(t.cj);
+    const loc = localPV(t.m);
+    const ins = res.ordem.filter(u => u.j === t.m && res.tr[u.id]);
+    let CA = loc.CA, tc = Math.max(c.tcMin, loc.tc || 0);
+    ins.forEach(u => { const x = res.tr[u.id]; CA += x.CA; tc = Math.max(tc, x.tc + (x.tt || 0)); });
+    const i = idf(tc), Q = CA * i / 360;
+    const S = (isNum(cm) && isNum(cj) && L > 0) ? (cm - cj) / L : null;
+    const h = partFlow(Q, D, S, n);
+    const tau = h.R != null && S != null ? c.gama * h.R * S : null;
+    const tt = h.V > 0 ? L / h.V / 60 : 0;
+    const pm = pvById(t.m), pj = pvById(t.j), tm = tampaPV(pm), tj = tampaPV(pj);
+    const Dm = D / 1000, esp = Dm * c.espF;
+    const recM = isNum(tm) && isNum(cm) ? tm - (cm + Dm + esp) : null;
+    const recJ = isNum(tj) && isNum(cj) ? tj - (cj + Dm + esp) : null;
+    const r = {CA, tc, i, Q, S, h, tau, tt, recM, recJ, L, D, cm, cj, tm, tj, nIn: ins.length, loc, msgs: []};
+    res.tr[t.id] = r;
+    let st = 'ok';
+    const add = (par, val, lim, s, nota) => { chk('rede', t.id, par, val, lim, s, nota); r.msgs.push({s, t: par + ': ' + val + ' (' + lim + ')' + (s !== 'ok' && nota ? ' — ' + nota : '')}); st = worst(st, s); };
+    if (!pm || !pj) add('PVs do trecho', (t.m || '—') + ' → ' + (t.j || '—'), 'PVs cadastrados', 'err', 'Selecione PV de montante e de jusante.');
+    if (!isNum(S)) add('Cotas do tubo', '—', 'informe cotas de montante e jusante', 'err', 'Use "Lançar cotas automaticamente" ou digite as cotas.');
+    else {
+      add('Declividade', fmt(S * 100, 3) + ' %', '≥ ' + fmt(c.imin, 2) + ' %', S * 100 >= c.imin ? 'ok' : (S > 0 ? 'warn' : 'err'), S > 0 ? 'Abaixo da mínima adotada.' : 'Tubo em aclive ou nivelado.');
+      add('Diâmetro', D + ' mm', '≥ ' + c.dmin + ' mm', D >= c.dmin ? 'ok' : 'err');
+      if (Q > 0 && h.V != null) {
+        add('Grau de enchimento y/D', h.carga ? 'em carga' : fmt(h.yD, 3), '≤ ' + fmt(c.yD, 2), h.carga ? 'err' : h.yD <= c.yD ? 'ok' : 'err', h.carga ? 'Vazão maior que a capacidade máxima do tubo: aumente o diâmetro ou a declividade.' : 'Lâmina acima do limite: aumente o diâmetro.');
+        add('Velocidade', fmt(h.V, 2) + ' m/s', fmt(c.vmin, 2) + ' a ' + fmt(c.vmax, 2) + ' m/s', h.V < c.vmin ? 'warn' : h.V > c.vmax ? 'err' : 'ok', h.V < c.vmin ? 'Velocidade baixa: aumente a declividade.' : 'Velocidade alta: preveja degraus/PV de queda.');
+        add('Tensão trativa τ', fmt(tau, 2) + ' Pa', '≥ ' + fmt(c.tauMin, 2) + ' Pa', tau >= c.tauMin ? 'ok' : 'warn', 'Autolimpeza não garantida: aumente a declividade.');
+      }
+      if (isNum(recM)) add('Recobrimento montante', fmt(recM, 2) + ' m', '≥ ' + fmt(c.recob, 2) + ' m', recM >= c.recob - 1e-3 ? 'ok' : 'err', 'Tubo raso: risco de ruptura pelo tráfego.');
+      if (isNum(recJ)) add('Recobrimento jusante', fmt(recJ, 2) + ' m', '≥ ' + fmt(c.recob, 2) + ' m', recJ >= c.recob - 1e-3 ? 'ok' : 'err', 'Tubo raso: risco de ruptura pelo tráfego.');
+    }
+    ins.forEach(u => { if ((num(u.D) || 0) > D) add('Diâmetro x montante', u.id + ' Ø' + u.D + ' → Ø' + D, 'não reduzir para jusante', 'err', 'O diâmetro não pode diminuir no sentido do escoamento.'); });
+    r.st = st;
+  });
+
+  /* 4. Poços de visita */
+  P.pvs.forEach(pv => {
+    const ins = res.ordem.filter(t => t.j === pv.id), outs = res.ordem.filter(t => t.m === pv.id);
+    const out = outs[0], tp = tampaPV(pv);
+    const cotas = []; ins.forEach(t => { if (isNum(num(t.cj))) cotas.push(+t.cj); }); outs.forEach(t => { if (isNum(num(t.cm))) cotas.push(+t.cm); });
+    const fundo = cotas.length ? Math.min(...cotas) : null;
+    const prof = isNum(tp) && isNum(fundo) ? tp - fundo : null;
+    const K = c.K[pv.defl] != null ? +c.K[pv.defl] : 0.15;
+    const Vout = out && res.tr[out.id] ? res.tr[out.id].h.V : null;
+    const hf = isNum(Vout) ? K * Vout * Vout / (2 * G) : 0;
+    const r = {ins, outs, tp, fundo, prof, K, Vout, hf, nbl: P.bls.filter(b => b.pv === pv.id).length, msgs: []};
+    res.pv[pv.id] = r;
+    let st = 'ok';
+    const add = (par, val, lim, s, nota) => { chk('pvs', pv.id, par, val, lim, s, nota); r.msgs.push({s, t: par + ': ' + val + ' (' + lim + ')' + (s !== 'ok' && nota ? ' — ' + nota : '')}); st = worst(st, s); };
+    if (!isNum(tp)) add('Cota da tampa', '—', 'informe a cota ou cadastre o greide da rua', 'err');
+    if (outs.length > 1) add('Saídas do PV', outs.length + ' trechos', '1 saída', 'err', 'Um PV só pode ter um trecho de saída.');
+    if (!ins.length && !outs.length) add('Ligação', 'isolado', 'ligado à rede', 'warn', 'PV sem trechos.');
+    if (!outs.length && ins.length) { res.outlets.push(pv.id); r.exut = true; }
+    if (ins.length >= 2 && pv.defl !== 'T' && pv.defl !== 'X') add('Tipo de deflexão', DEFL[pv.defl], ins.length + ' entradas', 'warn', 'PV com mais de uma entrada: use confluência T ou X para considerar a perda correta.');
+    if (out) {
+      const dzMin = +c.dz[pv.defl] || 0;
+      ins.forEach(t => {
+        const cjI = num(t.cj), cmO = num(out.cm), dI = (num(t.D) || 0) / 1000, dO = (num(out.D) || 0) / 1000;
+        if (isNum(cjI) && isNum(cmO)) {
+          const dz = cjI - cmO;
+          add('Degrau ' + t.id + '→' + out.id, fmt(dz, 3) + ' m', '≥ ' + fmt(dzMin, 2) + ' m', dz >= dzMin - 1e-4 ? 'ok' : 'err', 'Degrau insuficiente para compensar a perda por turbulência no PV.');
+          const coroa = (cjI + dI) - (cmO + dO);
+          if (coroa < -1e-3) add('Alinhamento de geratriz superior', fmt(coroa, 3) + ' m', 'coroa de saída ≤ coroa de entrada', 'err', 'A coroa do tubo de saída está acima da de entrada (remanso).');
+        }
+      });
+      const dmax = Math.max(0, ...ins.map(t => num(t.D) || 0), num(out.D) || 0);
+      if ((num(pv.dpv) || 0) - dmax < 400) add('Diâmetro do PV', 'Ø' + pv.dpv + ' p/ tubo Ø' + dmax, 'Ø PV ≥ Ø tubo + 400 mm', 'warn', 'PV pequeno para o tubo: aumente o PV ou use câmara.');
+    }
+    if (isNum(prof)) add('Profundidade', fmt(prof, 2) + ' m', '≤ ' + fmt(c.profMaxPV, 2) + ' m', prof <= c.profMaxPV ? 'ok' : 'warn', 'PV profundo: preveja escada, chaminé e escoramento especial.');
+    r.st = st;
+  });
+
+  /* 5. Linha piezométrica — de jusante para montante */
+  const visit = (pvId, Hpv, guard) => {
+    if (guard > 400) return;
+    res.ordem.filter(t => t.j === pvId).forEach(t => {
+      const r = res.tr[t.id]; if (!r || !isNum(r.cm) || !isNum(r.cj)) return;
+      const D = r.D / 1000, yn = r.h.carga ? D : (r.h.y || 0);
+      const Hj = Math.max(Hpv, r.cj + yn);
+      const carga = Hj > r.cj + D + 1e-6 || r.h.carga;
+      const hfA = isNum(r.h.Sf) ? r.h.Sf * r.L : 0;
+      const Hm = carga ? Math.max(Hj + hfA, r.cm + yn) : Math.max(r.cm + yn, Hj);
+      const pvm = res.pv[t.m];
+      const hpv = pvm ? pvm.hf : 0;
+      const Hpm = Hm + hpv;
+      r.piez = {Hj, Hm, hfA, hpv, Hpm, carga, regime: carga ? 'em carga' : 'livre'};
+      if (pvm) { pvm.H = Math.max(pvm.H || -1e9, Hpm); }
+      visit(t.m, Hpm, guard + 1);
+    });
+  };
+  res.outlets.forEach(id => {
+    const pv = pvById(id), r = res.pv[id];
+    let H0 = -1e9;
+    r.ins.forEach(t => { const x = res.tr[t.id]; if (x && isNum(x.cj)) H0 = Math.max(H0, x.cj + (x.h.carga ? x.D / 1000 : (x.h.y || 0))); });
+    const na = num(pv.na); if (isNum(na)) H0 = Math.max(H0, na);
+    r.H = H0; r.naJus = na;
+    visit(id, H0, 0);
+  });
+  P.pvs.forEach(pv => {
+    const r = res.pv[pv.id]; if (!r || !isNum(r.H) || !isNum(r.tp) || r.H < -1e8) return;
+    r.folga = r.tp - r.H;
+    const s = r.folga < 0 ? 'err' : r.folga < c.folgaPV ? 'warn' : 'ok';
+    chk('perfil', pv.id, 'Linha piezométrica × tampa', 'folga ' + fmt(r.folga, 2) + ' m', '≥ ' + fmt(c.folgaPV, 2) + ' m', s, s === 'err' ? 'EXTRAVASAMENTO: o nível d\'água ultrapassa a tampa do PV.' : 'Folga pequena entre o nível d\'água e a tampa.');
+    r.msgs.push({s, t: 'Nível d\'água no PV ' + fmt(r.H, 3) + ' m — folga até a tampa ' + fmt(r.folga, 2) + ' m'});
+    r.st = worst(r.st, s);
+  });
+
+  /* 6. Quantitativos */
+  const q = {tubos: {}, escav: 0, berco: 0, reaterro: 0, ramais: {}, pvs: {}, bls: {}};
+  P.trechos.forEach(t => {
+    const r = res.tr[t.id]; if (!r) return;
+    const D = r.D / 1000, De = D * (1 + 2 * c.espF), B = De + 2 * c.valaFolga;
+    q.tubos[t.D] = (q.tubos[t.D] || 0) + r.L;
+    if (isNum(r.tm) && isNum(r.tj) && isNum(r.cm) && isNum(r.cj)) {
+      const hM = r.tm - r.cm + D * c.espF + c.berco, hJ = r.tj - r.cj + D * c.espF + c.berco;
+      const V = B * r.L * (hM + hJ) / 2;
+      r.vala = {B, hM, hJ, V};
+      q.escav += V; q.berco += B * c.berco * r.L; q.reaterro += V - B * c.berco * r.L - Math.PI * De * De / 4 * r.L;
+    }
+  });
+  P.bls.forEach(b => { q.ramais[b.rD] = (q.ramais[b.rD] || 0) + (num(b.rL) || 0); const k = BLTIPOS[b.tipo].nome + ' — ' + (b.constr || ''); q.bls[k] = (q.bls[k] || 0) + 1; });
+  P.pvs.forEach(p => { const k = p.tipo + ' · ' + (p.tampaCl || ''); q.pvs[k] = (q.pvs[k] || 0) + 1; });
+  res.quant = q;
+  R = res;
+  return res;
+}
+
+/* =====================================================================
+   PROJETO AUTOMÁTICO: cotas e diâmetros
+   ===================================================================== */
+function autoCotas(silencioso) {
+  const c = P.crit, ot = ordemTrechos().ordem;
+  const done = {};
+  ot.forEach(t => {
+    const pm = pvById(t.m), pj = pvById(t.j), tm = tampaPV(pm), tj = tampaPV(pj), L = num(t.L) || 0;
+    if (!isNum(tm) || !isNum(tj) || !(L > 0)) return;
+    const D = (num(t.D) || 0) / 1000, hmin = c.recob + D * (1 + c.espF);
+    let cm = tm - hmin;
+    ot.filter(u => u.j === t.m && done[u.id]).forEach(u => {
+      const cjI = num(u.cj), dI = (num(u.D) || 0) / 1000;
+      cm = Math.min(cm, cjI - (+c.dz[pm.defl] || 0), cjI + dI - D);
+    });
+    let iT = (tm - tj) / L;
+    let iTau = 0;
+    if (R && R.tr[t.id] && R.tr[t.id].h && R.tr[t.id].h.R > 0) iTau = c.tauMin / (c.gama * R.tr[t.id].h.R);
+    let i = Math.max(c.imin / 100, iT, iTau);
+    let cj = cm - i * L;
+    cj = Math.min(cj, tj - hmin);
+    t.cm = +cm.toFixed(3); t.cj = +cj.toFixed(3);
+    done[t.id] = true;
+  });
+  if (!silencioso) toast('Cotas lançadas de montante para jusante');
+}
+function escolheD(Q, S, Dmin) {
+  const c = P.crit;
+  for (const D of DIAMS) {
+    if (D < Dmin) continue;
+    const h = partFlow(Q, D, S, c.nTubo);
+    if (!h.carga && h.yD != null && h.yD <= c.yD) return D;
+  }
+  return DIAMS[DIAMS.length - 1];
+}
+function autoDimensionar() {
+  const c = P.crit;
+  for (let it = 0; it < 6; it++) {
+    autoCotas(true); calc();
+    let mudou = false;
+    R.ordem.forEach(t => {
+      const r = R.tr[t.id]; if (!r || !isNum(r.S) || r.S <= 0) return;
+      let Dmin = c.dmin;
+      R.ordem.filter(u => u.j === t.m).forEach(u => { Dmin = Math.max(Dmin, num(u.D) || 0); });
+      const nd = escolheD(r.Q, r.S, Dmin);
+      if (nd !== +t.D) { t.D = nd; mudou = true; }
+    });
+    if (!mudou && it > 0) break;
+  }
+  autoCotas(true); calc(); autoCotas(true); calc();
+  toast('Rede dimensionada: diâmetros e cotas atualizados');
+}
+
+/* =====================================================================
+   INTERFACE
+   ===================================================================== */
+const TABS = [
+  ['projeto', '1. Projeto e critérios'], ['chuva', '2. Chuva (IDF · tc)'], ['ruas', '3. Ruas e greide'],
+  ['bacias', '4. Bacias'], ['bls', '5. Sarjetas e bocas-de-lobo'], ['pvs', '6. Poços de visita'],
+  ['rede', '7. Rede tronco'], ['perfil', '8. Perfil e piezométrica'], ['secao', '9. Seção transversal'],
+  ['verif', '10. Verificação'], ['memorial', '11. Memorial']
+];
+let TAB = 'projeto';
+
+/* ---------- campos ligados ao estado por caminho ("pvs.2.tampa") ---------- */
+function getPath(p) { return p.split('.').reduce((o, k) => (o == null ? o : o[k]), P); }
+function setPath(p, v) {
+  const ks = p.split('.'); let o = P;
+  for (let i = 0; i < ks.length - 1; i++) o = o[ks[i]];
+  o[ks[ks.length - 1]] = v;
+}
+function fld(path, label, o = {}) {
+  const v = getPath(path), t = o.type || 'num', cls = o.w2 ? 'field w2' : 'field';
+  const hint = o.hint ? `<span class="hint">${o.hint}</span>` : '';
+  const ph = o.ph != null ? ` placeholder="${esc(o.ph)}"` : '';
+  if (t === 'sel') {
+    const opts = (o.opts || []).map(op => { const [val, txt] = Array.isArray(op) ? op : [op, op]; return `<option value="${esc(val)}"${String(val) === String(v) ? ' selected' : ''}>${esc(txt)}</option>`; }).join('');
+    return `<div class="${cls}"><label>${label}</label><select data-p="${path}" data-t="${o.num ? 'num' : 'txt'}">${opts}</select>${hint}</div>`;
+  }
+  if (t === 'area') return `<div class="${cls}" style="grid-column:1/-1"><label>${label}</label><textarea data-p="${path}" data-t="txt" rows="3"${ph}>${esc(v)}</textarea>${hint}</div>`;
+  const it = t === 'num' ? `type="number" inputmode="decimal" step="${o.step || 'any'}"` : t === 'date' ? 'type="date"' : 'type="text"';
+  return `<div class="${cls}"><label>${label}</label><input ${it} data-p="${path}" data-t="${t === 'num' ? 'num' : 'txt'}" value="${esc(v == null ? '' : v)}"${ph}${o.id ? ' data-id="1"' : ''}/>${hint}</div>`;
+}
+const optsPV = (vazio) => (vazio ? [['', '— selecione —']] : []).concat(P.pvs.map(p => [p.id, p.id]));
+const optsRua = () => [['', '—']].concat(P.ruas.map(r => [r.id, r.nome]));
+const optsDest = () => [['', '— selecione —']].concat(P.bls.map(b => [b.id, 'BL ' + b.id])).concat(P.pvs.map(p => [p.id, 'PV ' + p.id]));
+const optsD = () => DIAMS.map(d => [d, 'Ø ' + d + ' mm']);
+const kv = (lbl, val, st) => `<div class="${st || ''}"><small>${lbl}</small><b>${val}</b></div>`;
+const msgsHTML = (ms, soProblemas) => {
+  const l = (ms || []).filter(m => !soProblemas || m.s !== 'ok');
+  if (!l.length) return '';
+  return '<div class="msgs">' + l.map(m => `<div class="msg ${m.s}">${m.s === 'ok' ? '✓' : m.s === 'warn' ? '⚠' : '✕'} <span>${esc(m.t)}</span></div>`).join('') + '</div>';
+};
+const stBadge = st => st === 'err' ? '<span class="badge badge-err">✕ Revisar</span>' : st === 'warn' ? '<span class="badge badge-warn">⚠ Atenção</span>' : '<span class="badge badge-ok">✓ OK</span>';
+const ajuda = (tit, html) => `<details class="ajuda"><summary>${tit}</summary><div class="in">${html}</div></details>`;
+function itemCard(kind, idx, titulo, sub, corpo, resId) {
+  return `<div class="item" id="it-${kind}-${idx}"><div class="item-h"><span class="t">${esc(titulo)}</span><span class="s">${sub || ''}</span><span class="sp"></span><span data-res="st-${kind}-${idx}"></span>
+    <button class="btn-icon" title="Duplicar" onclick="dupItem('${kind}',${idx})">⧉</button>
+    <button class="btn-icon" title="Excluir" onclick="delItem('${kind}',${idx})">✕</button></div>
+    <div class="item-b"><div class="fgrid">${corpo}</div>${resId ? `<div class="res" data-res="${resId}"></div>` : ''}</div></div>`;
+}
+
+/* ---------- eventos ---------- */
+let recalcT = null;
+function onField(e) {
+  const el = e.target, p = el.dataset.p; if (!p) return;
+  let v = el.value;
+  if (el.dataset.t === 'num') v = v === '' ? '' : +v;
+  const old = getPath(p);
+  if (p.endsWith('.id') && old !== v) renameRef(p.split('.')[0], old, v);
+  setPath(p, v);
+  if (p === 'proj.nome') { $('bar-nome').value = v; }
+  save();
+  if (el.tagName === 'SELECT' || e.type === 'change' && el.dataset.full) { calc(); renderTab(); return; }
+  clearTimeout(recalcT); recalcT = setTimeout(() => { calc(); refreshRes(); }, 220);
+}
+function renameRef(kind, a, b) {
+  if (!a || a === b) return;
+  if (kind === 'pvs') { P.trechos.forEach(t => { if (t.m === a) t.m = b; if (t.j === a) t.j = b; }); P.bls.forEach(x => { if (x.pv === a) x.pv = b; }); P.bacias.forEach(x => { if (x.dest === a) x.dest = b; }); }
+  if (kind === 'bls') { P.bls.forEach(x => { if (x.prox === a) x.prox = b; }); P.bacias.forEach(x => { if (x.dest === a) x.dest = b; }); }
+  if (kind === 'ruas') { P.estacas.forEach(x => { if (x.rua === a) x.rua = b; }); P.pvs.forEach(x => { if (x.rua === a) x.rua = b; }); P.bls.forEach(x => { if (x.rua === a) x.rua = b; }); }
+}
+function nextId(list, pre, dig = 2) {
+  let n = list.length + 1; const ids = new Set(list.map(x => x.id));
+  while (ids.has(pre + String(n).padStart(dig, '0'))) n++;
+  return pre + String(n).padStart(dig, '0');
+}
+function addItem(kind) {
+  const L = P[kind], last = L[L.length - 1];
+  let o;
+  if (kind === 'ruas') o = {id: nextId(L, 'R', 1), nome: 'Rua ' + (L.length + 1), larg: 7, passeio: 2, it: 3};
+  if (kind === 'estacas') { const rua = last ? last.rua : (P.ruas[0] || {}).id; const es = estacasRua(rua); const u = es[es.length - 1]; o = {rua, dist: u ? u.dist + 20 : 0, cota: u ? +(u.cota - 0.2).toFixed(3) : 10, obs: ''}; }
+  if (kind === 'bacias') o = {id: nextId(L, 'B', 1), nome: '', A: 0.2, C: 0.7, dest: last ? last.dest : '', tcMode: 'man', tc: 10, kL: '', kH: ''};
+  if (kind === 'bls') o = Object.assign({}, last || {rua: (P.ruas[0] || {}).id || '', dist: 0, lado: 'E', tipo: 'gs', L: 1, a: 0.05, gL: 0.9, gB: 0.4, ga: 60, fr: 0.8, S: '', z: '', pv: (P.pvs[0] || {}).id || '', rL: 6, rD: 400, rI: 2, constr: 'Pré-moldada'}, {id: nextId(L, 'BL-'), prox: ''});
+  if (kind === 'pvs') o = {id: nextId(L, 'PV-'), rua: last ? last.rua : ((P.ruas[0] || {}).id || ''), dist: last ? (num(last.dist) || 0) + 40 : 0, tipo: PVTIPOS[0], dpv: 1000, tampaCl: TAMPAS[0], tampa: '', defl: 'reta', na: '', obs: ''};
+  if (kind === 'trechos') { const m = last ? last.j : ((P.pvs[0] || {}).id || ''); o = {id: nextId(L, 'T', 1), m, j: '', L: 40, D: last ? last.D : P.crit.dmin, cm: '', cj: '', mat: MATS[1]}; }
+  L.push(o); save(); calc(); renderTab();
+  setTimeout(() => { const el = document.getElementById(`it-${kind}-${L.length - 1}`); if (el) el.scrollIntoView({behavior: 'smooth', block: 'center'}); }, 60);
+}
+function dupItem(kind, i) {
+  const L = P[kind], o = JSON.parse(JSON.stringify(L[i]));
+  if ('id' in o) o.id = nextId(L, kind === 'pvs' ? 'PV-' : kind === 'bls' ? 'BL-' : kind === 'trechos' ? 'T' : kind === 'bacias' ? 'B' : 'R', kind === 'pvs' || kind === 'bls' ? 2 : 1);
+  if (kind === 'estacas') o.dist = (num(o.dist) || 0) + 20;
+  L.splice(i + 1, 0, o); save(); calc(); renderTab();
+}
+function delItem(kind, i) {
+  const L = P[kind], o = L[i];
+  if (!confirm('Excluir ' + (o.id || o.nome || 'este item') + '?')) return;
+  L.splice(i, 1); save(); calc(); renderTab();
+}
+
+/* ---------- abas ---------- */
+function buildTabs() {
+  $('tabs-list').innerHTML = TABS.map(([k, t]) => `<button class="tab-btn${k === TAB ? ' active' : ''}" data-tab="${k}">${t}</button>`).join('');
+  $('tabs-list').onclick = e => { const b = e.target.closest('.tab-btn'); if (b) showTab(b.dataset.tab); };
+}
+function showTab(k) {
+  TAB = k; try { localStorage.setItem('tc_dren_tab', k); } catch (e) {}
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === k));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + k));
+  const b = document.querySelector(`.tab-btn[data-tab="${k}"]`); if (b) b.scrollIntoView({inline: 'center', block: 'nearest'});
+  renderTab(); window.scrollTo(0, 0);
+}
+function renderTab() {
+  const f = {projeto: vProjeto, chuva: vChuva, ruas: vRuas, bacias: vBacias, bls: vBLs, pvs: vPVs, rede: vRede, perfil: vPerfil, secao: vSecao, verif: vVerif, memorial: vMemorial}[TAB];
+  $('tab-' + TAB).innerHTML = f();
+  refreshRes();
+  if (TAB === 'perfil') drawPerfil();
+  if (TAB === 'secao') drawSecao();
+}
+function refreshRes() {
+  document.querySelectorAll('[data-res]').forEach(el => {
+    const k = el.dataset.res, [a, b, i] = k.split('-');
+    let h = '';
+    try {
+      if (a === 'st') h = resStatus(b, +i);
+      else if (RES[a]) h = RES[a](+b, i);
+    } catch (err) { h = '<span class="msg err">Erro de cálculo: ' + esc(err.message) + '</span>'; }
+    el.innerHTML = h;
+  });
+  updateSummary();
+}
+function resStatus(kind, i) {
+  const o = P[kind][i]; if (!o) return '';
+  const m = {bls: R.bl, pvs: R.pv, trechos: R.tr}[kind]; const r = m && m[o.id];
+  return r ? stBadge(r.st) : '';
+}
+function updateSummary() {
+  if (!R) return;
+  const e = R.checks.filter(c => c.st === 'err').length, w = R.checks.filter(c => c.st === 'warn').length;
+  const b = document.querySelector('.tab-btn[data-tab="verif"]');
+  if (b) b.innerHTML = '10. Verificação ' + (e ? `<span class="badge badge-err" style="padding:.05rem .4rem">${e}</span>` : w ? `<span class="badge badge-warn" style="padding:.05rem .4rem">${w}</span>` : '<span class="badge badge-ok" style="padding:.05rem .4rem">✓</span>');
+}
+
+/* ---------- 1. PROJETO E CRITÉRIOS ---------- */
+function vProjeto() {
+  const dev = CFG.device, tips = {
+    android: '<b>Android:</b> no Chrome, toque em ⋮ → <i>Adicionar à tela inicial</i> para abrir o programa como aplicativo. Os cartões ficam em duas colunas; gire o celular para ver as tabelas largas.',
+    iphone: '<b>iPhone/iPad:</b> no Safari, toque em Compartilhar → <i>Adicionar à Tela de Início</i>. Os campos usam fonte de 16 px para o Safari não dar zoom ao digitar.',
+    desktop: '<b>Computador:</b> use a aba 11 para imprimir o memorial (Ctrl+P → Salvar como PDF). A planilha da rede pode ser exportada em CSV pelo botão de backup.'
+  };
+  return `<h3>Projeto e critérios de dimensionamento</h3>
+  ${dev && tips[dev] ? `<div class="dev-tip"><div>📱</div><div>${tips[dev]}</div></div>` : ''}
+  <div class="card"><h4>Identificação</h4><div class="fgrid">
+    ${fld('proj.nome', 'Nome do projeto', {type: 'txt', w2: true})}
+    ${fld('proj.municipio', 'Município / UF', {type: 'txt'})}
+    ${fld('proj.local', 'Local / bairro', {type: 'txt'})}
+    ${fld('proj.resp', 'Responsável técnico', {type: 'txt'})}
+    ${fld('proj.crea', 'CREA / CAU', {type: 'txt'})}
+    ${fld('proj.art', 'ART / RRT', {type: 'txt'})}
+    ${fld('proj.data', 'Data', {type: 'date'})}
+    ${fld('proj.obs', 'Observações gerais (vão para o memorial)', {type: 'area'})}
+  </div></div>
+
+  <div class="card"><h4>Hidrologia e rugosidade</h4><div class="fgrid">
+    ${fld('crit.tr', 'Período de retorno TR (anos)', {type: 'sel', num: true, opts: [[2, '2 anos'], [5, '5 anos'], [10, '10 anos (usual microdrenagem)'], [25, '25 anos'], [50, '50 anos'], [100, '100 anos']]})}
+    ${fld('crit.tcMin', 'tc mínimo (min)', {step: 1})}
+    ${fld('crit.nTubo', 'Manning n — tubos', {step: 0.001, hint: 'Concreto 0,013 · PEAD 0,010–0,012'})}
+    ${fld('crit.nSarj', 'Manning n — sarjeta', {step: 0.001, hint: 'Concreto 0,016 · asfalto 0,016–0,018'})}
+    ${fld('crit.gama', 'γ água (N/m³)', {step: 1})}
+  </div></div>
+
+  <div class="card"><h4>Sarjetas e bocas-de-lobo</h4><div class="fgrid">
+    ${fld('crit.ymax', 'Lâmina máxima junto à guia (m)', {step: 0.005, hint: 'Meio-fio 15 cm → 0,13 m'})}
+    ${fld('crit.Tmax', 'Largura alagada máxima T (m)', {step: 0.1})}
+    ${fld('crit.Cw', 'Coef. vertedor Cw', {step: 0.01, hint: 'Q = Cw·L·h^1,5 (1,66 a 1,70)'})}
+    ${fld('crit.Co', 'Coef. orifício Co (grelha)', {step: 0.01, hint: 'Q = Co·A·h^0,5'})}
+    ${fld('crit.ramalDmin', 'Ramal — Ø mínimo (mm)', {step: 50})}
+    ${fld('crit.ramalLmax', 'Ramal — comprimento máx. (m)', {step: 1})}
+    ${fld('crit.ramalImin', 'Ramal — declividade mín. (%)', {step: 0.1})}
+  </div></div>
+
+  <div class="card"><h4>Rede tronco</h4><div class="fgrid">
+    ${fld('crit.dmin', 'Diâmetro mínimo (mm)', {type: 'sel', num: true, opts: optsD()})}
+    ${fld('crit.yD', 'Lâmina máxima y/D', {step: 0.05, hint: 'DNIT: 0,75'})}
+    ${fld('crit.vmin', 'Velocidade mínima (m/s)', {step: 0.05})}
+    ${fld('crit.vmax', 'Velocidade máxima (m/s)', {step: 0.1})}
+    ${fld('crit.tauMin', 'Tensão trativa mínima (Pa)', {step: 0.1})}
+    ${fld('crit.imin', 'Declividade mínima (%)', {step: 0.05})}
+    ${fld('crit.recob', 'Recobrimento mínimo (m)', {step: 0.05, hint: 'Sob pista: 1,00 m'})}
+    ${fld('crit.espF', 'Espessura da parede (× D)', {step: 0.01})}
+    ${fld('crit.profMaxPV', 'Profundidade máx. de PV (m)', {step: 0.1})}
+    ${fld('crit.folgaPV', 'Folga mín. NA → tampa (m)', {step: 0.05})}
+    ${fld('crit.valaFolga', 'Folga lateral da vala (m/lado)', {step: 0.05})}
+    ${fld('crit.berco', 'Berço / lastro (m)', {step: 0.05})}
+  </div></div>
+
+  <div class="card"><h4>Perdas no poço de visita — K e degrau mínimo</h4>
+    <p class="lead" style="margin:0 0 .6rem">Perda localizada <span class="formula">h<sub>f</sub> = K · V² / 2g</span>, com V do tubo de saída. O degrau entre a chegada e a saída compensa essa perda.</p>
+    <div class="tbl-wrap"><table><thead><tr><th>Situação</th><th>K</th><th>Faixa usual</th><th>Degrau mín. (m)</th></tr></thead><tbody>
+    ${[['reta', '0,10 – 0,15'], ['d45', '0,30 – 0,50'], ['d90', '0,50 – 0,90'], ['T', '0,50 – 1,00'], ['X', '1,00 – 1,50'], ['ini', 'entrada ≈ 0,50']].map(([k, f]) =>
+      `<tr><td>${DEFL[k]}</td><td style="width:90px"><input type="number" step="0.05" data-p="crit.K.${k}" data-t="num" value="${P.crit.K[k]}"/></td><td>${f}</td><td style="width:100px"><input type="number" step="0.01" data-p="crit.dz.${k}" data-t="num" value="${P.crit.dz[k]}"/></td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="bar-btns" style="margin:.75rem 0 0"><button class="btn btn-secondary btn-sm" onclick="restaurarCriterios()">Restaurar critérios padrão</button></div>
+  </div>`;
+}
+function restaurarCriterios() { if (!confirm('Restaurar todos os critérios para os valores padrão?')) return; P.crit = defaultCrit(); save(); calc(); renderTab(); }
+
+/* ---------- 2. CHUVA ---------- */
+function vChuva() {
+  const f = P.idf, tr = P.crit.tr;
+  const durs = [5, 10, 15, 20, 30, 45, 60, 90, 120], trs = [2, 5, 10, 25, 50, 100];
+  return `<h3>Chuva de projeto — equação IDF e tempo de concentração</h3>
+  <p class="lead">A intensidade é obtida pela equação de chuvas intensas do local: <span class="formula">i = a · TR<sup>b</sup> / (t + c)<sup>d</sup></span> (mm/h, t em minutos). Use a equação oficial do seu município, do programa Plúvio (UFV/ANA) ou de estudo hidrológico.</p>
+  <div class="card"><h4>Coeficientes da equação IDF</h4><div class="fgrid">
+    ${fld('idf.fonte', 'Fonte / posto pluviográfico', {type: 'txt', w2: true})}
+    ${fld('idf.a', 'a', {step: 0.01})}${fld('idf.b', 'b', {step: 0.001})}${fld('idf.c', 'c (min)', {step: 0.1})}${fld('idf.d', 'd', {step: 0.001})}
+  </div>
+  <div class="res" data-res="idf-0"></div></div>
+  ${ajuda('Equações de referência', `<p>Padrão do programa: <b>Rio de Janeiro – Jardim Botânico</b> (Ulysses Alcântara): a = 1239; b = 0,15; c = 20; d = 0,74.</p><p>Para outras cidades, obtenha a, b, c, d no Plúvio (UFV/ANA) ou na prefeitura. Equações em outras formas (ex.: com ln(TR)) devem ser ajustadas para esta forma antes de usar.</p>`)}
+  <div class="card"><h4>Tempo de concentração — Kirpich</h4>
+    <p class="lead" style="margin:0 0 .6rem"><span class="formula">t<sub>c</sub> = 57 · (L³ / H)<sup>0,385</sup></span> com t<sub>c</sub> em min, L em km (comprimento do talvegue) e H em m (desnível). Em áreas urbanas pequenas adote t<sub>c</sub> de entrada entre 5 e 15 min; o programa respeita o mínimo dos critérios.</p>
+    <div class="fgrid">${fld('idf.kL', 'Comprimento L (m)', {step: 1})}${fld('idf.kH', 'Desnível H (m)', {step: 0.1})}</div>
+    <div class="res" data-res="kir-0"></div>
+  </div>
+  <div class="card"><h4>Tabela de intensidades (mm/h)</h4><div class="tbl-wrap"><table><thead><tr><th>Duração</th>${trs.map(t => `<th${t === +tr ? ' style="color:var(--orange)"' : ''}>TR ${t}</th>`).join('')}</tr></thead><tbody>
+    ${durs.map(d => `<tr><td>${d} min</td>${trs.map(t => `<td class="td-num"${t === +tr ? ' style="font-weight:700;color:var(--orange)"' : ''}>${fmt(idf(d, t), 1)}</td>`).join('')}</tr>`).join('')}
+  </tbody></table></div></div>`;
+}
+
+/* ---------- 3. RUAS E GREIDE ---------- */
+function vRuas() {
+  const ruas = P.ruas.map((r, i) => itemCard('ruas', i, r.nome || r.id, 'Código ' + esc(r.id),
+    fld(`ruas.${i}.id`, 'Código', {type: 'txt'}) + fld(`ruas.${i}.nome`, 'Nome da rua', {type: 'txt', w2: true}) +
+    fld(`ruas.${i}.larg`, 'Largura da pista (m)', {step: 0.1}) + fld(`ruas.${i}.passeio`, 'Passeio (m/lado)', {step: 0.1}) +
+    fld(`ruas.${i}.it`, 'Decl. transversal sarjeta (%)', {step: 0.5, hint: 'z = 100 / i'}), '')).join('');
+  let est = '';
+  P.ruas.forEach(r => {
+    const idx = P.estacas.map((e, i) => ({e, i})).filter(x => x.e.rua === r.id).sort((a, b) => (num(a.e.dist) || 0) - (num(b.e.dist) || 0));
+    est += `<div class="card"><h4>${esc(r.nome)} — estaqueamento e greide</h4>
+      ${idx.length ? `<div class="tbl-wrap"><table><thead><tr><th>Estaca</th><th>Distância (m)</th><th>Cota do greide (m)</th><th>Decl. até a próxima</th><th>Obs.</th><th></th></tr></thead><tbody>
+      ${idx.map(({e, i}, k) => { const nx = idx[k + 1]; const d = nx ? (e.cota - nx.e.cota) / ((nx.e.dist - e.dist) || 1) * 100 : null;
+        const st = d == null ? '' : Math.abs(d) < P.crit.imin ? 'warn' : 'ok';
+        return `<tr><td><b>${estLabel(num(e.dist))}</b></td><td style="width:110px"><input type="number" step="any" data-p="estacas.${i}.dist" data-t="num" data-full="1" value="${e.dist}"/></td>
+        <td style="width:120px"><input type="number" step="any" data-p="estacas.${i}.cota" data-t="num" value="${e.cota}"/></td>
+        <td class="td-num ${st}">${d == null ? '—' : fmt(d, 2) + ' %' + (d < 0 ? ' ↑' : '')}</td>
+        <td><input type="text" data-p="estacas.${i}.obs" data-t="txt" value="${esc(e.obs)}"/></td><td><button class="btn-icon" onclick="delItem('estacas',${i})">✕</button></td></tr>`; }).join('')}
+      </tbody></table></div>` : '<div class="empty">Sem estacas nesta rua.</div>'}
+      <div class="bar-btns" style="margin:.6rem 0 0"><button class="btn btn-secondary btn-sm" onclick="addEstaca('${r.id}')">＋ Estaca</button><button class="btn btn-secondary btn-sm" onclick="addEstacas20('${r.id}')">＋ 3 estacas a cada 20 m</button></div>
+    </div>`;
+  });
+  return `<h3>Ruas, estaqueamento e greide</h3>
+  <p class="lead">O greide (cota do eixo nas estacas) é usado para obter automaticamente a <b>cota da tampa dos PVs</b> e a <b>declividade das sarjetas</b> nas bocas-de-lobo. Estacas de 20 m (notação n+xx,xx). Declividade positiva desce no sentido do estaqueamento.</p>
+  <div class="bar-btns"><button class="btn btn-primary btn-sm" onclick="addItem('ruas')">＋ Rua</button></div>
+  ${ruas || '<div class="empty">Cadastre a primeira rua.</div>'}
+  ${est}
+  <p class="hint" style="font-size:.75rem;color:var(--muted)">⚠ Declividade em laranja: abaixo da mínima de ${fmt(P.crit.imin, 2)} % — risco de empoçamento na sarjeta.</p>`;
+}
+function addEstaca(rua) { const es = estacasRua(rua), u = es[es.length - 1]; P.estacas.push({rua, dist: u ? u.dist + 20 : 0, cota: u ? +(u.cota - 0.2).toFixed(3) : 10, obs: ''}); save(); calc(); renderTab(); }
+function addEstacas20(rua) { for (let k = 0; k < 3; k++) addEstacaSil(rua); save(); calc(); renderTab(); }
+function addEstacaSil(rua) { const es = estacasRua(rua), u = es[es.length - 1]; P.estacas.push({rua, dist: u ? u.dist + 20 : 0, cota: u ? +(u.cota - 0.2).toFixed(3) : 10, obs: ''}); }
+
+/* ---------- 4. BACIAS ---------- */
+function vBacias() {
+  const lst = P.bacias.map((b, i) => itemCard('bacias', i, b.id + (b.nome ? ' — ' + b.nome : ''), '→ ' + esc(b.dest || 'sem destino'),
+    fld(`bacias.${i}.id`, 'Código', {type: 'txt'}) + fld(`bacias.${i}.nome`, 'Descrição', {type: 'txt', w2: true}) +
+    fld(`bacias.${i}.A`, 'Área A (ha)', {step: 0.01, hint: '1 ha = 10.000 m²'}) + fld(`bacias.${i}.C`, 'Coef. de escoamento C', {step: 0.05}) +
+    fld(`bacias.${i}.dest`, 'Descarrega em', {type: 'sel', opts: optsDest()}) +
+    fld(`bacias.${i}.tcMode`, 'Tempo de concentração', {type: 'sel', opts: [['man', 'Informado'], ['kir', 'Kirpich (L, H)']]}) +
+    (b.tcMode === 'kir' ? fld(`bacias.${i}.kL`, 'Talvegue L (m)', {step: 1}) + fld(`bacias.${i}.kH`, 'Desnível H (m)', {step: 0.1}) : fld(`bacias.${i}.tc`, 'tc (min)', {step: 1})),
+    `bac-${i}`)).join('');
+  const tot = P.bacias.reduce((s, b) => s + (num(b.A) || 0), 0);
+  return `<h3>Bacias de contribuição</h3>
+  <p class="lead">Método Racional: <span class="formula">Q = C · i · A / 360</span> (Q em m³/s, i em mm/h, A em ha). Cada bacia descarrega numa <b>boca-de-lobo</b> (escoando pela sarjeta) ou diretamente num <b>PV</b> (ligação de galeria, canaleta ou lote). Área total: <b>${fmt(tot, 3)} ha</b>.</p>
+  <div class="bar-btns"><button class="btn btn-primary btn-sm" onclick="addItem('bacias')">＋ Bacia</button></div>
+  ${lst || '<div class="empty">Cadastre as áreas que contribuem para cada boca-de-lobo.</div>'}
+  ${ajuda('Coeficientes de escoamento C (valores usuais)', `<div class="tbl-wrap"><table><thead><tr><th>Superfície / ocupação</th><th>C</th></tr></thead><tbody>
+    <tr><td>Telhados</td><td>0,75 – 0,95</td></tr><tr><td>Asfalto / concreto</td><td>0,70 – 0,95</td></tr><tr><td>Paralelepípedo rejuntado</td><td>0,75 – 0,85</td></tr>
+    <tr><td>Paralelepípedo / bloco com junta de areia</td><td>0,50 – 0,70</td></tr><tr><td>Centro comercial denso</td><td>0,70 – 0,95</td></tr><tr><td>Residencial — lotes pequenos</td><td>0,50 – 0,70</td></tr>
+    <tr><td>Residencial — lotes grandes</td><td>0,30 – 0,50</td></tr><tr><td>Parques, praças, gramados</td><td>0,10 – 0,35</td></tr></tbody></table></div>
+    <p>Para áreas mistas use o C ponderado: C = Σ(Cᵢ·Aᵢ) / ΣAᵢ.</p>`)}`;
+}
+
+/* ---------- 5. SARJETAS E BOCAS-DE-LOBO ---------- */
+function vBLs() {
+  const lst = P.bls.map((b, i) => {
+    const tg = b.tipo === 'gr' || b.tipo === 'cb', tgu = b.tipo !== 'gr';
+    return itemCard('bls', i, b.id, esc(ruaNome(b.rua)) + ' · est. ' + estLabel(num(b.dist)) + ' · lado ' + (b.lado === 'D' ? 'direito' : 'esquerdo') + ' → ' + esc(b.pv || '?'),
+      fld(`bls.${i}.id`, 'Código', {type: 'txt'}) + fld(`bls.${i}.rua`, 'Rua', {type: 'sel', opts: optsRua()}) +
+      fld(`bls.${i}.dist`, 'Posição (m)', {step: 0.5}) + fld(`bls.${i}.lado`, 'Lado', {type: 'sel', opts: [['E', 'Esquerdo'], ['D', 'Direito']]}) +
+      fld(`bls.${i}.tipo`, 'Tipo hidráulico', {type: 'sel', opts: Object.entries(BLTIPOS).map(([k, v]) => [k, v.nome])}) +
+      fld(`bls.${i}.constr`, 'Execução', {type: 'sel', opts: ['Pré-moldada', 'Blocos de concreto', 'Concreto moldado in loco']}) +
+      (tgu ? fld(`bls.${i}.L`, 'Abertura na guia L (m)', {step: 0.1}) : '') +
+      (tg ? fld(`bls.${i}.gL`, 'Grelha — comprimento (m)', {step: 0.05}) + fld(`bls.${i}.gB`, 'Grelha — largura (m)', {step: 0.05}) + fld(`bls.${i}.ga`, 'Grelha — área livre (%)', {step: 5}) : '') +
+      fld(`bls.${i}.a`, 'Depressão a (m)', {step: 0.01, hint: 'Rebaixo junto à BL'}) +
+      fld(`bls.${i}.fr`, 'Fator de redução', {step: 0.05, hint: 'Obstrução: guia 0,80 · grelha 0,50 · comb. 0,65'}) +
+      fld(`bls.${i}.S`, 'Decl. sarjeta (%)', {step: 0.05, ph: 'auto pelo greide'}) +
+      fld(`bls.${i}.z`, 'z = 1/i transversal', {step: 1, ph: 'auto pela rua'}) +
+      fld(`bls.${i}.prox`, 'Excedente segue para', {type: 'sel', opts: [['', '— nenhuma —']].concat(P.bls.filter(x => x.id !== b.id).map(x => [x.id, x.id]))}) +
+      fld(`bls.${i}.pv`, 'Ramal liga no PV', {type: 'sel', opts: optsPV(true)}) +
+      fld(`bls.${i}.rL`, 'Ramal — comprimento (m)', {step: 0.5}) +
+      fld(`bls.${i}.rD`, 'Ramal — Ø (mm)', {type: 'sel', num: true, opts: optsD()}) +
+      fld(`bls.${i}.rI`, 'Ramal — declividade (%)', {step: 0.1}),
+      `bl-${i}`);
+  }).join('');
+  return `<h3>Sarjetas, bocas-de-lobo e ramais</h3>
+  <p class="lead">Para cada boca-de-lobo o programa calcula a lâmina na sarjeta (Izzard), a capacidade de engolimento, o que <b>passa direto</b> para a BL seguinte e o escoamento no <b>ramal até o PV</b>.</p>
+  ${ajuda('Fórmulas e critérios usados', `
+    <p><b>Sarjeta (Izzard):</b> <span class="formula">Q = 0,375 · (z/n) · S<sup>½</sup> · y<sup>8/3</sup></span>; largura alagada T = z · y. A capacidade admissível é a teórica (com y<sub>máx</sub>) vezes o fator F de redução por declividade (DAEE/CETESB): 0,50 até 0,4 %; 0,80 entre 1 e 3 %; 0,50 a 5 %; 0,40 a 6 %; 0,27 a 8 %; 0,20 a 10 %.</p>
+    <p><b>Boca-de-lobo de guia (vertedor lateral):</b> <span class="formula">Q = C<sub>w</sub> · L · (y + a)<sup>3/2</sup></span>, com a = depressão.</p>
+    <p><b>Grelha:</b> funciona como vertedor até h = 0,12 m (<span class="formula">Q = C<sub>w</sub> · P · h<sup>3/2</sup></span>, P = perímetro livre sem o lado da guia) e como orifício acima de 0,42 m (<span class="formula">Q = C<sub>o</sub> · A<sub>útil</sub> · h<sup>½</sup></span>); entre os dois, interpolação linear.</p>
+    <p><b>Combinada:</b> soma guia + grelha. A capacidade real é a teórica vezes o fator de redução (obstrução por lixo/folhas).</p>
+    <p><b>Ramal BL → PV:</b> Manning em seção parcialmente cheia, com Q = vazão engolida. Exige Ø ≥ ${P.crit.ramalDmin} mm, L ≤ ${P.crit.ramalLmax} m, i ≥ ${fmt(P.crit.ramalImin, 1)} % e ${fmt(P.crit.vmin, 2)} ≤ V ≤ ${fmt(P.crit.vmax, 1)} m/s.</p>`)}
+  <div class="bar-btns"><button class="btn btn-primary btn-sm" onclick="addItem('bls')">＋ Boca-de-lobo</button></div>
+  ${lst || '<div class="empty">Cadastre as bocas-de-lobo (precisa de ao menos um PV para ligar o ramal).</div>'}`;
+}
+
+/* ---------- 6. POÇOS DE VISITA ---------- */
+function vPVs() {
+  const lst = P.pvs.map((p, i) => itemCard('pvs', i, p.id, esc(ruaNome(p.rua)) + ' · est. ' + estLabel(num(p.dist)) + ' · ' + esc(DEFL[p.defl] || ''),
+    fld(`pvs.${i}.id`, 'Código', {type: 'txt'}) + fld(`pvs.${i}.rua`, 'Rua', {type: 'sel', opts: optsRua()}) +
+    fld(`pvs.${i}.dist`, 'Posição (m)', {step: 0.5}) +
+    fld(`pvs.${i}.tampa`, 'Cota da tampa (m)', {step: 0.01, ph: (v => isNum(v) ? 'greide: ' + v.toFixed(3) : 'informe')(greideCota(p.rua, num(p.dist)))}) +
+    fld(`pvs.${i}.defl`, 'Escoamento no PV', {type: 'sel', opts: Object.entries(DEFL)}) +
+    fld(`pvs.${i}.tipo`, 'Tipo construtivo', {type: 'sel', opts: PVTIPOS}) +
+    fld(`pvs.${i}.dpv`, 'Ø interno (mm)', {type: 'sel', num: true, opts: [[1000, 'Ø 1000'], [1200, 'Ø 1200'], [1500, 'Ø 1500'], [2000, 'Ø 2000 / câmara']]}) +
+    fld(`pvs.${i}.tampaCl`, 'Tampão (NBR 10160)', {type: 'sel', opts: TAMPAS}) +
+    fld(`pvs.${i}.na`, 'NA a jusante (m) — só exutório', {step: 0.01, ph: 'opcional'}) +
+    fld(`pvs.${i}.obs`, 'Observação', {type: 'txt', w2: true}), `pv-${i}`)).join('');
+  return `<h3>Poços de visita</h3>
+  <p class="lead">A cota da tampa vem do greide (aba 3) quando deixada em branco. O programa verifica o degrau mínimo entre chegada e saída, o alinhamento das geratrizes superiores, a profundidade e a <b>perda por turbulência</b> <span class="formula">h<sub>f</sub> = K · V² / 2g</span> usada na linha piezométrica.</p>
+  <div class="bar-btns"><button class="btn btn-primary btn-sm" onclick="addItem('pvs')">＋ Poço de visita</button></div>
+  ${lst || '<div class="empty">Cadastre os poços de visita da rede.</div>'}`;
+}
+
+/* ---------- 7. REDE TRONCO ---------- */
+function vRede() {
+  const lst = P.trechos.map((t, i) => itemCard('trechos', i, t.id + ' · ' + (t.m || '?') + ' → ' + (t.j || '?'), 'Ø ' + t.D + ' mm · ' + fmt(num(t.L), 1) + ' m',
+    fld(`trechos.${i}.id`, 'Código', {type: 'txt'}) + fld(`trechos.${i}.m`, 'PV montante', {type: 'sel', opts: optsPV(true)}) +
+    fld(`trechos.${i}.j`, 'PV jusante', {type: 'sel', opts: optsPV(true)}) + fld(`trechos.${i}.L`, 'Extensão (m)', {step: 0.1}) +
+    fld(`trechos.${i}.D`, 'Diâmetro', {type: 'sel', num: true, opts: optsD()}) + fld(`trechos.${i}.mat`, 'Tubo (NBR 8890)', {type: 'sel', opts: MATS}) +
+    fld(`trechos.${i}.cm`, 'Cota inferior montante (m)', {step: 0.001}) + fld(`trechos.${i}.cj`, 'Cota inferior jusante (m)', {step: 0.001}),
+    `tr-${i}`)).join('');
+  return `<h3>Rede tronco — dimensionamento hidráulico</h3>
+  <p class="lead">Vazão pelo <b>Método Racional acumulado</b>: em cada trecho soma-se o C·A de tudo o que chega a montante; o t<sub>c</sub> é o maior entre a entrada local e (t<sub>c</sub> + tempo de percurso) dos trechos de montante. Hidráulica por Manning em <b>seção parcialmente cheia</b>, com verificação de y/D, velocidade e tensão trativa.</p>
+  <div class="bar-btns">
+    <button class="btn btn-primary btn-sm" onclick="addItem('trechos')">＋ Trecho</button>
+    <button class="btn btn-secondary btn-sm" onclick="if(confirm('Recalcular todas as cotas dos tubos a partir das tampas, recobrimento, degraus e declividade mínima?')){autoCotas();calc();renderTab();save();}">⤓ Lançar cotas automaticamente</button>
+    <button class="btn btn-secondary btn-sm" onclick="if(confirm('Escolher o menor diâmetro comercial que atende y/D e lançar as cotas de toda a rede?')){autoDimensionar();renderTab();save();}">⚙ Dimensionar rede automaticamente</button>
+  </div>
+  <div class="card" style="padding:.75rem"><h4 style="margin-bottom:.5rem">Planilha de cálculo</h4><div data-res="tblrede-0"></div></div>
+  ${ajuda('Fórmulas usadas', `<p><span class="formula">V = (1/n) · R<sub>h</sub><sup>2/3</sup> · S<sup>½</sup></span>; seção parcial por ângulo central θ: A = D²(θ − sen θ)/8, P = Dθ/2, y/D = (1 − cos θ/2)/2.</p>
+    <p>Tensão trativa: <span class="formula">τ = γ · R<sub>h</sub> · S</span> ≥ ${fmt(P.crit.tauMin, 1)} Pa (autolimpeza). Tempo de percurso t<sub>t</sub> = L / V.</p>
+    <p>Recobrimento = cota da tampa − (cota inferior + D + parede). O lançamento automático usa: recobrimento mínimo, degrau mínimo do tipo de PV, coroa de saída ≤ coroa de chegada e declividade = maior entre a mínima, a do terreno e a necessária para τ mínimo.</p>`)}
+  ${lst || '<div class="empty">Cadastre os trechos entre PVs (montante → jusante).</div>'}`;
+}
+
+/* ---------- blocos de resultado ---------- */
+const RES = {
+  idf(i) {
+    const tr = P.crit.tr, t = P.crit.tcMin;
+    return `<div class="kv">${kv('i (tc = ' + t + ' min; TR ' + tr + ')', fmt(idf(t), 1) + ' mm/h')}${kv('i (10 min; TR ' + tr + ')', fmt(idf(10), 1) + ' mm/h')}${kv('i (15 min; TR ' + tr + ')', fmt(idf(15), 1) + ' mm/h')}${kv('i (60 min; TR ' + tr + ')', fmt(idf(60), 1) + ' mm/h')}</div>`;
+  },
+  kir() {
+    const t = kirpich(num(P.idf.kL), num(P.idf.kH)); const ta = isNum(t) ? Math.max(P.crit.tcMin, t) : null;
+    return `<div class="kv">${kv('tc Kirpich', isNum(t) ? fmt(t, 2) + ' min' : '—')}${kv('tc adotado', isNum(ta) ? fmt(ta, 2) + ' min' : '—')}${kv('i (TR ' + P.crit.tr + ')', isNum(ta) ? fmt(idf(ta), 1) + ' mm/h' : '—')}</div>`;
+  },
+  bac(i) {
+    const b = P.bacias[i], r = R.bac[b.id]; if (!r) return '';
+    return `<div class="kv">${kv('C · A', fmt(r.CA, 4) + ' ha')}${b.tcMode === 'kir' ? kv('tc Kirpich', isNum(r.tk) ? fmt(r.tk, 2) + ' min' : '—') : ''}${kv('tc adotado', fmt(r.tc, 1) + ' min')}${kv('i', fmt(r.i, 1) + ' mm/h')}${kv('Q', fL(r.Q) + ' L/s')}</div>`;
+  },
+  bl(i) {
+    const b = P.bls[i], r = R.bl[b.id]; if (!r) return '';
+    const c = P.crit, ram = r.ram || {};
+    const sy = isNum(r.y) ? (r.y <= c.ymax ? 'ok' : 'err') : '';
+    return `<div class="section-title" style="margin-top:0">Sarjeta</div><div class="kv">
+      ${kv('Q afluente', fL(r.Qafl) + ' L/s')}${kv('tc · i', fmt(r.tc, 1) + ' min · ' + fmt(r.i, 0) + ' mm/h')}
+      ${kv('Declividade S', isNum(r.Sp) ? fmt(r.Sp, 2) + ' %' + (num(b.S) == null ? ' (greide)' : '') : '—', isNum(r.Sp) ? '' : 'err')}${kv('z', fmt(r.z, 1))}
+      ${kv('Lâmina y', isNum(r.y) ? fmt(r.y * 100, 1) + ' cm' : '—', sy)}${kv('Largura alagada T', isNum(r.T) ? fmt(r.T, 2) + ' m' : '—', isNum(r.T) ? (r.T <= c.Tmax ? 'ok' : 'warn') : '')}
+      ${kv('Fator F', isNum(r.F) ? fmt(r.F, 2) : '—')}${kv('Q admissível', fL(r.Qadm) + ' L/s', isNum(r.Qadm) ? (r.Qafl <= r.Qadm ? 'ok' : 'err') : '')}</div>
+      <div class="section-title">Boca-de-lobo</div><div class="kv">
+      ${kv('Capacidade teórica', fL(r.Qteo) + ' L/s')}${kv('Capacidade × ' + fmt(r.fr, 2), fL(r.Qcap) + ' L/s')}
+      ${kv('Q engolida', fL(r.Qeng) + ' L/s', 'ok')}${kv('Passa direto', fL(r.Qbyp) + ' L/s', r.Qbyp > 1e-4 ? (b.prox ? 'warn' : 'err') : 'ok')}${kv('Eficiência', fmt(r.ef * 100, 0) + ' %')}</div>
+      <div class="section-title">Ramal ${esc(b.id)} → ${esc(b.pv || '?')}</div><div class="kv">
+      ${kv('Q plena', fL(ram.Qp) + ' L/s')}${kv('V plena', fmt(ram.Vp, 2) + ' m/s')}
+      ${kv('y/D', ram.carga ? 'em carga' : fmt(ram.yD, 2), ram.carga ? 'err' : (ram.yD <= c.yD ? 'ok' : 'warn'))}
+      ${kv('V real', fmt(ram.V, 2) + ' m/s', isNum(ram.V) && r.Qeng > 0 ? (ram.V < c.vmin ? 'warn' : ram.V > c.vmax ? 'err' : 'ok') : '')}${kv('τ', fmt(ram.tau, 2) + ' Pa')}</div>
+      ${msgsHTML(r.msgs, true)}`;
+  },
+  pv(i) {
+    const p = P.pvs[i], r = R.pv[p.id]; if (!r) return '';
+    const c = P.crit;
+    return `<div class="kv">${kv('Cota da tampa', fmt(r.tp, 3) + ' m' + (num(p.tampa) == null && isNum(r.tp) ? ' (greide)' : ''), isNum(r.tp) ? '' : 'err')}
+      ${kv('Cota de fundo', fmt(r.fundo, 3) + ' m')}${kv('Profundidade', fmt(r.prof, 2) + ' m', isNum(r.prof) ? (r.prof <= c.profMaxPV ? 'ok' : 'warn') : '')}
+      ${kv('Entradas / saída', r.ins.length + ' / ' + r.outs.length + (r.exut ? ' (exutório)' : ''))}${kv('Ramais de BL', r.nbl)}
+      ${kv('K', fmt(r.K, 2))}${kv('V saída', fmt(r.Vout, 2) + ' m/s')}${kv('h<sub>f</sub> = K·V²/2g', fmt(r.hf, 3) + ' m')}
+      ${kv('Nível d\'água', isNum(r.H) && r.H > -1e8 ? fmt(r.H, 3) + ' m' : '—')}${kv('Folga até a tampa', isNum(r.folga) ? fmt(r.folga, 2) + ' m' : '—', isNum(r.folga) ? (r.folga < 0 ? 'err' : r.folga < c.folgaPV ? 'warn' : 'ok') : '')}</div>
+      ${msgsHTML(r.msgs, true)}`;
+  },
+  tr(i) {
+    const t = P.trechos[i], r = R.tr[t.id]; if (!r) return '<div class="msg warn">⚠ <span>Trecho fora da rede calculada (verifique PVs de montante e jusante).</span></div>';
+    const c = P.crit, h = r.h;
+    return `<div class="kv">${kv('Σ C·A', fmt(r.CA, 4) + ' ha')}${kv('tc', fmt(r.tc, 2) + ' min')}${kv('i', fmt(r.i, 1) + ' mm/h')}${kv('Q projeto', fL(r.Q) + ' L/s')}
+      ${kv('Declividade', isNum(r.S) ? fmt(r.S * 100, 3) + ' %' : '—', isNum(r.S) ? (r.S * 100 >= c.imin ? 'ok' : 'warn') : 'err')}
+      ${kv('Q plena', fL(h.Qp) + ' L/s')}${kv('V plena', fmt(h.Vp, 2) + ' m/s')}${kv('Q / Q plena', isNum(h.Qp) ? fmt(r.Q / h.Qp, 2) : '—')}
+      ${kv('y/D', h.carga ? 'em carga' : fmt(h.yD, 3), h.carga ? 'err' : isNum(h.yD) ? (h.yD <= c.yD ? 'ok' : 'err') : '')}${kv('Lâmina y', isNum(h.y) ? fmt(h.y * 100, 1) + ' cm' : '—')}
+      ${kv('V real', fmt(h.V, 2) + ' m/s', isNum(h.V) && r.Q > 0 ? (h.V < c.vmin ? 'warn' : h.V > c.vmax ? 'err' : 'ok') : '')}${kv('τ', fmt(r.tau, 2) + ' Pa', isNum(r.tau) ? (r.tau >= c.tauMin ? 'ok' : 'warn') : '')}
+      ${kv('Tempo de percurso', fmt(r.tt, 2) + ' min')}${kv('Froude', fmt(h.Fr, 2))}
+      ${kv('Recobr. montante', fmt(r.recM, 2) + ' m', isNum(r.recM) ? (r.recM >= c.recob - 1e-3 ? 'ok' : 'err') : '')}${kv('Recobr. jusante', fmt(r.recJ, 2) + ' m', isNum(r.recJ) ? (r.recJ >= c.recob - 1e-3 ? 'ok' : 'err') : '')}</div>
+      ${msgsHTML(r.msgs, true)}`;
+  },
+  tblrede() {
+    if (!R.ordem.length) return '<div class="empty">Sem trechos calculáveis.</div>';
+    const c = P.crit;
+    const cell = (v, st) => `<td class="td-num ${st || ''}">${v}</td>`;
+    return `<div class="tbl-wrap"><table><thead><tr><th>Trecho</th><th>Mont.→Jus.</th><th>L (m)</th><th>ΣCA (ha)</th><th>tc (min)</th><th>i (mm/h)</th><th>Q (L/s)</th><th>Ø (mm)</th><th>S (%)</th><th>Qp (L/s)</th><th>y/D</th><th>V (m/s)</th><th>τ (Pa)</th><th>Cota mont.</th><th>Cota jus.</th><th>Rec. m/j (m)</th><th></th></tr></thead><tbody>
+    ${R.ordem.map(t => { const r = R.tr[t.id], h = r.h; return `<tr><td><b>${esc(t.id)}</b></td><td>${esc(t.m)} → ${esc(t.j)}</td>${cell(fmt(r.L, 1))}${cell(fmt(r.CA, 4))}${cell(fmt(r.tc, 2))}${cell(fmt(r.i, 1))}${cell(fL(r.Q))}${cell(t.D)}
+      ${cell(isNum(r.S) ? fmt(r.S * 100, 3) : '—', isNum(r.S) && r.S * 100 < c.imin ? 'warn' : '')}${cell(fL(h.Qp))}${cell(h.carga ? 'carga' : fmt(h.yD, 2), h.carga || h.yD > c.yD ? 'err' : 'ok')}
+      ${cell(fmt(h.V, 2), !isNum(h.V) ? '' : h.V < c.vmin ? 'warn' : h.V > c.vmax ? 'err' : 'ok')}${cell(fmt(r.tau, 2), isNum(r.tau) && r.tau < c.tauMin ? 'warn' : '')}
+      ${cell(fmt(r.cm, 3))}${cell(fmt(r.cj, 3))}${cell(fmt(r.recM, 2) + ' / ' + fmt(r.recJ, 2), (isNum(r.recM) && r.recM < c.recob - 1e-3) || (isNum(r.recJ) && r.recJ < c.recob - 1e-3) ? 'err' : '')}
+      <td><span class="st ${r.st}">${r.st === 'ok' ? '✓' : r.st === 'warn' ? '⚠' : '✕'}</span></td></tr>`; }).join('')}
+    </tbody></table></div>`;
+  }
+};
+
+/* ---------- 8. PERFIL E LINHA PIEZOMÉTRICA ---------- */
+let PERFIL_INI = null;
+function cabeceiras() {
+  const ini = P.pvs.filter(p => R.ordem.some(t => t.m === p.id) && !R.ordem.some(t => t.j === p.id));
+  return ini.length ? ini : P.pvs.filter(p => R.ordem.some(t => t.m === p.id));
+}
+function caminho(pvId) {
+  const out = [], seen = new Set(); let cur = pvId;
+  while (cur && !seen.has(cur)) { seen.add(cur); const t = R.ordem.find(x => x.m === cur); if (!t) break; out.push(t); cur = t.j; }
+  return out;
+}
+function vPerfil() {
+  const cab = cabeceiras();
+  if (!PERFIL_INI || !pvById(PERFIL_INI)) PERFIL_INI = cab[0] ? cab[0].id : null;
+  const opts = P.pvs.filter(p => R.ordem.some(t => t.m === p.id)).map(p => `<option value="${esc(p.id)}"${p.id === PERFIL_INI ? ' selected' : ''}>${esc(p.id)}${cab.includes(p) ? ' (cabeceira)' : ''}</option>`).join('');
+  const c = P.crit;
+  const linhas = R.ordem.filter(t => R.tr[t.id] && R.tr[t.id].piez).map(t => {
+    const r = R.tr[t.id], z = r.piez, pv = R.pv[t.m] || {};
+    const st = !isNum(pv.folga) ? '' : pv.folga < 0 ? 'err' : pv.folga < c.folgaPV ? 'warn' : 'ok';
+    return `<tr><td><b>${esc(t.id)}</b></td><td>${esc(t.m)} → ${esc(t.j)}</td><td>${z.regime}</td><td class="td-num">${fmt(z.Hj, 3)}</td><td class="td-num">${z.carga ? fmt(z.hfA, 3) : '—'}</td><td class="td-num">${fmt(z.Hm, 3)}</td>
+      <td class="td-num">${fmt(pv.K, 2)}</td><td class="td-num">${fmt(z.hpv, 3)}</td><td class="td-num"><b>${fmt(z.Hpm, 3)}</b></td><td class="td-num">${fmt(pv.tp, 3)}</td><td class="td-num ${st}">${fmt(pv.folga, 2)}</td></tr>`;
+  }).join('');
+  const alertas = P.pvs.filter(p => R.pv[p.id] && isNum(R.pv[p.id].folga) && R.pv[p.id].folga < 0);
+  return `<h3>Perfil longitudinal e linha piezométrica</h3>
+  <p class="lead">A linha piezométrica é calculada <b>de jusante para montante</b>: parte do nível no exutório (lâmina normal ou NA informado) e soma, trecho a trecho, a perda por atrito (Manning, quando o tubo está em carga) e a perda por turbulência em cada PV <span class="formula">K·V²/2g</span>. Se o nível passar da tampa, há extravasamento.</p>
+  ${alertas.map(p => `<div class="piez-alert">✕ <span><b>${esc(p.id)}: extravasamento.</b> Nível d'água ${fmt(R.pv[p.id].H, 3)} m acima da tampa ${fmt(R.pv[p.id].tp, 3)} m. Aumente diâmetros a jusante, reduza deflexões (K) ou aumente a declividade.</span></div>`).join('')}
+  <div class="card">
+    <div class="bar-btns" style="margin-bottom:.5rem"><label style="font-size:.82rem;font-weight:600;color:var(--muted)">Perfil a partir de</label>
+      <select onchange="PERFIL_INI=this.value;drawPerfil()" style="padding:.35rem .5rem;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)">${opts}</select></div>
+    <div class="profile-svg-wrap" style="border:none;padding:0"><svg id="svg-perfil" class="svgbox" viewBox="0 0 1000 380"></svg></div>
+    <div class="legend"><span><i style="background:#8B5A2B"></i>Terreno / tampas</span><span><i style="background:var(--agua)"></i>Tubo</span><span><i style="background:var(--orange)"></i>Linha piezométrica</span></div>
+    <div id="perfil-tab" style="margin-top:.75rem"></div>
+  </div>
+  <div class="card"><h4>Linha piezométrica — todos os trechos (cotas em m)</h4>
+    ${linhas ? `<div class="tbl-wrap"><table><thead><tr><th>Trecho</th><th>Mont.→Jus.</th><th>Regime</th><th>NA jusante</th><th>h<sub>f</sub> atrito</th><th>NA montante</th><th>K (PV mont.)</th><th>h<sub>f</sub> PV</th><th>NA no PV</th><th>Tampa</th><th>Folga</th></tr></thead><tbody>${linhas}</tbody></table></div>` : '<div class="empty">Nenhum trecho com cotas e exutório definido.</div>'}
+  </div>`;
+}
+function drawPerfil() {
+  const svg = $('svg-perfil'); if (!svg) return;
+  const path = PERFIL_INI ? caminho(PERFIL_INI) : [];
+  if (!path.length) { svg.innerHTML = '<text x="500" y="190" text-anchor="middle" class="sm">Sem trechos a partir deste PV.</text>'; $('perfil-tab').innerHTML = ''; return; }
+  const pts = []; let x = 0;
+  path.forEach((t, k) => {
+    const r = R.tr[t.id];
+    if (k === 0) pts.push({id: t.m, x, pv: R.pv[t.m]});
+    x += r.L; pts.push({id: t.j, x, pv: R.pv[t.j]});
+  });
+  const vals = [];
+  pts.forEach(p => { if (isNum(p.pv.tp)) vals.push(p.pv.tp); if (isNum(p.pv.fundo)) vals.push(p.pv.fundo); if (isNum(p.pv.H) && p.pv.H > -1e8) vals.push(p.pv.H); });
+  path.forEach(t => { const r = R.tr[t.id]; [r.cm, r.cj].forEach(v => isNum(v) && vals.push(v)); });
+  if (!vals.length) return;
+  let ymin = Math.min(...vals) - 0.4, ymax = Math.max(...vals) + 0.7;
+  const W = 1000, H = 380, ml = 62, mr = 24, mt = 34, mb = 46;
+  const X = v => ml + v / (x || 1) * (W - ml - mr), Y = v => mt + (ymax - v) / (ymax - ymin) * (H - mt - mb);
+  let s = '';
+  const step = [0.1, 0.2, 0.25, 0.5, 1, 2, 5].find(st => (ymax - ymin) / st <= 8) || 5;
+  for (let v = Math.ceil(ymin / step) * step; v <= ymax; v += step) s += `<line class="grid" x1="${ml}" x2="${W - mr}" y1="${Y(v)}" y2="${Y(v)}"/><text class="sm" x="${ml - 6}" y="${Y(v) + 3}" text-anchor="end">${fmt(v, 2)}</text>`;
+  // tubos
+  path.forEach((t, k) => {
+    const r = R.tr[t.id], x0 = pts[k].x, x1 = pts[k + 1].x, D = r.D / 1000;
+    if (isNum(r.cm) && isNum(r.cj)) s += `<polygon class="tubo" points="${X(x0)},${Y(r.cm)} ${X(x1)},${Y(r.cj)} ${X(x1)},${Y(r.cj + D)} ${X(x0)},${Y(r.cm + D)}"/>
+      <text class="sm" x="${(X(x0) + X(x1)) / 2}" y="${Y((r.cm + r.cj) / 2 + D) - 8}" text-anchor="middle">${esc(t.id)} · Ø${r.D} · ${isNum(r.S) ? fmt(r.S * 100, 2) + '%' : ''} · ${fmt(r.L, 1)} m</text>`;
+  });
+  // terreno
+  s += `<polyline class="terr" points="${pts.filter(p => isNum(p.pv.tp)).map(p => X(p.x) + ',' + Y(p.pv.tp)).join(' ')}"/>`;
+  // PVs
+  pts.forEach(p => {
+    if (!isNum(p.pv.tp) || !isNum(p.pv.fundo)) return;
+    const w = 10; s += `<rect class="pv" x="${X(p.x) - w / 2}" y="${Y(p.pv.tp)}" width="${w}" height="${Math.max(2, Y(p.pv.fundo) - Y(p.pv.tp))}"/>
+      <text class="lbl" x="${X(p.x)}" y="${Y(p.pv.tp) - 8}" text-anchor="middle">${esc(p.id)}</text>`;
+  });
+  // piezométrica
+  let pz = [];
+  path.forEach((t, k) => {
+    const z = R.tr[t.id].piez; if (!z) return;
+    const x0 = X(pts[k].x), x1 = X(pts[k + 1].x);
+    pz.push(`${x0},${Y(z.Hpm)}`, `${x0 + 6},${Y(z.Hm)}`, `${x1},${Y(z.Hj)}`);
+  });
+  if (pz.length) s += `<polyline class="piez" points="${pz.join(' ')}"/>`;
+  pts.forEach(p => { if (isNum(p.pv.H) && isNum(p.pv.tp) && p.pv.H > p.pv.tp) s += `<circle cx="${X(p.x)}" cy="${Y(p.pv.H)}" r="6" fill="var(--err)"/>`; });
+  s += `<line x1="${ml}" x2="${W - mr}" y1="${H - mb}" y2="${H - mb}" stroke="var(--muted)"/>`;
+  pts.forEach(p => { s += `<text class="sm" x="${X(p.x)}" y="${H - mb + 16}" text-anchor="middle">${fmt(p.x, 1)} m</text>`; });
+  s += `<text class="sm" x="${ml}" y="16">Cota (m)</text><text class="sm" x="${W - mr}" y="${H - 8}" text-anchor="end">Distância acumulada ao longo da rede</text>`;
+  svg.innerHTML = s;
+  $('perfil-tab').innerHTML = `<div class="tbl-wrap"><table class="tbl-r"><thead><tr><th></th>${pts.map(p => `<th>${esc(p.id)}</th>`).join('')}</tr></thead><tbody>
+    <tr><td>Distância (m)</td>${pts.map(p => `<td class="td-num">${fmt(p.x, 1)}</td>`).join('')}</tr>
+    <tr><td>Tampa (m)</td>${pts.map(p => `<td class="td-num">${fmt(p.pv.tp, 3)}</td>`).join('')}</tr>
+    <tr><td>Fundo (m)</td>${pts.map(p => `<td class="td-num">${fmt(p.pv.fundo, 3)}</td>`).join('')}</tr>
+    <tr><td>Profundidade (m)</td>${pts.map(p => `<td class="td-num">${fmt(p.pv.prof, 2)}</td>`).join('')}</tr>
+    <tr><td>Nível d'água (m)</td>${pts.map(p => `<td class="td-num">${isNum(p.pv.H) && p.pv.H > -1e8 ? fmt(p.pv.H, 3) : '—'}</td>`).join('')}</tr>
+    <tr><td>Folga (m)</td>${pts.map(p => { const f = p.pv.folga; return `<td class="td-num ${!isNum(f) ? '' : f < 0 ? 'err' : f < P.crit.folgaPV ? 'warn' : 'ok'}">${fmt(f, 2)}</td>`; }).join('')}</tr>
+  </tbody></table></div>`;
+}
+
+/* ---------- 9. SEÇÃO TRANSVERSAL ---------- */
+let SEC = {t: null, ext: 'm'};
+function vSecao() {
+  if (!SEC.t || !P.trechos.some(t => t.id === SEC.t)) SEC.t = R.ordem[0] ? R.ordem[0].id : null;
+  const opts = R.ordem.map(t => `<option value="${esc(t.id)}"${t.id === SEC.t ? ' selected' : ''}>${esc(t.id)} (${esc(t.m)} → ${esc(t.j)})</option>`).join('');
+  return `<h3>Seção transversal da vala</h3>
+  <p class="lead">Seção tipo no início ou no fim de cada trecho, com pista, sarjetas, passeios, vala escorada, berço e tubo. Largura da vala B = D externo + ${fmt(P.crit.valaFolga * 2, 2)} m; berço de ${fmt(P.crit.berco, 2)} m. Os volumes alimentam os quantitativos do memorial.</p>
+  <div class="card">
+    <div class="bar-btns"><select onchange="SEC.t=this.value;drawSecao()" style="padding:.35rem .5rem;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)">${opts}</select>
+      <div class="seg"><button class="${SEC.ext === 'm' ? 'on' : ''}" onclick="SEC.ext='m';renderTab()">Montante</button><button class="${SEC.ext === 'j' ? 'on' : ''}" onclick="SEC.ext='j';renderTab()">Jusante</button></div></div>
+    <svg id="svg-secao" class="svgbox" viewBox="0 0 900 420"></svg>
+    <div id="secao-kv" style="margin-top:.75rem"></div>
+  </div>`;
+}
+function drawSecao() {
+  const svg = $('svg-secao'); if (!svg) return;
+  const t = P.trechos.find(x => x.id === SEC.t), r = t && R.tr[t.id];
+  if (!r || !r.vala) { svg.innerHTML = '<text x="450" y="200" text-anchor="middle" class="sm">Selecione um trecho com cotas definidas.</text>'; $('secao-kv').innerHTML = ''; return; }
+  const c = P.crit, pv = pvById(SEC.ext === 'm' ? t.m : t.j), rua = ruaById(pv && pv.rua) || {larg: 7, passeio: 2, nome: ''};
+  const tp = SEC.ext === 'm' ? r.tm : r.tj, ci = SEC.ext === 'm' ? r.cm : r.cj, D = r.D / 1000, De = D * (1 + 2 * c.espF), B = r.vala.B;
+  const fundoVala = ci - D * c.espF - c.berco, hv = tp - fundoVala, rec = tp - (ci + D + D * c.espF);
+  const larg = +rua.larg || 7, pas = +rua.passeio || 2, Wt = larg + 2 * pas;
+  const W = 900, ml = 40, mr = 40, mt = 50;
+  const narrow = window.innerWidth < 700, Wshow = narrow ? Math.min(Wt, Math.max(4.5, B * 3.2)) : Wt;
+  const sc = narrow ? (W - ml - mr) / Wshow : Math.min((W - ml - mr) / Wt, (420 - mt - 60) / (hv + 0.4));
+  const X = v => W / 2 + v * sc, Y = v => mt + (tp + 0.25 - v) * sc;
+  const xV = 0;  // vala no eixo
+  let s = '';
+  // terreno/pavimento
+  const yp = Y(tp), mf = 0.15;
+  s += `<rect x="${X(-Wt / 2)}" y="${Y(tp + mf)}" width="${pas * sc}" height="${mf * sc}" fill="#cfcac0"/><rect x="${X(larg / 2)}" y="${Y(tp + mf)}" width="${pas * sc}" height="${mf * sc}" fill="#cfcac0"/>`;
+  s += `<line x1="${X(-larg / 2)}" y1="${yp}" x2="${X(larg / 2)}" y2="${yp}" stroke="var(--ink)" stroke-width="5"/>`;
+  s += `<line x1="${X(-larg / 2)}" y1="${Y(tp + mf)}" x2="${X(-larg / 2)}" y2="${yp}" stroke="var(--ink)" stroke-width="2"/><line x1="${X(larg / 2)}" y1="${Y(tp + mf)}" x2="${X(larg / 2)}" y2="${yp}" stroke="var(--ink)" stroke-width="2"/>`;
+  s += `<text class="sm" x="${X(0)}" y="${yp - 10}" text-anchor="middle">Pista ${fmt(larg, 2)} m · ${esc(rua.nome || '')}</text><text class="sm" x="${X(-larg / 2 - pas / 2)}" y="${Y(tp + mf) - 6}" text-anchor="middle">Passeio</text><text class="sm" x="${X(larg / 2 + pas / 2)}" y="${Y(tp + mf) - 6}" text-anchor="middle">Passeio</text>`;
+  // vala
+  s += `<rect x="${X(xV - B / 2)}" y="${yp + 3}" width="${B * sc}" height="${Y(fundoVala) - yp - 3}" fill="color-mix(in srgb,#8B5A2B 14%,transparent)" stroke="#8B5A2B" stroke-dasharray="5 3"/>`;
+  s += `<rect x="${X(xV - B / 2)}" y="${Y(fundoVala + c.berco)}" width="${B * sc}" height="${c.berco * sc}" fill="#bdb6a8"/>`;
+  // tubo
+  const cy = Y(ci + D / 2);
+  s += `<circle cx="${X(xV)}" cy="${cy}" r="${De / 2 * sc}" fill="#9aa3ad"/><circle cx="${X(xV)}" cy="${cy}" r="${D / 2 * sc}" fill="var(--surface)" stroke="var(--agua)" stroke-width="2"/>`;
+  const yD = r.h.yD || 0; if (yD > 0) { const yw = Y(ci + Math.min(1, yD) * D); s += `<line x1="${X(xV) - D / 2 * sc * Math.sqrt(1 - Math.pow(1 - 2 * Math.min(yD, 1), 2))}" x2="${X(xV) + D / 2 * sc * Math.sqrt(1 - Math.pow(1 - 2 * Math.min(yD, 1), 2))}" y1="${yw}" y2="${yw}" stroke="var(--agua)" stroke-width="2"/>`; }
+  s += `<text class="lbl" x="${X(xV)}" y="${cy + 4}" text-anchor="middle">Ø${r.D}</text>`;
+  // cotas
+  const xd = X(xV + B / 2) + 26;
+  const dim = (y1, y2, txt) => `<line x1="${xd}" x2="${xd}" y1="${y1}" y2="${y2}" stroke="var(--muted)"/><line x1="${xd - 4}" x2="${xd + 4}" y1="${y1}" y2="${y1}" stroke="var(--muted)"/><line x1="${xd - 4}" x2="${xd + 4}" y1="${y2}" y2="${y2}" stroke="var(--muted)"/><text class="sm" x="${xd + 8}" y="${(y1 + y2) / 2 + 3}">${txt}</text>`;
+  s += dim(yp, Y(ci + D + D * c.espF), 'recobrimento ' + fmt(rec, 2) + ' m');
+  s += `<g transform="translate(70,0)">${dim(yp, Y(fundoVala), 'vala ' + fmt(hv, 2) + ' m')}</g>`;
+  s += `<line x1="${X(xV - B / 2)}" x2="${X(xV + B / 2)}" y1="${Y(fundoVala) + 16}" y2="${Y(fundoVala) + 16}" stroke="var(--muted)"/><text class="sm" x="${X(xV)}" y="${Y(fundoVala) + 30}" text-anchor="middle">B = ${fmt(B, 2)} m</text>`;
+  s += `<text class="sm" x="${Math.max(8, X(-Wt / 2))}" y="24">Cota da tampa ${fmt(tp, 3)} m · cota inferior do tubo ${fmt(ci, 3)} m</text>`;
+  svg.setAttribute('viewBox', `0 0 900 ${Math.max(300, Y(fundoVala) + 50)}`);
+  svg.innerHTML = s;
+  $('secao-kv').innerHTML = `<div class="kv">${kv('Profundidade da vala', fmt(hv, 2) + ' m')}${kv('Largura B', fmt(B, 2) + ' m')}${kv('Recobrimento', fmt(rec, 2) + ' m', rec >= c.recob - 1e-3 ? 'ok' : 'err')}
+    ${kv('Escavação / m', fmt(B * hv, 2) + ' m³/m')}${kv('Escavação do trecho', fmt(r.vala.V, 2) + ' m³')}${kv('Escoramento', hv > 1.25 ? 'necessário (h > 1,25 m)' : 'avaliar', hv > 1.25 ? 'warn' : '')}</div>`;
+}
+
+/* ---------- 10. VERIFICAÇÃO ---------- */
+let VFILTRO = 'prob';
+function vVerif() {
+  const ch = R.checks, e = ch.filter(c => c.st === 'err').length, w = ch.filter(c => c.st === 'warn').length, o = ch.filter(c => c.st === 'ok').length;
+  const lst = ch.filter(c => VFILTRO === 'todos' || (VFILTRO === 'prob' ? c.st !== 'ok' : c.st === VFILTRO));
+  const nomes = {bacias: 'Bacias', bls: 'Sarjetas/BL/ramais', pvs: 'Poços de visita', rede: 'Rede tronco', perfil: 'Piezométrica'};
+  return `<h3>Verificação geral do projeto</h3>
+  <div class="sumbar"><span class="badge badge-err">✕ ${e} erro(s)</span><span class="badge badge-warn">⚠ ${w} alerta(s)</span><span class="badge badge-ok">✓ ${o} atendido(s)</span></div>
+  ${e === 0 && w === 0 && ch.length ? '<div class="nota-tec nota-tec-info"><b>✓</b><span>Todos os critérios foram atendidos.</span></div>' : ''}
+  <div class="bar-btns"><div class="seg">${[['prob', 'Pendências'], ['err', 'Erros'], ['warn', 'Alertas'], ['ok', 'Atendidos'], ['todos', 'Todos']].map(([k, t]) => `<button class="${VFILTRO === k ? 'on' : ''}" onclick="VFILTRO='${k}';renderTab()">${t}</button>`).join('')}</div></div>
+  ${lst.length ? `<div class="tbl-wrap"><table><thead><tr><th></th><th>Grupo</th><th>Elemento</th><th>Verificação</th><th>Calculado</th><th>Critério</th><th>Orientação</th></tr></thead><tbody>
+  ${lst.map(c => `<tr style="cursor:pointer" onclick="showTab('${c.tab === 'perfil' ? 'perfil' : c.tab}')"><td><span class="st ${c.st}">${c.st === 'ok' ? '✓' : c.st === 'warn' ? '⚠' : '✕'}</span></td><td>${nomes[c.tab] || c.tab}</td><td><b>${esc(c.el)}</b></td><td>${esc(c.par)}</td><td class="${c.st}">${esc(c.val)}</td><td>${esc(c.lim)}</td><td style="font-size:.75rem">${c.st === 'ok' ? '' : esc(c.nota)}</td></tr>`).join('')}
+  </tbody></table></div>` : '<div class="empty">Nada nesta categoria.</div>'}`;
+}
+
+/* ---------- 11. MEMORIAL ---------- */
+function vMemorial() {
+  return `<h3>Memorial descritivo e de cálculo</h3>
+  <div class="bar-btns"><button class="btn btn-primary btn-sm" onclick="imprimir()">🖨 Imprimir / salvar PDF</button><span style="font-size:.78rem;color:var(--muted)">No celular: Compartilhar → Imprimir → (pinça para ampliar) → Salvar PDF.</span></div>
+  <div id="memorial-print">${memorialHTML()}</div>`;
+}
+function imprimir() { if (TAB !== 'memorial') showTab('memorial'); setTimeout(() => window.print(), 150); }
+function memorialHTML() {
+  const p = P.proj, c = P.crit, f = P.idf, q = R.quant;
+  const T = (head, rows) => `<table><thead><tr>${head.map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody></table>`;
+  const tr = cells => `<tr>${cells.map(x => `<td>${x}</td>`).join('')}</tr>`;
+  const dt = p.data ? new Date(p.data + 'T12:00').toLocaleDateString('pt-BR') : '';
+  const e = R.checks.filter(x => x.st === 'err'), w = R.checks.filter(x => x.st === 'warn');
+  let n = 0; const H = t => `<h2>${++n}. ${t}</h2>`;
+  return `
+  <div class="mhead">${CFG.logo ? `<img src="${CFG.logo}" alt=""/>` : ''}<div><div style="font-weight:700;font-size:1rem;color:#12355F">${esc(CFG.empresa || 'Total Civil')}</div>${CFG.sub ? `<div style="font-size:.78rem;color:#555">${esc(CFG.sub)}</div>` : ''}</div></div>
+  <h1>Memorial Descritivo e de Cálculo — Drenagem Pluvial</h1>
+  <p style="margin:0"><b>${esc(p.nome)}</b>${p.local ? ' · ' + esc(p.local) : ''}${p.municipio ? ' · ' + esc(p.municipio) : ''}</p>
+  <p style="margin:0;font-size:.8rem;color:#555">${dt ? 'Data: ' + dt : ''}${p.resp ? ' · Responsável técnico: ' + esc(p.resp) : ''}${p.crea ? ' · ' + esc(p.crea) : ''}${p.art ? ' · ART/RRT ' + esc(p.art) : ''}</p>
+
+  ${H('Objeto')}
+  <p>O presente memorial apresenta o dimensionamento hidráulico do sistema de microdrenagem de águas pluviais composto por ${P.bacias.length} bacia(s) de contribuição (área total de ${fmt(P.bacias.reduce((s, b) => s + (num(b.A) || 0), 0), 3)} ha), ${P.bls.length} boca(s)-de-lobo com respectivos ramais, ${P.pvs.length} poço(s) de visita e ${P.trechos.length} trecho(s) de rede tronco, totalizando ${fmt(Object.values(q.tubos).reduce((s, v) => s + v, 0), 1)} m de galeria.</p>
+  ${p.obs ? `<p>${esc(p.obs).replace(/\n/g, '<br>')}</p>` : ''}
+
+  ${H('Critérios de projeto')}
+  ${T(['Parâmetro', 'Valor adotado'], [
+    tr(['Período de retorno', c.tr + ' anos']), tr(['Tempo de concentração mínimo', c.tcMin + ' min']),
+    tr(['Manning — tubos / sarjeta', fmt(c.nTubo, 3) + ' / ' + fmt(c.nSarj, 3)]),
+    tr(['Lâmina máxima na sarjeta / largura alagada', fmt(c.ymax, 2) + ' m / ' + fmt(c.Tmax, 2) + ' m']),
+    tr(['Diâmetro mínimo — rede / ramal', c.dmin + ' mm / ' + c.ramalDmin + ' mm']),
+    tr(['Lâmina máxima nos condutos (y/D)', fmt(c.yD, 2)]), tr(['Velocidade mínima / máxima', fmt(c.vmin, 2) + ' / ' + fmt(c.vmax, 2) + ' m/s']),
+    tr(['Tensão trativa mínima', fmt(c.tauMin, 2) + ' Pa']), tr(['Declividade mínima — rede / ramal', fmt(c.imin, 2) + ' % / ' + fmt(c.ramalImin, 2) + ' %']),
+    tr(['Recobrimento mínimo', fmt(c.recob, 2) + ' m']), tr(['Folga mínima entre nível d\'água e tampa', fmt(c.folgaPV, 2) + ' m']),
+    tr(['Coeficientes de perda K no PV', Object.keys(DEFL).map(k => DEFL[k] + ' ' + fmt(c.K[k], 2)).join('; ')])])}
+
+  ${H('Metodologia')}
+  <h3>Vazões — Método Racional</h3><p>Q = C · i · A / 360, com Q em m³/s, i em mm/h e A em ha. Na rede, as vazões são acumuladas de montante para jusante somando-se os produtos C·A; o tempo de concentração em cada trecho é o maior entre o tempo de entrada local e o tempo de concentração dos trechos de montante acrescido do tempo de percurso (t<sub>t</sub> = L/V).</p>
+  <h3>Chuva de projeto</h3><p>i = a · TR<sup>b</sup> / (t + c)<sup>d</sup>, com a = ${fmt(f.a, 2)}, b = ${fmt(f.b, 3)}, c = ${fmt(f.c, 2)} e d = ${fmt(f.d, 3)} — ${esc(f.fonte || 'fonte não informada')}. Para TR = ${c.tr} anos: i(10 min) = ${fmt(idf(10), 1)} mm/h; i(15 min) = ${fmt(idf(15), 1)} mm/h. Tempo de concentração de bacias rurais/maiores por Kirpich: t<sub>c</sub> = 57 · (L³/H)<sup>0,385</sup> (L em km, H em m).</p>
+  <h3>Sarjetas</h3><p>Fórmula de Izzard para seção triangular: Q = 0,375 · (z/n) · S<sup>1/2</sup> · y<sup>8/3</sup>; largura alagada T = z · y. A capacidade admissível é a capacidade teórica com a lâmina máxima multiplicada pelo fator de redução F em função da declividade longitudinal (DAEE/CETESB).</p>
+  <h3>Bocas-de-lobo</h3><p>Abertura na guia funcionando como vertedor lateral: Q = C<sub>w</sub> · L · (y + a)<sup>3/2</sup>, C<sub>w</sub> = ${fmt(c.Cw, 2)}, a = depressão. Grelhas: vertedor (Q = C<sub>w</sub> · P · h<sup>3/2</sup>) até h = 0,12 m e orifício (Q = C<sub>o</sub> · A<sub>útil</sub> · h<sup>1/2</sup>, C<sub>o</sub> = ${fmt(c.Co, 2)}) a partir de 0,42 m. A capacidade teórica é reduzida por fator de obstrução. A vazão não engolida segue pela sarjeta e é somada à boca-de-lobo seguinte.</p>
+  <h3>Ramais e rede tronco</h3><p>Equação de Manning em seção circular parcialmente cheia: V = (1/n) · R<sub>h</sub><sup>2/3</sup> · S<sup>1/2</sup>, com a lâmina obtida iterativamente pelo ângulo central θ (A = D²(θ − sen θ)/8; P = Dθ/2). Verificam-se o grau de enchimento y/D, as velocidades mínima e máxima e a tensão trativa τ = γ · R<sub>h</sub> · S para autolimpeza.</p>
+  <h3>Poços de visita e linha piezométrica</h3><p>A perda por turbulência em cada PV é h<sub>f</sub> = K · V²/2g, com K conforme a deflexão ou confluência e V do conduto de saída. O degrau mínimo entre a geratriz inferior de chegada e a de saída compensa esta perda, mantendo-se a geratriz superior de saída abaixo da de chegada. A linha piezométrica é traçada de jusante para montante a partir do nível no lançamento, somando a perda por atrito (S<sub>f</sub> · L, quando em carga) e a perda localizada em cada PV, e comparada com a cota da tampa.</p>
+
+  ${H('Bacias de contribuição')}
+  ${T(['Bacia', 'Descrição', 'Destino', 'A (ha)', 'C', 'tc (min)', 'i (mm/h)', 'Q (L/s)'], P.bacias.map(b => { const r = R.bac[b.id]; return tr([esc(b.id), esc(b.nome), esc(b.dest), fmt(r.A, 3), fmt(r.C, 2), fmt(r.tc, 1), fmt(r.i, 1), fL(r.Q)]); }))}
+
+  ${H('Sarjetas e bocas-de-lobo')}
+  ${T(['BL', 'Rua / est.', 'Tipo', 'S (%)', 'Q afl. (L/s)', 'y (cm)', 'T (m)', 'Q adm. (L/s)', 'Cap. (L/s)', 'Engolida (L/s)', 'Passa (L/s)', ''], P.bls.map(b => { const r = R.bl[b.id]; return tr([esc(b.id), esc(ruaNome(b.rua)) + ' ' + estLabel(num(b.dist)), BLTIPOS[b.tipo].nome, fmt(r.Sp, 2), fL(r.Qafl), isNum(r.y) ? fmt(r.y * 100, 1) : '—', fmt(r.T, 2), fL(r.Qadm), fL(r.Qcap), fL(r.Qeng), fL(r.Qbyp) + (b.prox && r.Qbyp > 1e-4 ? ' → ' + esc(b.prox) : ''), stTxt(r.st)]); }))}
+
+  ${H('Ramais de ligação')}
+  ${T(['Ramal', 'PV', 'Ø (mm)', 'L (m)', 'i (%)', 'Q (L/s)', 'y/D', 'V (m/s)', 'τ (Pa)', ''], P.bls.map(b => { const r = R.bl[b.id], m = r.ram; return tr([esc(b.id), esc(b.pv), b.rD, fmt(num(b.rL), 1), fmt(num(b.rI), 2), fL(r.Qeng), m.carga ? 'carga' : fmt(m.yD, 2), fmt(m.V, 2), fmt(m.tau, 2), '']); }))}
+
+  ${H('Rede tronco — planilha de cálculo')}
+  ${T(['Trecho', 'Mont.→Jus.', 'L (m)', 'ΣCA', 'tc', 'i', 'Q (L/s)', 'Ø', 'S (%)', 'Qp (L/s)', 'y/D', 'V (m/s)', 'τ (Pa)', 'CI mont.', 'CI jus.', 'Rec. m/j', ''], R.ordem.map(t => { const r = R.tr[t.id], h = r.h; return tr([esc(t.id), esc(t.m) + '→' + esc(t.j), fmt(r.L, 1), fmt(r.CA, 3), fmt(r.tc, 1), fmt(r.i, 1), fL(r.Q), t.D, isNum(r.S) ? fmt(r.S * 100, 3) : '—', fL(h.Qp), h.carga ? 'carga' : fmt(h.yD, 2), fmt(h.V, 2), fmt(r.tau, 2), fmt(r.cm, 3), fmt(r.cj, 3), fmt(r.recM, 2) + '/' + fmt(r.recJ, 2), stTxt(r.st)]); }))}
+
+  ${H('Poços de visita')}
+  ${T(['PV', 'Rua / est.', 'Tipo', 'Tampão', 'Tampa (m)', 'Fundo (m)', 'Prof. (m)', 'Escoamento', 'K', 'h<sub>f</sub> (m)', 'NA (m)', 'Folga (m)', ''], P.pvs.map(pv => { const r = R.pv[pv.id]; return tr([esc(pv.id), esc(ruaNome(pv.rua)) + ' ' + estLabel(num(pv.dist)), esc(pv.tipo), esc((pv.tampaCl || '').split(' (')[0]), fmt(r.tp, 3), fmt(r.fundo, 3), fmt(r.prof, 2), DEFL[pv.defl], fmt(r.K, 2), fmt(r.hf, 3), isNum(r.H) && r.H > -1e8 ? fmt(r.H, 3) : '—', fmt(r.folga, 2), stTxt(r.st)]); }))}
+
+  ${H('Linha piezométrica')}
+  ${T(['Trecho', 'Regime', 'NA jus. (m)', 'h<sub>f</sub> atrito (m)', 'NA mont. (m)', 'h<sub>f</sub> PV (m)', 'NA no PV mont. (m)'], R.ordem.filter(t => R.tr[t.id].piez).map(t => { const z = R.tr[t.id].piez; return tr([esc(t.id), z.regime, fmt(z.Hj, 3), z.carga ? fmt(z.hfA, 3) : '—', fmt(z.Hm, 3), fmt(z.hpv, 3), fmt(z.Hpm, 3)]); }))}
+
+  ${H('Quantitativos estimados')}
+  ${T(['Item', 'Unid.', 'Quantidade'], [
+    ...Object.entries(q.tubos).sort((a, b) => a[0] - b[0]).map(([d, l]) => tr(['Tubo de concreto Ø ' + d + ' mm — rede', 'm', fmt(l, 2)])),
+    ...Object.entries(q.ramais).sort((a, b) => a[0] - b[0]).map(([d, l]) => tr(['Tubo de concreto Ø ' + d + ' mm — ramais', 'm', fmt(l, 2)])),
+    ...Object.entries(q.pvs).map(([k, v]) => tr(['Poço de visita — ' + esc(k), 'un', v])),
+    ...Object.entries(q.bls).map(([k, v]) => tr(['Boca-de-lobo — ' + esc(k), 'un', v])),
+    tr(['Escavação de vala — rede tronco', 'm³', fmt(q.escav, 2)]), tr(['Berço / lastro', 'm³', fmt(q.berco, 2)]), tr(['Reaterro compactado (estimado)', 'm³', fmt(q.reaterro, 2)])])}
+  <p style="font-size:.75rem;color:#555">Volumes de vala com paredes verticais (B = D externo + ${fmt(2 * c.valaFolga, 2)} m), profundidade média entre as extremidades de cada trecho. Não incluem ramais, PVs, bota-fora e empolamento.</p>
+
+  ${H('Verificação')}
+  <p>Foram realizadas ${R.checks.length} verificações: ${R.checks.length - e.length - w.length} atendidas, ${w.length} alerta(s) e ${e.length} não conformidade(s).</p>
+  ${e.length + w.length ? T(['', 'Elemento', 'Verificação', 'Calculado', 'Critério'], [...e, ...w].map(x => tr([x.st === 'err' ? '✕' : '⚠', esc(x.el), esc(x.par), esc(x.val), esc(x.lim)]))) : '<p>Todos os critérios de projeto foram atendidos.</p>'}
+
+  ${H('Referências')}
+  <p style="font-size:.8rem">DNIT. <i>Manual de drenagem de rodovias</i> (Publicação IPR-724). Rio de Janeiro, 2006.<br>
+  DNIT. <i>Álbum de projetos-tipo de dispositivos de drenagem</i> (Publicação IPR-736), com emendas vigentes.<br>
+  DNIT. <i>Manual de hidrologia básica para estruturas de drenagem</i> (Publicação IPR-715). Rio de Janeiro, 2005.<br>
+  DAEE / CETESB. <i>Drenagem urbana: manual de projeto</i>. São Paulo, 1980.<br>
+  ABNT NBR 8890 — Tubo de concreto de seção circular para águas pluviais e esgotos sanitários.<br>
+  ABNT NBR 10160 — Tampões e grelhas de ferro fundido dúctil.<br>
+  ABNT NBR 15645 — Execução de obras lineares para transporte de água pluvial e esgoto sanitário utilizando tubos e aduelas de concreto.</p>
+
+  <div class="assin"><div>${esc(p.resp || 'Responsável técnico')}<br>${esc(p.crea || '')}${p.art ? ' · ART/RRT ' + esc(p.art) : ''}</div></div>
+  <div class="mfoot">${esc(CFG.rodape || 'Total Civil · totalcivil.com.br')} · Gerado pelo programa Drenagem Pluvial — Total Civil</div>`;
+}
+function stTxt(s) { return s === 'err' ? '✕' : s === 'warn' ? '⚠' : '✓'; }
+
+/* =====================================================================
+   PROJETOS, CONFIGURAÇÃO, BACKUP
+   ===================================================================== */
+function openModal(id) { $(id).classList.add('open'); }
+function closeModal(id) { $(id).classList.remove('open'); }
+function openProjetos() {
+  const ids = Object.keys(DB.list).sort((a, b) => (DB.list[b].upd || 0) - (DB.list[a].upd || 0));
+  $('plist').innerHTML = ids.map(id => { const x = DB.list[id]; return `<div class="pi${id === DB.cur ? ' cur' : ''}" onclick="abrirProjeto('${id}')"><div class="n">${esc(x.nome)}<br><small>alterado em ${new Date(x.upd || 0).toLocaleString('pt-BR')}</small></div>
+    <button class="btn-icon" title="Excluir" onclick="event.stopPropagation();excluirProjeto('${id}')">✕</button></div>`; }).join('');
+  openModal('modal-projetos');
+}
+function abrirProjeto(id) { saveNow(); DB.cur = id; P = migrate(DB.list[id].data); lsSet(LS_PROJ, DB); afterLoad(); closeModal('modal-projetos'); toast('Projeto aberto'); }
+function novoProjeto(ex) {
+  saveNow(); const id = uid(); P = ex ? exampleProject() : blankProject('Novo projeto');
+  if (ex) autoCotas(true);
+  DB.cur = id; saveNow(); afterLoad(); closeModal('modal-projetos'); showTab('projeto');
+}
+function duplicarProjeto() { saveNow(); const id = uid(); P = migrate(JSON.parse(JSON.stringify(P))); P.proj.nome += ' (cópia)'; DB.cur = id; saveNow(); afterLoad(); closeModal('modal-projetos'); toast('Projeto duplicado'); }
+function excluirProjeto(id) {
+  if (!confirm('Excluir definitivamente "' + DB.list[id].nome + '"?')) return;
+  delete DB.list[id];
+  if (!Object.keys(DB.list).length) { const nid = uid(); P = blankProject('Novo projeto'); DB.cur = nid; saveNow(); }
+  else if (id === DB.cur) { DB.cur = Object.keys(DB.list)[0]; P = migrate(DB.list[DB.cur].data); }
+  lsSet(LS_PROJ, DB); afterLoad(); openProjetos();
+}
+function afterLoad() { $('bar-nome').value = P.proj.nome || ''; calc(); renderTab(); }
+
+function applyConfig() {
+  document.documentElement.setAttribute('data-theme', CFG.tema || '');
+  $('hdr-empresa').textContent = CFG.empresa || 'Total Civil';
+  const im = $('hdr-logo'); if (CFG.logo) { im.src = CFG.logo; im.style.display = ''; } else { im.style.display = 'none'; im.removeAttribute('src'); }
+  $('ftr-text').innerHTML = esc(CFG.rodape || 'Total Civil · Drenagem Pluvial') + ' · <a href="https://totalcivil.com.br">totalcivil.com.br</a>';
+  if (CFG.logo) $('dev-logo').innerHTML = `<img src="${CFG.logo}" alt=""/>`;
+  document.body.classList.remove('dev-desktop', 'dev-android', 'dev-iphone'); if (CFG.device) document.body.classList.add('dev-' + CFG.device);
+}
+function openConfig() {
+  $('cfg-empresa').value = CFG.empresa || ''; $('cfg-sub').value = CFG.sub || ''; $('cfg-rodape').value = CFG.rodape || '';
+  $('cfg-tema').value = CFG.tema || ''; $('cfg-device').value = CFG.device || 'desktop';
+  const pr = $('logo-prev'); if (CFG.logo) { pr.src = CFG.logo; pr.style.display = 'block'; } else pr.style.display = 'none';
+  openModal('modal-config');
+}
+function saveConfig() {
+  CFG.empresa = $('cfg-empresa').value.trim(); CFG.sub = $('cfg-sub').value.trim(); CFG.rodape = $('cfg-rodape').value.trim();
+  CFG.tema = $('cfg-tema').value; CFG.device = $('cfg-device').value;
+  lsSet(LS_CFG, CFG); applyConfig(); closeModal('modal-config'); renderTab(); toast('Configurações salvas');
+}
+function handleLogo(inp) {
+  const f = inp.files[0]; if (!f) return;
+  if (f.size > 600 * 1024) { toast('Imagem maior que 600 KB — reduza antes de enviar'); return; }
+  const rd = new FileReader();
+  rd.onload = e => { CFG.logo = e.target.result; const pr = $('logo-prev'); pr.src = CFG.logo; pr.style.display = 'block'; lsSet(LS_CFG, CFG); applyConfig(); };
+  rd.readAsDataURL(f);
+}
+function removeLogo() { CFG.logo = ''; lsSet(LS_CFG, CFG); $('logo-prev').style.display = 'none'; applyConfig(); }
+function toggleTheme() {
+  const dark = CFG.tema ? CFG.tema === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  CFG.tema = dark ? 'light' : 'dark'; lsSet(LS_CFG, CFG); applyConfig(); if (TAB === 'perfil') drawPerfil();
+}
+function chooseDevice(d) { CFG.device = d; lsSet(LS_CFG, CFG); applyConfig(); $('screen-device').classList.remove('active'); $('screen-app').classList.add('active'); showTab(TAB); }
+
+function baixar(nome, conteudo, tipo) {
+  const b = new Blob([conteudo], {type: tipo}); const u = URL.createObjectURL(b);
+  const a = document.createElement('a'); a.href = u; a.download = nome; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 1500);
+}
+const slug = s => (s || 'projeto').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^\w]+/g, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 50);
+function exportBackup(todos) {
+  saveNow();
+  const ps = todos ? Object.values(DB.list).map(x => ({nome: x.nome, data: x.data})) : [{nome: P.proj.nome, data: P}];
+  baixar((todos ? 'drenagem-todos-projetos' : 'drenagem-' + slug(P.proj.nome)) + '-' + new Date().toISOString().slice(0, 10) + '.json', JSON.stringify({app: 'totalcivil-drenagem', v: 1, projetos: ps}, null, 1), 'application/json');
+}
+function importBackup(inp) {
+  const f = inp.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = e => {
+    try {
+      const d = JSON.parse(e.target.result); let lst = [];
+      if (d.app === 'totalcivil-drenagem' && Array.isArray(d.projetos)) lst = d.projetos.map(x => x.data);
+      else if (d.ruas && (d.linhas || d.pvs)) lst = [converterAntigo(d)];
+      else if (d.proj && d.crit) lst = [d];
+      else throw new Error('formato não reconhecido');
+      saveNow(); let last = null;
+      lst.forEach(pj => { const id = uid(); const m = migrate(pj); DB.list[id] = {nome: m.proj.nome, upd: Date.now(), data: m}; last = id; });
+      DB.cur = last; P = migrate(DB.list[last].data); lsSet(LS_PROJ, DB); afterLoad(); closeModal('modal-backup');
+      toast(lst.length + ' projeto(s) importado(s)');
+    } catch (err) { alert('Não foi possível importar: ' + err.message); }
+    inp.value = '';
+  };
+  rd.readAsText(f);
+}
+// Importa arquivos da versão anterior (calculadora "Bacias-PVs-Tubos-Caixas")
+function converterAntigo(d) {
+  const p = blankProject('Projeto importado'); const est = s => { const m = String(s || '').match(/(\d+)\s*\+\s*([\d.,]+)/); return m ? +m[1] * 20 + parseFloat(m[2].replace(',', '.')) : 0; };
+  p.ruas = (d.ruas || []).map(r => ({id: 'R' + r.id, nome: r.nome, larg: r.larg || 7, passeio: 2, it: 3}));
+  (d.linhas || []).filter(l => l.tipo === 'estaca').forEach(l => {
+    p.estacas.push({rua: 'R' + l.ruaId, dist: isNum(+l.dist) ? +l.dist : est(l.est), cota: +l.eixo || 0, obs: ''});
+    if (+l.bacia > 0 && l.pv) p.bacias.push({id: 'B' + (p.bacias.length + 1), nome: 'Est. ' + l.est, A: +l.bacia, C: 0.7, dest: l.pv, tcMode: 'man', tc: 10, kL: '', kH: ''});
+  });
+  p.pvs = (d.pvs || []).map(v => ({id: v.id, rua: 'R' + v.ruaId, dist: est(v.est), tipo: v.tipo || PVTIPOS[0], dpv: +v.diam || 1000, tampaCl: /400/.test(v.tampa) ? TAMPAS[0] : TAMPAS[1], tampa: '', defl: /CRUZ/i.test(v.id) ? 'T' : 'reta', na: '', obs: ''}));
+  p.trechos = (d.tubos || []).map(t => ({id: t.trecho, m: t.pvM, j: t.pvJ, L: +t.ext || 20, D: +t.diam || 400, cm: '', cj: '', mat: MATS[1]}));
+  p.bls = (d.caixas || []).map(c => ({id: c.id, rua: 'R' + c.ruaId, dist: est(c.est), lado: 'E', tipo: /dupla/i.test(c.tipo) ? 'gd' : 'gs', L: /dupla/i.test(c.tipo) ? 2 : 1, a: 0.05, gL: 0.9, gB: 0.4, ga: 60, fr: 0.8, S: '', z: '', prox: '', pv: c.pv, rL: 6, rD: 400, rI: 2, constr: /bloco/i.test(c.tipo) ? 'Blocos de concreto' : 'Pré-moldada'}));
+  const P0 = P; P = p; autoCotas(true); P = P0;
+  return p;
+}
+function exportCSV() {
+  calc();
+  const L = [['Trecho', 'PV montante', 'PV jusante', 'Extensao (m)', 'Soma CA (ha)', 'tc (min)', 'i (mm/h)', 'Q (L/s)', 'Diametro (mm)', 'Declividade (%)', 'Q plena (L/s)', 'y/D', 'V (m/s)', 'Tensao trativa (Pa)', 'Cota inf. montante', 'Cota inf. jusante', 'Recobr. montante', 'Recobr. jusante', 'Situacao']];
+  const n = (x, d) => isNum(x) ? x.toFixed(d).replace('.', ',') : '';
+  R.ordem.forEach(t => { const r = R.tr[t.id], h = r.h; L.push([t.id, t.m, t.j, n(r.L, 2), n(r.CA, 4), n(r.tc, 2), n(r.i, 2), n(r.Q * 1000, 2), t.D, n(r.S * 100, 3), n(h.Qp * 1000, 2), h.carga ? 'carga' : n(h.yD, 3), n(h.V, 3), n(r.tau, 2), n(r.cm, 3), n(r.cj, 3), n(r.recM, 2), n(r.recJ, 2), r.st === 'ok' ? 'OK' : r.st === 'warn' ? 'ALERTA' : 'REVISAR']); });
+  baixar('rede-' + slug(P.proj.nome) + '.csv', '﻿' + L.map(r => r.map(c => /[;"\n]/.test(String(c)) ? '"' + String(c).replace(/"/g, '""') + '"' : c).join(';')).join('\r\n'), 'text/csv;charset=utf-8');
+}
+
+/* =====================================================================
+   INICIALIZAÇÃO
+   ===================================================================== */
+function init() {
+  loadAll(); applyConfig(); calc();
+  try { const t = localStorage.getItem('tc_dren_tab'); if (t && TABS.some(x => x[0] === t)) TAB = t; } catch (e) {}
+  buildTabs();
+  $('bar-nome').value = P.proj.nome || '';
+  $('bar-nome').addEventListener('input', e => { P.proj.nome = e.target.value; save(); });
+  document.addEventListener('input', e => { if (e.target.dataset && e.target.dataset.p && e.target.tagName !== 'SELECT') onField(e); });
+  document.addEventListener('change', e => { if (e.target.dataset && e.target.dataset.p && (e.target.tagName === 'SELECT' || e.target.dataset.full)) onField(e); });
+  document.querySelectorAll('.modal-backdrop').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); }));
+  matchMedia('(prefers-color-scheme: dark)').addEventListener && matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (TAB === 'perfil') drawPerfil(); });
+  if (CFG.device) { $('screen-app').classList.add('active'); showTab(TAB); }
+  else { $('screen-device').classList.add('active'); }
+  window.addEventListener('beforeunload', saveNow);
+}
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body></html>
