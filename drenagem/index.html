@@ -526,7 +526,8 @@ table.tbl-r th:not(:first-child){text-align:right}
       <div class="plist" id="plist"></div>
       <div class="bar-btns" style="margin-top:1rem">
         <button class="btn btn-primary btn-sm" onclick="novoProjeto(false)">＋ Novo em branco</button>
-        <button class="btn btn-secondary btn-sm" onclick="novoProjeto(true)">＋ Novo com exemplo</button>
+        <button class="btn btn-secondary btn-sm" onclick="novoProjeto(true)">＋ Exemplo simples (2 ruas)</button>
+        <button class="btn btn-secondary btn-sm" onclick="novoProjeto('bairro')">＋ Exemplo de bairro (6 ruas)</button>
         <button class="btn btn-secondary btn-sm" onclick="duplicarProjeto()">⧉ Duplicar atual</button>
       </div>
       <p class="hint" style="font-size:.75rem;color:var(--muted)">Os projetos ficam guardados no navegador deste aparelho. Use Backup para levar para outro aparelho.</p>
@@ -659,6 +660,60 @@ function exampleProject() {
   return p;
 }
 
+/* Exemplo de bairro: 3 ruas leste–oeste × 3 ruas norte–sul (9 cruzamentos).
+   Terreno cai 0,6 % para leste e 1,0 % para sul. Coletores nas ruas L–O correm para
+   leste até o tronco da Rua Gonçalves Dias, que corre para sul até o canal. */
+function exampleBairro() {
+  const p = blankProject('Exemplo — Bairro com 6 ruas (3 × 3 cruzamentos)');
+  p.proj.municipio = 'Município / UF'; p.proj.local = 'Loteamento Jardim das Flores';
+  p.proj.obs = 'Exemplo funcional de microdrenagem em malha de 6 ruas: três ruas no sentido leste–oeste cortadas por três ruas no sentido norte–sul. Coletores nas ruas leste–oeste descarregam no tronco da Rua Gonçalves Dias, que lança no canal ao sul.';
+  const cota = (x, y) => +(12.0 - 0.006 * x + 0.010 * y).toFixed(3);    // terreno
+  const EW = [['R1', 'Rua das Acácias', 0, 'mfs30'], ['R2', 'Rua dos Ipês', -100, 'mfs30'], ['R3', 'Rua das Palmeiras', -200, 'mf15']];
+  const NS = [['R4', 'Rua Castro Alves', 20, 'mf15'], ['R5', 'Rua Olavo Bilac', 120, 'mf15'], ['R6', 'Rua Gonçalves Dias', 220, 'mfs45']];
+  const mfAttr = k => ({mf: k, mfH: MEIOFIO[k].h, sjW: MEIOFIO[k].W, sjI: MEIOFIO[k].Sw || ''});
+  // ruas L–O: R1 é a referência (direção leste); R2 e R3 posicionadas pelos cruzamentos com R4
+  p.ruas.push(Object.assign({id: 'R1', nome: EW[0][1], larg: 7, passeio: 2, it: 3, az: 0}, mfAttr(EW[0][3])));
+  NS.forEach(([id, nome, x, mf]) => p.ruas.push(Object.assign({id, nome, larg: 7, passeio: 2, it: 2.5, ref: 'R1', refDist: x, ang: -90, dist0: 20}, mfAttr(mf))));
+  EW.slice(1).forEach(([id, nome, y, mf]) => p.ruas.push(Object.assign({id, nome, larg: 7, passeio: 2, it: 3, ref: 'R4', refDist: 20 - y, ang: 90, dist0: 20}, mfAttr(mf))));
+  // estacas a cada 20 m (0 a 240 m em todas as ruas)
+  for (let d = 0; d <= 240; d += 20) {
+    EW.forEach(([id, , y]) => p.estacas.push({rua: id, dist: d, cota: cota(d, y), obs: [20, 120, 220].includes(d) ? 'cruzamento' : ''}));
+    NS.forEach(([id, , x]) => p.estacas.push({rua: id, dist: d, cota: cota(x, 20 - d), obs: [20, 120, 220].includes(d) ? 'cruzamento' : ''}));
+  }
+  const pv = (id, rua, dist, defl, obs) => ({id, rua, dist, tipo: PVTIPOS[0], dpv: 1000, tampaCl: TAMPAS[0], tampa: '', defl, na: '', obs: obs || ''});
+  const tr = (id, m, j, L, D) => ({id, m, j, L: L || '', D: D || 400, cm: '', cj: '', mat: MATS[1], aL: '', cL: '', tcL: ''});
+  // tronco na Rua Gonçalves Dias (R6), de norte para sul
+  const T = [['PV-T1', 20, 'd90', 'Cruzamento com a Rua das Acácias'], ['PV-T2', 70, 'reta'], ['PV-T3', 120, 'T', 'Cruzamento com a Rua dos Ipês'], ['PV-T4', 170, 'reta'], ['PV-T5', 220, 'T', 'Cruzamento com a Rua das Palmeiras'], ['PV-T6', 240, 'reta', 'Lançamento no canal']];
+  T.forEach(([id, d, df, ob]) => p.pvs.push(pv(id, 'R6', d, df, ob)));
+  p.pvs[p.pvs.length - 1].na = 6.00;
+  for (let k = 0; k < T.length - 1; k++) p.trechos.push(tr('TR' + (k + 1), T[k][0], T[k + 1][0]));
+  // coletores nas ruas L–O: PVs em 20 (cruz. R4), 70, 120 (cruz. R5), 170 → PV do tronco
+  const chegada = {R1: 'PV-T1', R2: 'PV-T3', R3: 'PV-T5'};
+  EW.forEach(([rua, nome], k) => {
+    const ids = [20, 70, 120, 170].map((d, j) => { const id = 'PV-' + (k + 1) + String.fromCharCode(65 + j); p.pvs.push(pv(id, rua, d, j === 0 ? 'ini' : 'reta', d === 20 ? 'Cruzamento com a Rua Castro Alves' : d === 120 ? 'Cruzamento com a Rua Olavo Bilac' : '')); return id; });
+    for (let j = 0; j < 3; j++) p.trechos.push(tr('C' + (k + 1) + '.' + (j + 1), ids[j], ids[j + 1]));
+    p.trechos.push(tr('C' + (k + 1) + '.4', ids[3], chegada[rua], 50));
+  });
+  // bocas-de-lobo, ramais e bacias
+  let nb = 0;
+  const addBL = (rua, dist, lado, pvId, A, C, modelo, rL) => {
+    const id = 'BL-' + String(++nb).padStart(2, '0'), m = CAIXAS[modelo];
+    p.bls.push({id, modelo, rua, dist, lado, tipo: m.tipo, L: m.L, a: 0.05, gL: m.gL || 0.9, gB: m.gB || 0.3, ga: 60, fr: BLTIPOS[m.tipo].fr, S: '', z: '', prox: '', pv: pvId, rL: rL || 6, rD: 400, rI: 2.0, constr: m.constr, cxB: m.cxB, cxL: m.cxL, cxH: m.cxH});
+    p.bacias.push({id: 'B' + nb, nome: 'Quadra + meia pista — ' + ruaNomeEx(rua) + ' est. ' + estLabel(dist) + ' (' + (lado === 'D' ? 'dir.' : 'esq.') + ')', A, C, dest: id, tcMode: 'man', tc: 10, kL: '', kH: ''});
+  };
+  const ruaNomeEx = id => (p.ruas.find(r => r.id === id) || {}).nome || id;
+  EW.forEach(([rua], k) => {
+    [[65, 'PV-' + (k + 1) + 'B'], [165, 'PV-' + (k + 1) + 'D']].forEach(([d, pvId]) => ['E', 'D'].forEach(l => addBL(rua, d, l, pvId, 0.18, 0.70, k === 2 ? 'bls-bl' : 'bld-pm')));
+  });
+  NS.slice(0, 2).forEach(([rua], n) => {
+    const col = n === 0 ? 'A' : 'C';
+    [[15, 'PV-1' + col, 0.06], [115, 'PV-2' + col, 0.16], [215, 'PV-3' + col, 0.16]].forEach(([d, pvId, A]) => ['E', 'D'].forEach(l => addBL(rua, d, l, pvId, A, 0.65, 'bls-pm', 8)));
+  });
+  [[65, 'PV-T2'], [165, 'PV-T4']].forEach(([d, pvId]) => ['E', 'D'].forEach(l => addBL('R6', d, l, pvId, 0.20, 0.70, 'bld-pm')));
+  // praça a montante lançando direto no PV do início do tronco
+  p.bacias.push({id: 'B' + (nb + 1), nome: 'Praça central (galeria de lote)', A: 0.35, C: 0.30, dest: 'PV-2B', tcMode: 'man', tc: 15, kL: '', kH: ''});
+  return p;
+}
 /* ---------------- estado ---------------- */
 let DB = {cur: null, list: {}};   // projetos
 let P = null;                      // projeto atual (dados)
@@ -2085,9 +2140,13 @@ function openProjetos() {
 }
 function abrirProjeto(id) { saveNow(); DB.cur = id; P = migrate(DB.list[id].data); lsSet(LS_PROJ, DB); afterLoad(); verificarMesNovo(); closeModal('modal-projetos'); toast('Projeto aberto'); }
 function novoProjeto(ex) {
-  saveNow(); const id = uid(); P = ex ? exampleProject() : blankProject('Novo projeto');
-  if (ex) autoCotas(true);
-  DB.cur = id; saveNow(); afterLoad(); closeModal('modal-projetos'); showTab('projeto');
+  saveNow(); const id = uid(); P = ex === 'bairro' ? exampleBairro() : ex ? exampleProject() : blankProject('Novo projeto');
+  if (ex === 'bairro') { calc(); autoDimensionar(); }
+  else if (ex) autoCotas(true);
+  DB.cur = id; saveNow(); afterLoad(); closeModal('modal-projetos');
+  if (ex === 'bairro') { autoCorrigir(); closeModal('modal-auto'); DESFAZER = null; showTab('planta'); toast('Exemplo de bairro criado e dimensionado automaticamente'); }
+  else showTab('projeto');
+  verificarMesNovo();
 }
 function duplicarProjeto() { saveNow(); const id = uid(); P = migrate(JSON.parse(JSON.stringify(P))); P.proj.nome += ' (cópia)'; DB.cur = id; saveNow(); afterLoad(); closeModal('modal-projetos'); toast('Projeto duplicado'); }
 function excluirProjeto(id) {
@@ -2615,7 +2674,8 @@ function caminho(pvId) {
   while (cur && !seen.has(cur)) { seen.add(cur); const t = R.ordem.find(x => x.m === cur); if (!t) break; out.push(t); cur = t.j; }
   return out;
 }
-function svgPerfil(ini, K, W = 1200) {
+function svgPerfil(ini, K, W0 = 1200) {
+  let W = W0;
   const path = caminho(ini); if (!path.length) return '';
   const c = P.crit, pts = []; let X = 0;
   path.forEach((t, k) => { const r = R.tr[t.id]; if (k === 0) pts.push({id: t.m, x: 0, pv: R.pv[t.m], p: pvById(t.m)}); X += r.L || 0; pts.push({id: t.j, x: X, pv: R.pv[t.j], p: pvById(t.j)}); });
@@ -2628,11 +2688,17 @@ function svgPerfil(ini, K, W = 1200) {
   const rowsPV = [['Estaca', p => estLabel(num(p.p && p.p.dist))], ['Distância acumulada (m)', p => fmt(p.x, 2)], ['Cota da tampa (m)', p => fmt(p.pv.tp, 3)], ['Cota do fundo do PV (m)', p => fmt(p.pv.fundo, 3)], ['Profundidade do PV (m)', p => fmt(p.pv.prof, 2)], ['Nível d\'água no PV (m)', p => isNum(p.pv.H) && p.pv.H > -1e8 ? fmt(p.pv.H, 3) : '—']];
   const rowsTr = [['Trecho', (t, r) => t.id], ['Diâmetro (mm)', (t) => 'Ø ' + t.D], ['Extensão (m)', (t, r) => fmt(r.L, 2)], ['Declividade (%)', (t, r) => isNum(r.S) ? fmt(r.S * 100, 3) : '—'], ['CI montante → jusante', (t, r) => fmt(r.cm, 3) + ' → ' + fmt(r.cj, 3)], ['Vazão Q (L/s)', (t, r) => fL(r.Q)], ['Velocidade V (m/s)', (t, r) => fmt(r.h.V, 2)], ['Lâmina y/D', (t, r) => r.h.carga ? 'em carga' : fmt(r.h.yD, 2)]];
   const H = mt + hp + 30 + (rowsPV.length + rowsTr.length) * rowH + 60;
+  // largura mínima por trecho (legibilidade); a escala horizontal só é ajustada nos trechos curtos
+  const sx0 = (W - ml - mr) / (X || 1), MINW = 120;
+  const seg = path.map(t => Math.max(MINW, (R.tr[t.id].L || 0) * sx0)); let distorce = seg.some((w, k) => w > (R.tr[path[k].id].L || 0) * sx0 + 0.5);
+  const cum = [0]; seg.forEach(w => cum.push(cum[cum.length - 1] + w));
+  W = Math.max(W, ml + mr + cum[cum.length - 1]);
   const sx = (W - ml - mr) / (X || 1), sy = hp / (ymax - ymin);
-  const PX = x => ml + x * sx, PY = y => mt + (ymax - y) * sy;
+  const PX = x => { for (let k = 0; k < pts.length - 1; k++) if (x <= pts[k + 1].x + 1e-9) { const f = (x - pts[k].x) / ((pts[k + 1].x - pts[k].x) || 1); return ml + cum[k] + f * seg[k]; } return ml + cum[cum.length - 1]; };
+  const PY = y => mt + (ymax - y) * sy;
   let s = `<svg ${SVGNS} viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="${K.bg}"/>`;
   s += tx(16, 30, 'Perfil longitudinal — ' + pts[0].id + ' → ' + pts[pts.length - 1].id, {fs: 18, w: 700, c: K.blue});
-  const ex = sy / sx; s += tx(W - mr, 26, 'Escala vertical exagerada ' + fmt(ex, 1) + ' × a horizontal', {fs: 12, a: 'end', c: K.muted});
+  const ex = sy / sx0; s += tx(W - mr, 26, 'Escala vertical exagerada ' + fmt(ex, 1) + ' × a horizontal' + (distorce ? ' · trechos curtos ampliados na horizontal' : ''), {fs: 12, a: 'end', c: K.muted});
   const step = [0.1, 0.2, 0.25, 0.5, 1, 2, 5].find(v => (ymax - ymin) / v <= 9) || 5;
   for (let v = Math.ceil(ymin / step) * step; v <= ymax; v += step) s += ln(ml, PY(v), W - mr, PY(v), K.grid) + tx(ml - 8, PY(v) + 4, fmt(v, 2), {fs: 12, a: 'end', c: K.muted});
   s += tx(ml - 70, mt + hp / 2, 'Cota (m)', {fs: 13, c: K.muted, rot: -90, a: 'middle'});
@@ -2647,7 +2713,8 @@ function svgPerfil(ini, K, W = 1200) {
     s += `<polygon points="${x0},${PY(r.cm)} ${x1},${PY(r.cj)} ${x1},${PY(r.cj + D)} ${x0},${PY(r.cm + D)}" fill="${K.bg}" stroke="${K.agua}" stroke-width="1.2"/>`;
     const y = r.h.carga ? D : (r.h.y || 0);
     if (y > 0) s += `<polygon points="${x0},${PY(r.cm)} ${x1},${PY(r.cj)} ${x1},${PY(r.cj + y)} ${x0},${PY(r.cm + y)}" fill="${K.aguaF}"/>`;
-    s += tx((x0 + x1) / 2, PY((r.cm + r.cj) / 2 + D + e) - 10, t.id + ' · Ø' + t.D + ' · i ' + (isNum(r.S) ? fmt(r.S * 100, 2) : '—') + ' %', {fs: 13, a: 'middle', w: 700, c: K.aguaD, halo: K.soil});
+    const lb = t.id + ' · Ø' + t.D + ' · i ' + (isNum(r.S) ? fmt(r.S * 100, 2) : '—') + ' %';
+    s += tx((x0 + x1) / 2, PY((r.cm + r.cj) / 2 + D + e) - 10, (x1 - x0) > lb.length * 7.5 + 20 ? lb : t.id, {fs: 13, a: 'middle', w: 700, c: K.aguaD, halo: K.soil});
   });
   // PVs
   pts.forEach(p => {
