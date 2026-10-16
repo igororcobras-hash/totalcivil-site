@@ -458,7 +458,10 @@ const PROGRAMAS = [
    ico:'<path d="M23 5C23 5 11 19 11 28a12 12 0 0 0 24 0C35 19 23 5 23 5Z"/><path d="M17 29a6 6 0 0 0 6 6"/>'},
   {key:'estrutura',    campo:'estruturaAtivo',    solic:'estruturaSolicitado',    nome:'Estrutura em Concreto Armado', url:'https://concreto.totalcivil.com.br', disp:true,
    desc:'Dimensionamento de fundações e estruturas de concreto armado. Sapatas, estacas, radier, corrida. NBR 6118:2023 · NBR 6122:2022.',
-   ico:'<path d="M10 6v34M36 6v34M4 14h38M4 32h38"/><circle cx="10" cy="14" r="1.6"/><circle cx="36" cy="14" r="1.6"/><circle cx="10" cy="32" r="1.6"/><circle cx="36" cy="32" r="1.6"/>'}
+   ico:'<path d="M10 6v34M36 6v34M4 14h38M4 32h38"/><circle cx="10" cy="14" r="1.6"/><circle cx="36" cy="14" r="1.6"/><circle cx="10" cy="32" r="1.6"/><circle cx="36" cy="32" r="1.6"/>'},
+  {key:'visitas',      campo:'visitasAtivo',      solic:null,                     nome:'Visitas Técnicas',             url:'/visitas/',      disp:true,  gratis:true,
+   desc:'Gestão de visitas técnicas e inspeções de obra. Checklist, diário, fotos, RNC e relatório de vistoria. Sem login · acesso livre.',
+   ico:'<rect x="6" y="8" width="34" height="28" rx="3"/><path d="M6 16h34"/><circle cx="23" cy="28" r="5"/><path d="M20 28h6M23 25v6"/>'}
 ];
 const porKey = k => PROGRAMAS.find(p => p.key === k);
 
@@ -516,14 +519,14 @@ function liberado(u, p){ if(!u) return false; if(u.admin) return true; return !!
 function renderProgramas(){
   $('lista-programas').innerHTML = PROGRAMAS.map(p => {
     const lib = p.disp && liberado(eu, p);
-    const chip = !p.disp ? '<span class="chip soon">Em breve</span>' : lib ? '<span class="chip lib">No seu pacote</span>' : '<span class="chip ok">Disponível</span>';
+    const chip = !p.disp ? '<span class="chip soon">Em breve</span>' : p.gratis ? '<span class="chip lib">Acesso livre</span>' : lib ? '<span class="chip lib">No seu pacote</span>' : '<span class="chip ok">Disponível</span>';
     const abrirLink = p.disp ? '<a class="abrir" href="' + p.url + '">Abrir →</a>' : '<span class="mini">Reserve: cobrança só após o lançamento</span>';
     return '<li><article class="card' + (p.disp ? '' : ' breve') + (sel.has(p.key) ? ' sel' : '') + '" data-card="' + p.key + '">' +
       '<div class="topo-card"><span class="ico" aria-hidden="true"><svg viewBox="0 0 46 46">' + p.ico + '</svg></span>' + chip + '</div>' +
       '<h3>' + esc(p.nome) + '</h3><p>' + esc(p.desc) + '</p>' +
-      '<div class="preco"><b>' + brl(PRECO).replace(',00', '') + '</b> /mês' + (p.disp ? ' · 2 meses grátis' : '') + '</div>' +
+      (p.gratis ? '<div class="preco"><b>Gratuito</b> · sem cadastro</div>' : '<div class="preco"><b>' + brl(PRECO).replace(',00', '') + '</b> /mês' + (p.disp ? ' · 2 meses grátis' : '') + '</div>') +
       '<div class="rodape-card">' +
-        (lib ? '<span class="mini">Liberado para você</span>' :
+        (p.gratis ? '' : lib ? '<span class="mini">Liberado para você</span>' :
          '<label class="incluir"><input type="checkbox" data-incluir="' + p.key + '"' + (sel.has(p.key) ? ' checked' : '') + '> Incluir no pacote</label>') +
         abrirLink + '</div></article></li>';
   }).join('');
