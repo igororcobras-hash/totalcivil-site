@@ -1037,8 +1037,9 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
 <div id="barEmop" style="display:flex;gap:5px;padding:4px 8px;background:#eff6ff;border-bottom:1px solid #e2e8f0;flex-wrap:wrap;align-items:center;flex:1;min-width:320px">
   <span style="font-size:9px;font-weight:800;color:#334155">Banco EMOP:</span>
   <input type="file" id="fileEmopXLSX" accept=".xlsx,.xls,.dbf" multiple style="display:none">
-  <button class="btn btn-primary" style="padding:3px 7px;font-size:9px;font-weight:800" onclick="document.getElementById('fileEmopXLSX').click()" title="Selecione os arquivos do mês da sua assinatura EMOP: os originais em DBF (DIPR, MAT e COMP), sem formatar, ou os XLSX (DIPR, Insumos e COMP) - pode selecionar todos juntos">🗂️ Atualizar EMOP (XLSX ou DBF)</button>
+  <button class="btn btn-primary" style="padding:3px 7px;font-size:9px;font-weight:800" onclick="document.getElementById('fileEmopXLSX').click()" title="Selecione os arquivos do mês da sua assinatura EMOP: os originais em DBF (DIPR, MAT, REUT e COMP), sem formatar, ou os XLSX (DIPR, Insumos e COMP) - pode selecionar todos juntos">🗂️ Atualizar EMOP (XLSX ou DBF)</button>
   <button class="btn" style="padding:3px 7px;font-size:9px;font-weight:700;background:white;color:#1e293b;border:1px solid #94a3b8" onclick="reverterEmopParaEmbutido()" title="Descarta o banco EMOP que você importou (a EMOP fica vazia até carregar de novo)">🗑️ Descartar EMOP importado</button>
+  <span id="avisoArquivosEmop" style="font-size:9px;color:#1e3a8a;width:100%">📌 Arquivos da EMOP do mês (DBF originais, sem formatar): <b>DIPR</b> (serviços), <b>MAT</b> (insumos), <b>REUT</b> (códigos reutilizados) e <b>COMP</b> (composições). Selecione os 4 juntos.</span>
   <span id="infoBancoEmop" style="font-size:8px;color:#334155;width:100%">Carregando banco EMOP...</span>
   <div id="statusImportEmop" style="font-size:9px;width:100%;display:none;padding:6px;border-radius:6px"></div>
 </div>
@@ -6631,7 +6632,7 @@ function atualizarLinhaInfoEmop(){
   } else if(nDipr>0){
     el.textContent = 'EMOP • ' + fmtNum(nDipr) + ' DIPR + ' + fmtNum(nInsumos) + ' insumos • carregado de arquivo DIPR/COMP';
   } else {
-    el.textContent = 'EMOP não incluída no programa • carregue os arquivos da sua assinatura EMOP (DIPR, MAT/Insumos e COMP do mês, em DBF ou XLSX) em "🗂️ Atualizar EMOP (XLSX ou DBF)"';
+    el.textContent = 'EMOP não incluída no programa • carregue os arquivos da sua assinatura EMOP (DIPR, MAT/Insumos, REUT e COMP do mês, em DBF ou XLSX) em "🗂️ Atualizar EMOP (XLSX ou DBF)"';
   }
 }
 
@@ -6803,6 +6804,7 @@ function detectarTipoDbf(campos){
   var tem = function(n){ return nomes.indexOf(n)>=0; };
   var descr = nomes.filter(function(n){ return /^DESC/.test(n); });
   if(tem('CODIGO') && tem('ELEMENTAR') && tem('QUANTIDADE')) return { tipo:'COMP' };
+  if(tem('ELEMENTAR') && tem('COMPOSICAO')) return { tipo:'REUT', descr:descr };
   var num = campos.filter(function(c){ return c.tipo==='N' || c.tipo==='F'; }).map(function(c){ return c.nome; });
   var preco = ['CUSTO','PRECO','PRECO_UNIT','VALOR'].filter(tem)[0] || num[0];
   var unid = nomes.filter(function(n){ return /^UNI/.test(n); })[0];
@@ -6854,6 +6856,24 @@ function montarCompDeDbf(dbf, dipr, insumos, reservaInsumos){
   });
   return { map: map, faltam: Object.keys(faltam).length, daReserva: Object.keys(daReserva).length };
 }
+// V1-02-40: REUT = códigos reutilizados (composição usada dentro de outra composição). Cada elementar
+// aponta para um serviço do DIPR (COMPOSICAO '0100100751' = 01.001.0075-1); preço e descritivo inteiro
+// vêm desse serviço, a unidade do próprio REUT.
+function itensDeReutDbf(dbf, t, dipr){
+  var cat = {}; (dipr||[]).forEach(function(d){ cat[d.CODIGO] = d; });
+  var out = [], semServico = 0;
+  dbf.regs.forEach(function(r){
+    var el = String(r.ELEMENTAR||'').trim();
+    var c = String(r.COMPOSICAO||'').replace(/[^0-9A-Za-z]/g,'').toUpperCase();
+    if(!el || c.length!==10) return;
+    var cod = c.substr(0,2)+'.'+c.substr(2,3)+'.'+c.substr(5,4)+'-'+c.charAt(9);
+    var s = cat[cod];
+    if(!s) semServico++;
+    out.push({ CODIGO:el, DESCR1:(s && s.DESCR1) || juntarDescritivoDbf(r, t.descr), UNID:String(r.UNIDADE||'').trim() || (s ? s.UNID : ''),
+      CUSTO: s ? Number(s.CUSTO)||0 : 0, COMPOSICAO:cod });
+  });
+  return { itens: out, semServico: semServico };
+}
 // Mapas antigos do botão "🧱 Insumos EMOP" têm prioridade no descritivo das composições; se já
 // tinham um insumo do MAT, passam a ter o descritivo inteiro (não acrescenta códigos novos).
 function atualizarMapasInsumosAntigos(insumos){
@@ -6872,7 +6892,7 @@ function atualizarMapasInsumosAntigos(insumos){
   try{ localStorage.setItem('schueler_insumo_full_v1', JSON.stringify(window.INSUMO_FULL_MAP)); }catch(e){}
   if(typeof _insumosIdxKey!=='undefined') _insumosIdxKey = '';
 }
-window._emopDbf = { lerDbf: lerDbf, juntarDescritivoDbf: juntarDescritivoDbf, detectarTipoDbf: detectarTipoDbf, itensDeDbf: itensDeDbf, montarCompDeDbf: montarCompDeDbf };
+window._emopDbf = { itensDeReutDbf: itensDeReutDbf, lerDbf: lerDbf, juntarDescritivoDbf: juntarDescritivoDbf, detectarTipoDbf: detectarTipoDbf, itensDeDbf: itensDeDbf, montarCompDeDbf: montarCompDeDbf };
 
 async function processarArquivosEmop(fileList){
   var files = Array.prototype.slice.call(fileList);
@@ -6882,6 +6902,8 @@ async function processarArquivosEmop(fileList){
   var novoDipr=null, novoInsumos=null, novoComp=null;
   var relatorio = [];
   var compDbf = [];
+  var reutDbf = [];
+  var leuInsumosDbf = false;
 
   for(var i=0;i<files.length;i++){
     var file = files[i];
@@ -6896,11 +6918,14 @@ async function processarArquivosEmop(fileList){
           // MAT e outros arquivos de insumos (elementares) do mesmo mês se somam
           var lidos = itensDeDbf(dbf, t);
           novoInsumos = (novoInsumos||[]).concat(lidos);
+          leuInsumosDbf = true;
           relatorio.push('🗂️ ' + file.name + ': INSUMOS EMOP — ' + fmtNum(lidos.length) + ' itens');
         } else if(t && t.tipo==='COMP'){
           compDbf.push({ nome: file.name, dbf: dbf });
+        } else if(t && t.tipo==='REUT'){
+          reutDbf.push({ nome: file.name, dbf: dbf, t: t });
         } else {
-          relatorio.push('⚠️ ' + file.name + ': DBF não reconhecido (esperado DIPR, MAT ou COMP da EMOP).');
+          relatorio.push('⚠️ ' + file.name + ': DBF não reconhecido (esperado DIPR, MAT, REUT ou COMP da EMOP).');
         }
         continue;
       }
@@ -6927,6 +6952,21 @@ async function processarArquivosEmop(fileList){
   var extraInsumosAtual = extraDBs.find(function(d){ return d.name===NOME_EXTRA_DB_INSUMOS_EMB || d.name===NOME_EXTRA_DB_INSUMOS_IMP; });
   var insumosAntes = extraInsumosAtual ? extraInsumosAtual.items : [];
 
+  // REUT depois do DIPR: entra junto com os insumos (substitui os mesmos códigos)
+  reutDbf.forEach(function(r){
+    try{
+      var res = itensDeReutDbf(r.dbf, r.t, novoDipr!==null ? novoDipr : catalog);
+      var codigos = {}; res.itens.forEach(function(i){ codigos[i.CODIGO] = 1; });
+      novoInsumos = (novoInsumos!==null ? novoInsumos : insumosAntes).filter(function(i){ return !codigos[i.CODIGO]; }).concat(res.itens);
+      var linha = '🗂️ ' + r.nome + ': REUTILIZADOS — ' + fmtNum(res.itens.length) + ' composições usadas dentro de outras';
+      if(res.semServico) linha += '\n   ⚠️ ' + fmtNum(res.semServico) + ' não estão no DIPR carregado (ficam com preço 0). Selecione o DIPR do mesmo mês junto.';
+      relatorio.push(linha);
+    }catch(err){
+      console.error(err);
+      relatorio.push('❌ ' + r.nome + ': erro ao processar — ' + err.message);
+    }
+  });
+
   // COMP em DBF por último: usa o DIPR e o MAT deste envio (ou os já carregados)
   compDbf.forEach(function(c){
     try{
@@ -6934,13 +6974,23 @@ async function processarArquivosEmop(fileList){
       novoComp = Object.assign(novoComp||{}, m.map);
       var linha = '🗂️ ' + c.nome + ': COMP — ' + fmtNum(Object.keys(m.map).length) + ' composições';
       if(m.daReserva) linha += '\n   ↳ ' + fmtNum(m.daReserva) + ' insumo(s) das composições não estão no MAT enviado; descritivo e preço vieram do banco de insumos que já estava carregado.';
-      if(m.faltam) linha += '\n   ⚠️ ' + fmtNum(m.faltam) + ' insumo(s) das composições não estão em nenhum arquivo de insumos carregado (ficam só com o código e preço 0 dentro da composição; o preço do serviço no DIPR não muda). Se a EMOP enviou outro arquivo de elementares (ex.: equipamentos), selecione-o junto.';
+      if(m.faltam) linha += '\n   ⚠️ ' + fmtNum(m.faltam) + ' insumo(s) das composições não estão em nenhum arquivo de insumos carregado (ficam só com o código e preço 0 dentro da composição; o preço do serviço no DIPR não muda). Selecione junto o REUT do mesmo mês (códigos reutilizados).';
       relatorio.push(linha);
     }catch(err){
       console.error(err);
       relatorio.push('❌ ' + c.nome + ': erro ao processar — ' + err.message);
     }
   });
+
+  // V1-02-40: lembra os 4 DBF do mês quando algum ficou de fora
+  if(files.some(function(f){ return /\.dbf$/i.test(f.name); })){
+    var faltam = [];
+    if(novoDipr===null) faltam.push('DIPR (serviços)');
+    if(!leuInsumosDbf) faltam.push('MAT (insumos)');
+    if(!reutDbf.length) faltam.push('REUT (códigos reutilizados)');
+    if(!compDbf.length) faltam.push('COMP (composições)');
+    if(faltam.length) relatorio.push('📌 Não veio neste envio: ' + faltam.join(', ') + '. O programa usa o que já estava carregado; para o mês ficar completo, selecione DIPR, MAT, REUT e COMP juntos.');
+  }
 
   if(novoDipr===null && novoInsumos===null && novoComp===null){
     setStatusImportEmop(relatorio.join('\n'), 'erro');
@@ -7701,7 +7751,7 @@ setTimeout(inicializarBancoSco, 200);
     var sinOrig = origemMeta(window._sinapiImportMeta) || (window._sinapiImportMeta ? ('importado por você'+(window._sinapiImportMeta.importadoEm?' em '+window._sinapiImportMeta.importadoEm:'')) : 'embutido no programa');
     var scoOrig = origemMeta(window._scoImportMeta) || (window._scoImportMeta ? ('importado por você'+(window._scoImportMeta.importadoEm?' em '+window._scoImportMeta.importadoEm:'')) : 'embutido no programa');
     var geral = [
-      ['Versão do programa', 'V1-02-39'],
+      ['Versão do programa', 'V1-02-40'],
       ['Navegador', navegador()],
       ['Tela (largura)', window.innerWidth+' px'],
       ['Descompressão nativa (bancos embutidos)', window.DecompressionStream ? 'sim' : 'NÃO — atualize o navegador'],
