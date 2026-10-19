@@ -7526,7 +7526,7 @@ setTimeout(inicializarBancoSco, 200);
     var sinOrig = origemMeta(window._sinapiImportMeta) || (window._sinapiImportMeta ? ('importado por você'+(window._sinapiImportMeta.importadoEm?' em '+window._sinapiImportMeta.importadoEm:'')) : 'embutido no programa');
     var scoOrig = origemMeta(window._scoImportMeta) || (window._scoImportMeta ? ('importado por você'+(window._scoImportMeta.importadoEm?' em '+window._scoImportMeta.importadoEm:'')) : 'embutido no programa');
     var geral = [
-      ['Versão do programa', 'V1-02-36'],
+      ['Versão do programa', 'V1-02-37'],
       ['Navegador', navegador()],
       ['Tela (largura)', window.innerWidth+' px'],
       ['Descompressão nativa (bancos embutidos)', window.DecompressionStream ? 'sim' : 'NÃO — atualize o navegador'],
@@ -11565,6 +11565,203 @@ document.addEventListener('DOMContentLoaded', limparRestos);
 })();
 </script>
 <!-- FIM PATCH V1-02-34 -->
+
+<!-- ==================== PATCH V1-02-37 - TOPO COMPACTO NO COMPUTADOR: uma barra com menus + a linha da obra ==================== -->
+<style>
+/* Só no computador (body.mode-desktop). Os botões são os mesmos de antes, apenas mudam de lugar;
+   ao trocar para Android/iPhone tudo volta ao lugar original e o celular continua como era. */
+.tp-bar{display:flex;align-items:center;gap:6px;padding:4px 10px;flex-wrap:nowrap;position:relative;z-index:50}
+.tp-dark{background:#0f172a;color:#fff;z-index:60;flex-wrap:wrap;row-gap:4px}
+.tp-light{background:#f1f5f9;border-bottom:1px solid #e2e8f0}
+.tp-bar h1{font-size:12px;display:flex;align-items:center;gap:6px;white-space:nowrap;margin-right:4px}
+.tp-bar h1 img{height:26px!important;width:auto!important}
+.tp-bar h1 span{color:#f59e0b}
+.tp-bar h1 small{display:none}
+.tp-bar .btn,.tp-bar .tp-mb{white-space:nowrap}
+.tp-m{position:relative;display:inline-block}
+.tp-mb{border:1px solid #334155;background:#1e293b;color:#fff;border-radius:8px;padding:5px 9px;font-size:10px;font-weight:800;cursor:pointer}
+.tp-mb:hover,.tp-m.aberto>.tp-mb{background:#f59e0b;color:#0f172a;border-color:#f59e0b}
+.tp-mb::after{content:' ▾';font-size:9px;opacity:.8}
+.tp-pn{display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:230px;background:#fff;color:#0f172a;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 10px 30px rgba(15,23,42,.25);padding:6px;z-index:9000;font-size:11px}
+.tp-m.aberto>.tp-pn{display:block}
+.tp-pn .tp-h{font-size:9px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.04em;padding:6px 8px 3px}
+.tp-pn>.btn,.tp-pn>label.btn,.tp-pn #boxExportXlsx>.btn,.tp-pn #userBadge .btn{display:flex!important;width:100%;justify-content:flex-start;align-items:center;gap:6px;background:transparent!important;color:#0f172a!important;border:none!important;border-radius:6px;padding:7px 9px!important;font-size:11px!important;font-weight:600!important;text-align:left;margin:0!important;white-space:nowrap}
+.tp-pn>.btn:hover,.tp-pn>label.btn:hover,.tp-pn #boxExportXlsx>.btn:hover,.tp-pn #userBadge .btn:hover{background:#fef3c7!important}
+.tp-pn #boxExportXlsx{display:block;background:none;padding:0;margin:0!important;border-radius:0}
+.tp-pn #userBadge{display:block;background:none;color:#334155;border:none;padding:4px 8px;font-size:10px;font-weight:700;white-space:normal}
+.tp-pn #statusBackupPasta{display:block;padding:0 9px 4px}
+.tp-pn hr{border:none;border-top:1px solid #e2e8f0;margin:4px 2px}
+.tp-row{display:flex;gap:4px;align-items:center;padding:4px 8px}
+.tp-row input{flex:1;padding:5px 7px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;width:auto!important;min-width:110px}
+.tp-row .btn{padding:5px 8px!important;font-size:10px!important}
+.tp-pn.tp-bancos{position:fixed;left:8px;right:8px;padding:0;overflow:hidden;max-height:calc(100vh - 70px);overflow-y:auto}
+.tp-bancos>div{display:flex}
+.tp-bancos #barEmop,.tp-bancos #barSinapi,.tp-bancos #barSco{flex:1;min-width:0!important;padding:10px!important;border:none!important;border-right:1px solid #e2e8f0!important;align-content:flex-start}
+.tp-fonte{display:flex;gap:3px;align-items:center;white-space:nowrap}
+.tp-fonte .btn{padding:4px 7px!important;font-size:9px!important}
+.tp-fonte>b{font-size:9px;color:#94a3b8}
+#bdiConfigBar.tp-bdi{display:flex;gap:3px;align-items:center;flex-wrap:nowrap;white-space:nowrap;padding:2px 6px}
+#bdiConfigBar.tp-bdi label{display:flex;align-items:center;gap:2px;font-size:9px;color:#e2e8f0}
+#bdiConfigBar.tp-bdi input{width:34px!important;padding:2px 3px!important;font-size:10px!important}
+#bdiConfigBar.tp-bdi #bdiConfigInfo{display:none}
+.tp-campo{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:800;color:#0f172a;white-space:nowrap;min-width:0}
+.tp-campo input,#topoObra #dataBaseEMOP{min-width:120px;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;background:#fff}
+#topoObra #dataBaseEMOP{border-color:#f59e0b;background:#fffbeb}
+.tp-sp{flex:1}
+.tp-ocultar{display:none!important}
+</style>
+<script>
+(function(){
+  var M = null;   // o que foi montado: {movidos, criados, ocultos}
+  function $(id){ return document.getElementById(id); }
+  function el(tag, cls, html){ var e = document.createElement(tag); if(cls) e.className = cls; if(html != null) e.innerHTML = html; return e; }
+  function botao(txt, raiz){ return raiz ? Array.prototype.find.call(raiz.querySelectorAll('button,label.btn'), function(b){ return b.textContent.trim().indexOf(txt) >= 0; }) : null; }
+
+  // move o elemento e deixa uma marca no lugar de origem para poder devolver
+  function mover(e, destino){
+    if(!e || !destino) return e;
+    if(!e.__tpMarca && e.parentNode){ var m = document.createComment('topo'); e.parentNode.insertBefore(m, e); e.__tpMarca = m; e.__tpEstilo = e.getAttribute('style'); M.movidos.push(e); }
+    destino.appendChild(e); return e;
+  }
+  function estilo(e, css){ if(!e) return; if(!e.__tpMarca && !e.__tpSoEstilo){ e.__tpSoEstilo = true; e.__tpEstilo = e.getAttribute('style'); M.movidos.push(e); } e.style.cssText += ';' + css; }
+  // atalho visível que só clica no botão original (o original continua no menu)
+  function atalho(orig, rot, cls, css){ var b = el('button', cls || 'btn', rot); b.type = 'button'; if(css) b.style.cssText = css; b.onclick = function(){ if(orig) orig.click(); }; return b; }
+  function h(t){ return el('div', 'tp-h', t); }
+  function linha(){ var d = el('div', 'tp-row'); Array.prototype.forEach.call(arguments, function(f){ mover(f, d); }); return d; }
+  function menu(rot, itens, cls){
+    var m = el('div', 'tp-m'), b = el('button', 'tp-mb', rot), p = el('div', 'tp-pn' + (cls ? ' ' + cls : ''));
+    b.type = 'button'; m.appendChild(b); m.appendChild(p);
+    itens.forEach(function(x){ if(!x) return; if(x.__tpNovo) p.appendChild(x); else mover(x, p); });
+    return m;
+  }
+  function novo(e){ e.__tpNovo = true; return e; }
+
+  function nomeUsuario(){
+    var b = $('userBadge'); if(!b) return 'Conta';
+    var t = '';
+    for(var n = b.firstChild; n; n = n.nextSibling){ if(n.nodeType === 3) t += n.textContent; else break; }
+    t = (t || b.textContent).replace(/\(.*?\)/g, '').replace('👑', '').trim();
+    return (b.textContent.indexOf('👑') >= 0 ? '👑 ' : '👤 ') + (t.split(/\s+/)[0] || 'Conta');
+  }
+  function atualizarUsuario(){
+    if(!M) return;
+    var b = $('userBadge'), pn = M.painelUsuario;
+    if(b && pn && b.parentNode !== pn) mover(b, pn);
+    if(M.botaoUsuario) M.botaoUsuario.textContent = nomeUsuario();
+  }
+
+  function montar(){
+    if(M) return;
+    var H = document.querySelector('body>.header'), P = $('patchBar1'), O = document.querySelector('body>.orc-bar'), F = $('barFonte');
+    var bE = $('barEmop'); if(!H || !P || !O || !F || !bE) return;
+    var bancos = bE.parentElement;
+    M = {movidos: [], criados: [], ocultos: [H, P, O, F, bancos]};
+    var E = {
+      logo: H.querySelector('h1'), bdi: $('bdiConfigBar'), amb: $('device-toggle-btn'),
+      titulo: document.querySelector('button[onclick="addTituloGlobal()"]'), exibir: document.querySelector('button[onclick="expandAllOrc()"]'),
+      ocultar: document.querySelector('button[onclick="collapseAllOrc()"]'), diag: $('btnDiagComp'),
+      abcCod: document.querySelector('button[onclick="abrirCurvaABC_Codigos()"]'), abcIns: document.querySelector('button[onclick="abrirCurvaABC_Insumos()"]'),
+      backup: $('fileBackupXLSX') && $('fileBackupXLSX').closest('label'), fileLista: $('fileImportCodigos'), lista: botao('Importar Lista', P),
+      dataBase: $('dataBaseTodos'), atuBase: botao('Atualizar Base Todos', P),
+      comp: document.querySelector('button[onclick="abrirModalComp()"]'), cot: botao('Cotação Quartis', P), hist: botao('Histórico', P),
+      bkp: $('btnBackupPasta'), bkpSt: $('statusBackupPasta'), exportar: $('boxExportXlsx'),
+      nome: $('nomeOrcAtual'), dataEmop: $('dataBaseEMOP'), salvar: botao('Salvar', O), meus: botao('Meus Orcamentos', O), novo: botao('Novo', O),
+      stOrc: $('statusOrc'), local: $('localObra'), fEmop: $('btnFonteEmop'), fSin: $('btnFonteSinapi'), fSco: $('btnFonteSco'),
+      atuEmop: botao('Atualizar EMOP', bE), atuSin: botao('Atualizar SINAPI', $('barSinapi')), atuSco: botao('Atualizar SCO', $('barSco'))
+    };
+    // "Importar Lista" já abre este mesmo seletor de arquivo
+    estilo(E.fileLista, 'display:none');
+    var r1 = el('div', 'tp-bar tp-dark'), r2 = el('div', 'tp-bar tp-light');
+    r1.id = 'topoMenus'; r2.id = 'topoObra';
+    M.criados.push(r1, r2);
+    mover(E.logo, r1);
+    if(E.logo){ E.logo.addEventListener('mouseenter', M.dica = function(){ var s = $('dbName'); E.logo.title = s ? s.textContent : ''; }); }
+    r1.appendChild(menu('📁 Orçamento', [novo(h('Orçamento')), E.salvar, E.meus, E.novo, novo(el('hr')), E.hist, E.bkp, E.bkpSt,
+      novo(el('hr')), novo(h('Data base de todos os itens')), novo(linha(E.dataBase, E.atuBase))]));
+    r1.appendChild(menu('📥 Importar', [novo(h('Importar')), E.backup, E.lista, novo(el('hr')), novo(h('Atualizar bancos (arquivo do mês)')),
+      novo(atalho(E.atuEmop, '🗂️ EMOP (XLSX mensal)')), novo(atalho(E.atuSin, '📥 SINAPI (XLSX oficial mensal)')), novo(atalho(E.atuSco, '📥 SCO (mensal)'))]));
+    r1.appendChild(menu('📤 Exportar', [novo(h('Exportar orçamento')), E.exportar]));
+    r1.appendChild(menu('🧩 Planilha', [novo(h('Planilha')), E.titulo, E.comp, novo(el('hr')), E.exibir, E.ocultar, E.diag]));
+    r1.appendChild(menu('📈 Análises', [novo(h('Análises')), E.abcCod, E.abcIns, E.cot]));
+    var wB = el('div', ''); ['barEmop', 'barSinapi', 'barSco'].forEach(function(id){ mover($(id), wB); });
+    r1.appendChild(menu('🗄️ Bancos', [novo(wB)], 'tp-bancos'));
+    r1.appendChild(el('span', 'tp-sp'));
+    var fonte = el('span', 'tp-fonte'); fonte.title = 'Fonte de dados: marque os bancos desejados'; [E.fEmop, E.fSin, E.fSco].forEach(function(b){ mover(b, fonte); });
+    r1.appendChild(fonte);
+    if(E.bdi){ mover(E.bdi, r1); E.bdi.classList.add('tp-bdi'); }
+    var mu = menu('Conta', [novo(h('Conta'))]); M.botaoUsuario = mu.firstChild; M.painelUsuario = mu.lastChild;
+    M.painelUsuario.style.left = 'auto'; M.painelUsuario.style.right = '0';
+    r1.appendChild(mu);
+    mover(E.amb, r1);
+    // linha da obra
+    var cN = el('label', 'tp-campo'); cN.appendChild(document.createTextNode('Orçamento:')); mover(E.nome, cN); cN.style.flex = '1.2';
+    var cL = el('label', 'tp-campo'); cL.appendChild(document.createTextNode('Local:')); mover(E.local, cL); cL.style.flex = '1';
+    estilo(E.nome, 'flex:1;min-width:120px'); estilo(E.local, 'flex:1;min-width:120px;padding:5px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px');
+    r2.appendChild(cN); r2.appendChild(cL);
+    mover(E.dataEmop, r2); estilo(E.dataEmop, 'width:150px');
+    r2.appendChild(atalho(E.salvar, '💾 Salvar', 'btn', 'background:#22c55e;color:#fff'));
+    r2.appendChild(atalho(E.meus, 'Meus Orçamentos', 'btn btn-dark'));
+    mover(E.stOrc, r2);
+    H.parentNode.insertBefore(r1, H); H.parentNode.insertBefore(r2, H);
+    M.ocultos.forEach(function(x){ x.classList.add('tp-ocultar'); });
+    atualizarUsuario();
+  }
+
+  function desmontar(){
+    if(!M) return;
+    fecharMenus();
+    // devolve na ordem inversa para cada um voltar exatamente ao lugar de antes
+    M.movidos.slice().reverse().forEach(function(e){
+      if(e.__tpMarca){ var m = e.__tpMarca; if(m.parentNode){ m.parentNode.insertBefore(e, m); m.parentNode.removeChild(m); } }
+      if(e.__tpEstilo == null) e.removeAttribute('style'); else e.setAttribute('style', e.__tpEstilo);
+      delete e.__tpMarca; delete e.__tpEstilo; delete e.__tpSoEstilo;
+    });
+    var bdi = $('bdiConfigBar'); if(bdi) bdi.classList.remove('tp-bdi');
+    var logo = document.querySelector('body>.header h1'); if(logo && M.dica){ logo.removeEventListener('mouseenter', M.dica); logo.removeAttribute('title'); }
+    M.criados.forEach(function(x){ if(x.parentNode) x.parentNode.removeChild(x); });
+    M.ocultos.forEach(function(x){ x.classList.remove('tp-ocultar'); });
+    M = null;
+  }
+
+  function fecharMenus(excepto){ document.querySelectorAll('.tp-m.aberto').forEach(function(m){ if(m !== excepto) m.classList.remove('aberto'); }); }
+  document.addEventListener('click', function(ev){
+    var b = ev.target.closest && ev.target.closest('.tp-mb');
+    if(b){
+      var m = b.parentNode; fecharMenus(m); m.classList.toggle('aberto');
+      var pn = m.querySelector('.tp-pn');
+      if(m.classList.contains('aberto') && pn){
+        if(pn.classList.contains('tp-bancos')) pn.style.top = (m.getBoundingClientRect().bottom + 4) + 'px';
+        else if(pn !== (M && M.painelUsuario)){ pn.style.left = ''; pn.style.right = ''; if(pn.getBoundingClientRect().right > innerWidth - 4){ pn.style.left = 'auto'; pn.style.right = '0'; } }
+      }
+      return;
+    }
+    var dentro = ev.target.closest && ev.target.closest('.tp-m');
+    if(!dentro){ fecharMenus(); return; }
+    // escolheu um item do menu: fecha (o painel dos bancos fica aberto, ele tem campos e listas)
+    var item = ev.target.closest('.btn');
+    if(item && !dentro.querySelector('.tp-bancos') && !ev.target.closest('.tp-row')) setTimeout(fecharMenus, 0);
+  });
+  document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape') fecharMenus(); });
+
+  // monta ao escolher "Computador" e desfaz antes de Android/iPhone (o celular arruma a tela do jeito dele)
+  var initOrig = window.initApp;
+  if(typeof initOrig === 'function'){
+    window.initApp = function(){
+      desmontar();
+      var r = initOrig.apply(this, arguments);
+      if(document.body.classList.contains('mode-desktop')){ try{ montar(); }catch(e){ console.error('topo compacto', e); try{ desmontar(); }catch(e2){} } }
+      return r;
+    };
+  }
+  // o cartão do usuário é refeito a cada login: leva de novo para o menu da conta
+  var aplicarOrig = window.aplicarUsuarioLogado;
+  if(typeof aplicarOrig === 'function'){
+    window.aplicarUsuarioLogado = function(){ var r = aplicarOrig.apply(this, arguments); try{ atualizarUsuario(); }catch(e){} return r; };
+  }
+  window.topoCompacto = {montar: montar, desmontar: desmontar};
+})();
+</script>
+<!-- FIM PATCH V1-02-37 -->
 
 </body>
 </html>
