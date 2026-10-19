@@ -4903,7 +4903,7 @@ setTimeout(function(){ if(typeof loadBdiConfig==='function') loadBdiConfig(); },
     }
     var mapFull={}; full.forEach(function(it){ mapFull[String(it.CODIGO).toUpperCase()]=it; });
 
-    var importados=0, naoEncontrados=[];
+    var importadosLista=[], importados=0, naoEncontrados=[];
     var dataBaseVal = (document.getElementById('dataBaseTodos')?document.getElementById('dataBaseTodos').value:'') || (document.getElementById('dataBaseEMOP')?document.getElementById('dataBaseEMOP').value:'');
 
     dataRows.forEach(function(r){
@@ -4985,13 +4985,15 @@ setTimeout(function(){ if(typeof loadBdiConfig==='function') loadBdiConfig(); },
         dataBase: dataBaseVal
       };
       if(typeof inserirNoOrc==='function') inserirNoOrc(novo); else orc.push(novo);
+      importadosLista.push(novo);
       importados++;
       if(!itCatalog && codU) naoEncontrados.push(codU);
     });
 
+    var msgBdi = (typeof window.distribuirBdiImportado==='function') ? window.distribuirBdiImportado(importadosLista) : '';
     if(typeof saveOrc==='function') saveOrc();
     if(typeof renderOrc==='function') renderOrc();
-    alert('Importação concluída: '+importados+' linha(s)\n'+(naoEncontrados.length?'Códigos não encontrados no catálogo (importados com os dados da própria planilha): '+naoEncontrados.slice(0,20).join(', ')+(naoEncontrados.length>20?'...':''):''));
+    alert('Importação concluída: '+importados+' linha(s)'+msgBdi+'\n'+(naoEncontrados.length?'Códigos não encontrados no catálogo (importados com os dados da própria planilha): '+naoEncontrados.slice(0,20).join(', ')+(naoEncontrados.length>20?'...':''):''));
   }
 
   // dispara a leitura assim que o usuário escolhe o arquivo no modal
@@ -7751,7 +7753,7 @@ setTimeout(inicializarBancoSco, 200);
     var sinOrig = origemMeta(window._sinapiImportMeta) || (window._sinapiImportMeta ? ('importado por você'+(window._sinapiImportMeta.importadoEm?' em '+window._sinapiImportMeta.importadoEm:'')) : 'embutido no programa');
     var scoOrig = origemMeta(window._scoImportMeta) || (window._scoImportMeta ? ('importado por você'+(window._scoImportMeta.importadoEm?' em '+window._scoImportMeta.importadoEm:'')) : 'embutido no programa');
     var geral = [
-      ['Versão do programa', 'V1-02-40'],
+      ['Versão do programa', 'V1-02-41'],
       ['Navegador', navegador()],
       ['Tela (largura)', window.innerWidth+' px'],
       ['Descompressão nativa (bancos embutidos)', window.DecompressionStream ? 'sim' : 'NÃO — atualize o navegador'],
@@ -9282,6 +9284,44 @@ setTimeout(inicializarBancoSco, 200);
 
 <!-- ==================== PATCH V1-02-27 - XLSX com as composições abertas + ITEM e CÓDIGO separados no "Importar Lista" ==================== -->
 <script>
+// V1-02-41: BDI numérico vindo do "Importar Lista" vai para os campos BDI do topo (maior → PRINCIPAL,
+// depois BDI1, BDI2, BDI3), em vez de ficar numa caixa "própria" ao lado de cada item.
+// 0,18 (célula de Excel em %) = 18%. Um valor que já está num campo reaproveita o campo; só campos
+// vazios (0) recebem valor novo, para não mudar o BDI dos itens que já estavam no orçamento.
+window.distribuirBdiImportado = function(itens){
+  var cfg = window.bdiConfig || (window.bdiConfig = {bdi1:0,bdi2:0,bdi3:0,principal:0});
+  var custom = (itens||[]).filter(function(it){ return it.bdiTipo==='CUSTOM'; });
+  if(!custom.length) return '';
+  function arred(v){ return Math.round(v*10000)/10000; }
+  custom.forEach(function(it){
+    var v = parseFloat(String(it.bdi).replace(',','.')) || 0;
+    if(v>0 && v<1) v = v*100;
+    it.bdi = arred(v);
+  });
+  var valores = [];
+  custom.forEach(function(it){ if(valores.indexOf(it.bdi)<0) valores.push(it.bdi); });
+  valores.sort(function(a,b){ return b-a; });
+  var slots = [['principal','PRINCIPAL'],['bdi1','BDI1'],['bdi2','BDI2'],['bdi3','BDI3']];
+  var tipoDe = {}, preenchidos = [], sobra = [];
+  valores.forEach(function(v){
+    if(v===0){ tipoDe[v]='ZERO'; return; }
+    var s = slots.find(function(x){ return arred(Number(cfg[x[0]])||0)===v; });
+    if(!s){
+      s = slots.find(function(x){ return !(Number(cfg[x[0]])>0); });
+      if(s){ cfg[s[0]] = v; preenchidos.push((s[1]==='PRINCIPAL'?'PRINCIPAL':s[1].replace('BDI','BDI '))+' = '+String(v).replace('.',',')+'%'); }
+    }
+    if(s) tipoDe[v] = s[1]; else sobra.push(String(v).replace('.',',')+'%');
+  });
+  custom.forEach(function(it){ if(tipoDe[it.bdi]){ it.bdiTipo = tipoDe[it.bdi]; it.bdi = tipoDe[it.bdi]==='ZERO' ? 0 : it.bdi; } });
+  if(preenchidos.length){
+    var el = {bdi1:'bdi1', bdi2:'bdi2', bdi3:'bdi3', principal:'bdiPrincipal'};
+    Object.keys(el).forEach(function(k){ var e = document.getElementById(el[k]); if(e) e.value = cfg[k] || ''; });
+    if(typeof window.saveBdiConfig==='function') window.saveBdiConfig();
+  }
+  return (preenchidos.length ? '\nBDI da planilha nos campos do topo: '+preenchidos.join(', ')+'.' : '')
+    + (sobra.length ? '\nBDI que não coube nos 4 campos (ficou próprio no item): '+sobra.join(', ')+'.' : '');
+};
+
 (function(){
   function normTxt(s){ return String(s==null?'':s).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
   function vazio(v){ return v===null || v===undefined || String(v).trim()===''; }
@@ -9690,7 +9730,7 @@ setTimeout(inicializarBancoSco, 200);
     }
     var mapFull={}; full.forEach(function(it){ mapFull[String(it.CODIGO).toUpperCase()]=it; });
 
-    var importados=0, titulos=0, ignorados=0, naoEncontrados=[];
+    var importadosLista=[], importados=0, titulos=0, ignorados=0, naoEncontrados=[];
     var dataBaseVal = (document.getElementById('dataBaseTodos')?document.getElementById('dataBaseTodos').value:'') || (document.getElementById('dataBaseEMOP')?document.getElementById('dataBaseEMOP').value:'');
 
     dataRows.forEach(function(r){
@@ -9773,13 +9813,15 @@ setTimeout(inicializarBancoSco, 200);
         dataBase: dataBaseVal
       };
       if(typeof inserirNoOrc==='function') inserirNoOrc(novo); else orc.push(novo);
+      importadosLista.push(novo);
       importados++;
       if(!itCatalog && codU) naoEncontrados.push(codU);
     });
 
+    var msgBdi = (typeof window.distribuirBdiImportado==='function') ? window.distribuirBdiImportado(importadosLista) : '';
     if(typeof saveOrc==='function') saveOrc();
     if(typeof renderOrc==='function') renderOrc();
-    alert('Importação concluída: '+importados+' linha(s)'
+    alert('Importação concluída: '+importados+' linha(s)'+msgBdi
       + (titulos ? ' + '+titulos+' título(s)' : '')
       + (ignorados ? '\n'+ignorados+' linha(s) de total/subtotal/BDI ignorada(s)' : '')
       + '\n'+(naoEncontrados.length?'Códigos não encontrados no catálogo (importados com os dados da própria planilha): '+naoEncontrados.slice(0,20).join(', ')+(naoEncontrados.length>20?'...':''):''));
