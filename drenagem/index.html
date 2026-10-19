@@ -3428,4 +3428,622 @@ function trocaCodigo(k, v) {
   save(); atualizarCustos();
 }
 </script>
+<script>
+/* =====================================================================
+   PATCH DR-01 (19/10/2026)
+   1. Caixas de ralo e ramais nos desenhos, com opção de mostrar/ocultar:
+      - seção transversal: contínuo quando a caixa/ramal está no plano do
+        corte (mesma estaca do PV); pontilhado quando está em vista, fora
+        do corte (em outra estaca, descendo para o PV no sentido da água);
+      - perfil longitudinal: o ramal chega pela lateral, fora do plano do
+        corte pelo eixo da rede — sempre pontilhado.
+   2. Poço de visita padrão EMOP: câmara retangular de blocos de concreto
+      vazados 20 cm (largura e altura), cheios de concreto e amarrados por
+      barras de aço; laje de fundo e laje da tampa em concreto armado;
+      chaminé centralizada em anéis Ø0,60 e tampão de ferro fundido Ø0,60.
+      Câmara interna 1,40 · 1,60 · 1,70 m e depois de 0,10 em 0,10 m;
+      altura interna a partir de 1,40 m, de 0,10 em 0,10 m.
+      Seletor de padrão (como o da caixa de ralo), medidas digitáveis e
+      dimensionamento automático (menor medida que atende).
+   Substitui funções pelo nome global; o código anterior fica acima.
+   ===================================================================== */
+const DASH = '7 5', ACO = '#9A3412';
+const EMOP_TIPO = 'Padrão EMOP — câmara retangular de blocos de concreto 20 cm, grauteados e armados';
+if (!PVTIPOS.includes(EMOP_TIPO)) PVTIPOS.push(EMOP_TIPO);
+const EMOP_LADOS = [1.40, 1.60, 1.70, 1.80, 1.90, 2.00, 2.10, 2.20, 2.30, 2.40, 2.50, 2.60, 2.70, 2.80, 2.90, 3.00];
+const PVMOD = {emop: {nome: 'EMOP — câmara automática (menor que atende)', emop: true}};
+EMOP_LADOS.forEach(L => { PVMOD['emop-' + L.toFixed(2)] = {nome: 'EMOP — câmara ' + fmt(L, 2) + ' × ' + fmt(L, 2) + ' m', emop: true, L}; });
+PVMOD['emop-outro'] = {nome: 'EMOP — medidas digitadas', emop: true};
+PVMOD.circ = {nome: 'Circular — anéis pré-moldados ou alvenaria (Ø nos detalhes)'};
+const ehEmop = pv => !!(pv && PVMOD[pv.modelo] && PVMOD[pv.modelo].emop);
+const sobe10 = x => Math.ceil(x * 10 - 1e-6) / 10;
+/* série EMOP de lados internos: 1,40 · 1,60 · 1,70 e depois de 0,10 em 0,10 */
+const emopLado = x => x <= 1.40 + 1e-6 ? 1.40 : x <= 1.60 + 1e-6 ? 1.60 : x <= 1.70 + 1e-6 ? 1.70 : sobe10(x);
+const naSerieL = x => [1.40, 1.60, 1.70].some(v => Math.abs(x - v) < 1e-6) || (x >= 1.80 - 1e-6 && Math.abs(x * 10 - Math.round(x * 10)) < 1e-6);
+const naSerieH = (x, hmin) => x >= hmin - 1e-6 && Math.abs(x * 10 - Math.round(x * 10)) < 1e-6;
+const fmtCam = m => fmt(m.L, 2) + ' × ' + fmt(m.L, 2) + ' × h ' + fmt(m.Hi, 2) + ' m';
+const mostraRalos = () => !(P && P.desenho && P.desenho.ralos === false);
+function setRalos(v) { P.desenho = Object.assign({}, P.desenho || {}, {ralos: !!v}); save(); }
+
+/* parâmetros construtivos (editáveis na aba 6) */
+const EMOP_CRIT = {pvEmopParede: 0.20, pvEmopLajeF: 0.15, pvEmopLajeT: 0.15, pvEmopFolga: 0.20, pvEmopFolgaTopo: 0.20, pvEmopHmin: 1.40, pvEmopChamMax: 1.00};
+const emopC = () => { const c = P.crit || {}, o = {}; Object.keys(EMOP_CRIT).forEach(k => { const v = num(c[k]); o[k] = isNum(v) && v >= 0 ? v : EMOP_CRIT[k]; }); return o; };
+const _defaultCrit0 = defaultCrit;
+defaultCrit = function () { return Object.assign(_defaultCrit0(), EMOP_CRIT); };
+Object.assign(CRITR, {pvEmopParede: [0.15, 0.25], pvEmopLajeF: [0.10, 0.25], pvEmopLajeT: [0.10, 0.25], pvEmopFolga: [0.10, 0.40], pvEmopFolgaTopo: [0.10, 0.40], pvEmopHmin: [1.20, 1.60], pvEmopChamMax: [0.30, 1.50]});
+Object.assign(HELP, {
+  'pvs.modelo': 'Padrão construtivo do poço de visita. EMOP: câmara retangular com paredes de blocos de concreto vazados de 20 cm (largura e altura), cheios de concreto e amarrados por barras de aço; laje de fundo e laje da tampa em concreto armado; na laje da tampa, centralizado, o pescoço (chaminé) em anéis Ø0,60 m para assentar o tampão de ferro fundido Ø0,60 m. Câmara interna, entre paredes, de 1,40 × 1,40, 1,60 × 1,60 ou 1,70 × 1,70 m e depois de 0,10 em 0,10 m; altura interna a partir de 1,40 m, de 0,10 em 0,10 m. "Automático" escolhe a menor medida que atende. Circular: anéis pré-moldados ou alvenaria, com o Ø nos detalhes (▸).',
+  'pvs.pvL': 'Lado interno da câmara EMOP, entre as faces internas das paredes. Vazio = automático: a menor medida da série EMOP (1,40 · 1,60 · 1,70 m e depois de 0,10 em 0,10 m) em que cabem, em cada parede, os tubos e ramais ligados (Ø externo) mais as folgas entre eles e até os cantos. Digite para fixar outra medida.',
+  'pvs.pvHi': 'Altura interna da câmara, do fundo até a face de baixo da laje da tampa. Vazio = automático: parte de 1,40 m e sobe de 0,10 em 0,10 m até caber o tubo mais alto ligado ao PV (quedas e ramais incluídos) com a folga até a laje, e até a chaminé ficar com no máximo a altura indicada nos parâmetros. A profundidade vem da tampa (greide/topografia) e do fundo dos tubos.',
+  'crit.pvEmopParede': 'Espessura das paredes do PV EMOP: blocos de concreto vazados de 20 cm, cheios de concreto (grauteados) e amarrados por barras de aço verticais.',
+  'crit.pvEmopLajeF': 'Espessura da laje de fundo, em concreto armado, do PV EMOP. Confira no projeto-padrão EMOP.',
+  'crit.pvEmopLajeT': 'Espessura da laje da tampa, em concreto armado, do PV EMOP. Nela se apoia, no centro, a chaminé de anéis Ø0,60. Confira no projeto-padrão EMOP.',
+  'crit.pvEmopFolga': 'Folga livre entre o Ø externo de cada tubo e o canto da câmara ou o tubo vizinho na mesma parede. Usada para escolher a câmara: lado ≥ soma dos Ø externos da parede + folgas.',
+  'crit.pvEmopFolgaTopo': 'Folga entre o topo externo do tubo mais alto ligado ao PV e a face de baixo da laje da tampa.',
+  'crit.pvEmopHmin': 'Altura interna mínima da câmara EMOP (1,40 m). A altura sobe de 0,10 em 0,10 m.',
+  'crit.pvEmopChamMax': 'Altura máxima da chaminé de anéis Ø0,60 entre a laje da tampa e a superfície. Em PV mais fundo, o programa aumenta a altura interna da câmara (de 0,10 em 0,10 m) para não passar deste limite. Confira no projeto-padrão EMOP.'
+});
+
+/* projetos: PVs antigos continuam circulares (mesmo resultado); exemplos e PVs novos usam EMOP */
+const _migrate0 = migrate;
+migrate = function (p) {
+  p = _migrate0(p);
+  p.desenho = Object.assign({ralos: true}, p.desenho || {});
+  (p.pvs || []).forEach(pv => { if (!PVMOD[pv.modelo]) pv.modelo = pv.tipo === EMOP_TIPO ? 'emop' : 'circ'; });
+  return p;
+};
+const emopNosExemplos = p => { (p.pvs || []).forEach(pv => { pv.modelo = 'emop'; pv.tipo = EMOP_TIPO; pv.pvL = ''; pv.pvHi = ''; }); p.desenho = {ralos: true}; return p; };
+const _exProj0 = exampleProject, _exBairro0 = exampleBairro;
+exampleProject = function () { return emopNosExemplos(_exProj0.apply(this, arguments)); };
+exampleBairro = function () { return emopNosExemplos(_exBairro0.apply(this, arguments)); };
+
+/* ---------- medidas do PV EMOP (a partir dos tubos, ramais e topografia) ---------- */
+const _dadosSecao0 = dadosSecao;
+const PAREDE_NOME = {jus: 'parede de saída (jusante)', mon: 'parede de chegada (montante)', E: 'parede lateral esquerda', D: 'parede lateral direita'};
+function emopMedidas(pv, r, E) {
+  const c = P.crit, esp = +c.espF || 0.10;
+  const tubo = (t, cota, nome) => { const D = (num(t.D) || 0) / 1000; return {id: nome || t.id, D, De: D * (1 + 2 * esp), ci: num(cota)}; };
+  const outs = r.outs.map(t => tubo(t, t.cm)), ins = r.ins.map(t => tubo(t, t.cj)).sort((a, b) => b.D - a.D);
+  const ds = _dadosSecao0(pv.id);
+  const rams = P.bls.filter(b => b.pv === pv.id).map(b => { const D = (num(b.rD) || 400) / 1000, g = ds && ds.bls.find(x => x.b.id === b.id);
+    return {id: 'ramal ' + b.id, D, De: D * (1 + 2 * esp), ci: g ? g.ciPV : null, lado: b.lado === 'D' ? 'D' : 'E'}; });
+  const par = {jus: [], mon: [], E: [], D: []};
+  const soma = a => a.reduce((s, t) => s + t.De, 0);
+  outs.forEach(t => par.jus.push(t));
+  if (ins[0]) par.mon.push(ins[0]);
+  rams.forEach(t => par[t.lado].push(t));
+  ins.slice(1).forEach(t => (soma(par.E) <= soma(par.D) ? par.E : par.D).push(t));
+  const need = a => a.length ? soma(a) + (a.length + 1) * E.pvEmopFolga : 0;
+  const nec = {}; let Lneed = 0, Lpar = 'jus';
+  Object.keys(par).forEach(k => { nec[k] = need(par[k]); if (nec[k] > Lneed) { Lneed = nec[k]; Lpar = k; } });
+  const Lauto = emopLado(Math.max(Lneed, EMOP_LADOS[0]));
+  const Ldig = num(pv.pvL) > 0 ? num(pv.pvL) : null, L = Ldig || Lauto;
+  /* altura interna */
+  const fundo = r.fundo, tp = r.tp, prof = r.prof;
+  const comCota = outs.concat(ins, rams).filter(t => isNum(t.ci));
+  let alto = null; comCota.forEach(t => { const z = t.ci + t.D * (1 + esp); if (!alto || z > alto.z) alto = {z, t}; });
+  const HiNeed = isNum(fundo) && alto ? alto.z - fundo + E.pvEmopFolgaTopo : 0;
+  const disp = isNum(prof) ? prof - E.pvEmopLajeT : null;     // altura até a laje da tampa encostar na superfície
+  let Hauto = Math.max(E.pvEmopHmin, sobe10(HiNeed)), hMot = HiNeed > E.pvEmopHmin + 1e-6 ? 'tubo' : 'min';
+  if (isNum(disp)) {
+    const hCham = sobe10(disp - E.pvEmopChamMax);
+    if (hCham > Hauto + 1e-6) { Hauto = hCham; hMot = 'cham'; }
+    if (Hauto > disp + 1e-6) { Hauto = Math.max(0, +disp.toFixed(2)); hMot = 'raso'; }
+  }
+  const Hdig = num(pv.pvHi) > 0 ? num(pv.pvHi) : null, Hi = Hdig || Hauto;
+  const hc = isNum(disp) ? disp - Hi : null;
+  const ext = L + 2 * E.pvEmopParede;
+  const q = {alv: 4 * (L + E.pvEmopParede) * Hi, lajeF: ext * ext * E.pvEmopLajeF, lajeT: Math.max(0, ext * ext - Math.PI * 0.30 * 0.30) * E.pvEmopLajeT, cham: isNum(hc) ? Math.max(0, hc) : 0};
+  return {L, Lauto, Ldig, Lneed, Lpar, nec, par, Hi, Hauto, Hdig, HiNeed, hMot, alto, hc, disp, par0: E.pvEmopParede, parede: E.pvEmopParede, eF: E.pvEmopLajeF, eT: E.pvEmopLajeT, E, fundo, tp, prof, q};
+}
+function motivoCam(m) {
+  const a = m.par[m.Lpar] || [], E = m.E;
+  let t = a.length ? PAREDE_NOME[m.Lpar] + ': ' + a.map(x => 'Ø ext. ' + fmt(x.De, 2)).join(' + ') + ' + ' + (a.length + 1) + ' folgas de ' + fmt(E.pvEmopFolga, 2) + ' = ' + fmt(m.Lneed, 2) + ' m' : 'sem tubos ligados';
+  t += m.Lneed <= EMOP_LADOS[0] + 1e-6 ? ' → mínimo da série, ' + fmt(m.Lauto, 2) + ' m' : ' → ' + fmt(m.Lauto, 2) + ' m da série EMOP';
+  const h = {min: 'altura mínima ' + fmt(E.pvEmopHmin, 2) + ' m', tubo: 'altura pelo tubo mais alto (' + (m.alto ? m.alto.t.id : '') + ') + folga de ' + fmt(E.pvEmopFolgaTopo, 2) + ' = ' + fmt(m.HiNeed, 2) + ' m', cham: 'altura aumentada para a chaminé não passar de ' + fmt(E.pvEmopChamMax, 2) + ' m (PV de ' + fmt(m.prof, 2) + ' m)', raso: 'PV raso: a câmara ocupa toda a profundidade disponível'}[m.hMot];
+  return t + '; ' + h + '.';
+}
+function emopPosCalc(res) {
+  const E = emopC();
+  P.pvs.forEach(pv => {
+    const r = res.pv[pv.id]; if (!r) return;
+    if (!ehEmop(pv)) { r.emop = null; delete pv.emL; delete pv.emH; return; }
+    pv.tipo = EMOP_TIPO;
+    res.checks = res.checks.filter(x => !(x.el === pv.id && x.par === 'Diâmetro do PV'));
+    r.msgs = r.msgs.filter(x => !/^Diâmetro do PV/.test(x.t));
+    const m = emopMedidas(pv, r, E); r.emop = m; pv.emL = m.L; pv.emH = m.Hi;
+    const add = (par, val, lim, s, nota) => { res.checks.push({tab: 'pvs', el: pv.id, par, val, lim, st: s, nota: nota || ''}); r.msgs.push({s, t: par + ': ' + val + ' (' + lim + ')' + (s !== 'ok' && nota ? ' — ' + nota : '')}); };
+    add('Câmara EMOP', fmt(m.L, 2) + ' × ' + fmt(m.L, 2) + ' m' + (m.Ldig ? ' (digitada)' : ''), '≥ ' + fmt(m.Lneed, 2) + ' m (tubos + folgas)', m.L >= m.Lneed - 1e-6 ? 'ok' : 'err', 'Câmara pequena para os tubos da ' + PAREDE_NOME[m.Lpar] + ': use ' + fmt(m.Lauto, 2) + ' × ' + fmt(m.Lauto, 2) + ' m.');
+    if (m.Ldig && !naSerieL(m.Ldig)) add('Câmara EMOP na série', fmt(m.Ldig, 2) + ' m', '1,40 · 1,60 · 1,70 e de 0,10 em 0,10 m', 'warn', 'Medida fora da série EMOP: use ' + fmt(emopLado(m.Ldig), 2) + ' m.');
+    const hLim = Math.max(m.E.pvEmopHmin, m.HiNeed);
+    add('Altura interna da câmara', fmt(m.Hi, 2) + ' m' + (m.Hdig ? ' (digitada)' : ''), '≥ ' + fmt(hLim, 2) + ' m', m.Hi >= m.HiNeed - 1e-6 ? (m.Hi >= m.E.pvEmopHmin - 1e-6 ? 'ok' : 'warn') : 'err', m.Hi < m.HiNeed - 1e-6 ? 'O tubo mais alto (' + (m.alto ? m.alto.t.id : '') + ') não cabe sob a laje: aumente a altura interna.' : 'Câmara mais baixa que o mínimo EMOP de ' + fmt(m.E.pvEmopHmin, 2) + ' m.');
+    if (m.Hdig && !naSerieH(m.Hdig, m.E.pvEmopHmin)) add('Altura interna na série', fmt(m.Hdig, 2) + ' m', 'a partir de ' + fmt(m.E.pvEmopHmin, 2) + ' m, de 0,10 em 0,10 m', 'warn', 'Medida fora da série EMOP.');
+    if (isNum(m.hc)) {
+      if (m.hc < -1e-3) add('Chaminé (anéis Ø0,60)', fmt(m.hc, 2) + ' m', '≥ 0', 'err', 'A laje da tampa ficaria acima da superfície: reduza a altura interna da câmara.');
+      else if (m.hc > m.E.pvEmopChamMax + 1e-3) add('Chaminé (anéis Ø0,60)', fmt(m.hc, 2) + ' m', '≤ ' + fmt(m.E.pvEmopChamMax, 2) + ' m', 'warn', 'Chaminé alta: aumente a altura interna da câmara (de 0,10 em 0,10 m).');
+      else add('Chaminé (anéis Ø0,60)', fmt(Math.max(0, m.hc), 2) + ' m', '0 a ' + fmt(m.E.pvEmopChamMax, 2) + ' m', 'ok');
+      if (isNum(m.disp) && m.disp < m.E.pvEmopHmin - 1e-6) add('Profundidade para a câmara', fmt(m.prof, 2) + ' m', '≥ ' + fmt(m.E.pvEmopHmin + m.eT, 2) + ' m (câmara mínima + laje)', 'warn', 'PV raso: não cabe a câmara mínima EMOP; confirme o padrão ou use caixa de passagem.');
+    }
+    r.st = r.msgs.reduce((s, x) => worst(s, x.s), 'ok');
+  });
+  if (res.quant) {
+    const q = res.quant.pvs = {};
+    P.pvs.forEach(p => { const r = res.pv[p.id], k = (r && r.emop ? 'PV padrão EMOP — câmara ' + fmtCam(r.emop) : p.tipo) + ' · ' + (p.tampaCl || ''); q[k] = (q[k] || 0) + 1; });
+  }
+}
+const _calc0 = calc;
+calc = function () {
+  const res = _calc0.apply(this, arguments);
+  try { emopPosCalc(res); } catch (e) { console.error('PV EMOP:', e); }
+  return res;
+};
+dadosSecao = function (pvId) {
+  const d = _dadosSecao0(pvId); if (!d) return d;
+  const r = R && R.pv[pvId];
+  if (r && r.emop) { const m = r.emop; d.emop = m; d.dpv = m.L; d.parede = m.parede; d.fundoVala = Math.min(d.ci - d.e - P.crit.berco, d.fundoPV - m.eF - P.crit.berco); }
+  return d;
+};
+
+/* ---------- caixa de ralo / ramal: no plano do corte ou em vista ---------- */
+function blPlano(d, b) {
+  const mesma = b.b.rua === d.pv.rua;
+  const dLon = mesma ? Math.abs((num(b.b.dist) || 0) - (num(d.pv.dist) || 0)) : null;
+  const cxL = num(b.b.cxL) || 1.0;
+  return {dLon, mesma, caixa: mesma && dLon <= cxL / 2 + 1e-6, ramal: mesma && dLon <= 0.30 + 1e-6};
+}
+const txtVista = pl => pl.mesma ? 'em vista · a ' + fmt(pl.dLon, 2) + ' m do corte' : 'em vista · ligada de outra rua';
+
+/* PV padrão EMOP em corte (seção transversal) */
+function pvEmopCorte(d, X, Y, sc, K) {
+  const m = d.emop, xi = m.L / 2, xe = xi + m.parede, f = d.fundoPV, zc = f + m.Hi, zl = zc + m.eT, tp = d.tp, ea = 0.08;
+  let s = '';
+  // laje de fundo (concreto armado)
+  s += rc(X(-xe), Y(f), 2 * xe * sc, m.eF * sc, K.conc, K.ink, 1);
+  s += ln(X(-xe + 0.04), Y(f - m.eF + 0.04), X(xe - 0.04), Y(f - m.eF + 0.04), ACO, 1.4) + ln(X(-xi), Y(f - 0.04), X(xi), Y(f - 0.04), ACO, 1.2);
+  // paredes: blocos de concreto vazados 20 × 20 cm, cheios de concreto e amarrados por barras de aço
+  [-1, 1].forEach(sd => {
+    const x0 = sd > 0 ? xi : -xe;
+    s += rc(X(x0), Y(zc), m.parede * sc, m.Hi * sc, K.conc, K.ink, 1);
+    for (let z = f + 0.20; z < zc - 1e-6; z += 0.20) s += ln(X(x0), Y(z), X(x0 + m.parede), Y(z), K.muted, 0.7);
+    s += ln(X(x0 + m.parede / 2), Y(f - m.eF + 0.04), X(x0 + m.parede / 2), Y(zl - 0.04), ACO, 1.6);
+  });
+  // laje da tampa (concreto armado) com abertura central Ø0,60
+  s += rc(X(-xe), Y(zl), (xe - 0.30) * sc, m.eT * sc, K.conc, K.ink, 1) + rc(X(0.30), Y(zl), (xe - 0.30) * sc, m.eT * sc, K.conc, K.ink, 1);
+  s += ln(X(-xe + 0.04), Y(zc + 0.04), X(-0.34), Y(zc + 0.04), ACO, 1.4) + ln(X(0.34), Y(zc + 0.04), X(xe - 0.04), Y(zc + 0.04), ACO, 1.4);
+  // chaminé em anéis Ø0,60 e tampão de ferro fundido Ø0,60
+  const hc = tp - 0.06 - zl;
+  if (hc > 0.02) [-1, 1].forEach(sd => { s += rc(X(sd > 0 ? 0.30 : -0.30 - ea), Y(tp - 0.06), ea * sc, hc * sc, K.conc, K.ink, 1); });
+  s += rc(X(-0.30 - ea), Y(tp), (0.60 + 2 * ea) * sc, 0.06 * sc, K.ink);
+  // medida interna da câmara
+  s += dimH(X(-xi), X(xi), Y(zc) + 10, 'câmara ' + fmt(m.L, 2) + ' × h ' + fmt(m.Hi, 2) + ' m', K, 12, true);
+  return s;
+}
+
+/* ---------- 10. SEÇÃO TRANSVERSAL ---------- */
+svgSecao = function (pvId, K, W = 1100) {
+  const d = dadosSecao(pvId); if (!d) return '';
+  const c = P.crit, half = d.larg / 2 + d.pas + 0.6, m = d.emop;
+  const bls = mostraRalos() ? d.bls.map(b => Object.assign({pl: blPlano(d, b)}, b)) : [];
+  const temVista = bls.some(b => !b.pl.caixa || !b.pl.ramal);
+  const notas = (temVista ? 1 : 0) + (m ? 2 : 0);
+  const zTop = d.tp + 0.6, zBot = Math.min(d.fundoVala, ...bls.map(b => b.fundo - 0.1)) - 0.5;
+  const sc = (W - 140) / (2 * half), Hd = (zTop - zBot) * sc;
+  const H0 = Math.round(70 + Hd + 30), H = H0 + notas * 24;
+  const X = x => W / 2 + x * sc, Y = z => 60 + (zTop - z) * sc;
+  const zR = x => d.zSup(x);
+  let s = `<svg ${SVGNS} viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="${K.bg}"/>`;
+  s += tx(20, 30, 'Seção transversal no ' + d.pv.id + ' — ' + (d.rua.nome || '') + ' · est. ' + estLabel(num(d.pv.dist)), {fs: 18, w: 700, c: K.blue});
+  s += tx(W - 20, 30, 'Escala 1:1 (horizontal = vertical)', {fs: 12, a: 'end', c: K.muted});
+  const mh = d.mfH;
+  s += `<polygon points="${X(-half)},${Y(zR(half) + mh)} ${X(-d.larg / 2)},${Y(zR(d.larg / 2) + mh)} ${X(-d.larg / 2)},${Y(zR(d.larg / 2))} ${X(0)},${Y(d.tp)} ${X(d.larg / 2)},${Y(zR(d.larg / 2))} ${X(d.larg / 2)},${Y(zR(d.larg / 2) + mh)} ${X(half)},${Y(zR(half) + mh)} ${X(half)},${H0} ${X(-half)},${H0}" fill="${K.soil}"/>`;
+  const Bpv = d.dpv + 2 * d.parede + 2 * c.valaFolga;
+  s += `<polygon points="${X(-Bpv / 2)},${Y(zR(Bpv / 2))} ${X(0)},${Y(d.tp)} ${X(Bpv / 2)},${Y(zR(Bpv / 2))} ${X(Bpv / 2)},${Y(d.fundoVala)} ${X(-Bpv / 2)},${Y(d.fundoVala)}" fill="${K.reat}" stroke="${K.terr}" stroke-width="1.4" stroke-dasharray="7 4"/>`;
+  if (d.tp - d.fundoVala > 1.25) [-1, 1].forEach(sd => { s += rc(X(sd * Bpv / 2) - (sd > 0 ? 0 : 5), Y(zR(Bpv / 2)), 5, Y(d.fundoVala) - Y(zR(Bpv / 2)), K.terr); });
+  s += rc(X(-Bpv / 2), Y(d.fundoVala + c.berco), Bpv * sc, c.berco * sc, K.brita, K.ink, 0.6);
+  const xs0 = Math.max(0, d.larg / 2 - d.sjW);
+  s += `<polyline points="${X(-xs0)},${Y(zR(xs0))} ${X(0)},${Y(d.tp)} ${X(xs0)},${Y(zR(xs0))}" fill="none" stroke="${K.pav}" stroke-width="${Math.max(3, 0.1 * sc)}"/>`;
+  if (d.sjW > 0) [-1, 1].forEach(sd => { s += `<polygon points="${X(sd * xs0)},${Y(zR(xs0))} ${X(sd * d.larg / 2)},${Y(zR(d.larg / 2))} ${X(sd * d.larg / 2)},${Y(zR(d.larg / 2) - 0.10)} ${X(sd * xs0)},${Y(zR(xs0) - 0.10)}" fill="${K.conc}" stroke="${K.ink}" stroke-width="0.8"/>`; });
+  [-1, 1].forEach(sd => {
+    const xc = sd * d.larg / 2, zc = zR(d.larg / 2);
+    s += rc(X(Math.min(xc, xc + sd * 0.15)), Y(zc + mh), 0.15 * sc, (mh + 0.30) * sc, K.mf, K.ink, 0.8);
+    s += rc(X(Math.min(xc + sd * 0.15, xc + sd * (d.pas))), Y(zc + mh), (d.pas - 0.15) * sc, 0.08 * sc, K.pass, K.ink, 0.6);
+  });
+  // PV em corte
+  const xi = d.dpv / 2, xe = xi + d.parede;
+  if (m) s += pvEmopCorte(d, X, Y, sc, K);
+  else {
+    const pvTopo = d.tp;
+    [-1, 1].forEach(sd => { s += rc(X(sd > 0 ? xi : -xe), Y(pvTopo - 0.35), d.parede * sc, (pvTopo - 0.35 - (d.fundoPV - d.parede)) * sc, K.conc, K.ink, 1); });
+    s += rc(X(-xe), Y(d.fundoPV), 2 * xe * sc, d.parede * sc, K.conc, K.ink, 1);
+    s += rc(X(-xe), Y(pvTopo - 0.20), (xe - 0.30) * sc, 0.15 * sc, K.conc, K.ink, 1) + rc(X(0.30), Y(pvTopo - 0.20), (xe - 0.30) * sc, 0.15 * sc, K.conc, K.ink, 1);
+    s += rc(X(-0.30), Y(pvTopo), 0.60 * sc, 0.05 * sc, K.ink);
+  }
+  // tubo (boca no fundo do PV)
+  const cy = d.ci + d.D / 2;
+  s += `<circle cx="${X(0)}" cy="${Y(cy)}" r="${d.De / 2 * sc}" fill="${K.pipe}" stroke="${K.ink}" stroke-width="1"/><circle cx="${X(0)}" cy="${Y(cy)}" r="${d.D / 2 * sc}" fill="${K.bg}" stroke="${K.agua}" stroke-width="2"/>`;
+  const yD = d.rt.h.carga ? 1 : (d.rt.h.yD || 0);
+  if (yD > 0) { const R0 = d.D / 2, yw = d.ci + Math.min(1, yD) * d.D, hw = Math.sqrt(Math.max(0, R0 * R0 - Math.pow(yw - cy, 2)));
+    s += `<path d="M ${X(-hw)} ${Y(yw)} A ${R0 * sc} ${R0 * sc} 0 ${yw > cy ? 1 : 0} 0 ${X(hw)} ${Y(yw)} Z" fill="${K.aguaF}"/>`; }
+  // caixas de ralo e ramais (contínuo = no plano do corte; pontilhado = em vista, fora do corte)
+  bls.forEach(b => {
+    const x0 = b.side * d.larg / 2, xin = x0 + b.side * 0.15, xout = xin + b.side * b.larg, xa = Math.min(xin, xout), wb = 0.10;
+    const vC = !b.pl.caixa, vR = !b.pl.ramal;
+    if (vC) {
+      s += rc(X(xa - wb), Y(b.topo), (b.larg + 2 * wb) * sc, (b.topo - b.fundo + wb) * sc, 'none', K.ink, 1.2, DASH);
+      s += rc(X(xa), Y(b.topo - 0.08), b.larg * sc, (b.topo - 0.08 - b.fundo) * sc, 'none', K.ink, 1, DASH);
+      s += rc(X(xa), Y(b.topo), b.larg * sc, 0.08 * sc, 'none', K.ink, 1, DASH);
+    } else {
+      s += rc(X(xa - wb), Y(b.topo), (b.larg + 2 * wb) * sc, (b.topo - b.fundo + wb) * sc, K.conc, K.ink, 1);
+      s += rc(X(xa), Y(b.topo - 0.08), b.larg * sc, (b.topo - 0.08 - b.fundo) * sc, K.bg, null);
+      s += rc(X(xa), Y(b.topo), b.larg * sc, 0.08 * sc, K.ink);
+      s += `<path d="M ${X(x0)} ${Y(b.zCurb)} L ${X(xin)} ${Y(b.zCurb + 0.02)}" stroke="${K.agua}" stroke-width="3"/>`;
+    }
+    const xs = xin, xf = b.side * (m ? xi : xe), z1 = b.ciBL, z2 = b.ciPV, rr = b.rD;
+    s += `<polygon points="${X(xs)},${Y(z1)} ${X(xf)},${Y(z2)} ${X(xf)},${Y(z2 + rr)} ${X(xs)},${Y(z1 + rr)}" fill="${vR ? 'none' : K.aguaF}" stroke="${K.agua}" stroke-width="1.6"${vR ? ` stroke-dasharray="${DASH}"` : ''}/>`;
+    s += tx(X(b.side * (d.larg / 2 + d.pas * 0.5)), Y(b.topo) - 14, b.b.id + (vC ? ' (em vista)' : ''), {fs: 15, w: 700, a: 'middle', c: K.bl, halo: K.bg});
+    const mx = X((xs + xf) / 2), my = Y((z1 + z2) / 2 + rr) - 8;
+    s += tx(mx, my, 'Ramal Ø' + b.b.rD + ' · i ' + fmt(b.rI * 100, 1) + '%', {fs: 13, a: 'middle', c: K.aguaD, w: 700, halo: K.reat});
+    if (vR) s += tx(mx, Y((z1 + z2) / 2) + 16, txtVista(b.pl), {fs: 12, a: 'middle', c: K.aguaD, halo: K.reat});
+    if (b.ciPV < d.fundoPV) s += tx(X(xf), Y(z2) + 18, '⚠ chega abaixo do fundo do PV', {fs: 12, a: b.side > 0 ? 'start' : 'end', c: K.err, halo: K.bg});
+  });
+  // rótulos principais
+  s += tx(X(0), Y(d.tp) - 22, d.pv.id + (m ? ' · tampão FoFo Ø0,60' : ' · tampão Ø0,60'), {fs: 15, w: 700, a: 'middle', c: K.ink, halo: K.bg});
+  s += tx(X(-d.larg / 4), Y(zR(d.larg / 4)) - 10, 'Pista ' + fmt(d.larg, 2) + ' m · i ' + fmt(d.it * 100, 1) + '%', {fs: 13, a: 'middle', c: K.ink, halo: K.soil});
+  s += tx(X(d.larg / 2 - 0.2), Y(zR(d.larg / 2) + mh) - 8, 'Meio-fio h ' + fmt(mh * 100, 0) + ' cm' + (d.sjW > 0 ? ' · sarjeta ' + fmt(d.sjW, 2) + ' m a ' + fmt(d.sjI * 100, 1) + '%' : ''), {fs: 12, a: 'end', c: K.ink, halo: K.soil});
+  s += tx(X(0), Y(d.fundoVala) + 22, 'Tubo Ø' + d.t.D + ' (' + d.t.id + ')', {fs: 13, w: 700, a: 'middle', c: K.aguaD, halo: K.soil});
+  s += dimV(X(-xe) - 14, Y(d.tp), Y(d.fundoPV), '', K, 13, true) + dimV(X(xe) + 14, Y(d.tp), Y(d.fundoVala), '', K, 13, false);
+  s += tx(X(-xe) - 20, Y(d.fundoPV) + 4, 'Prof. PV ' + fmt(d.tp - d.fundoPV, 2) + ' m', {fs: 13, a: 'end', c: K.ink, halo: K.soil, w: 700});
+  s += tx(X(xe) + 20, Y(d.fundoVala) + 4, 'Fundo da escavação ' + fmt(d.tp - d.fundoVala, 2) + ' m', {fs: 13, c: K.ink, halo: K.soil, w: 700});
+  s += dimH(X(-d.larg / 2), X(d.larg / 2), 52, 'Pista ' + fmt(d.larg, 2) + ' m', K, 13);
+  // notas
+  let yn = H0 + 16;
+  if (temVista) { s += ln(20, yn - 4, 60, yn - 4, K.ink, 1.4, DASH) + tx(70, yn, 'Pontilhado: caixa de ralo ou ramal em vista, fora do plano do corte (em outra estaca, descendo para o PV no sentido da água).', {fs: 12, c: K.ink}); yn += 24; }
+  if (m) s += tx(20, yn, 'PV padrão EMOP: câmara interna ' + fmtCam(m) + ' · paredes de blocos de concreto 20 cm, cheios de concreto e amarrados por barras de aço', {fs: 12, c: K.ink}) +
+    tx(20, yn + 22, 'Lajes de fundo e de tampa em concreto armado (' + fmt(m.eF, 2) + ' / ' + fmt(m.eT, 2) + ' m) · chaminé centralizada em anéis Ø0,60 (h ' + fmt(Math.max(0, m.hc || 0), 2) + ' m) · tampão de ferro fundido Ø0,60', {fs: 12, c: K.ink});
+  return s + '</svg>';
+};
+quadroSecao = function (pvId) {
+  const d = dadosSecao(pvId); if (!d) return '';
+  const c = P.crit, ge = d.ci + d.D + d.e, fvT = d.ci - d.e - c.berco, m = d.emop;
+  const L = [['Cota da tampa do PV', fmt(d.tp, 3) + ' m'], ['Cota do fundo do PV', fmt(d.fundoPV, 3) + ' m'], ['Profundidade do PV', fmt(d.tp - d.fundoPV, 2) + ' m']];
+  if (m) {
+    const ext = m.L + 2 * m.parede;
+    L.push(['Padrão do PV', 'EMOP — paredes de blocos de concreto 20 cm, cheios de concreto e amarrados com barras de aço'],
+      ['Câmara interna (entre paredes)', fmt(m.L, 2) + ' × ' + fmt(m.L, 2) + ' m · altura ' + fmt(m.Hi, 2) + ' m' + (m.Ldig || m.Hdig ? ' (digitada)' : ' (automática)')],
+      ['Medidas externas da câmara', fmt(ext, 2) + ' × ' + fmt(ext, 2) + ' m'],
+      ['Laje de fundo / laje da tampa (concreto armado)', 'e = ' + fmt(m.eF, 2) + ' / ' + fmt(m.eT, 2) + ' m'],
+      ['Chaminé em anéis Ø0,60 + tampão FoFo Ø0,60', isNum(m.hc) ? 'h = ' + fmt(Math.max(0, m.hc), 2) + ' m' : '—'],
+      ['Alvenaria de blocos 20 cm (cheia e armada)', fmt(m.q.alv, 2) + ' m²'],
+      ['Concreto armado — laje de fundo + laje da tampa', fmt(m.q.lajeF, 3) + ' + ' + fmt(m.q.lajeT, 3) + ' m³']);
+  } else L.push(['Ø interno do PV / parede', 'Ø ' + fmt(d.dpv * 1000, 0) + ' mm / ' + fmt(d.parede * 100, 0) + ' cm']);
+  L.push(['Tubo (' + d.t.id + ')', 'Ø ' + d.t.D + ' mm · ' + (d.t.mat || '')], ['Espessura da parede e', fmt(d.e * 1000, 0) + ' mm'], ['Ø externo', fmt(d.De * 1000, 0) + ' mm'],
+    ['Cota inferior interna (CI)', fmt(d.ci, 3) + ' m'], ['Cota superior externa', fmt(ge, 3) + ' m'], ['Recobrimento', fmt(d.tp - ge, 2) + ' m'],
+    ['Largura da vala B (no tubo)', fmt(d.B, 2) + ' m (folga ' + fmt(c.valaFolga, 2) + ' m/lado)'], ['Berço', fmt(c.berco, 2) + ' m'], ['Fundo da vala no tubo', fmt(fvT, 3) + ' m'], ['Profundidade da vala no tubo', fmt(d.tp - fvT, 2) + ' m' + (d.tp - fvT > 1.25 ? ' (escorar)' : '')],
+    ['Escavação por metro de vala', fmt(d.B * (d.tp - fvT), 2) + ' m³/m'], ['Fundo da escavação no PV', fmt(d.fundoVala, 3) + ' m (largura ' + fmt(d.dpv + 2 * d.parede + 2 * c.valaFolga, 2) + ' m)']);
+  L.push(['Meio-fio / sarjeta', ((MEIOFIO[d.rua.mf] || {}).nome || '—') + ' · espelho ' + fmt(d.mfH * 100, 0) + ' cm' + (d.sjW > 0 ? ' · sarjeta ' + fmt(d.sjW, 2) + ' m a ' + fmt(d.sjI * 100, 1) + ' %' : '')]);
+  d.bls.forEach(b => { const pl = blPlano(d, b);
+    L.push(['Boca-de-lobo ' + b.b.id + ' (' + (b.b.lado === 'D' ? 'direita' : 'esquerda') + ')', ((CAIXAS[b.b.modelo] || {}).nome || BLTIPOS[b.b.tipo].nome) + ' · caixa interna ' + fmt(b.larg, 2) + ' × ' + fmt(num(b.b.cxL) || 1, 2) + ' × prof. ' + fmt(b.prof, 2) + ' m · fundo ' + fmt(b.fundo, 3) + ' m · ' + (pl.caixa ? 'no plano do corte' : txtVista(pl))]);
+    L.push(['Ramal ' + b.b.id + ' → ' + d.pv.id, 'Ø ' + b.b.rD + ' mm · L ' + fmt(b.rL, 2) + ' m · i ' + fmt(b.rI * 100, 2) + ' % · CI ' + fmt(b.ciBL, 3) + ' → ' + fmt(b.ciPV, 3) + ' m · ' + (pl.ramal ? 'no plano do corte' : txtVista(pl))]); });
+  return `<div class="tbl-wrap"><table><thead><tr><th>Quadro de medidas</th><th>Valor</th></tr></thead><tbody>${L.map(([a, b]) => `<tr><td>${esc(a)}</td><td><b>${esc(b)}</b></td></tr>`).join('')}</tbody></table></div>`;
+};
+const chkRalos = fn => `<label style="font-size:.84rem;display:flex;gap:.45rem;align-items:center;margin:.1rem 0 .55rem;flex-wrap:wrap"><input type="checkbox" ${mostraRalos() ? 'checked' : ''} onchange="setRalos(this.checked);${fn}()"/> <b>Mostrar caixas de ralo e ramais</b> <small style="color:var(--muted)">contínuo = no plano do corte · pontilhado = em vista, fora do corte</small></label>`;
+const _vSecao0 = vSecao, _vPerfil0 = vPerfil;
+vSecao = function () { return _vSecao0.apply(this, arguments).replace('<div class="svg-scroll" id="secao-box">', chkRalos('drawSecao') + '<div class="svg-scroll" id="secao-box">'); };
+vPerfil = function () { return _vPerfil0.apply(this, arguments).replace('<div class="svg-scroll" id="perfil-box">', chkRalos('drawPerfil') + '<div class="svg-scroll" id="perfil-box">'); };
+
+/* ---------- 9. PERFIL LONGITUDINAL (PV EMOP, caixas de ralo e ramais em vista) ---------- */
+svgPerfil = function (ini, K, W0 = 1200) {
+  let W = W0;
+  const path = caminho(ini); if (!path.length) return '';
+  const c = P.crit, pts = []; let X = 0;
+  path.forEach((t, k) => { const r = R.tr[t.id]; if (k === 0) pts.push({id: t.m, x: 0, pv: R.pv[t.m], p: pvById(t.m)}); X += r.L || 0; pts.push({id: t.j, x: X, pv: R.pv[t.j], p: pvById(t.j)}); });
+  const vals = [];
+  pts.forEach(p => { [p.pv.tp, p.pv.fundo, p.pv.H].forEach(v => { if (isNum(v) && v > -1e8) vals.push(v); }); if (p.pv.emop && isNum(p.pv.fundo)) vals.push(p.pv.fundo - p.pv.emop.eF); });
+  path.forEach(t => { const r = R.tr[t.id]; [r.cm, r.cj].forEach(v => isNum(v) && vals.push(v)); });
+  if (!vals.length) return '';
+  const ralos = mostraRalos(), BL = [];
+  if (ralos) pts.forEach((p, k) => { const ds = _dadosSecao0(p.id); if (ds) ds.bls.forEach(b => { BL.push({b, k}); vals.push(b.topo, b.fundo); }); });
+  const ymin = Math.min(...vals) - 0.6, ymax = Math.max(...vals) + 0.8;
+  const ml = 270, mr = 60, mt = 110, hp = 360, rowH = 28, leg2 = BL.length ? 22 : 0;
+  const rowsPV = [['Estaca', p => estLabel(num(p.p && p.p.dist))], ['Distância acumulada (m)', p => fmt(p.x, 2)], ['Cota da tampa (m)', p => fmt(p.pv.tp, 3)], ['Cota do fundo do PV (m)', p => fmt(p.pv.fundo, 3)], ['Profundidade do PV (m)', p => fmt(p.pv.prof, 2)], ['Nível d\'água no PV (m)', p => isNum(p.pv.H) && p.pv.H > -1e8 ? fmt(p.pv.H, 3) : '—']];
+  const rowsTr = [['Trecho', (t, r) => t.id], ['Diâmetro (mm)', (t) => 'Ø ' + t.D], ['Extensão (m)', (t, r) => fmt(r.L, 2)], ['Declividade (%)', (t, r) => isNum(r.S) ? fmt(r.S * 100, 3) : '—'], ['CI montante → jusante', (t, r) => fmt(r.cm, 3) + ' → ' + fmt(r.cj, 3)], ['Vazão Q (L/s)', (t, r) => fL(r.Q)], ['Velocidade V (m/s)', (t, r) => fmt(r.h.V, 2)], ['Lâmina y/D', (t, r) => r.h.carga ? 'em carga' : fmt(r.h.yD, 2)]];
+  const H = mt + hp + 30 + leg2 + (rowsPV.length + rowsTr.length) * rowH + 60;
+  const sx0 = (W - ml - mr) / (X || 1), MINW = 120;
+  const seg = path.map(t => Math.max(MINW, (R.tr[t.id].L || 0) * sx0)); let distorce = seg.some((w, k) => w > (R.tr[path[k].id].L || 0) * sx0 + 0.5);
+  const cum = [0]; seg.forEach(w => cum.push(cum[cum.length - 1] + w));
+  W = Math.max(W, ml + mr + cum[cum.length - 1]);
+  const sx = (W - ml - mr) / (X || 1), sy = hp / (ymax - ymin);
+  const PX = x => { for (let k = 0; k < pts.length - 1; k++) if (x <= pts[k + 1].x + 1e-9) { const f = (x - pts[k].x) / ((pts[k + 1].x - pts[k].x) || 1); return ml + cum[k] + f * seg[k]; } return ml + cum[cum.length - 1]; };
+  const PY = y => mt + (ymax - y) * sy;
+  let s = `<svg ${SVGNS} viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="${K.bg}"/>`;
+  s += tx(16, 30, 'Perfil longitudinal — ' + pts[0].id + ' → ' + pts[pts.length - 1].id, {fs: 18, w: 700, c: K.blue});
+  const ex = sy / sx0; s += tx(W - mr, 26, 'Escala vertical exagerada ' + fmt(ex, 1) + ' × a horizontal' + (distorce ? ' · trechos curtos ampliados na horizontal' : ''), {fs: 12, a: 'end', c: K.muted});
+  const step = [0.1, 0.2, 0.25, 0.5, 1, 2, 5].find(v => (ymax - ymin) / v <= 9) || 5;
+  for (let v = Math.ceil(ymin / step) * step; v <= ymax; v += step) s += ln(ml, PY(v), W - mr, PY(v), K.grid) + tx(ml - 8, PY(v) + 4, fmt(v, 2), {fs: 12, a: 'end', c: K.muted});
+  s += tx(ml - 70, mt + hp / 2, 'Cota (m)', {fs: 13, c: K.muted, rot: -90, a: 'middle'});
+  const terr = pts.filter(p => isNum(p.pv.tp));
+  if (terr.length > 1) s += `<polygon points="${terr.map(p => PX(p.x) + ',' + PY(p.pv.tp)).join(' ')} ${PX(terr[terr.length - 1].x)},${mt + hp} ${PX(terr[0].x)},${mt + hp}" fill="${K.soil}"/>` + `<polyline points="${terr.map(p => PX(p.x) + ',' + PY(p.pv.tp)).join(' ')}" fill="none" stroke="${K.terr}" stroke-width="3"/>`;
+  path.forEach((t, k) => {
+    const r = R.tr[t.id], x0 = PX(pts[k].x), x1 = PX(pts[k + 1].x), D = r.D / 1000, e = D * c.espF;
+    if (!isNum(r.cm) || !isNum(r.cj)) return;
+    s += `<polygon points="${x0},${PY(r.cm - e)} ${x1},${PY(r.cj - e)} ${x1},${PY(r.cj + D + e)} ${x0},${PY(r.cm + D + e)}" fill="${K.pipe}"/>`;
+    s += `<polygon points="${x0},${PY(r.cm)} ${x1},${PY(r.cj)} ${x1},${PY(r.cj + D)} ${x0},${PY(r.cm + D)}" fill="${K.bg}" stroke="${K.agua}" stroke-width="1.2"/>`;
+    const y = r.h.carga ? D : (r.h.y || 0);
+    if (y > 0) s += `<polygon points="${x0},${PY(r.cm)} ${x1},${PY(r.cj)} ${x1},${PY(r.cj + y)} ${x0},${PY(r.cm + y)}" fill="${K.aguaF}"/>`;
+    const lb = t.id + ' · Ø' + t.D + ' · i ' + (isNum(r.S) ? fmt(r.S * 100, 2) : '—') + ' %';
+    s += tx((x0 + x1) / 2, PY((r.cm + r.cj) / 2 + D + e) - 10, (x1 - x0) > lb.length * 7.5 + 20 ? lb : t.id, {fs: 13, a: 'middle', w: 700, c: K.aguaD, halo: K.soil});
+  });
+  // PVs (circular ou EMOP: câmara, laje da tampa e chaminé Ø0,60)
+  const wPV = {};
+  pts.forEach(p => {
+    if (!isNum(p.pv.tp) || !isNum(p.pv.fundo)) return;
+    const x = PX(p.x), m = p.pv.emop;
+    if (m) {
+      const f = p.pv.fundo, zc = f + m.Hi, zl = zc + m.eT, tp = p.pv.tp;
+      const wC = Math.max(16, (m.L + 2 * m.parede) * sx), wI = Math.max(10, m.L * sx), wN = Math.max(9, 0.76 * sx), wNi = Math.max(5, 0.60 * sx);
+      wPV[p.id] = wC;
+      s += rc(x - wC / 2, PY(Math.min(zl, tp)), wC, PY(f - m.eF) - PY(Math.min(zl, tp)), K.conc, K.ink, 1.4);
+      s += rc(x - wI / 2, PY(zc), wI, PY(f) - PY(zc), K.bg, null);
+      if (tp > zl) { s += rc(x - wN / 2, PY(tp), wN, PY(zl) - PY(tp) + 1, K.conc, K.ink, 1.2); s += rc(x - wNi / 2, PY(tp) + 2, wNi, PY(zc) - PY(tp) - 1, K.bg, null); }
+      else s += rc(x - wNi / 2, PY(zl), wNi, PY(zc) - PY(zl) + 1, K.bg, null);
+    } else {
+      const w = Math.max(14, ((num(p.p.dpv) || 1000) / 1000 + 0.3) * sx);
+      wPV[p.id] = w;
+      s += rc(x - w / 2, PY(p.pv.tp), w, PY(p.pv.fundo - 0.15) - PY(p.pv.tp), K.conc, K.ink, 1.4);
+      s += rc(x - w / 2 + 4, PY(p.pv.tp) + 2, w - 8, PY(p.pv.fundo) - PY(p.pv.tp) - 2, K.bg, null);
+    }
+    s += tx(x, mt - 32, p.id, {fs: 15, w: 700, a: 'middle', c: K.ink});
+    s += tx(x, mt - 14, 'CT ' + fmt(p.pv.tp, 3), {fs: 12, a: 'middle', c: K.muted});
+    if (isNum(p.pv.H) && isNum(p.pv.tp) && p.pv.H > p.pv.tp) s += `<circle cx="${x}" cy="${PY(p.pv.H)}" r="7" fill="${K.err}"/>`;
+  });
+  // caixas de ralo e ramais: chegam pela lateral, fora do plano do corte → sempre em vista (pontilhado)
+  const sentido = k => { const p = pts[k], n = pts[k + 1], a = pts[k - 1];
+    if (n && n.p && p.p && n.p.rua === p.p.rua && num(n.p.dist) !== num(p.p.dist)) return num(n.p.dist) > num(p.p.dist) ? 1 : -1;
+    if (a && a.p && p.p && a.p.rua === p.p.rua && num(a.p.dist) !== num(p.p.dist)) return num(p.p.dist) > num(a.p.dist) ? 1 : -1;
+    return 1; };
+  const rot = [];
+  BL.forEach(({b, k}) => {
+    const p = pts[k]; if (!isNum(p.pv.tp)) return;
+    let xm = p.x; if (b.b.rua === p.p.rua) xm = p.x + sentido(k) * ((num(b.b.dist) || 0) - (num(p.p.dist) || 0));
+    xm = Math.min(Math.max(xm, 0), X);
+    const xb = PX(xm), xp = PX(p.x), wb = Math.max(8, (num(b.b.cxL) || 1) * sx), wp = wPV[p.id] || 14;
+    s += rc(xb - wb / 2, PY(b.topo), wb, PY(b.fundo) - PY(b.topo), 'none', K.ink, 1.3, DASH);
+    s += ln(xb - wb / 2, PY(b.topo) + 3, xb + wb / 2, PY(b.topo) + 3, K.ink, 1, '3 3');
+    if (Math.abs(xb - xp) > wp / 2 + wb / 2 + 2) {
+      const lado = xb < xp ? -1 : 1, xA = xb - lado * wb / 2, xB = xp + lado * wp / 2;
+      s += `<polygon points="${xA},${PY(b.ciBL)} ${xB},${PY(b.ciPV)} ${xB},${PY(b.ciPV + b.rD)} ${xA},${PY(b.ciBL + b.rD)}" fill="none" stroke="${K.agua}" stroke-width="1.5" stroke-dasharray="${DASH}"/>`;
+    } else s += `<ellipse cx="${xp}" cy="${PY(b.ciPV + b.rD / 2)}" rx="${Math.max(3, b.rD / 2 * sx)}" ry="${Math.max(3, b.rD / 2 * sy)}" fill="none" stroke="${K.agua}" stroke-width="1.5" stroke-dasharray="4 3"/>`;
+    const yb = PY(b.topo), g = rot.find(o => Math.abs(o.x - xb) < 46 && Math.abs(o.y - yb) < 14);
+    if (g) g.ids.push(b.b.id); else rot.push({x: xb, y: yb, ids: [b.b.id]});
+  });
+  rot.forEach(o => { s += tx(o.x, o.y - 6, o.ids.join(' / '), {fs: 11, a: 'middle', c: K.ink, w: 700, halo: K.bg}); });
+  // linha piezométrica
+  const pz = [];
+  path.forEach((t, k) => { const z = R.tr[t.id].piez; if (!z) return; const x0 = PX(pts[k].x), x1 = PX(pts[k + 1].x); pz.push(`${x0},${PY(z.Hpm)}`, `${x0 + 7},${PY(z.Hm)}`, `${x1},${PY(z.Hj)}`); });
+  if (pz.length) s += `<polyline points="${pz.join(' ')}" fill="none" stroke="${K.orange}" stroke-width="2.4" stroke-dasharray="8 4"/>`;
+  // legenda
+  const ly = mt + hp + 20;
+  [[K.terr, 'Terreno / tampas', 3], [K.agua, 'Tubo (Ø interno) e lâmina d\'água', 3], [K.orange, 'Linha piezométrica', 2.4]].forEach(([cl, t, w], i) => { const x = ml + i * 300; s += ln(x, ly, x + 30, ly, cl, w, i === 2 ? '8 4' : '') + tx(x + 38, ly + 5, t, {fs: 13, c: K.ink}); });
+  if (leg2) s += ln(ml, ly + 22, ml + 30, ly + 22, K.ink, 1.5, DASH) + tx(ml + 38, ly + 27, 'Caixa de ralo e ramal em vista, fora do plano do corte (chegam ao PV pela lateral)', {fs: 13, c: K.ink});
+  // guitarra
+  let y = ly + 22 + leg2;
+  const linha = (titulo) => { s += rc(10, y, W - 20, rowH, 'none', K.grid) + tx(18, y + rowH / 2 + 5, titulo, {fs: 13, w: 700, c: K.ink}); };
+  rowsPV.forEach(([t, f]) => { linha(t); pts.forEach(p => { s += tx(PX(p.x), y + rowH / 2 + 5, f(p), {fs: 13, a: 'middle', c: K.ink}); }); y += rowH; });
+  rowsTr.forEach(([t, f]) => { linha(t); path.forEach((tr, k) => { const r = R.tr[tr.id]; s += tx((PX(pts[k].x) + PX(pts[k + 1].x)) / 2, y + rowH / 2 + 5, f(tr, r), {fs: 13, a: 'middle', c: K.ink, w: t === 'Trecho' ? 700 : null}); }); y += rowH; });
+  return s + '</svg>';
+};
+
+/* ---------- 6. POÇOS DE VISITA (planilha com o padrão EMOP) ---------- */
+ROWFIELDS.pvs = i => { const pv = P.pvs[i], b = [[`pvs.${i}.tampa`, 'Tampa'], [`pvs.${i}.defl`, 'Escoamento']];
+  if (ehEmop(pv)) b.push([`pvs.${i}.pvL`, 'Câmara'], [`pvs.${i}.pvHi`, 'Altura interna']); else b.push([`pvs.${i}.dpv`, 'Ø do PV']);
+  b.push([`pvs.${i}.na`, 'NA']); return b; };
+const _fbDpv0 = FB['pvs.dpv'];
+FB['pvs.dpv'] = function (v, o) { return ehEmop(o) ? null : _fbDpv0.apply(this, arguments); };
+FB['pvs.pvL'] = (v, o) => {
+  const r = R && R.pv[o.id], m = r && r.emop; if (!m) return null;
+  if (!(v > 0)) return mk('info', 'Automático: ' + fmt(m.Lauto, 2) + ' × ' + fmt(m.Lauto, 2) + ' m — ' + motivoCam(m));
+  if (v < m.Lneed - 1e-6) return mk('err', 'Pequena para os tubos: a ' + PAREDE_NOME[m.Lpar] + ' precisa de ' + fmt(m.Lneed, 2) + ' m.', m.Lauto, 'Usar ' + fmt(m.Lauto, 2));
+  if (!naSerieL(v)) return mk('warn', 'Fora da série EMOP (1,40 · 1,60 · 1,70 e de 0,10 em 0,10 m).', emopLado(v), 'Usar ' + fmt(emopLado(v), 2));
+  return mk('ok', 'Atende: mínimo ' + fmt(m.Lneed, 2) + ' m (o automático seria ' + fmt(m.Lauto, 2) + ' m).');
+};
+FB['pvs.pvHi'] = (v, o) => {
+  const r = R && R.pv[o.id], m = r && r.emop; if (!m) return null;
+  if (!(v > 0)) return mk('info', 'Automático: ' + fmt(m.Hauto, 2) + ' m' + (isNum(m.hc) ? ' · chaminé ' + fmt(Math.max(0, m.hc), 2) + ' m' : '') + '.');
+  if (v < m.HiNeed - 1e-6) return mk('err', 'O tubo mais alto não cabe: precisa de ' + fmt(m.HiNeed, 2) + ' m.', m.Hauto, 'Usar ' + fmt(m.Hauto, 2));
+  if (isNum(m.disp) && v > m.disp + 1e-6) return mk('err', 'A laje da tampa passaria da superfície (máximo ' + fmt(m.disp, 2) + ' m).', m.Hauto, 'Usar ' + fmt(m.Hauto, 2));
+  if (!naSerieH(v, m.E.pvEmopHmin)) return mk('warn', 'Fora da série EMOP (a partir de ' + fmt(m.E.pvEmopHmin, 2) + ' m, de 0,10 em 0,10 m).', Math.max(m.E.pvEmopHmin, sobe10(v)), 'Usar ' + fmt(Math.max(m.E.pvEmopHmin, sobe10(v)), 2));
+  return mk('ok', 'Atende · chaminé ' + fmt(Math.max(0, m.hc || 0), 2) + ' m.');
+};
+const _cellRes0 = cellRes;
+cellRes = function (kind, i, key, el) {
+  if (kind === 'pvs' && key === 'cam') {
+    const o = P.pvs[i], r = o && R.pv[o.id]; if (!r) return '—';
+    if (r.emop) { const m = r.emop, bad = m.L < m.Lneed - 1e-6 || m.Hi < m.HiNeed - 1e-6 || (isNum(m.hc) && m.hc < -1e-3);
+      cc(el, bad ? 'err' : ''); return fmt(m.L, 2) + ' × ' + fmt(m.L, 2) + ' <small>h ' + fmt(m.Hi, 2) + (m.Ldig || m.Hdig ? ' · digitada' : ' · auto') + '</small>'; }
+    cc(el, ''); return 'Ø ' + (num(o.dpv) || 1000);
+  }
+  return _cellRes0.apply(this, arguments);
+};
+vPVs = function () {
+  const md = Object.entries(PVMOD).map(([k, v]) => [k, v.nome]);
+  return `<h3>Poços de visita</h3>
+  <p class="lead">Uma linha por PV, localizado por estaca. A tampa vem do greide quando em branco. Na mesma linha: padrão do PV, câmara, fundo, profundidade, ligações, perda por turbulência <span class="formula">h<sub>f</sub> = K · V² / 2g</span>, nível d'água e folga até a tampa.</p>
+  <p class="lead" style="margin-top:-.3rem"><b>Padrão EMOP</b> (câmara de blocos de concreto 20 cm armados, lajes de concreto armado, chaminé Ø0,60 e tampão FoFo Ø0,60): no automático, a menor câmara e a altura que atendem aos tubos e à topografia. Escolha outra medida na coluna <b>Padrão do PV</b> ou digite nos detalhes (▸).</p>
+  <div class="bar-btns"><button class="btn btn-primary btn-sm" onclick="addItem('pvs')">＋ Poço de visita</button>
+    <button class="btn btn-secondary btn-sm" onclick="dimensionarPVs()" title="Todos os PVs no padrão EMOP, com a menor câmara e a altura que atendem">📐 Dimensionar PVs (padrão EMOP)</button>
+    <button class="btn btn-primary btn-sm" onclick="autoCorrigir()" title="Corrige cotas, diâmetros, declividades, ramais e PVs pela solução de menor custo, conforme a topografia">🛠 Corrigir automaticamente (menor custo)</button></div>
+  ${sheet('pvs', [
+    {h: 'PV', p: 'id', o: {type: 'txt'}, w: 96, k: 'pvs.id'},
+    {h: 'Rua', p: 'rua', o: () => ({type: 'sel', opts: optsRua()}), w: 130, k: 'pvs.rua'},
+    {h: 'Estaca', p: 'dist', o: {type: 'est'}, w: 84, k: 'pvs.dist'},
+    {h: 'Tampa', u: 'm', p: 'tampa', o: (o) => ({step: 0.01, ph: (v => isNum(v) ? v.toFixed(3) : '')(greideCota(o.rua, num(o.dist)))}), w: 84, k: 'pvs.tampa'},
+    {h: 'Escoamento', p: 'defl', o: {type: 'sel', opts: Object.entries(DEFL)}, w: 150, k: 'pvs.defl'},
+    {h: 'Padrão do PV', p: 'modelo', o: {type: 'sel', opts: md}, w: 250, k: 'pvs.modelo'},
+    {h: 'Câmara / Ø', u: 'm', res: 'cam'},
+    {h: 'Tampa usada', u: 'm', res: 'tp'}, {h: 'Fundo', u: 'm', res: 'fundo'}, {h: 'Prof.', u: 'm', res: 'prof'}, {h: 'Entra / sai', res: 'lig'},
+    {h: 'K', res: 'K'}, {h: 'h<sub>f</sub> PV', u: 'm', res: 'hf'}, {h: 'NA', u: 'm', res: 'H'}, {h: 'Folga', u: 'm', res: 'folga'}
+  ], (o, i) => {
+    let h = '';
+    if (ehEmop(o)) {
+      const m = R.pv[o.id] && R.pv[o.id].emop;
+      h += fld(`pvs.${i}.pvL`, 'Lado interno da câmara (m) — vazio = automático', {step: 0.1, ph: m ? fmt(m.Lauto, 2) + ' (automático)' : 'automático'});
+      h += fld(`pvs.${i}.pvHi`, 'Altura interna da câmara (m) — vazio = automático', {step: 0.1, ph: m ? fmt(m.Hauto, 2) + ' (automático)' : 'automático'});
+    } else {
+      h += fld(`pvs.${i}.tipo`, 'Tipo construtivo', {type: 'sel', opts: PVTIPOS.filter(t => t !== EMOP_TIPO)});
+      h += fld(`pvs.${i}.dpv`, 'Ø interno do PV (mm)', {type: 'sel', num: true, opts: [[1000, '1000'], [1200, '1200'], [1500, '1500'], [2000, '2000']]});
+    }
+    return h + fld(`pvs.${i}.tampaCl`, 'Tampão (NBR 10160)', {type: 'sel', opts: TAMPAS}) +
+      fld(`pvs.${i}.na`, 'NA a jusante (m) — só PV final', {step: 0.01}) + fld(`pvs.${i}.obs`, 'Observação', {type: 'txt', w2: true});
+  })}
+  <div class="card"><h4>Padrão EMOP — medidas construtivas</h4>
+    <div class="fgrid">
+      ${fld('crit.pvEmopParede', 'Parede — blocos de concreto (m)', {step: 0.01})}
+      ${fld('crit.pvEmopLajeF', 'Laje de fundo — concreto armado (m)', {step: 0.01})}
+      ${fld('crit.pvEmopLajeT', 'Laje da tampa — concreto armado (m)', {step: 0.01})}
+      ${fld('crit.pvEmopFolga', 'Folga entre tubos e até o canto (m)', {step: 0.01})}
+      ${fld('crit.pvEmopFolgaTopo', 'Folga do tubo mais alto até a laje (m)', {step: 0.01})}
+      ${fld('crit.pvEmopHmin', 'Altura interna mínima (m)', {step: 0.1})}
+      ${fld('crit.pvEmopChamMax', 'Altura máxima da chaminé Ø0,60 (m)', {step: 0.05})}
+    </div>
+    ${ajuda('Como o programa escolhe a câmara e a altura', `<p><b>Padrão EMOP:</b> câmara retangular com paredes de blocos de concreto vazados de 20 cm (largura e altura), cheios de concreto e amarrados por barras de aço; laje de fundo e laje da tampa em concreto armado; na laje da tampa, centralizado, o pescoço (chaminé) em anéis Ø0,60 para assentar o tampão de ferro fundido Ø0,60. Câmara interna, entre paredes, de 1,40 × 1,40, 1,60 × 1,60 ou 1,70 × 1,70 m e depois de 0,10 em 0,10 m; altura interna a partir de 1,40 m, de 0,10 em 0,10 m.</p><p><b>Câmara (lado interno):</b> cada tubo ou ramal fica numa parede — o de saída na parede de jusante, o maior que chega na de montante, os ramais na lateral do lado da boca-de-lobo e as outras chegadas na lateral mais livre. Em cada parede, a soma dos Ø externos mais uma folga entre tubos e até os cantos tem de caber no lado; vale a parede mais carregada, arredondada para a série EMOP (1,40 · 1,60 · 1,70 m e depois de 0,10 em 0,10 m). A vazão e a velocidade entram pelos diâmetros dos tubos (dimensionados pela vazão) e pelas quedas no PV.</p><p><b>Altura interna:</b> a partir de 1,40 m, de 0,10 em 0,10 m, até caber o topo externo do tubo mais alto (quedas e ramais incluídos) com a folga até a laje. Em PV fundo, a altura sobe até a chaminé de anéis Ø0,60 ficar com no máximo a altura indicada. A profundidade é a da tampa (greide/topografia) até o fundo dos tubos.</p><p>A menor medida que atende é também a de menor custo. Para a rede inteira (cotas, diâmetros e PVs) pelo menor custo, use <b>Corrigir automaticamente</b>.</p>`)}
+  </div>`;
+};
+const _onField0 = onField;
+onField = function (e) {
+  const el = e.target, p = (el.dataset && el.dataset.p) || '', mm = /^pvs\.(\d+)\.(modelo|pvL)$/.exec(p);
+  if (mm) {
+    const i = +mm[1], pv = P.pvs[i];
+    if (pv && mm[2] === 'modelo') {
+      const md = PVMOD[el.value] || {};
+      if (md.emop) { pv.tipo = EMOP_TIPO; if (md.L) pv.pvL = md.L; else if (el.value === 'emop') { pv.pvL = ''; pv.pvHi = ''; } }
+      else if (pv.tipo === EMOP_TIPO) { pv.tipo = PVTIPOS[0]; if (!num(pv.dpv)) pv.dpv = 1000; }
+    }
+    if (pv && mm[2] === 'pvL') {
+      const v = el.value === '' ? null : +el.value;
+      const novo = !(v > 0) ? 'emop' : PVMOD['emop-' + v.toFixed(2)] && Math.abs(v * 100 - Math.round(v * 100)) < 1e-6 ? 'emop-' + v.toFixed(2) : 'emop-outro';
+      pv.modelo = novo; const sl = document.querySelector(`select[data-p="pvs.${i}.modelo"]`); if (sl) sl.value = novo;
+    }
+  }
+  return _onField0.apply(this, arguments);
+};
+const _applyFix0 = applyFix;
+applyFix = function (path, val) {
+  const mm = /^pvs\.(\d+)\.pvL$/.exec(path);
+  if (mm && P.pvs[+mm[1]]) { const v = +val; P.pvs[+mm[1]].modelo = PVMOD['emop-' + v.toFixed(2)] ? 'emop-' + v.toFixed(2) : 'emop-outro'; }
+  return _applyFix0.apply(this, arguments);
+};
+addItem = function (kind) {
+  const L = P[kind], last = L[L.length - 1];
+  let o;
+  if (kind === 'ruas') o = {id: nextId(L, 'R', 1), nome: 'Rua ' + (L.length + 1), larg: 7, passeio: 2, it: 3};
+  if (kind === 'bacias') o = {id: nextId(L, 'B', 1), nome: '', A: 0.2, C: 0.7, dest: last ? last.dest : '', tcMode: 'man', tc: 10, kL: '', kH: ''};
+  if (kind === 'bls') o = Object.assign({rua: (P.ruas[0] || {}).id || '', dist: 0, lado: 'E', tipo: 'gs', L: 1, a: 0.05, gL: 0.9, gB: 0.4, ga: 60, fr: 0.8, S: '', z: '', pv: (P.pvs[0] || {}).id || '', rL: 6, rD: 400, rI: 2, constr: 'Pré-moldada'}, last ? JSON.parse(JSON.stringify(last)) : {}, {id: nextId(L, 'BL-'), prox: ''});
+  if (kind === 'pvs') o = {id: nextId(L, 'PV-'), rua: last ? last.rua : ((P.ruas[0] || {}).id || ''), dist: last ? (num(last.dist) || 0) + 40 : 0, modelo: 'emop', tipo: EMOP_TIPO, pvL: '', pvHi: '', dpv: 1000, tampaCl: TAMPAS[0], tampa: '', defl: last ? 'reta' : 'ini', na: '', obs: ''};
+  if (kind === 'trechos') {
+    const m = last ? last.j : ((P.pvs[0] || {}).id || '');
+    const iM = P.pvs.findIndex(p => p.id === m), j = iM >= 0 && P.pvs[iM + 1] ? P.pvs[iM + 1].id : '';
+    o = {id: nextId(L, 'T', 1), m, j, L: '', D: last ? last.D : P.crit.dmin, cm: '', cj: '', mat: MATS[1], aL: '', cL: '', tcL: ''};
+  }
+  L.push(o); save(); calc(); renderTab();
+  setTimeout(() => { const el = document.getElementById(`row-${kind}-${L.length - 1}`) || document.getElementById(`it-${kind}-${L.length - 1}`); if (el) el.scrollIntoView({behavior: 'smooth', block: 'center'}); }, 60);
+};
+
+/* botão "Dimensionar PVs (padrão EMOP)" — menor câmara e altura que atendem */
+function dimensionarPVs() {
+  if (!P.pvs.length) { toast('Nenhum poço de visita cadastrado.'); return; }
+  if (!confirm('Dimensionar todos os poços de visita no padrão EMOP?\n\nCada PV passa a ter câmara e altura automáticas: a menor câmara da série EMOP (1,40 · 1,60 · 1,70 m e depois de 0,10 em 0,10 m) em que cabem os tubos e ramais ligados, e a altura interna (a partir de 1,40 m, de 0,10 em 0,10 m) conforme a profundidade dada pela topografia.\n\nMedidas digitadas e PVs circulares passam para o automático. Você pode desfazer no relatório.')) return;
+  calc();
+  const antes = JSON.stringify(P), A = {};
+  P.pvs.forEach(pv => { const r = R.pv[pv.id]; A[pv.id] = r && r.emop ? fmtCam(r.emop) + (r.emop.Ldig || r.emop.Hdig ? ' (digitada)' : '') : ehEmop(pv) ? '—' : 'circular Ø' + (num(pv.dpv) || 1000); });
+  P.pvs.forEach(pv => { pv.modelo = 'emop'; pv.tipo = EMOP_TIPO; pv.pvL = ''; pv.pvHi = ''; });
+  calc(); DESFAZER = antes; save(); renderTab();
+  const linhas = P.pvs.map(pv => { const r = R.pv[pv.id], m = r && r.emop;
+    return `<tr><td style="white-space:nowrap"><b>${esc(pv.id)}</b></td><td style="white-space:nowrap">${esc(A[pv.id])}</td><td style="white-space:nowrap"><b>${m ? esc(fmtCam(m)) : '—'}</b></td><td class="td-num">${m && isNum(m.hc) ? fmt(Math.max(0, m.hc), 2) : '—'}</td><td class="td-num">${r ? fmt(r.prof, 2) : '—'}</td><td style="white-space:normal;min-width:240px"><small>${m ? esc(motivoCam(m)) : ''}</small></td><td>${r ? stIc(r.st) : ''}</td></tr>`; }).join('');
+  const pend = [];
+  P.pvs.forEach(pv => { const r = R.pv[pv.id]; if (r) r.msgs.filter(x => x.s !== 'ok' && /^(Câmara|Altura|Chaminé|Profundidade para)/.test(x.t)).forEach(x => pend.push(pv.id + ': ' + x.t)); });
+  const h = document.querySelector('#modal-auto .modal-header h3'); if (h) h.textContent = 'Dimensionamento dos PVs — padrão EMOP';
+  $('auto-body').innerHTML = `<div class="tbl-wrap"><table><thead><tr><th>PV</th><th>Antes</th><th>Depois (câmara × altura)</th><th class="td-num">Chaminé (m)</th><th class="td-num">Prof. (m)</th><th>Por quê</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>
+    <div class="section-title">Precisa da sua decisão (${pend.length})</div>
+    ${pend.length ? '<div class="msgs">' + pend.map(t => `<div class="msg warn">⚠ <span>${esc(t)}</span></div>`).join('') + '</div>' : '<div class="msg ok">✓ <span>Todos os PVs atendem.</span></div>'}
+    <p class="hint" style="font-size:.75rem;color:var(--muted);margin-top:.8rem">A menor medida que atende é também a de menor custo. Para recalcular a rede inteira (cotas, diâmetros, ramais e PVs) pelo menor custo conforme a topografia, use <b>Corrigir automaticamente</b>.</p>`;
+  openModal('modal-auto');
+}
+/* relatório da correção automática: inclui as câmaras EMOP e não mexe no Ø circular de PV EMOP */
+const _relCor0 = relatorioCorrecao;
+relatorioCorrecao = function (A) {
+  const h = document.querySelector('#modal-auto .modal-header h3'); if (h) h.textContent = 'Correção automática — relatório';
+  let mexeu = false;
+  P.pvs.forEach(o => { if (!ehEmop(o)) return; const a = A.pvs.find(x => x.id === o.id); if (a && String(a.dpv) !== String(o.dpv)) { o.dpv = a.dpv; mexeu = true; } });
+  if (mexeu) save();
+  const out = _relCor0.apply(this, arguments);
+  const novas = [];
+  P.pvs.forEach(o => { if (!ehEmop(o)) return; const a = A.pvs.find(x => x.id === o.id); if (!a) return;
+    const f = (L, H) => isNum(L) ? fmt(L, 2) + ' × ' + fmt(L, 2) + ' × h ' + fmt(H, 2) + ' m' : '—';
+    const antes = isNum(a.emL) ? f(a.emL, a.emH) : ehEmop(a) ? '—' : 'circular Ø' + (a.dpv || 1000), depois = f(o.emL, o.emH);
+    if (antes !== depois) novas.push(`<tr><td><b>${esc('PV ' + o.id)}</b></td><td>Câmara EMOP</td><td>${esc(antes)}</td><td><b>${esc(depois)}</b></td></tr>`); });
+  if (novas.length) {
+    const body = $('auto-body'), tit = body.querySelector('.section-title');
+    if (tit) tit.textContent = tit.textContent.replace(/\((\d+)\)/, (x, n) => '(' + (+n + novas.length) + ')');
+    const tb = body.querySelector('.tbl-wrap tbody');
+    if (tb) tb.insertAdjacentHTML('beforeend', novas.join(''));
+    else if (tit && tit.nextElementSibling) tit.nextElementSibling.outerHTML = `<div class="tbl-wrap"><table><thead><tr><th>Elemento</th><th>Dado</th><th>Antes</th><th>Depois</th></tr></thead><tbody>${novas.join('')}</tbody></table></div>`;
+  }
+  return out;
+};
+
+/* ---------- custos: PV EMOP pelo preço do PV de tamanho equivalente + quantidades EMOP ---------- */
+orcamento = function () {
+  const c = P.crit, cfg = custosCfg(), linhas = {};
+  const add = (k, q, nomeExtra) => { if (!(q > 0)) return; const p = preco(k); const L = linhas[k] || (linhas[k] = {k, p, q: 0, nome: nomeExtra}); L.q += q; };
+  P.trechos.forEach(t => {
+    const r = R.tr[t.id]; if (!r || !(r.L > 0)) return;
+    add('tubo:' + t.D, r.L);
+    if (r.vala) {
+      const h = (r.vala.hM + r.vala.hJ) / 2, B = r.vala.B, hb = bandaH(h), wb = bandaB(B);
+      const D = r.D / 1000, De = D * (1 + 2 * c.espF), Vb = B * c.berco * r.L;
+      add(`esc:${hb}:${wb}`, r.vala.V);
+      add('berco:' + (B < 1.5 ? 0 : 1), Vb);
+      add(`reat:${hb}:${wb}`, Math.max(0, r.vala.V - Vb - Math.PI * De * De / 4 * r.L));
+      if (h > 1.25) add(`escor:${hb}:${B < 1.5 ? 0 : 1}`, 2 * r.L * h);
+    }
+  });
+  P.bls.forEach(b => { add('tubo:' + b.rD, num(b.rL) || 0); add(`bl:${b.tipo}:${b.constr || 'Pré-moldada'}`, 1); });
+  P.pvs.forEach(pv => {
+    const r = R.pv[pv.id]; if (!r || !isNum(r.prof)) return;
+    const ref = r.emop ? r.emop.L * 1000 : (num(pv.dpv) || 1000);
+    const d = [1000, 1200, 1500, 2000].find(x => x >= ref - 1e-6) || 2000;
+    const pb = preco('pvbase:' + d); add('pvbase:' + d, 1);
+    if (pb.src !== 'sco') add('pvacr:' + d, Math.max(0, r.prof - (pb.hBase || 1.35)));
+  });
+  const L = Object.values(linhas).map(x => Object.assign(x, {total: x.q * (x.p.preco || 0)}));
+  const ordem = ['tubo', 'esc', 'berco', 'reat', 'escor', 'pvbase', 'pvacr', 'bl'];
+  L.sort((a, b) => ordem.indexOf(a.k.split(':')[0]) - ordem.indexOf(b.k.split(':')[0]) || a.k.localeCompare(b.k, 'pt', {numeric: true}));
+  const sub = L.reduce((s, x) => s + x.total, 0), bdi = +cfg.bdi || 0;
+  return {linhas: L, sub, bdi, total: sub * (1 + bdi / 100), comBanco: Object.keys(cfg.precos || {}).length > 0};
+};
+const _vCustos0 = vCustos;
+vCustos = function () {
+  const h = _vCustos0.apply(this, arguments);
+  const em = P.pvs.filter(p => R.pv[p.id] && R.pv[p.id].emop); if (!em.length) return h;
+  let t = {alv: 0, lajeF: 0, lajeT: 0, cham: 0};
+  const rows = em.map(p => { const m = R.pv[p.id].emop; Object.keys(t).forEach(k => { t[k] += m.q[k]; });
+    return `<tr><td><b>${esc(p.id)}</b></td><td>${esc(fmtCam(m))}</td><td class="td-num">${fmt(m.q.alv, 2)}</td><td class="td-num">${fmt(m.q.lajeF, 3)}</td><td class="td-num">${fmt(m.q.lajeT, 3)}</td><td class="td-num">${fmt(m.q.cham, 2)}</td><td class="td-num">1</td></tr>`; }).join('');
+  return h + `<div class="card"><h4>Quantidades dos PVs padrão EMOP</h4>
+    <div class="tbl-wrap"><table><thead><tr><th>PV</th><th>Câmara</th><th class="td-num">Alvenaria de blocos 20 cm cheia e armada (m²)</th><th class="td-num">Concreto armado laje de fundo (m³)</th><th class="td-num">Concreto armado laje da tampa (m³)</th><th class="td-num">Chaminé anéis Ø0,60 (m)</th><th class="td-num">Tampão FoFo Ø0,60 (un)</th></tr></thead><tbody>${rows}
+    <tr><td colspan="2" style="text-align:right"><b>Total</b></td><td class="td-num"><b>${fmt(t.alv, 2)}</b></td><td class="td-num"><b>${fmt(t.lajeF, 3)}</b></td><td class="td-num"><b>${fmt(t.lajeT, 3)}</b></td><td class="td-num"><b>${fmt(t.cham, 2)}</b></td><td class="td-num"><b>${em.length}</b></td></tr></tbody></table></div>
+    <p class="hint" style="font-size:.74rem;color:var(--muted);margin-top:.5rem">No orçamento estimado acima, cada PV EMOP entra pelo preço do PV de tamanho equivalente do SINAPI/SCO (para comparar alternativas). Para o orçamento oficial pela EMOP, leve estas quantidades ao programa de Orçamento. Armaduras e graute conforme o projeto-padrão EMOP.</p></div>`;
+};
+const _tabMem0 = tabelasMemoria;
+tabelasMemoria = function () {
+  const T = _tabMem0.apply(this, arguments);
+  const t = T.find(x => x.nome === 'PVs');
+  if (t) { t.head = t.head.slice(); t.head[4] = 'Ø (mm) ou câmara EMOP (m)';
+    t.rows.forEach((row, k) => { const pv = P.pvs[k], r = pv && R.pv[pv.id]; if (r && r.emop) row[4] = 'EMOP ' + fmt(r.emop.L, 2) + ' × ' + fmt(r.emop.L, 2) + ' × h ' + fmt(r.emop.Hi, 2); }); }
+  const em = P.pvs.filter(p => R.pv[p.id] && R.pv[p.id].emop);
+  if (em.length) T.push({nome: 'PVs EMOP', titulo: 'Poços de visita padrão EMOP — medidas e quantidades', head: ['PV', 'Câmara interna (m)', 'Altura interna (m)', 'Medida externa (m)', 'Laje de fundo e (m)', 'Laje da tampa e (m)', 'Chaminé anéis Ø0,60 (m)', 'Alvenaria de blocos 20 cm (m²)', 'Concreto laje de fundo (m³)', 'Concreto laje da tampa (m³)', 'Tampão FoFo Ø0,60 (un)', 'Medidas'],
+    rows: em.map(p => { const m = R.pv[p.id].emop; return [p.id, m.L, m.Hi, m.L + 2 * m.parede, m.eF, m.eT, m.q.cham, m.q.alv, m.q.lajeF, m.q.lajeT, 1, m.Ldig || m.Hdig ? 'digitadas' : 'automáticas']; }),
+    fm: ['@', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.000', '0.000', '0', '@']});
+  return T;
+};
+</script>
 </body></html>
