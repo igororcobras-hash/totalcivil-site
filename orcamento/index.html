@@ -12030,13 +12030,16 @@ document.addEventListener('DOMContentLoaded', limparRestos);
 </script>
 <!-- FIM PATCH V1-02-37 -->
 
-<!-- ==================== PATCH V1-02-42 - CABEÇALHO DO RELATÓRIO: texto e imagens (como no Word) no Word e no PDF ==================== -->
+<!-- ==================== PATCH V1-02-42 - CABEÇALHO (TIMBRE) E RODAPÉ: texto e imagens (como no Word) no Excel, Word e PDF ==================== -->
 <style>
 #cabModal{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:100000;display:none;align-items:center;justify-content:center;padding:12px}
 #cabModal.aberto{display:flex}
 #cabModal .cab-caixa{background:#fff;border-radius:12px;width:min(920px,100%);max-height:95vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.35);font-family:Arial,sans-serif}
 #cabModal .cab-topo{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#0f172a;color:#fff;border-radius:12px 12px 0 0;font-weight:800;font-size:13px}
-#cabModal .cab-topo button{margin-left:auto;background:transparent;border:0;color:#fff;font-size:18px;cursor:pointer}
+#cabModal .cab-topo button[data-c=fechar]{margin-left:auto;background:transparent;border:0;color:#fff;font-size:18px;cursor:pointer}
+#cabModal .cab-abas{display:flex;gap:4px;margin-left:12px}
+#cabModal .cab-aba{background:#334155;border:0;color:#e2e8f0;border-radius:6px;padding:4px 12px;font-weight:800;cursor:pointer;font-size:12px}
+#cabModal .cab-aba.ativa{background:#f59e0b;color:#0f172a}
 #cabModal .cab-barra{display:flex;flex-wrap:wrap;gap:4px;padding:8px 10px;border-bottom:1px solid #e2e8f0;background:#f8fafc;align-items:center}
 #cabModal .cab-barra button,#cabModal .cab-barra select,#cabModal .cab-barra label.cab-bt{min-width:30px;height:28px;padding:0 7px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;font-size:12px;display:inline-flex;align-items:center;gap:4px;color:#0f172a}
 #cabModal .cab-barra button:hover,#cabModal .cab-barra label.cab-bt:hover{background:#fef3c7}
@@ -12059,7 +12062,7 @@ document.addEventListener('DOMContentLoaded', limparRestos);
   // O cabeçalho é do usuário (empresa, logotipo, contrato...): fica salvo neste navegador e entra no início do
   // Word e do PDF ("exportarRelatorio"). Imagens vão como data URI; no Word o arquivo vira MHTML para o Word mostrar as imagens.
   var KEY = 'schueler_cabecalho_rel_v1';
-  function ler(){ try{ var o = JSON.parse(localStorage.getItem(KEY) || 'null'); if(o && typeof o.html === 'string') return o; }catch(e){} return { html:'', ativo:true }; }
+  function ler(){ try{ var o = JSON.parse(localStorage.getItem(KEY) || 'null'); if(o && typeof o.html === 'string') return o; }catch(e){} return { html:'', rodape:'', ativo:true }; }
   function gravar(o){
     try{ localStorage.setItem(KEY, JSON.stringify(o)); return true; }
     catch(e){ alert('Não foi possível salvar o cabeçalho: as imagens ocupam espaço demais no navegador. Use imagens menores ou menos imagens.'); return false; }
@@ -12080,19 +12083,24 @@ document.addEventListener('DOMContentLoaded', limparRestos);
     var c = ler();
     return (c.ativo && temConteudo(c.html)) ? '<div class="rel-cabecalho">' + c.html + '</div><hr style="border:0;border-top:1.5px solid #0f172a;margin:8px 0 12px">' : '';
   };
+  window.rodapeRelatorioHtml = function(){
+    var c = ler();
+    return (c.ativo && temConteudo(c.rodape)) ? '<hr style="border:0;border-top:1.5px solid #0f172a;margin:14px 0 8px"><div class="rel-cabecalho rel-rodape">' + c.rodape + '</div>' : '';
+  };
+  window._cabecalhoRelatorio = function(){ var c = ler(); return { ativo: c.ativo !== false, cab: temConteudo(c.html) ? c.html : '', rod: temConteudo(c.rodape) ? c.rodape : '' }; };
 
   // ---- entra no Word e no PDF ----
   var _docOrig = window.documentoRel;
   if(typeof _docOrig === 'function'){
     window.documentoRel = function(corpo){
-      var doc = _docOrig(window.cabecalhoRelatorioHtml() + corpo);
+      var doc = _docOrig(window.cabecalhoRelatorioHtml() + corpo + window.rodapeRelatorioHtml());
       return doc.replace('</style>', '.rel-cabecalho table{border-collapse:collapse;width:100%}.rel-cabecalho td{border:0;padding:2px 4px;vertical-align:middle}.rel-cabecalho img{max-width:100%}</style>');
     };
   }
   var _expOrig = window.exportarRelatorio;
   if(typeof _expOrig === 'function'){
     window.exportarRelatorio = function(tipo, qual){
-      if(tipo !== 'word' || !/<img[^>]+src="data:/i.test(window.cabecalhoRelatorioHtml())) return _expOrig(tipo, qual);
+      if(tipo !== 'word' || !/<img[^>]+src="data:/i.test(window.cabecalhoRelatorioHtml() + window.rodapeRelatorioHtml())) return _expOrig(tipo, qual);
       // Word: MHTML (.doc) com as imagens como partes do arquivo
       var doc = window.documentoRel(relatorioHtml(qual || 'tudo'));
       var limite = '----=_SchuelerCab_' + Date.now(), partes = [], n = 0;
@@ -12148,7 +12156,7 @@ document.addEventListener('DOMContentLoaded', limparRestos);
     var m = document.createElement('div'); m.id = 'cabModal'; m.setAttribute('role', 'dialog');
     m.innerHTML =
       '<div class="cab-caixa">' +
-      '<div class="cab-topo">🧾 Cabeçalho do relatório (Word e PDF)<button type="button" data-c="fechar" title="Fechar">✕</button></div>' +
+      '<div class="cab-topo">🧾 Cabeçalho e rodapé (Excel, Word e PDF)<span class="cab-abas"><button type="button" data-c="abaCab" class="cab-aba ativa">Cabeçalho</button><button type="button" data-c="abaRod" class="cab-aba">Rodapé</button></span><button type="button" data-c="fechar" title="Fechar">✕</button></div>' +
       '<div class="cab-barra">' +
         '<button type="button" data-c="bold" title="Negrito"><b>N</b></button>' +
         '<button type="button" data-c="italic" title="Itálico"><i>I</i></button>' +
@@ -12176,7 +12184,7 @@ document.addEventListener('DOMContentLoaded', limparRestos);
       '<div id="cabEditor" contenteditable="true" spellcheck="true" data-vazio="Digite aqui o cabeçalho: nome da empresa ou órgão, CNPJ, endereço, obra, contrato... Use 🖼️ Imagem para o logotipo."></div>' +
       '<div class="cab-rodape">' +
         '<label style="font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px"><input type="checkbox" id="cabAtivo"> Incluir nas exportações</label>' +
-        '<span class="cab-dica">Sai no início do Word e do PDF, acima da planilha e da memória de cálculo. Fica salvo neste navegador para os próximos orçamentos.</span>' +
+        '<span class="cab-dica">O cabeçalho (timbre) sai no início e o rodapé no fim do Excel, do Word e do PDF. Fica salvo neste navegador para os próximos orçamentos.</span>' +
         '<button type="button" data-c="limpar" style="background:#fee2e2;color:#991b1b">Apagar</button>' +
         '<button type="button" data-c="previa" style="background:#e0f2fe;color:#0c4a6e">Ver no PDF</button>' +
         '<button type="button" data-c="salvar" style="background:#16a34a;color:#fff">Salvar</button>' +
@@ -12190,6 +12198,7 @@ document.addEventListener('DOMContentLoaded', limparRestos);
       if(ev.target.closest('#cabEditor')) selecionarImg(null);
       var b = ev.target.closest('button[data-c]'); if(!b) return;
       var c = b.getAttribute('data-c');
+      if(c === 'abaCab' || c === 'abaRod'){ trocarAba(c === 'abaRod' ? 'rod' : 'cab'); return; }
       if(c === 'fechar') fechar();
       else if(c === 'salvar'){ if(salvar()) fechar(); }
       else if(c === 'limpar'){ if(confirm('Apagar todo o cabeçalho?')){ ed.innerHTML = ''; selecionarImg(null); } }
@@ -12211,15 +12220,27 @@ document.addEventListener('DOMContentLoaded', limparRestos);
     });
     document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape' && m.classList.contains('aberto')) fechar(); });
   }
+  var aba = 'cab', rascunho = { cab:'', rod:'' };
+  var VAZIO = { cab: 'Digite aqui o cabeçalho (timbre): nome da empresa ou órgão, CNPJ, endereço, obra, contrato... Use 🖼️ Imagem para o logotipo.',
+    rod: 'Digite aqui o rodapé: endereço, telefone, e-mail, site, responsável técnico... Também aceita imagem.' };
+  function trocarAba(nova){
+    var ed = document.getElementById('cabEditor');
+    rascunho[aba] = ed.innerHTML; aba = nova; ed.innerHTML = rascunho[aba] || ''; ed.setAttribute('data-vazio', VAZIO[aba]);
+    document.querySelectorAll('#cabModal .cab-aba').forEach(function(b){ b.classList.toggle('ativa', b.getAttribute('data-c') === (aba === 'rod' ? 'abaRod' : 'abaCab')); });
+    selecionarImg(null); ed.focus();
+  }
   function salvar(){
-    var h = limparHtml(document.getElementById('cabEditor').innerHTML);
-    return gravar({ html: temConteudo(h) ? h : '', ativo: document.getElementById('cabAtivo').checked, atualizadoEm: new Date().toISOString() });
+    rascunho[aba] = document.getElementById('cabEditor').innerHTML;
+    var h = limparHtml(rascunho.cab), r = limparHtml(rascunho.rod);
+    return gravar({ html: temConteudo(h) ? h : '', rodape: temConteudo(r) ? r : '', ativo: document.getElementById('cabAtivo').checked, atualizadoEm: new Date().toISOString() });
   }
   function fechar(){ var m = document.getElementById('cabModal'); if(m) m.classList.remove('aberto'); selecionarImg(null); }
   window.abrirCabecalhoRelatorio = function(){
     montar();
     var c = ler();
-    document.getElementById('cabEditor').innerHTML = c.html || '';
+    rascunho = { cab: c.html || '', rod: c.rodape || '' }; aba = 'cab';
+    var ed0 = document.getElementById('cabEditor'); ed0.innerHTML = rascunho.cab; ed0.setAttribute('data-vazio', VAZIO.cab);
+    document.querySelectorAll('#cabModal .cab-aba').forEach(function(b){ b.classList.toggle('ativa', b.getAttribute('data-c') === 'abaCab'); });
     document.getElementById('cabAtivo').checked = c.ativo !== false;
     document.getElementById('cabModal').classList.add('aberto');
     setTimeout(function(){ document.getElementById('cabEditor').focus(); }, 50);
@@ -12229,15 +12250,173 @@ document.addEventListener('DOMContentLoaded', limparRestos);
   function botao(){
     var box = document.getElementById('boxExportXlsx'); if(!box || document.getElementById('btnCabecalhoRel')) return !!box;
     var b = document.createElement('button'); b.type = 'button'; b.id = 'btnCabecalhoRel'; b.className = 'btn btn-dark';
-    b.textContent = '🧾 Cabeçalho'; b.title = 'Cabeçalho do Word e do PDF: texto e imagens (logotipo), como no Word';
+    b.textContent = '🧾 Cabeçalho'; b.title = 'Cabeçalho (timbre) e rodapé do Excel, do Word e do PDF: texto e imagens, como no Word';
     b.onclick = function(){ window.abrirCabecalhoRelatorio(); };
     box.appendChild(b); return true;
   }
   window.addEventListener('load', function(){ var n = 0; (function tenta(){ if(!botao() || !document.getElementById('btnPdfRel')){ if(++n < 20) setTimeout(tenta, 500); } else botao(); })(); });
   try{
     var g = (typeof MENU_CEL !== 'undefined') && MENU_CEL.find(function(x){ return /Exportar/.test(x.g); });
-    if(g && !g.itens.some(function(i){ return /Cabeçalho/.test(i.r); })) g.itens.push({ r: 'Cabeçalho (Word e PDF)', d: 'texto e imagens no início do relatório', a: function(){ window.abrirCabecalhoRelatorio(); } });
+    if(g && !g.itens.some(function(i){ return /Cabeçalho/.test(i.r); })) g.itens.push({ r: 'Cabeçalho e rodapé', d: 'timbre com texto e imagens no Excel, Word e PDF', a: function(){ window.abrirCabecalhoRelatorio(); } });
   }catch(e){}
+})();
+</script>
+<script>
+(function(){
+  // V1-02-42: cabeçalho (timbre) e rodapé também no Excel. O HTML do editor vira uma imagem (SVG foreignObject →
+  // canvas → PNG), que entra como figura acima da planilha e abaixo da última linha, nas abas do orçamento e da
+  // memória de cálculo. As linhas descem para abrir espaço (fórmulas, mesclagens e filtros acompanham); as linhas
+  // da figura ficam vazias, então o "Importar Backup XLSX" continua achando o cabeçalho da tabela.
+  var LARG = 900; // px da figura (cabe nas colunas A..J do orçamento)
+  function abaAlvo(nome){ var n = String(nome||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase(); return /^orcamento/.test(n) || /memoria/.test(n); }
+
+  function htmlParaPng(html){
+    return new Promise(function(ok, falha){
+      var box = document.createElement('div');
+      box.style.cssText = 'position:fixed;left:-10000px;top:0;width:'+LARG+'px;padding:6px 10px;box-sizing:border-box;background:#fff;color:#0f172a;font-family:Arial,sans-serif;font-size:12px;line-height:1.35';
+      box.className = 'rel-cabecalho'; box.innerHTML = html;
+      box.querySelectorAll('img').forEach(function(i){ i.style.maxWidth = '100%'; });
+      document.body.appendChild(box);
+      var imgs = Array.prototype.slice.call(box.querySelectorAll('img'));
+      Promise.all(imgs.map(function(i){ return i.complete ? 0 : new Promise(function(r){ i.onload = i.onerror = r; }); })).then(function(){
+        var h = Math.ceil(box.getBoundingClientRect().height);
+        var xhtml = new XMLSerializer().serializeToString(box);
+        box.remove();
+        var css = '<style>table{border-collapse:collapse;width:100%}td{border:0;padding:2px 4px;vertical-align:middle}p{margin:0 0 4px}ul{margin:2px 0 4px 18px;padding:0}hr{border:0;border-top:1.5px solid #0f172a}</style>';
+        var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+LARG+'" height="'+h+'"><foreignObject x="0" y="0" width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml">'+css+xhtml.replace(/position:\s*fixed;\s*left:\s*-10000px;\s*top:\s*0(px)?;?/,'')+'</div></foreignObject></svg>';
+        var img = new Image();
+        img.onload = function(){
+          try{
+            var esc = 2, cv = document.createElement('canvas'); cv.width = LARG*esc; cv.height = h*esc;
+            var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0,0,cv.width,cv.height); cx.scale(esc, esc); cx.drawImage(img, 0, 0);
+            var url = cv.toDataURL('image/png');
+            ok({ b64: url.split(',')[1], w: LARG, h: h });
+          }catch(e){ falha(e); }
+        };
+        img.onerror = function(){ falha(new Error('não consegui desenhar o cabeçalho')); };
+        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      });
+    });
+  }
+
+  // ---- desce as linhas da aba ----
+  function moverRefs(f, n){
+    return String(f).replace(/(^|[^A-Za-z0-9_.!$'"])(\$?)([A-Z]{1,3})(\$?)(\d+)(?![\d(A-Za-z_])/g, function(m, pre, d1, col, d2, row){ return pre + d1 + col + d2 + (Number(row) + n); });
+  }
+  function descerAba(ws, n){
+    if(!n) return;
+    var U = XLSX.utils, novo = {};
+    Object.keys(ws).forEach(function(k){
+      if(k.charAt(0) === '!'){ return; }
+      var a = U.decode_cell(k), c = ws[k];
+      if(c && c.f) c.f = moverRefs(c.f, n);
+      novo[U.encode_cell({r:a.r+n, c:a.c})] = c; delete ws[k];
+    });
+    Object.keys(novo).forEach(function(k){ ws[k] = novo[k]; });
+    if(ws['!ref']){ var r = U.decode_range(ws['!ref']); r.s.r = 0; r.e.r += n; ws['!ref'] = U.encode_range(r); }
+    if(ws['!merges']) ws['!merges'].forEach(function(m){ m.s.r += n; m.e.r += n; });
+    if(ws['!autofilter'] && ws['!autofilter'].ref){ var af = U.decode_range(ws['!autofilter'].ref); af.s.r += n; af.e.r += n; ws['!autofilter'].ref = U.encode_range(af); }
+    if(ws['!rows']){ var rr = ws['!rows']; ws['!rows'] = new Array(n).concat(rr); }
+  }
+  function reservarLinhas(ws, ini, qtd){
+    ws['!rows'] = ws['!rows'] || [];
+    for(var i=0;i<qtd;i++) ws['!rows'][ini+i] = { hpx: 20 };
+  }
+
+  // ---- figura no arquivo xlsx (drawing) ----
+  function txt(u8){ return new TextDecoder('utf-8').decode(u8); }
+  function u8(t){ return new TextEncoder().encode(t); }
+  function b64u8(b){ var s = atob(b), a = new Uint8Array(s.length); for(var i=0;i<s.length;i++) a[i] = s.charCodeAt(i); return a; }
+  function anchor(id, nome, row, w, h){
+    var emu = 9525;
+    return '<xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>'+row+'</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>' +
+      '<xdr:ext cx="'+(w*emu)+'" cy="'+(h*emu)+'"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="'+(id+1)+'" name="'+nome+'"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>' +
+      '<xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rIdImg'+id+'"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>' +
+      '<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+(w*emu)+'" cy="'+(h*emu)+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>';
+  }
+  function inserirFiguras(arr, figurasPorAba, nomes){
+    var CFB = XLSX.CFB, z = CFB.read(new Uint8Array(arr), {type:'array'});
+    function ler(p){ var f = CFB.find(z, p); return f ? txt(f.content) : null; }
+    function gravar(p, conteudo){ var f = CFB.find(z, p); if(f){ f.content = conteudo; f.size = conteudo.length; } else CFB.utils.cfb_add(z, p, conteudo); }
+    var tipos = ler('/[Content_Types].xml');
+    if(!/Extension="png"/.test(tipos)) tipos = tipos.replace('<Default Extension="xml"', '<Default Extension="png" ContentType="image/png"/><Default Extension="xml"');
+    var nMidia = 0, nDesenho = 0;
+    nomes.forEach(function(nome, idx){
+      var figs = figurasPorAba[nome]; if(!figs || !figs.length) return;
+      var folha = '/xl/worksheets/sheet'+(idx+1)+'.xml', xml = ler(folha); if(!xml || /<drawing /.test(xml)) return;
+      nDesenho++;
+      var rels = [], ancoras = [];
+      figs.forEach(function(f, k){
+        nMidia++; gravar('/xl/media/schueler_cab'+nMidia+'.png', b64u8(f.png.b64));
+        rels.push('<Relationship Id="rIdImg'+k+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/schueler_cab'+nMidia+'.png"/>');
+        ancoras.push(anchor(k, f.nome, f.linha, f.png.w, f.png.h));
+      });
+      gravar('/xl/drawings/schueler_desenho'+nDesenho+'.xml', u8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'+ancoras.join('')+'</xdr:wsDr>'));
+      gravar('/xl/drawings/_rels/schueler_desenho'+nDesenho+'.xml.rels', u8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+rels.join('')+'</Relationships>'));
+      tipos = tipos.replace('</Types>', '<Override PartName="/xl/drawings/schueler_desenho'+nDesenho+'.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');
+      var relsPath = '/xl/worksheets/_rels/sheet'+(idx+1)+'.xml.rels', srels = ler(relsPath);
+      var rel = '<Relationship Id="rIdSchuelerCab" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/schueler_desenho'+nDesenho+'.xml"/>';
+      if(srels) srels = srels.replace('</Relationships>', rel+'</Relationships>');
+      else srels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+rel+'</Relationships>';
+      gravar(relsPath, u8(srels));
+      if(!/xmlns:r=/.test(xml)) xml = xml.replace('<worksheet ', '<worksheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ');
+      var m = /<(legacyDrawing|legacyDrawingHF|picture|oleObjects|controls|webPublishItems|tableParts|extLst)[ >]|<\/worksheet>/.exec(xml);
+      xml = xml.slice(0, m.index) + '<drawing r:id="rIdSchuelerCab"/>' + xml.slice(m.index);
+      gravar(folha, u8(xml));
+    });
+    gravar('/[Content_Types].xml', u8(tipos));
+    return CFB.write(z, {fileType:'zip', type:'array', compression:true});
+  }
+  window._schuelerCabXlsx = { moverRefs: moverRefs, descerAba: descerAba, inserirFiguras: inserirFiguras, htmlParaPng: htmlParaPng };
+
+  async function gravarComCabecalho(orig, wb, nome, opts){
+    var cfg = window._cabecalhoRelatorio ? window._cabecalhoRelatorio() : null;
+    var abas = (wb && wb.SheetNames || []).filter(abaAlvo);
+    if(!cfg || !cfg.ativo || (!cfg.cab && !cfg.rod) || !abas.length || /\.(csv|xls)$/i.test(nome||'')) return orig.call(XLSX, wb, nome, opts);
+    var pngCab = null, pngRod = null;
+    try{
+      if(cfg.cab) pngCab = await htmlParaPng(cfg.cab);
+      if(cfg.rod) pngRod = await htmlParaPng(cfg.rod);
+    }catch(e){
+      console.error(e);
+      alert('Não consegui colocar o cabeçalho/rodapé no Excel neste navegador (' + (e && e.message || e) + '). O arquivo sai sem eles; no Word e no PDF eles continuam saindo.');
+      return orig.call(XLSX, wb, nome, opts);
+    }
+    var figuras = {};
+    abas.forEach(function(nomeAba){
+      var ws = wb.Sheets[nomeAba], figs = [];
+      if(pngCab){
+        var n = Math.ceil(pngCab.h / 20) + 1;
+        descerAba(ws, n); reservarLinhas(ws, 0, n);
+        figs.push({ nome: 'Cabeçalho', linha: 0, png: pngCab });
+      }
+      if(pngRod){
+        var U = XLSX.utils, r = ws['!ref'] ? U.decode_range(ws['!ref']) : {s:{r:0,c:0}, e:{r:0,c:0}};
+        var ini = r.e.r + 2, q = Math.ceil(pngRod.h / 20) + 1;
+        reservarLinhas(ws, ini, q);
+        r.e.r = ini + q - 1; ws['!ref'] = U.encode_range(r);
+        figs.push({ nome: 'Rodapé', linha: ini, png: pngRod });
+      }
+      figuras[nomeAba] = figs;
+    });
+    var arr = XLSX.write(wb, Object.assign({}, opts || {}, {type:'array', bookType:'xlsx'}));
+    var saida = inserirFiguras(arr, figuras, wb.SheetNames);
+    var blob = new Blob([saida], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome || 'Orcamento.xlsx';
+    document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 3000);
+  }
+  function instalar(){
+    if(typeof XLSX === 'undefined' || typeof XLSX.writeFile !== 'function' || !XLSX.CFB) return false;
+    if(XLSX.writeFile._schuelerCab) return true;
+    var orig = XLSX.writeFile;
+    var novo = function(wb, nome, opts){
+      gravarComCabecalho(orig, wb, nome, opts).catch(function(e){ console.error(e); alert('Erro ao gravar o Excel com cabeçalho: ' + (e && e.message || e) + '. Gravando sem cabeçalho.'); orig.call(XLSX, wb, nome, opts); });
+    };
+    novo._schuelerCab = true;
+    XLSX.writeFile = novo;
+    return true;
+  }
+  if(!instalar()){ var t = 0, iv = setInterval(function(){ if(instalar() || ++t > 120) clearInterval(iv); }, 500); }
 })();
 </script>
 <!-- FIM PATCH V1-02-42 -->
