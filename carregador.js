@@ -18,6 +18,8 @@ const PROG = me.dataset.prog, CAMPO = me.dataset.campo, PEDIDO = me.dataset.pedi
 const VOLTAR = '/' + PROG + '/';
 const PRINCIPAL = (location.hostname.replace(/^www\./, '') === 'totalcivil.com.br' ? '' : 'https://totalcivil.com.br') + '/';
 const CACHE_DB = 'tc-programas', CACHE_ST = 'programas';
+/* o mesmo texto em todas as telas de abertura (tela de entrada, carregador e véu do programa) */
+const AGUARDE = 'Baixando versão atualizada do programa e verificando login de acesso.';
 
 const esc = t => String(t == null ? '' : t).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const BT_PRINCIPAL = '<a href="' + PRINCIPAL + '">Página principal</a>';
@@ -30,6 +32,9 @@ function tela(titulo, texto, botoes){
     (botoes ? '<div class="bts">' + botoes + '</div>' : '') + '</div>';
   const s = q.querySelector('[data-sair]'); if(s) s.onclick = () => fb ? fb.auth.signOut(fb.a).then(() => location.href = PRINCIPAL) : (location.href = PRINCIPAL);
   const r = q.querySelector('[data-recarregar]'); if(r) r.onclick = () => location.reload();
+}
+function aguarde(){
+  document.getElementById('tc-trava').innerHTML = '<div class="cx"><p class="tc-msg">' + esc(AGUARDE) + '</p></div>';
 }
 function erro(det){
   tela('Não foi possível abrir o programa', 'Verifique a internet e tente de novo.<br><small>' + esc(det) + '</small>',
@@ -67,6 +72,52 @@ async function descompactar(gz){
   return await new Response(s).text();
 }
 
+/* ---- prepara o programa antes de abrir ----
+   1. Tira a "Atualização automática" (tc_versao) dos programas: o endereço agora
+      serve a tela de entrada, que muda a cada publicação, e ela recarregava a página
+      e repetia toda a abertura. Quem traz a versão nova é este carregador.
+   2. Põe um véu com o mesmo texto da tela de entrada por cima das telas de login
+      do próprio programa, até ele decidir o que mostrar (programa, escolha do
+      ambiente ou um aviso com botão). Assim só aparece uma tela ao abrir. */
+const VEU_CSS = 'html.tc-veu body{overflow:hidden!important}' +
+  'html.tc-veu::after{content:"' + AGUARDE + '";position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2147483647;' +
+  'box-sizing:border-box;width:min(440px,calc(100vw - 32px));padding:24px;background:#fff;border:1px solid #e3ded3;border-radius:14px;' +
+  'box-shadow:0 6px 24px rgba(0,0,0,.06),0 0 0 200vmax #F6F4EF;color:#1a2130;font:600 16px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;' +
+  'text-align:center;letter-spacing:0;text-transform:none;white-space:normal}';
+/* enquanto a função devolve true, a tela do programa ainda é a conferência do login dele */
+const ESPERA = {
+  pavimento:    'var a=document.getElementById("aviso-inicial");return vis(a)?/iniciando/.test(a.className):!(vis("#login")||vis("#splash"));',
+  intertravado: 'return !vis("#login")&&!vis("#app-content");',
+  orcamento:    'return vis("#authOverlay")&&(vis("#ocEsperaInicial")||vis("#ocCarregando"));'
+};
+const ESPERA_TRAVA = 'return R.classList.contains("tc-trava")&&!document.querySelector("#tc-trava a,#tc-trava button");';
+function veu(){
+  return '<style id="tc-veu-css">' + VEU_CSS + '</style><script>(function(){' +
+    'var R=document.documentElement;R.classList.add("tc-veu");' +
+    'function vis(e){if(typeof e==="string")e=document.querySelector(e);return !!e&&e.getClientRects().length>0&&getComputedStyle(e).visibility!=="hidden";}' +
+    'function esperando(){' + (ESPERA[PROG] || ESPERA_TRAVA) + '}' +
+    'var t0=Date.now(),ok=0;' +
+    'function tirar(){R.classList.remove("tc-veu");var c=document.getElementById("tc-veu-css");if(c)c.remove();}' +
+    'function ver(){var e=true;try{e=esperando();}catch(_){e=false;}ok=e?0:ok+1;if(ok>=2||Date.now()-t0>30000)tirar();else setTimeout(ver,120);}' +
+    'function comecar(){setTimeout(ver,120);}' +
+    'document.readyState==="loading"?document.addEventListener("DOMContentLoaded",comecar):comecar();' +
+    '})();</' + 'script>';
+}
+function semAutoAtualizacao(html){
+  let i;
+  while((i = html.indexOf('tc_versao:')) >= 0){
+    const a = html.lastIndexOf('<script', i), b = html.indexOf('</script>', i);
+    if(a < 0 || b < 0) break;
+    html = html.slice(0, a) + html.slice(b + 9);
+  }
+  return html;
+}
+function prepararPrograma(html){
+  html = semAutoAtualizacao(html);
+  const m = /<head[^>]*>/i.exec(html);
+  return m ? html.slice(0, m.index + m[0].length) + veu() + html.slice(m.index + m[0].length) : veu() + html;
+}
+
 /* ---- sem acesso: explica o motivo (mesmos textos da página principal) ---- */
 async function semAcesso(fs, d, u, ehAdmin){
   const ref = fs.doc(d, 'usuarios', u.uid);
@@ -88,7 +139,7 @@ async function entregar(fs, d){
   const {versao, partes} = meta.data();
   let gz = await lerCache(versao);
   if(!gz){
-    tela('Abrindo ' + NOME + '…', 'Baixando a versão mais nova.', '');
+    aguarde();
     const pedacos = await prazo(Promise.all(Array.from({length: partes}, (_, i) =>
       fs.getDoc(fs.doc(d, 'programas', PROG, 'partes', String(i))).then(s => s.data().d.toUint8Array()))), 120000);
     const total = pedacos.reduce((n, b) => n + b.length, 0);
@@ -123,6 +174,7 @@ async function entregar(fs, d){
     /* libera o Firebase para o programa iniciar o dele, com a mesma sessão */
     fb = null;
     await deleteApp(app).catch(() => {});
+    html = prepararPrograma(html);
     document.open(); document.write(html); document.close();
   }catch(e){ console.error('Carregador:', e); erro((e && e.message) || String(e)); }
 })();

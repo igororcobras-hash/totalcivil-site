@@ -38,6 +38,7 @@
       'background:#F6F4EF;color:#1a2130;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}' +
     '#tc-trava .cx{max-width:440px;width:100%;background:#fff;border:1px solid #e3ded3;border-radius:14px;padding:24px;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,.06)}' +
     '#tc-trava h2{margin:0 0 8px;font-size:19px}#tc-trava p{margin:0 0 16px;color:#4a5568}' +
+    '#tc-trava p.tc-msg{margin:0;color:#1a2130;font-weight:600;font-size:16px}' +
     '#tc-trava .bts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}' +
     '#tc-trava a,#tc-trava button{font:inherit;font-weight:600;border-radius:9px;padding:9px 16px;cursor:pointer;text-decoration:none;border:1px solid #b8410e}' +
     '#tc-trava a{background:#b8410e;color:#fff}#tc-trava button{background:#fff;color:#b8410e}';
@@ -48,6 +49,7 @@
   function tela(titulo, texto, botoes){
     function por(){
       if(!quadro){ quadro = document.createElement('div'); quadro.id = 'tc-trava'; document.body.appendChild(quadro); }
+      if(titulo == null){ quadro.innerHTML = '<div class="cx"><p class="tc-msg">' + esc(texto) + '</p></div>'; return; }
       quadro.innerHTML = '<div class="cx"><h2>' + esc(titulo) + '</h2>' + (texto ? '<p>' + texto + '</p>' : '') +
         (botoes ? '<div class="bts">' + botoes + '</div>' : '') + '</div>';
       var s = quadro.querySelector('[data-sair]'); if(s) s.onclick = sair;
@@ -73,7 +75,8 @@
   function prazo(p, ms){ return Promise.race([p, new Promise(function(_, rej){ setTimeout(function(){ rej(new Error('o servidor não respondeu a tempo')); }, ms); })]); }
   function paraData(v){ if(!v) return null; if(typeof v.toDate === 'function') return v.toDate(); var d = new Date(v); return isNaN(d.getTime()) ? null : d; }
 
-  tela('Verificando acesso…', '', '');
+  /* mesmo texto da tela de entrada do site */
+  tela(null, 'Baixando versão atualizada do programa e verificando login de acesso.', '');
 
   var cfg = window.FIREBASE_CONFIG;
   if(!CAMPO || !cfg || !cfg.apiKey){ erro('configuração de acesso ausente'); return; }

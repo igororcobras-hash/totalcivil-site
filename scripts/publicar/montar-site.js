@@ -45,13 +45,14 @@ body{margin:0;background:#F6F4EF;color:#1a2130;font:15px/1.5 system-ui,-apple-sy
 #tc-trava{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:16px}
 #tc-trava .cx{max-width:440px;width:100%;background:#fff;border:1px solid #e3ded3;border-radius:14px;padding:24px;text-align:center;box-shadow:0 6px 24px rgba(0,0,0,.06)}
 #tc-trava h2{margin:0 0 8px;font-size:19px}#tc-trava p{margin:0 0 16px;color:#4a5568}
+#tc-trava p.tc-msg{margin:0;color:#1a2130;font-weight:600;font-size:16px}
 #tc-trava .bts{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
 #tc-trava a,#tc-trava button{font:inherit;font-weight:600;border-radius:9px;padding:9px 16px;cursor:pointer;text-decoration:none;border:1px solid #b8410e}
 #tc-trava a{background:#b8410e;color:#fff}#tc-trava button{background:#fff;color:#b8410e}
 </style>
 </head>
 <body>
-<div id="tc-trava"><div class="cx"><h2>Verificando acesso…</h2></div></div>
+<div id="tc-trava"><div class="cx"><p class="tc-msg">Baixando versão atualizada do programa e verificando login de acesso.</p></div></div>
 <noscript><p style="text-align:center">Ative o JavaScript para usar o programa.</p></noscript>
 <script src="/firebase-config.js"></script>
 <script type="module" src="/carregador.js" data-prog="${p.prog}" data-campo="${p.campo}" data-pedido="${p.pedido}" data-nome="${esc(p.nome)}"></script>
