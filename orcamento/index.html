@@ -712,6 +712,7 @@ var MENU_CEL = [
     {r: 'Ver planilha como é exportada', a: function(){ abrirRelatorioCelular('planilha'); }},
     {r: 'Criar composição própria', a: clicar(botaoPorFuncao('abrirModalComp'))},
     {r: 'Cotação (quartis)', a: clicar(botaoPorFuncao('abrirModalCotacaoGeral'))},
+    {r: 'Cálculo dos valores', d: 'truncar ou arredondar (padrão: truncar em 2 casas)', a: function(){ window.escolherCalculoCelular(); }},
     {r: 'Atualizar data base de todos os itens', a: function(){
       var inp = document.getElementById('dataBaseTodos'); var v = prompt('Data base (MM/AAAA) para todos os itens:', inp ? inp.value : '');
       if (v === null) return; if (inp) inp.value = v; clicar(botaoPorFuncao('atualizarDataBaseTodos'))(); }}
@@ -1002,6 +1003,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
   <button class="btn btn-primary" onclick="document.getElementById('fileImportCodigos').click()" title="CSV/TXT/XLSX com CODIGO,DESCR,UNID,QTD ou só CODIGOS">📥 Importar Lista</button>
   <input type="text" id="dataBaseTodos" placeholder="ex.: 09/2026" title="Data base no formato MM/AAAA (ex.: 09/2026)" style="width:100px">
   <button class="btn btn-dark" onclick="atualizarDataBaseTodos()">Atualizar todas as Bases</button>
+  <span id="boxCalcArred" class="calc-arred" title="Como os valores do orçamento são calculados (preço com BDI, totais e Excel). Padrão: truncar em 2 casas decimais.">🧮 Cálculo: <select id="calcModo"><option value="truncar">Truncar</option><option value="arredondar">Arredondar</option></select> em <select id="calcCasas"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select> casas</span>
   <span style="width:1px;align-self:stretch;background:#cbd5e1;margin:0 2px"></span>
   <button class="btn btn-ghost" style="border:1px solid #26c6da" onclick="abrirConsolidacao()">📊 Consolidação</button>
   <button class="btn btn-ghost" style="border:1px solid #f59e0b" onclick="abrirModalCotacaoGeral()">📈 Cotação Quartis</button>
@@ -2217,7 +2219,7 @@ function exportXLSX(){
   wsData.push(['Data: ' + new Date().toLocaleDateString('pt-BR') + ' | BDI: ' + bdi + '% | Itens: ' + orc.filter(x=>x.tipo==='ITEM').length + ' | Base: ' + finalBase]);
   wsData.push([]);
   wsData.push(['ITEM','CÓDIGO','DESCRIÇÃO','UNID','QTD','CUSTO UNIT','BDI %','UNIT C/ BDI','TOTAL','TOTAL C/ BDI','MERCADO UNIT','MERCADO TOTAL','DIF','LOJA','LINK']);
-  function trunc2(v){ const n=Number(v)||0; const abs=Math.abs(n); const t=Math.floor(abs*100+1e-7)/100; return n<0?-t:t; }
+  function trunc2(v){ return window.truncar2(v); }
   let n=1; const linhasItem=[]; let primeiraLinhaItem=null, ultimaLinhaItem=null;
   orc.forEach(l=>{
     if(l.tipo==='TITULO'){ wsData.push(['', '', l.titulo.toUpperCase()]); return; }
@@ -2245,13 +2247,13 @@ function exportXLSX(){
     const addrUnitBDI=XLSX.utils.encode_cell({r:rIdx,c:7});
     const addrTot=XLSX.utils.encode_cell({r:rIdx,c:8});
     const addrTotBDI=XLSX.utils.encode_cell({r:rIdx,c:9});
-    if(ws[addrUnitBDI]) ws[addrUnitBDI].f=`TRUNC(F${row}*(1+G${row}/100),2)`;
-    if(ws[addrTot]) ws[addrTot].f=`E${row}*F${row}`;
-    if(ws[addrTotBDI]) ws[addrTotBDI].f=`TRUNC(E${row}*H${row},2)`;
+    if(ws[addrUnitBDI]) ws[addrUnitBDI].f=formulaCalc(`F${row}*(1+G${row}/100)`);
+    if(ws[addrTot]) ws[addrTot].f=formulaCalc(`E${row}*F${row}`);
+    if(ws[addrTotBDI]) ws[addrTotBDI].f=formulaCalc(`E${row}*H${row}`);
     if(temMercado){
       const addrTotM=XLSX.utils.encode_cell({r:rIdx,c:11});
       const addrDif=XLSX.utils.encode_cell({r:rIdx,c:12});
-      if(ws[addrTotM]) ws[addrTotM].f=`E${row}*K${row}`;
+      if(ws[addrTotM]) ws[addrTotM].f=formulaCalc(`E${row}*K${row}`);
       if(ws[addrDif]) ws[addrDif].f=`K${row}-F${row}`;
     }
   });
@@ -4422,18 +4424,31 @@ window.exportarConsolidacao=function(){
 
 // ---- OVERRIDE renderOrc para incluir BDI select e data base ----
 var _orig_renderOrc = window.renderOrc;
-// trunca (não arredonda) um valor em 2 casas decimais - usado em todos os cálculos monetários do orçamento
+// V1-02-43: regra de cálculo de todos os valores do orçamento, escolhida em "📁 Orçamento" > "Cálculo dos valores".
+// Padrão: TRUNCAR em 2 casas (só muda se o usuário escolher). Fica salva no navegador.
+window.calcConfig = (function(){
+  try{ var c = JSON.parse(localStorage.getItem('schueler_calc_arred_v1') || 'null');
+    if(c && (c.modo==='truncar' || c.modo==='arredondar') && c.casas>=0 && c.casas<=4) return {modo:c.modo, casas:Math.round(c.casas)}; }catch(e){}
+  return {modo:'truncar', casas:2};
+})();
+// trunca (ou arredonda, se o usuário escolheu) um valor nas casas decimais escolhidas (padrão: trunca em 2) - usado em todos os cálculos monetários do orçamento
 function truncar2(v){
   var n = Number(v);
   if(!isFinite(n)) return 0;
   var neg = n<0;
   var abs = Math.abs(n);
+  var cfg = window.calcConfig || {}, f = Math.pow(10, (cfg.casas>=0 && cfg.casas<=4) ? cfg.casas : 2);
   // soma um épsilon minúsculo antes de truncar, pra corrigir ruído de ponto flutuante
   // (ex: 1*36.66 pode virar 36.659999999999997 em JS, o que truncaria errado para 36.65)
-  var t = Math.floor(abs*100 + 1e-7)/100;
+  var t = (cfg.modo==='arredondar') ? Math.round(abs*f + 1e-7)/f : Math.floor(abs*f + 1e-7)/f;
   return neg ? -t : t;
 }
 window.truncar2 = truncar2;
+// a mesma regra numa fórmula do Excel: TRUNC(x,2) ou ROUND(x,2)
+window.formulaCalc = function(expr){
+  var cfg = window.calcConfig || {}, casas = (cfg.casas>=0 && cfg.casas<=4) ? cfg.casas : 2;
+  return (cfg.modo==='arredondar' ? 'ROUND(' : 'TRUNC(') + expr + ',' + casas + ')';
+};
 window.renderOrc = function(){
   // chama original mas depois injeta BDI select?
   if(_orig_renderOrc) {
@@ -7753,7 +7768,7 @@ setTimeout(inicializarBancoSco, 200);
     var sinOrig = origemMeta(window._sinapiImportMeta) || (window._sinapiImportMeta ? ('importado por você'+(window._sinapiImportMeta.importadoEm?' em '+window._sinapiImportMeta.importadoEm:'')) : 'embutido no programa');
     var scoOrig = origemMeta(window._scoImportMeta) || (window._scoImportMeta ? ('importado por você'+(window._scoImportMeta.importadoEm?' em '+window._scoImportMeta.importadoEm:'')) : 'embutido no programa');
     var geral = [
-      ['Versão do programa', 'V1-02-42'],
+      ['Versão do programa', 'V1-02-43'],
       ['Navegador', navegador()],
       ['Tela (largura)', window.innerWidth+' px'],
       ['Descompressão nativa (bancos embutidos)', window.DecompressionStream ? 'sim' : 'NÃO — atualize o navegador'],
@@ -8426,7 +8441,7 @@ setTimeout(inicializarBancoSco, 200);
     wsData.push([]);
     wsData.push(['ITEM','CÓDIGO','DESCRIÇÃO','UNID','QTD','CUSTO UNIT','BDI %','UNIT C/ BDI','TOTAL','TOTAL C/ BDI','MERCADO UNIT','MERCADO TOTAL','DIF','LOJA','LINK']);
     const headerIdx = wsData.length-1;
-    function trunc2(v){ const n=Number(v)||0; const abs=Math.abs(n); const t=Math.floor(abs*100+1e-7)/100; return n<0?-t:t; }
+    function trunc2(v){ return window.truncar2(v); }
     let n=1; const linhasItem=[]; let primeiraLinhaItem=null, ultimaLinhaItem=null;
     orc.forEach(l=>{
       if(l.tipo==='TITULO'){ wsData.push(['', '', String(l.titulo||'').toUpperCase()]); return; }
@@ -8454,13 +8469,13 @@ setTimeout(inicializarBancoSco, 200);
       const addrUnitBDI=XLSX.utils.encode_cell({r:rIdx,c:7});
       const addrTot=XLSX.utils.encode_cell({r:rIdx,c:8});
       const addrTotBDI=XLSX.utils.encode_cell({r:rIdx,c:9});
-      if(ws[addrUnitBDI]) ws[addrUnitBDI].f=`TRUNC(F${row}*(1+G${row}/100),2)`;
-      if(ws[addrTot]) ws[addrTot].f=`E${row}*F${row}`;
-      if(ws[addrTotBDI]) ws[addrTotBDI].f=`TRUNC(E${row}*H${row},2)`;
+      if(ws[addrUnitBDI]) ws[addrUnitBDI].f=formulaCalc(`F${row}*(1+G${row}/100)`);
+      if(ws[addrTot]) ws[addrTot].f=formulaCalc(`E${row}*F${row}`);
+      if(ws[addrTotBDI]) ws[addrTotBDI].f=formulaCalc(`E${row}*H${row}`);
       if(temMercado){
         const addrTotM=XLSX.utils.encode_cell({r:rIdx,c:11});
         const addrDif=XLSX.utils.encode_cell({r:rIdx,c:12});
-        if(ws[addrTotM]) ws[addrTotM].f=`E${row}*K${row}`;
+        if(ws[addrTotM]) ws[addrTotM].f=formulaCalc(`E${row}*K${row}`);
         if(ws[addrDif]) ws[addrDif].f=`K${row}-F${row}`;
       }
     });
@@ -9439,9 +9454,9 @@ window.distribuirBdiImportado = function(itens){
       }
       pintarLinha(saida, {font:{sz:10, bold:true}, fill:{fgColor:{rgb:'E0F2FE'}}});
       linhasItem.push(saida);
-      // valores em cache do TOTAL GERAL = o que as fórmulas dão (I = E*F; J = TRUNC(E*H,2))
+      // valores em cache do TOTAL GERAL = o que as fórmulas dão (I = TRUNC(E*F,2); J = TRUNC(E*H,2), ou ROUND se escolhido)
       var cE = ws[enc({r:saida, c:4})], cF = ws[enc({r:saida, c:5})], cJ = ws[enc({r:saida, c:9})];
-      somaI += (cE && cF && typeof cE.v==='number' && typeof cF.v==='number') ? cE.v*cF.v : 0;
+      somaI += (cE && cF && typeof cE.v==='number' && typeof cF.v==='number') ? truncar2(cE.v*cF.v) : 0;
       somaJ += (cJ && typeof cJ.v==='number') ? cJ.v : 0;
       saida++;
 
@@ -9714,6 +9729,7 @@ window.distribuirBdiImportado = function(itens){
   };
 
   var RE_LINHA_TOTAL = /^(sub-?\s*total|total|valor total|preco total|bdi)\b/;
+  var RE_FIM_ORC = /^(total geral|valor global|total global|total do orcamento|total da obra|valor total geral|valor total do orcamento|valor total da obra|preco total geral|resumo( do orcamento| geral)?$|quadro resumo)/;
   async function importarComMapaDeColunas(matrix, headerIdx, colMap){
     var parseNum = window.parseNumeroFlexivel;
     var dataRows = matrix.slice(headerIdx+1);
@@ -9731,6 +9747,7 @@ window.distribuirBdiImportado = function(itens){
     var mapFull={}; full.forEach(function(it){ mapFull[String(it.CODIGO).toUpperCase()]=it; });
 
     var importadosLista=[], importados=0, titulos=0, ignorados=0, naoEncontrados=[];
+    var fimOrc=false, ignoradosFim=0; // V1-02-43
     var dataBaseVal = (document.getElementById('dataBaseTodos')?document.getElementById('dataBaseTodos').value:'') || (document.getElementById('dataBaseEMOP')?document.getElementById('dataBaseEMOP').value:'');
 
     dataRows.forEach(function(r){
@@ -9738,9 +9755,19 @@ window.distribuirBdiImportado = function(itens){
       var codigo = colMap.codigo!=null && r[colMap.codigo]!=null ? String(r[colMap.codigo]).trim() : '';
       var descrArq = colMap.descr!=null && r[colMap.descr]!=null ? String(r[colMap.descr]).trim() : '';
       if(!codigo && !descrArq) return;
+      // V1-02-43: depois do TOTAL GERAL vêm resumo, composição do BDI, assinaturas... não são itens
+      // (antes entravam de novo no fim do orçamento, com o descritivo no lugar do código)
+      if(fimOrc){ ignoradosFim++; return; }
+      if((importados || titulos) && r.some(function(c){ return c!=null && c!=='' && RE_FIM_ORC.test(normTxt(String(c)).trim()); })){ fimOrc=true; ignorados++; return; }
+      // V1-02-43: na coluna do código veio um texto (ex.: "SERVIÇOS PRELIMINARES"): é descritivo, não código
+      var codigoEraTexto = false;
+      if(codigo && !/\d/.test(codigo) && /[A-Za-zÀ-ÿ]{3,}\s+[A-Za-zÀ-ÿ]{2,}/.test(codigo)){
+        if(!descrArq) descrArq = codigo;
+        codigo = ''; codigoEraTexto = true;
+      }
 
       // com a coluna ITEM marcada: linha sem código, quantidade e preço unitário = título
-      if(colMap.item!=null && !codigo && descrArq){
+      if((colMap.item!=null || codigoEraTexto) && !codigo && descrArq){
         var semQtd = colMap.qtd==null || vazio(r[colMap.qtd]);
         var semPreco = colMap.custo==null || vazio(r[colMap.custo]);
         if(semQtd && semPreco){
@@ -9821,9 +9848,10 @@ window.distribuirBdiImportado = function(itens){
     var msgBdi = (typeof window.distribuirBdiImportado==='function') ? window.distribuirBdiImportado(importadosLista) : '';
     if(typeof saveOrc==='function') saveOrc();
     if(typeof renderOrc==='function') renderOrc();
-    alert('Importação concluída: '+importados+' linha(s)'+msgBdi
-      + (titulos ? ' + '+titulos+' título(s)' : '')
+    alert('Importação concluída: '+importados+' linha(s)'
+      + (titulos ? ' + '+titulos+' título(s)' : '') + msgBdi
       + (ignorados ? '\n'+ignorados+' linha(s) de total/subtotal/BDI ignorada(s)' : '')
+      + (ignoradosFim ? '\n'+ignoradosFim+' linha(s) depois do TOTAL GERAL (resumo, BDI, assinaturas) não importada(s)' : '')
       + '\n'+(naoEncontrados.length?'Códigos não encontrados no catálogo (importados com os dados da própria planilha): '+naoEncontrados.slice(0,20).join(', ')+(naoEncontrados.length>20?'...':''):''));
   }
 })();
@@ -11929,7 +11957,7 @@ document.addEventListener('DOMContentLoaded', limparRestos);
       ocultar: document.querySelector('button[onclick="collapseAllOrc()"]'), diag: $('btnDiagComp'),
       abcCod: document.querySelector('button[onclick="abrirCurvaABC_Codigos()"]'), abcIns: document.querySelector('button[onclick="abrirCurvaABC_Insumos()"]'),
       backup: $('fileBackupXLSX') && $('fileBackupXLSX').closest('label'), fileLista: $('fileImportCodigos'), lista: botao('Importar Lista', P),
-      dataBase: $('dataBaseTodos'), atuBase: botao('Atualizar todas as Bases', P),
+      dataBase: $('dataBaseTodos'), atuBase: botao('Atualizar todas as Bases', P), calc: $('boxCalcArred'),
       comp: document.querySelector('button[onclick="abrirModalComp()"]'), cot: botao('Cotação Quartis', P), hist: botao('Histórico', P),
       bkp: $('btnBackupPasta'), bkpSt: $('statusBackupPasta'), exportar: $('boxExportXlsx'),
       nome: $('nomeOrcAtual'), dataEmop: $('dataBaseEMOP'), salvar: botao('Salvar', O), meus: botao('Meus Orcamentos', O), novo: botao('Novo', O),
@@ -11944,7 +11972,8 @@ document.addEventListener('DOMContentLoaded', limparRestos);
     mover(E.logo, r1);
     if(E.logo){ E.logo.addEventListener('mouseenter', M.dica = function(){ var s = $('dbName'); E.logo.title = s ? s.textContent : ''; }); }
     r1.appendChild(menu('📁 Orçamento', [novo(h('Orçamento')), E.salvar, E.meus, E.novo, novo(el('hr')), E.hist, E.bkp, E.bkpSt,
-      novo(el('hr')), novo(h('Data base de todos os itens')), novo(linha(E.dataBase, E.atuBase))]));
+      novo(el('hr')), novo(h('Data base de todos os itens')), novo(linha(E.dataBase, E.atuBase)),
+      novo(el('hr')), novo(h('Cálculo dos valores')), novo(linha(E.calc))]));
     r1.appendChild(menu('📥 Importar', [novo(h('Importar')), E.backup, E.lista, novo(el('hr')), novo(h('Atualizar bancos (arquivo do mês)')),
       novo(atalho(E.atuEmop, '🗂️ EMOP (XLSX mensal)')), novo(atalho(E.atuSin, '📥 SINAPI (XLSX oficial mensal)')), novo(atalho(E.atuSco, '📥 SCO (mensal)'))]));
     r1.appendChild(menu('📤 Exportar', [novo(h('Exportar orçamento')), E.exportar]));
@@ -12420,6 +12449,51 @@ document.addEventListener('DOMContentLoaded', limparRestos);
 })();
 </script>
 <!-- FIM PATCH V1-02-42 -->
+
+
+<!-- ==================== PATCH V1-02-43 - CÁLCULO DOS VALORES: truncar ou arredondar (padrão: truncar em 2 casas) ==================== -->
+<style>
+.calc-arred{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:#0f172a;white-space:nowrap}
+.calc-arred select{padding:3px 4px;border:1px solid #cbd5e1;border-radius:5px;font-size:10px;background:#fff}
+</style>
+<script>
+(function(){
+  var KEY = 'schueler_calc_arred_v1';
+  function cfg(){ return window.calcConfig || (window.calcConfig = {modo:'truncar', casas:2}); }
+  function texto(){ var c = cfg(); return (c.modo==='arredondar' ? 'Arredondar' : 'Truncar') + ' em ' + c.casas + ' casa' + (c.casas===1 ? '' : 's'); }
+  function mostrar(){
+    var m = document.getElementById('calcModo'), k = document.getElementById('calcCasas'), c = cfg();
+    if(m) m.value = c.modo; if(k) k.value = String(c.casas);
+  }
+  function aplicar(modo, casas){
+    var c = cfg();
+    c.modo = (modo==='arredondar') ? 'arredondar' : 'truncar';
+    c.casas = Math.max(0, Math.min(4, parseInt(casas, 10)));
+    if(isNaN(c.casas)) c.casas = 2;
+    try{ localStorage.setItem(KEY, JSON.stringify({modo:c.modo, casas:c.casas})); }catch(e){}
+    mostrar();
+    try{ if(typeof renderOrc==='function') renderOrc(); }catch(e){ console.error(e); }
+    var st = document.getElementById('statusOrc');
+    if(st){ st.textContent = '🧮 Cálculo dos valores: ' + texto(); setTimeout(function(){ if(st.textContent.indexOf('🧮 Cálculo')===0) st.textContent=''; }, 6000); }
+  }
+  document.addEventListener('change', function(e){
+    if(e.target && (e.target.id==='calcModo' || e.target.id==='calcCasas')){
+      aplicar(document.getElementById('calcModo').value, document.getElementById('calcCasas').value);
+    }
+  });
+  window.escolherCalculoCelular = function(){
+    var c = cfg();
+    var v = prompt('Cálculo dos valores (agora: ' + texto() + ').\nEscreva T para truncar ou A para arredondar, e as casas decimais. Ex.: T2 (padrão) ou A2.', (c.modo==='arredondar' ? 'A' : 'T') + c.casas);
+    if(v===null) return;
+    var m = /^\s*([TtAa])\s*(\d)?\s*$/.exec(v);
+    if(!m){ alert('Não entendi "' + v + '". Escreva T2 para truncar em 2 casas ou A2 para arredondar em 2 casas.'); return; }
+    aplicar(/[Aa]/.test(m[1]) ? 'arredondar' : 'truncar', m[2]!=null ? m[2] : 2);
+  };
+  window.aplicarCalculoValores = aplicar;
+  mostrar();
+})();
+</script>
+<!-- FIM PATCH V1-02-43 -->
 
 </body>
 </html>
