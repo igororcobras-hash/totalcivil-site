@@ -3636,7 +3636,7 @@ svgSecao = function (pvId, K, W = 1100) {
   s += tx(W - 20, 30, 'Escala 1:1 (horizontal = vertical)', {fs: 12, a: 'end', c: K.muted});
   const mh = d.mfH;
   s += `<polygon points="${X(-half)},${Y(zR(half) + mh)} ${X(-d.larg / 2)},${Y(zR(d.larg / 2) + mh)} ${X(-d.larg / 2)},${Y(zR(d.larg / 2))} ${X(0)},${Y(d.tp)} ${X(d.larg / 2)},${Y(zR(d.larg / 2))} ${X(d.larg / 2)},${Y(zR(d.larg / 2) + mh)} ${X(half)},${Y(zR(half) + mh)} ${X(half)},${H0} ${X(-half)},${H0}" fill="${K.soil}"/>`;
-  const Bpv = d.dpv + 2 * d.parede + 2 * c.valaFolga;
+  const Bpv = d.Bcava || (d.dpv + 2 * d.parede + 2 * c.valaFolga);
   s += `<polygon points="${X(-Bpv / 2)},${Y(zR(Bpv / 2))} ${X(0)},${Y(d.tp)} ${X(Bpv / 2)},${Y(zR(Bpv / 2))} ${X(Bpv / 2)},${Y(d.fundoVala)} ${X(-Bpv / 2)},${Y(d.fundoVala)}" fill="${K.reat}" stroke="${K.terr}" stroke-width="1.4" stroke-dasharray="7 4"/>`;
   if (d.tp - d.fundoVala > 1.25) [-1, 1].forEach(sd => { s += rc(X(sd * Bpv / 2) - (sd > 0 ? 0 : 5), Y(zR(Bpv / 2)), 5, Y(d.fundoVala) - Y(zR(Bpv / 2)), K.terr); });
   s += rc(X(-Bpv / 2), Y(d.fundoVala + c.berco), Bpv * sc, c.berco * sc, K.brita, K.ink, 0.6);
@@ -3718,8 +3718,8 @@ quadroSecao = function (pvId) {
   } else L.push(['Ø interno do PV / parede', 'Ø ' + fmt(d.dpv * 1000, 0) + ' mm / ' + fmt(d.parede * 100, 0) + ' cm']);
   L.push(['Tubo (' + d.t.id + ')', 'Ø ' + d.t.D + ' mm · ' + (d.t.mat || '')], ['Espessura da parede e', fmt(d.e * 1000, 0) + ' mm'], ['Ø externo', fmt(d.De * 1000, 0) + ' mm'],
     ['Cota inferior interna (CI)', fmt(d.ci, 3) + ' m'], ['Cota superior externa', fmt(ge, 3) + ' m'], ['Recobrimento', fmt(d.tp - ge, 2) + ' m'],
-    ['Largura da vala B (no tubo)', fmt(d.B, 2) + ' m (folga ' + fmt(c.valaFolga, 2) + ' m/lado)'], ['Berço', fmt(c.berco, 2) + ' m'], ['Fundo da vala no tubo', fmt(fvT, 3) + ' m'], ['Profundidade da vala no tubo', fmt(d.tp - fvT, 2) + ' m' + (d.tp - fvT > 1.25 ? ' (escorar)' : '')],
-    ['Escavação por metro de vala', fmt(d.B * (d.tp - fvT), 2) + ' m³/m'], ['Fundo da escavação no PV', fmt(d.fundoVala, 3) + ' m (largura ' + fmt(d.dpv + 2 * d.parede + 2 * c.valaFolga, 2) + ' m)']);
+    ['Largura da vala B (no tubo)', fmt(d.B, 2) + ' m (' + txtRegraVala() + ')'], ['Berço', fmt(c.berco, 2) + ' m'], ['Fundo da vala no tubo', fmt(fvT, 3) + ' m'], ['Profundidade da vala no tubo', fmt(d.tp - fvT, 2) + ' m' + (d.tp - fvT > 1.25 ? ' (escorar)' : '')],
+    ['Escavação por metro de vala', fmt(d.B * (d.tp - fvT), 2) + ' m³/m'], ['Fundo da escavação no PV', fmt(d.fundoVala, 3) + ' m (cava ' + fmt(d.Bcava || (d.dpv + 2 * d.parede + 2 * c.valaFolga), 2) + ' × ' + fmt(d.Bcava || (d.dpv + 2 * d.parede + 2 * c.valaFolga), 2) + ' m' + (d.cava ? ', folga ' + fmt(d.cava.f, 2) + ' m por lado — EMOP 4.a' : '') + ')']);
   L.push(['Meio-fio / sarjeta', ((MEIOFIO[d.rua.mf] || {}).nome || '—') + ' · espelho ' + fmt(d.mfH * 100, 0) + ' cm' + (d.sjW > 0 ? ' · sarjeta ' + fmt(d.sjW, 2) + ' m a ' + fmt(d.sjI * 100, 1) + ' %' : '')]);
   d.bls.forEach(b => { const pl = blPlano(d, b);
     L.push(['Boca-de-lobo ' + b.b.id + ' (' + (b.b.lado === 'D' ? 'direita' : 'esquerda') + ')', ((CAIXAS[b.b.modelo] || {}).nome || BLTIPOS[b.b.tipo].nome) + ' · caixa interna ' + fmt(b.larg, 2) + ' × ' + fmt(num(b.b.cxL) || 1, 2) + ' × prof. ' + fmt(b.prof, 2) + ' m · fundo ' + fmt(b.fundo, 3) + ' m · ' + (pl.caixa ? 'no plano do corte' : txtVista(pl))]);
@@ -4043,6 +4043,222 @@ tabelasMemoria = function () {
   if (em.length) T.push({nome: 'PVs EMOP', titulo: 'Poços de visita padrão EMOP — medidas e quantidades', head: ['PV', 'Câmara interna (m)', 'Altura interna (m)', 'Medida externa (m)', 'Laje de fundo e (m)', 'Laje da tampa e (m)', 'Chaminé anéis Ø0,60 (m)', 'Alvenaria de blocos 20 cm (m²)', 'Concreto laje de fundo (m³)', 'Concreto laje da tampa (m³)', 'Tampão FoFo Ø0,60 (un)', 'Medidas'],
     rows: em.map(p => { const m = R.pv[p.id].emop; return [p.id, m.L, m.Hi, m.L + 2 * m.parede, m.eF, m.eT, m.q.cham, m.q.alv, m.q.lajeF, m.q.lajeT, 1, m.Ldig || m.Hdig ? 'digitadas' : 'automáticas']; }),
     fm: ['@', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.00', '0.000', '0.000', '0', '@']});
+  return T;
+};
+</script>
+<script>
+/* =====================================================================
+   PATCH DR-02 (19/10/2026) — quantitativos pelos critérios da EMOP
+   (Critérios de Orientação e Determinação de Quantitativos Orçamentários
+   e de Medições, Categoria 03; Tabelas EMOP 2 e 3):
+   - 4.b  vala de galerias pluviais: largura no fundo = Ø externo + 0,60 m,
+          e + 0,10 m para cada metro de profundidade acima de 2,00 m;
+   - a)   escavação por faixas de profundidade (até 1,5 · 1,5–3 · 3–4,5 …);
+   - 4.a  cavas dos PVs e das caixas de ralo: folga de 0,25 m por lado até
+          0,50 m de profundidade, 0,50 m até 3,00 m e proporcional acima;
+   - 6.b  reaterro = volume da cava − volume das estruturas;
+   - 6.c  reaterro sem material: volume de material por m³ compactado
+          (Tabela 3 — conversão de volumes de terra) e bota-fora com
+          empolamento e peso no corte de 1,7 t/m³ (Tabela 2).
+   Inclui a vala dos ramais. A vala da rede vai de face a face das cavas.
+   ===================================================================== */
+const SOLOS = {
+  areia: {nome: 'Areia', solto: 1.11, compLocal: 1.05, compSolto: 1.17},
+  comum: {nome: 'Terra comum', solto: 1.25, compLocal: 1.11, compSolto: 1.39},
+  argila: {nome: 'Argila', solto: 1.43, compLocal: 1.11, compSolto: 1.59}
+};
+const GAMA_CORTE = 1.7;   // t/m³ — material de 1ª categoria "in situ" (Tabela EMOP 2)
+const FAIXAS = [[0, 1.5], [1.5, 3.0], [3.0, 4.5], [4.5, 6.0], [6.0, 99]];
+const FAIXA_NOME = ['até 1,50 m', '1,50 a 3,00 m', '3,00 a 4,50 m', '4,50 a 6,00 m', 'acima de 6,00 m'];
+const QCRIT = {valaRegra: 'emop', solo: 'comum', reaprov: 'sim'};
+const _defaultCrit1 = defaultCrit;
+defaultCrit = function () { return Object.assign(_defaultCrit1(), QCRIT); };
+const qc = () => { const c = P.crit || {}; return {emop: c.valaRegra !== 'fixa', solo: SOLOS[c.solo] ? c.solo : 'comum', reaprov: c.reaprov !== 'nao'}; };
+const folgaVala = () => 2 * (num(P.crit.valaFolga) > 0 ? num(P.crit.valaFolga) : 0.30);
+function bVala(De, h) { return De + folgaVala() + (qc().emop ? 0.10 * Math.max(0, h - 2) : 0); }
+function txtRegraVala() { return qc().emop ? 'EMOP 4.b: Ø ext. + ' + fmt(folgaVala(), 2) + ' m, + 0,10 m por metro acima de 2,00 m' : 'Ø ext. + ' + fmt(folgaVala(), 2) + ' m (folga fixa)'; }
+const folgaCava = h => h <= 0.5 ? 0.25 : h <= 3 ? 0.50 : 0.50 * h / 3;
+const camadas = (h, area) => FAIXAS.map(([a, b]) => area * Math.max(0, Math.min(h, b) - a));
+const somaF = (a, b) => a.map((x, k) => x + b[k]);
+Object.assign(HELP, {
+  'crit.valaRegra': 'Largura do fundo da vala de galerias de águas pluviais. EMOP (Critérios de Quantitativos, Categoria 03, item 4.b): até 2,00 m de profundidade, Ø externo do tubo + 0,60 m; acima de 2,00 m, soma-se 0,10 m para cada metro além dos 2,00 m (ex.: 4,00 m de profundidade e tubo de 0,20 m → 0,20 + 0,60 + 0,10 × 2 = 1,00 m). Vale para a rede e para os ramais.',
+  'crit.solo': 'Tipo de solo para converter volumes (Tabela EMOP 3 — fator de conversão dos volumes de terra): 1 m³ no corte vira 1,11 (areia), 1,25 (terra comum) ou 1,43 m³ (argila) solto; 1 m³ compactado exige 1,05 / 1,11 / 1,11 m³ no corte ou 1,17 / 1,39 / 1,59 m³ solto. O bota-fora usa 1,7 t/m³ no corte (Tabela EMOP 2, material de 1ª categoria).',
+  'crit.reaprov': 'Os itens de reaterro da EMOP não incluem o material (critério 6.c). Reaproveitar: o material escavado volta para o reaterro e só o excedente vai para bota-fora. Não reaproveitar: todo o escavado vai para bota-fora e o reaterro usa material de jazida (volume solto a adquirir).'
+});
+
+function quantEmop(res) {
+  const c = P.crit, Q = qc(), so = SOLOS[Q.solo], esp = +c.espF || 0.10, berco = +c.berco || 0;
+  const vala = (L, hA, hB, De) => {        // vala de paredes verticais, profundidade variando linearmente
+    const o = {V: 0, f: [0, 0, 0, 0, 0], Vb: 0, escor: 0, Bm: 0, hm: (hA + hB) / 2, L};
+    if (!(L > 0)) return o;
+    const n = 20, dL = L / n;
+    for (let k = 0; k < n; k++) { const h = hA + (hB - hA) * (k + 0.5) / n, B = bVala(De, h);
+      o.V += B * h * dL; o.f = somaF(o.f, camadas(h, B * dL)); o.Vb += B * berco * dL; o.Bm += B / n; if (h > 1.25) o.escor += 2 * h * dL; }
+    return o;
+  };
+  const tubo = (De, L) => Math.PI * De * De / 4 * Math.max(0, L);
+  /* cavas dos PVs (4.a) */
+  const cv = {};
+  P.pvs.forEach(pv => {
+    const r = res.pv[pv.id]; if (!r || !isNum(r.tp) || !isNum(r.fundo)) return;
+    let side, hBot, est;
+    if (r.emop) { const m = r.emop; side = m.L + 2 * m.parede; hBot = r.fundo - m.eF - berco; est = side * side * (m.eF + m.Hi + m.eT) + Math.PI * 0.38 * 0.38 * Math.max(0, m.hc || 0); }
+    else { const par = +c.pvParede || 0.15; side = (num(pv.dpv) || 1000) / 1000 + 2 * par; hBot = r.fundo - par - berco; est = Math.PI * side * side / 4 * (r.tp - (r.fundo - par)); }
+    const h = r.tp - hBot, f = folgaCava(h), lado = side + 2 * f;
+    cv[pv.id] = r.cava = {side, h, f, lado, V: lado * lado * h, fx: camadas(h, lado * lado), est, lastro: side * side * berco, escor: h > 1.25 ? 4 * lado * h : 0, stubs: 0};
+  });
+  /* rede tronco: de face a face das cavas */
+  const T = {V: 0, f: [0, 0, 0, 0, 0], Vb: 0, tubo: 0, reat: 0, escor: 0};
+  P.trechos.forEach(t => {
+    const r = res.tr[t.id]; if (!r || !(r.L > 0) || !isNum(r.tm) || !isNum(r.tj) || !isNum(r.cm) || !isNum(r.cj)) return;
+    const D = r.D / 1000, De = D * (1 + 2 * esp);
+    const hM = r.tm - r.cm + D * esp + berco, hJ = r.tj - r.cj + D * esp + berco;
+    const aM = cv[t.m] ? cv[t.m].lado / 2 : 0, aJ = cv[t.j] ? cv[t.j].lado / 2 : 0;
+    const Lv = Math.max(0, r.L - aM - aJ), hA = hM + (hJ - hM) * Math.min(1, aM / r.L), hB = hJ - (hJ - hM) * Math.min(1, aJ / r.L);
+    const o = vala(Lv, hA, hB, De), tb = tubo(De, Lv);
+    [[t.m, cv[t.m]], [t.j, cv[t.j]]].forEach(([id, k]) => { if (k) k.stubs += tubo(De, k.f) + De * berco * k.f; });
+    r.vala = {B: o.Bm, hM, hJ, V: o.V, L: Lv, Vb: o.Vb, f: o.f, escor: o.escor, tubo: tb, reat: Math.max(0, o.V - o.Vb - tb)};
+    T.V += o.V; T.f = somaF(T.f, o.f); T.Vb += o.Vb; T.tubo += tb; T.reat += r.vala.reat; T.escor += o.escor;
+  });
+  /* ramais e cavas das caixas de ralo */
+  const RM = {V: 0, f: [0, 0, 0, 0, 0], Vb: 0, tubo: 0, reat: 0, escor: 0, n: 0, sem: 0};
+  const CX = {V: 0, f: [0, 0, 0, 0, 0], est: 0, lastro: 0, reat: 0, escor: 0, n: 0};
+  const geo = {};
+  P.bls.forEach(b => {
+    if (!(b.pv in geo)) { const d = _dadosSecao0(b.pv); geo[b.pv] = d; }
+    const d = geo[b.pv], g = d && d.bls.find(x => x.b.id === b.id), k = cv[b.pv];
+    const prof = num(b.cxH) || +c.blProf || 1.0, bx = (num(b.cxB) || 0.6) + 0.20, by = (num(b.cxL) || 1.0) + 0.20;
+    const hcx = prof + 0.10 + berco, fc = folgaCava(hcx), Vcx = (bx + 2 * fc) * (by + 2 * fc) * hcx;
+    const cx = {V: Vcx, f: fc, h: hcx, B: Math.min(bx, by) + 2 * fc, est: bx * by * (prof + 0.10), lastro: bx * by * berco, escor: hcx > 1.25 ? 2 * ((bx + 2 * fc) + (by + 2 * fc)) * hcx : 0};
+    cx.reat = Math.max(0, Vcx - cx.est - cx.lastro);
+    CX.V += Vcx; CX.f = somaF(CX.f, camadas(hcx, (bx + 2 * fc) * (by + 2 * fc))); CX.est += cx.est; CX.lastro += cx.lastro; CX.reat += cx.reat; CX.n++; CX.escor += cx.escor;
+    const rb = res.bl[b.id]; if (rb) rb.cava = cx;
+    if (!g || !k) { RM.sem++; return; }
+    const D = g.rD, De = D * (1 + 2 * esp), Lr = Math.max(0, (num(b.rL) || 0) - fc - k.f);
+    const hA = g.topo - g.ciBL + D * esp + berco, hB = d.tp - g.ciPV + D * esp + berco;
+    const o = vala(Lr, hA, hB, De), tb = tubo(De, Lr);
+    k.stubs += tubo(De, k.f);
+    const reat = Math.max(0, o.V - o.Vb - tb);
+    if (rb) rb.vala = {L: Lr, V: o.V, B: o.Bm, hm: o.hm, Vb: o.Vb, reat, escor: o.escor};
+    RM.V += o.V; RM.f = somaF(RM.f, o.f); RM.Vb += o.Vb; RM.tubo += tb; RM.reat += reat; RM.escor += o.escor; RM.n++;
+  });
+  const PV = {V: 0, f: [0, 0, 0, 0, 0], est: 0, lastro: 0, reat: 0, escor: 0, n: 0};
+  Object.values(cv).forEach(k => { k.reat = Math.max(0, k.V - k.est - k.lastro - k.stubs); PV.V += k.V; PV.f = somaF(PV.f, k.fx); PV.est += k.est; PV.lastro += k.lastro; PV.reat += k.reat; PV.escor += k.escor; PV.n++; });
+  const esc = T.V + RM.V + PV.V + CX.V, reat = T.reat + RM.reat + PV.reat + CX.reat, bercoT = T.Vb + RM.Vb + PV.lastro + CX.lastro;
+  const usado = Q.reaprov ? Math.min(esc, reat * so.compLocal) : 0;      // m³ no corte que voltam ao reaterro
+  const bfCorte = Math.max(0, esc - usado);
+  res.quantEmop = {T, RM, PV, CX, esc, reat, berco: bercoT, escor: T.escor + RM.escor + PV.escor + CX.escor,
+    usado, bfCorte, bfSolto: bfCorte * so.solto, bfMassa: bfCorte * GAMA_CORTE, jazida: Q.reaprov ? 0 : reat * so.compSolto, solo: so, Q};
+  if (res.quant) { res.quant.escav = T.V; res.quant.berco = T.Vb; res.quant.reaterro = T.reat; }
+}
+const _calc1 = calc;
+calc = function () {
+  const res = _calc1.apply(this, arguments);
+  try { quantEmop(res); } catch (e) { console.error('Quantitativos EMOP:', e); }
+  return res;
+};
+const _dadosSecao1 = dadosSecao;
+dadosSecao = function (pvId) {
+  const d = _dadosSecao1(pvId); if (!d) return d;
+  d.B = bVala(d.De, d.tp - (d.ci - d.e - P.crit.berco));
+  const k = R && R.pv[pvId] && R.pv[pvId].cava; if (k) { d.cava = k; d.Bcava = k.lado; }
+  return d;
+};
+const _svgDetVala0 = svgDetalheVala;
+svgDetalheVala = function (pvId) {
+  const d = dadosSecao(pvId); if (!d) return '';
+  const old = P.crit.valaFolga; P.crit.valaFolga = +((d.B - d.De) / 2).toFixed(3);
+  try { return _svgDetVala0.apply(this, arguments); } finally { P.crit.valaFolga = old; }
+};
+
+/* orçamento estimado: rede, ramais e cavas pelos critérios EMOP */
+orcamento = function () {
+  const c = P.crit, cfg = custosCfg(), linhas = {};
+  const add = (k, q, nomeExtra) => { if (!(q > 0)) return; const p = preco(k); const L = linhas[k] || (linhas[k] = {k, p, q: 0, nome: nomeExtra}); L.q += q; };
+  const terra = (V, Vb, reat, h, B, escor) => { const hb = bandaH(h), wb = bandaB(B); add(`esc:${hb}:${wb}`, V); add('berco:' + (B < 1.5 ? 0 : 1), Vb); add(`reat:${hb}:${wb}`, reat); if (escor > 0) add(`escor:${hb}:${B < 1.5 ? 0 : 1}`, escor); };
+  P.trechos.forEach(t => {
+    const r = R.tr[t.id]; if (!r || !(r.L > 0)) return;
+    add('tubo:' + t.D, r.L);
+    if (r.vala) terra(r.vala.V, r.vala.Vb != null ? r.vala.Vb : r.vala.B * c.berco * r.L, r.vala.reat != null ? r.vala.reat : 0, (r.vala.hM + r.vala.hJ) / 2, r.vala.B, r.vala.escor != null ? r.vala.escor : 0);
+  });
+  P.bls.forEach(b => {
+    add('tubo:' + b.rD, num(b.rL) || 0); add(`bl:${b.tipo}:${b.constr || 'Pré-moldada'}`, 1);
+    const rb = R.bl[b.id]; if (!rb) return;
+    if (rb.vala) terra(rb.vala.V, rb.vala.Vb, rb.vala.reat, rb.vala.hm, rb.vala.B, rb.vala.escor);
+    if (rb.cava) { const k = rb.cava; terra(k.V, k.lastro, k.reat, k.h, k.B, k.escor); }
+  });
+  P.pvs.forEach(pv => {
+    const r = R.pv[pv.id]; if (!r || !isNum(r.prof)) return;
+    const ref = r.emop ? r.emop.L * 1000 : (num(pv.dpv) || 1000);
+    const d = [1000, 1200, 1500, 2000].find(x => x >= ref - 1e-6) || 2000;
+    const pb = preco('pvbase:' + d); add('pvbase:' + d, 1);
+    if (pb.src !== 'sco') add('pvacr:' + d, Math.max(0, r.prof - (pb.hBase || 1.35)));
+    if (r.cava) { const k = r.cava; terra(k.V, k.lastro, k.reat, k.h, k.lado, k.escor); }
+  });
+  const L = Object.values(linhas).map(x => Object.assign(x, {total: x.q * (x.p.preco || 0)}));
+  const ordem = ['tubo', 'esc', 'berco', 'reat', 'escor', 'pvbase', 'pvacr', 'bl'];
+  L.sort((a, b) => ordem.indexOf(a.k.split(':')[0]) - ordem.indexOf(b.k.split(':')[0]) || a.k.localeCompare(b.k, 'pt', {numeric: true}));
+  const sub = L.reduce((s, x) => s + x.total, 0), bdi = +cfg.bdi || 0;
+  return {linhas: L, sub, bdi, total: sub * (1 + bdi / 100), comBanco: Object.keys(cfg.precos || {}).length > 0};
+};
+
+/* quadro de quantitativos EMOP (tela, memorial e Excel) */
+function linhasQuantEmop() {
+  const q = R.quantEmop; if (!q) return null;
+  const fx = [['Vala da rede tronco (de face a face das cavas)', q.T.f], ['Vala dos ramais', q.RM.f], ['Cavas dos poços de visita', q.PV.f], ['Cavas das caixas de ralo', q.CX.f]];
+  const tot = fx.reduce((a, x) => somaF(a, x[1]), [0, 0, 0, 0, 0]);
+  const usa = FAIXAS.map((_, k) => tot[k] > 1e-6);
+  const outros = [
+    ['Escavação total no corte', 'm³', q.esc],
+    ['Berço / lastro de brita (rede, ramais, PVs e caixas)', 'm³', q.berco],
+    ['Reaterro compactado — volume da cava − volume das estruturas (6.b)', 'm³', q.reat],
+    ['Escoramento de vala e cava (profundidade > 1,25 m)', 'm²', q.escor],
+    q.Q.reaprov ? ['Material escavado reaproveitado no reaterro (no corte; × ' + fmt(q.solo.compLocal, 2) + ' por m³ compactado)', 'm³', q.usado] : ['Material de jazida para o reaterro (solto; × ' + fmt(q.solo.compSolto, 2) + ' por m³ compactado)', 'm³', q.jazida],
+    ['Bota-fora — volume no corte', 'm³', q.bfCorte],
+    ['Bota-fora — volume solto (empolamento × ' + fmt(q.solo.solto, 2) + ', ' + q.solo.nome.toLowerCase() + ')', 'm³', q.bfSolto],
+    ['Bota-fora — massa para transporte (' + fmt(GAMA_CORTE, 1) + ' t/m³ no corte)', 't', q.bfMassa]
+  ];
+  return {fx, tot, usa, outros};
+}
+function quantEmopHTML(print) {
+  const L = linhasQuantEmop(); if (!L) return '';
+  const cols = FAIXAS.map((_, k) => k).filter(k => L.usa[k]);
+  const td = 'class="td-num"';
+  const t1 = `<div class="tbl-wrap"><table><thead><tr><th>Escavação mecânica, 1ª categoria (m³) — por faixa de profundidade</th>${cols.map(k => `<th ${td}>${FAIXA_NOME[k]}</th>`).join('')}<th ${td}>Total</th></tr></thead><tbody>
+    ${L.fx.map(([n, f]) => `<tr><td>${esc(n)}</td>${cols.map(k => `<td ${td}>${fmt(f[k], 2)}</td>`).join('')}<td ${td}><b>${fmt(f.reduce((a, b) => a + b, 0), 2)}</b></td></tr>`).join('')}
+    <tr><td><b>Total</b></td>${cols.map(k => `<td ${td}><b>${fmt(L.tot[k], 2)}</b></td>`).join('')}<td ${td}><b>${fmt(L.tot.reduce((a, b) => a + b, 0), 2)}</b></td></tr></tbody></table></div>`;
+  const t2 = `<div class="tbl-wrap" style="margin-top:.6rem"><table><thead><tr><th>Item</th><th>Unid.</th><th ${td}>Quantidade</th></tr></thead><tbody>${L.outros.map(([n, u, v]) => `<tr><td>${esc(n)}</td><td>${u}</td><td ${td}><b>${fmt(v, 2)}</b></td></tr>`).join('')}</tbody></table></div>`;
+  const q = R.quantEmop;
+  const nota = `<p class="hint" style="font-size:.74rem;color:${print ? '#555' : 'var(--muted)'};margin-top:.5rem">Critérios de Quantitativos da EMOP, Categoria 03: escavação orçada por faixas de profundidade (item a); vala de galerias pluviais com ${txtRegraVala()} (item 4.b); cavas dos PVs e das caixas de ralo com folga de 0,25 m por lado até 0,50 m de profundidade, 0,50 m até 3,00 m e proporcional acima (item 4.a); reaterro pela diferença entre o volume da cava e o das estruturas (item 6.b), sem material (item 6.c). Conversão de volumes: ${q.solo.nome.toLowerCase()} (Tabela 3); bota-fora com ${fmt(GAMA_CORTE, 1)} t/m³ no corte (Tabela 2). Paredes verticais escoradas acima de 1,25 m. Material de 1ª categoria; para 2ª e 3ª categorias o fundo é igual à área da base (item 5).${q.RM.sem ? ' ' + q.RM.sem + ' ramal(is) sem cotas ficaram fora da vala dos ramais.' : ''}</p>`;
+  return t1 + t2 + nota;
+}
+const _vCustos1 = vCustos;
+vCustos = function () {
+  let h = _vCustos1.apply(this, arguments);
+  h = h.replace('Não inclui escavação de ramais e PVs, pavimentação, bota-fora, esgotamento,', 'Inclui escavação, berço, reaterro e escoramento da rede, dos ramais e das cavas dos PVs e das caixas de ralo, pelos critérios de quantitativos da EMOP. Não inclui pavimentação, bota-fora (quantidade no quadro abaixo), esgotamento,');
+  return h + `<div class="card"><h4>Quantitativos de movimento de terra — critérios EMOP</h4>
+    <div class="fgrid">
+      ${fld('crit.valaRegra', 'Largura da vala', {type: 'sel', opts: [['emop', 'EMOP: Ø ext. + 0,60 m, + 0,10 m/m acima de 2,00 m'], ['fixa', 'Folga fixa (Ø ext. + 2 × folga lateral)']], w2: true})}
+      ${fld('crit.solo', 'Tipo de solo (empolamento)', {type: 'sel', opts: Object.entries(SOLOS).map(([k, v]) => [k, v.nome])})}
+      ${fld('crit.reaprov', 'Material escavado no reaterro', {type: 'sel', opts: [['sim', 'Reaproveitar (excedente vai para bota-fora)'], ['nao', 'Não reaproveitar (reaterro com material de jazida)']], w2: true})}
+    </div>${quantEmopHTML(false)}</div>`;
+};
+const _memHTML0 = memorialHTML;
+memorialHTML = function (sel) {
+  let h = _memHTML0.apply(this, arguments);
+  if (sel && sel.quant && R.quantEmop) h = h.replace(/<p style="font-size:\.75rem;color:#555">Volumes de vala com paredes verticais[\s\S]*?<\/p>/,
+    `<p style="font-size:.75rem;color:#555">Escavação, berço e reaterro acima: só a vala da rede tronco (de face a face das cavas), ${esc(txtRegraVala())}. Ramais, cavas dos PVs e das caixas de ralo, bota-fora e empolamento no quadro seguinte.</p><h4 style="margin:.8rem 0 .3rem">Movimento de terra — critérios de quantitativos da EMOP</h4>${quantEmopHTML(true)}`);
+  return h;
+};
+const _tabMem1 = tabelasMemoria;
+tabelasMemoria = function () {
+  const T = _tabMem1.apply(this, arguments), L = linhasQuantEmop();
+  if (L) {
+    const rows = [];
+    L.fx.forEach(([n, f]) => FAIXAS.forEach((_, k) => { if (f[k] > 1e-6) rows.push(['Escavação mecânica 1ª cat. — ' + n + ' — ' + FAIXA_NOME[k], 'm³', f[k]]); }));
+    L.outros.forEach(([n, u, v]) => rows.push([n, u, v]));
+    T.push({nome: 'Movimento de terra EMOP', titulo: 'Movimento de terra — critérios de quantitativos da EMOP (' + txtRegraVala() + ')', head: ['Item', 'Unid.', 'Quantidade'], rows, fm: ['@', '@', '0.00']});
+  }
   return T;
 };
 </script>
