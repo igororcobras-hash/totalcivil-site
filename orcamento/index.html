@@ -65,6 +65,10 @@ tr:hover{background:#fffbeb}
 .row-title input{background:transparent;border:none;color:white;font-weight:800;width:100%;text-transform:uppercase;outline:none;font-size:11px}
 .qty,.price{width:110px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;text-align:right}
 .qty{width:150px} .price{width:130px}
+/* V1-02-39: no computador a caixa da quantidade acompanha a largura da coluna Qtd (que pode ser arrastada) */
+body:not(.mode-mobile) #tblOrc th.th-qtd{min-width:190px}
+body:not(.mode-mobile) #tblOrc td:has(> input.qty){white-space:nowrap}
+body:not(.mode-mobile) #tblOrc input.qty{width:calc(100% - 34px);min-width:48px;box-sizing:border-box}
 /* remove setas/spinners dos inputs number - usuário digita */
 input[type=number]::-webkit-outer-spin-button,
 input[type=number]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
@@ -996,8 +1000,8 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
   <span style="width:1px;align-self:stretch;background:#cbd5e1;margin:0 2px"></span>
   <input type="file" id="fileImportCodigos" accept=".csv,.txt,.xlsx,.xls">
   <button class="btn btn-primary" onclick="document.getElementById('fileImportCodigos').click()" title="CSV/TXT/XLSX com CODIGO,DESCR,UNID,QTD ou só CODIGOS">📥 Importar Lista</button>
-  <input type="text" id="dataBaseTodos" placeholder="Data base MM/AAAA" style="width:100px">
-  <button class="btn btn-dark" onclick="atualizarDataBaseTodos()">Atualizar Base Todos</button>
+  <input type="text" id="dataBaseTodos" placeholder="ex.: 09/2026" title="Data base no formato MM/AAAA (ex.: 09/2026)" style="width:100px">
+  <button class="btn btn-dark" onclick="atualizarDataBaseTodos()">Atualizar todas as Bases</button>
   <span style="width:1px;align-self:stretch;background:#cbd5e1;margin:0 2px"></span>
   <button class="btn btn-ghost" style="border:1px solid #26c6da" onclick="abrirConsolidacao()">📊 Consolidação</button>
   <button class="btn btn-ghost" style="border:1px solid #f59e0b" onclick="abrirModalCotacaoGeral()">📈 Cotação Quartis</button>
@@ -1083,7 +1087,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
       <select id="selPosInsert" class="select" style="font-size:9px;max-width:320px"></select>
       <span style="font-size:8px;color:#94a3b8">(clique no <b>#</b> da linha para escolher onde inserir; a lista avança sozinha após cada inserção; setas ↑↓ para ajustes)</span>
     </div>
-    <div class="wrap"><table id="tblOrc"><thead><tr><th style="width:24px">#</th><th style="min-width:80px">Código</th><th>Descrição</th><th>Un</th><th>Qtd</th><th>Unit</th><th style="background:#e0f2fe">BDI %</th><th style="background:#fef9c3">Unit c/ BDI</th><th>Total</th><th style="background:#e0f2fe;font-weight:800">Total c/ BDI</th><th style="background:#fffbeb;border-left:2px solid #f59e0b">Mercado 1 clique</th><th>Ações</th></tr></thead><tbody id="tbodyOrc"></tbody></table></div>
+    <div class="wrap"><table id="tblOrc"><thead><tr><th style="width:24px">#</th><th style="min-width:80px">Código</th><th>Descrição</th><th>Un</th><th class="th-qtd">Qtd</th><th>Unit</th><th style="background:#e0f2fe">BDI %</th><th style="background:#fef9c3">Unit c/ BDI</th><th>Total</th><th style="background:#e0f2fe;font-weight:800">Total c/ BDI</th><th style="background:#fffbeb;border-left:2px solid #f59e0b">Mercado 1 clique</th><th>Ações</th></tr></thead><tbody id="tbodyOrc"></tbody></table></div>
     <div class="footer"><div class="kpis"><div class="kpi"><label>Itens / Mercado</label><strong id="kItens">0</strong></div><div class="kpi"><label>Subtotal DIPR / Mercado</label><strong id="kSub">R$ 0,00</strong></div><div class="kpi"><label>BDI % e Total</label><div style="display:flex;gap:4px;align-items:center"><input id="bdi" type="number" class="qty" value="0" style="width:50px" onkeydown="handleTabQtd(event, this.dataset.id || this.getAttribute('data-id'))"><strong id="kTot">R$ 0,00</strong></div></div></div></div>
   </div>
 </div>
@@ -7697,7 +7701,7 @@ setTimeout(inicializarBancoSco, 200);
     var sinOrig = origemMeta(window._sinapiImportMeta) || (window._sinapiImportMeta ? ('importado por você'+(window._sinapiImportMeta.importadoEm?' em '+window._sinapiImportMeta.importadoEm:'')) : 'embutido no programa');
     var scoOrig = origemMeta(window._scoImportMeta) || (window._scoImportMeta ? ('importado por você'+(window._scoImportMeta.importadoEm?' em '+window._scoImportMeta.importadoEm:'')) : 'embutido no programa');
     var geral = [
-      ['Versão do programa', 'V1-02-38'],
+      ['Versão do programa', 'V1-02-39'],
       ['Navegador', navegador()],
       ['Tela (largura)', window.innerWidth+' px'],
       ['Descompressão nativa (bancos embutidos)', window.DecompressionStream ? 'sim' : 'NÃO — atualize o navegador'],
@@ -11833,7 +11837,7 @@ document.addEventListener('DOMContentLoaded', limparRestos);
       ocultar: document.querySelector('button[onclick="collapseAllOrc()"]'), diag: $('btnDiagComp'),
       abcCod: document.querySelector('button[onclick="abrirCurvaABC_Codigos()"]'), abcIns: document.querySelector('button[onclick="abrirCurvaABC_Insumos()"]'),
       backup: $('fileBackupXLSX') && $('fileBackupXLSX').closest('label'), fileLista: $('fileImportCodigos'), lista: botao('Importar Lista', P),
-      dataBase: $('dataBaseTodos'), atuBase: botao('Atualizar Base Todos', P),
+      dataBase: $('dataBaseTodos'), atuBase: botao('Atualizar todas as Bases', P),
       comp: document.querySelector('button[onclick="abrirModalComp()"]'), cot: botao('Cotação Quartis', P), hist: botao('Histórico', P),
       bkp: $('btnBackupPasta'), bkpSt: $('statusBackupPasta'), exportar: $('boxExportXlsx'),
       nome: $('nomeOrcAtual'), dataEmop: $('dataBaseEMOP'), salvar: botao('Salvar', O), meus: botao('Meus Orcamentos', O), novo: botao('Novo', O),
