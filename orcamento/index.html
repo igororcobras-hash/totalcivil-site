@@ -712,6 +712,7 @@ var MENU_CEL = [
     {r: 'Ver planilha como é exportada', a: function(){ abrirRelatorioCelular('planilha'); }},
     {r: 'Criar composição própria', a: clicar(botaoPorFuncao('abrirModalComp'))},
     {r: 'Cotação (quartis)', a: clicar(botaoPorFuncao('abrirModalCotacaoGeral'))},
+    {r: 'Cálculo dos valores', d: 'truncar ou arredondar (padrão: truncar em 2 casas)', a: function(){ window.escolherCalculoCelular(); }},
     {r: 'Atualizar data base de todos os itens', a: function(){
       var inp = document.getElementById('dataBaseTodos'); var v = prompt('Data base (MM/AAAA) para todos os itens:', inp ? inp.value : '');
       if (v === null) return; if (inp) inp.value = v; clicar(botaoPorFuncao('atualizarDataBaseTodos'))(); }}
@@ -1002,6 +1003,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
   <button class="btn btn-primary" onclick="document.getElementById('fileImportCodigos').click()" title="CSV/TXT/XLSX com CODIGO,DESCR,UNID,QTD ou só CODIGOS">📥 Importar Lista</button>
   <input type="text" id="dataBaseTodos" placeholder="ex.: 09/2026" title="Data base no formato MM/AAAA (ex.: 09/2026)" style="width:100px">
   <button class="btn btn-dark" onclick="atualizarDataBaseTodos()">Atualizar todas as Bases</button>
+  <span id="boxCalcArred" class="calc-arred" title="Como os valores do orçamento são calculados (preço com BDI, totais e Excel). Padrão: truncar em 2 casas decimais.">🧮 Cálculo: <select id="calcModo"><option value="truncar">Truncar</option><option value="arredondar">Arredondar</option></select> em <select id="calcCasas"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select> casas</span>
   <span style="width:1px;align-self:stretch;background:#cbd5e1;margin:0 2px"></span>
   <button class="btn btn-ghost" style="border:1px solid #26c6da" onclick="abrirConsolidacao()">📊 Consolidação</button>
   <button class="btn btn-ghost" style="border:1px solid #f59e0b" onclick="abrirModalCotacaoGeral()">📈 Cotação Quartis</button>
@@ -2217,7 +2219,7 @@ function exportXLSX(){
   wsData.push(['Data: ' + new Date().toLocaleDateString('pt-BR') + ' | BDI: ' + bdi + '% | Itens: ' + orc.filter(x=>x.tipo==='ITEM').length + ' | Base: ' + finalBase]);
   wsData.push([]);
   wsData.push(['ITEM','CÓDIGO','DESCRIÇÃO','UNID','QTD','CUSTO UNIT','BDI %','UNIT C/ BDI','TOTAL','TOTAL C/ BDI','MERCADO UNIT','MERCADO TOTAL','DIF','LOJA','LINK']);
-  function trunc2(v){ const n=Number(v)||0; const abs=Math.abs(n); const t=Math.floor(abs*100+1e-7)/100; return n<0?-t:t; }
+  function trunc2(v){ return window.truncar2(v); }
   let n=1; const linhasItem=[]; let primeiraLinhaItem=null, ultimaLinhaItem=null;
   orc.forEach(l=>{
     if(l.tipo==='TITULO'){ wsData.push(['', '', l.titulo.toUpperCase()]); return; }
@@ -2245,13 +2247,13 @@ function exportXLSX(){
     const addrUnitBDI=XLSX.utils.encode_cell({r:rIdx,c:7});
     const addrTot=XLSX.utils.encode_cell({r:rIdx,c:8});
     const addrTotBDI=XLSX.utils.encode_cell({r:rIdx,c:9});
-    if(ws[addrUnitBDI]) ws[addrUnitBDI].f=`TRUNC(F${row}*(1+G${row}/100),2)`;
-    if(ws[addrTot]) ws[addrTot].f=`E${row}*F${row}`;
-    if(ws[addrTotBDI]) ws[addrTotBDI].f=`TRUNC(E${row}*H${row},2)`;
+    if(ws[addrUnitBDI]) ws[addrUnitBDI].f=formulaCalc(`F${row}*(1+G${row}/100)`);
+    if(ws[addrTot]) ws[addrTot].f=formulaCalc(`E${row}*F${row}`);
+    if(ws[addrTotBDI]) ws[addrTotBDI].f=formulaCalc(`E${row}*H${row}`);
     if(temMercado){
       const addrTotM=XLSX.utils.encode_cell({r:rIdx,c:11});
       const addrDif=XLSX.utils.encode_cell({r:rIdx,c:12});
-      if(ws[addrTotM]) ws[addrTotM].f=`E${row}*K${row}`;
+      if(ws[addrTotM]) ws[addrTotM].f=formulaCalc(`E${row}*K${row}`);
       if(ws[addrDif]) ws[addrDif].f=`K${row}-F${row}`;
     }
   });
@@ -4422,18 +4424,31 @@ window.exportarConsolidacao=function(){
 
 // ---- OVERRIDE renderOrc para incluir BDI select e data base ----
 var _orig_renderOrc = window.renderOrc;
-// trunca (não arredonda) um valor em 2 casas decimais - usado em todos os cálculos monetários do orçamento
+// V1-02-43: regra de cálculo de todos os valores do orçamento, escolhida em "📁 Orçamento" > "Cálculo dos valores".
+// Padrão: TRUNCAR em 2 casas (só muda se o usuário escolher). Fica salva no navegador.
+window.calcConfig = (function(){
+  try{ var c = JSON.parse(localStorage.getItem('schueler_calc_arred_v1') || 'null');
+    if(c && (c.modo==='truncar' || c.modo==='arredondar') && c.casas>=0 && c.casas<=4) return {modo:c.modo, casas:Math.round(c.casas)}; }catch(e){}
+  return {modo:'truncar', casas:2};
+})();
+// trunca (ou arredonda, se o usuário escolheu) um valor nas casas decimais escolhidas (padrão: trunca em 2) - usado em todos os cálculos monetários do orçamento
 function truncar2(v){
   var n = Number(v);
   if(!isFinite(n)) return 0;
   var neg = n<0;
   var abs = Math.abs(n);
+  var cfg = window.calcConfig || {}, f = Math.pow(10, (cfg.casas>=0 && cfg.casas<=4) ? cfg.casas : 2);
   // soma um épsilon minúsculo antes de truncar, pra corrigir ruído de ponto flutuante
   // (ex: 1*36.66 pode virar 36.659999999999997 em JS, o que truncaria errado para 36.65)
-  var t = Math.floor(abs*100 + 1e-7)/100;
+  var t = (cfg.modo==='arredondar') ? Math.round(abs*f + 1e-7)/f : Math.floor(abs*f + 1e-7)/f;
   return neg ? -t : t;
 }
 window.truncar2 = truncar2;
+// a mesma regra numa fórmula do Excel: TRUNC(x,2) ou ROUND(x,2)
+window.formulaCalc = function(expr){
+  var cfg = window.calcConfig || {}, casas = (cfg.casas>=0 && cfg.casas<=4) ? cfg.casas : 2;
+  return (cfg.modo==='arredondar' ? 'ROUND(' : 'TRUNC(') + expr + ',' + casas + ')';
+};
 window.renderOrc = function(){
   // chama original mas depois injeta BDI select?
   if(_orig_renderOrc) {
@@ -4903,7 +4918,7 @@ setTimeout(function(){ if(typeof loadBdiConfig==='function') loadBdiConfig(); },
     }
     var mapFull={}; full.forEach(function(it){ mapFull[String(it.CODIGO).toUpperCase()]=it; });
 
-    var importados=0, naoEncontrados=[];
+    var importadosLista=[], importados=0, naoEncontrados=[];
     var dataBaseVal = (document.getElementById('dataBaseTodos')?document.getElementById('dataBaseTodos').value:'') || (document.getElementById('dataBaseEMOP')?document.getElementById('dataBaseEMOP').value:'');
 
     dataRows.forEach(function(r){
@@ -4985,13 +5000,15 @@ setTimeout(function(){ if(typeof loadBdiConfig==='function') loadBdiConfig(); },
         dataBase: dataBaseVal
       };
       if(typeof inserirNoOrc==='function') inserirNoOrc(novo); else orc.push(novo);
+      importadosLista.push(novo);
       importados++;
       if(!itCatalog && codU) naoEncontrados.push(codU);
     });
 
+    var msgBdi = (typeof window.distribuirBdiImportado==='function') ? window.distribuirBdiImportado(importadosLista) : '';
     if(typeof saveOrc==='function') saveOrc();
     if(typeof renderOrc==='function') renderOrc();
-    alert('Importação concluída: '+importados+' linha(s)\n'+(naoEncontrados.length?'Códigos não encontrados no catálogo (importados com os dados da própria planilha): '+naoEncontrados.slice(0,20).join(', ')+(naoEncontrados.length>20?'...':''):''));
+    alert('Importação concluída: '+importados+' linha(s)'+msgBdi+'\n'+(naoEncontrados.length?'Códigos não encontrados no catálogo (importados com os dados da própria planilha): '+naoEncontrados.slice(0,20).join(', ')+(naoEncontrados.length>20?'...':''):''));
   }
 
   // dispara a leitura assim que o usuário escolhe o arquivo no modal
@@ -7751,7 +7768,7 @@ setTimeout(inicializarBancoSco, 200);
     var sinOrig = origemMeta(window._sinapiImportMeta) || (window._sinapiImportMeta ? ('importado por você'+(window._sinapiImportMeta.importadoEm?' em '+window._sinapiImportMeta.importadoEm:'')) : 'embutido no programa');
     var scoOrig = origemMeta(window._scoImportMeta) || (window._scoImportMeta ? ('importado por você'+(window._scoImportMeta.importadoEm?' em '+window._scoImportMeta.importadoEm:'')) : 'embutido no programa');
     var geral = [
-      ['Versão do programa', 'V1-02-40'],
+      ['Versão do programa', 'V1-02-43'],
       ['Navegador', navegador()],
       ['Tela (largura)', window.innerWidth+' px'],
       ['Descompressão nativa (bancos embutidos)', window.DecompressionStream ? 'sim' : 'NÃO — atualize o navegador'],
@@ -8424,7 +8441,7 @@ setTimeout(inicializarBancoSco, 200);
     wsData.push([]);
     wsData.push(['ITEM','CÓDIGO','DESCRIÇÃO','UNID','QTD','CUSTO UNIT','BDI %','UNIT C/ BDI','TOTAL','TOTAL C/ BDI','MERCADO UNIT','MERCADO TOTAL','DIF','LOJA','LINK']);
     const headerIdx = wsData.length-1;
-    function trunc2(v){ const n=Number(v)||0; const abs=Math.abs(n); const t=Math.floor(abs*100+1e-7)/100; return n<0?-t:t; }
+    function trunc2(v){ return window.truncar2(v); }
     let n=1; const linhasItem=[]; let primeiraLinhaItem=null, ultimaLinhaItem=null;
     orc.forEach(l=>{
       if(l.tipo==='TITULO'){ wsData.push(['', '', String(l.titulo||'').toUpperCase()]); return; }
@@ -8452,13 +8469,13 @@ setTimeout(inicializarBancoSco, 200);
       const addrUnitBDI=XLSX.utils.encode_cell({r:rIdx,c:7});
       const addrTot=XLSX.utils.encode_cell({r:rIdx,c:8});
       const addrTotBDI=XLSX.utils.encode_cell({r:rIdx,c:9});
-      if(ws[addrUnitBDI]) ws[addrUnitBDI].f=`TRUNC(F${row}*(1+G${row}/100),2)`;
-      if(ws[addrTot]) ws[addrTot].f=`E${row}*F${row}`;
-      if(ws[addrTotBDI]) ws[addrTotBDI].f=`TRUNC(E${row}*H${row},2)`;
+      if(ws[addrUnitBDI]) ws[addrUnitBDI].f=formulaCalc(`F${row}*(1+G${row}/100)`);
+      if(ws[addrTot]) ws[addrTot].f=formulaCalc(`E${row}*F${row}`);
+      if(ws[addrTotBDI]) ws[addrTotBDI].f=formulaCalc(`E${row}*H${row}`);
       if(temMercado){
         const addrTotM=XLSX.utils.encode_cell({r:rIdx,c:11});
         const addrDif=XLSX.utils.encode_cell({r:rIdx,c:12});
-        if(ws[addrTotM]) ws[addrTotM].f=`E${row}*K${row}`;
+        if(ws[addrTotM]) ws[addrTotM].f=formulaCalc(`E${row}*K${row}`);
         if(ws[addrDif]) ws[addrDif].f=`K${row}-F${row}`;
       }
     });
@@ -9282,6 +9299,44 @@ setTimeout(inicializarBancoSco, 200);
 
 <!-- ==================== PATCH V1-02-27 - XLSX com as composições abertas + ITEM e CÓDIGO separados no "Importar Lista" ==================== -->
 <script>
+// V1-02-41: BDI numérico vindo do "Importar Lista" vai para os campos BDI do topo (maior → PRINCIPAL,
+// depois BDI1, BDI2, BDI3), em vez de ficar numa caixa "própria" ao lado de cada item.
+// 0,18 (célula de Excel em %) = 18%. Um valor que já está num campo reaproveita o campo; só campos
+// vazios (0) recebem valor novo, para não mudar o BDI dos itens que já estavam no orçamento.
+window.distribuirBdiImportado = function(itens){
+  var cfg = window.bdiConfig || (window.bdiConfig = {bdi1:0,bdi2:0,bdi3:0,principal:0});
+  var custom = (itens||[]).filter(function(it){ return it.bdiTipo==='CUSTOM'; });
+  if(!custom.length) return '';
+  function arred(v){ return Math.round(v*10000)/10000; }
+  custom.forEach(function(it){
+    var v = parseFloat(String(it.bdi).replace(',','.')) || 0;
+    if(v>0 && v<1) v = v*100;
+    it.bdi = arred(v);
+  });
+  var valores = [];
+  custom.forEach(function(it){ if(valores.indexOf(it.bdi)<0) valores.push(it.bdi); });
+  valores.sort(function(a,b){ return b-a; });
+  var slots = [['principal','PRINCIPAL'],['bdi1','BDI1'],['bdi2','BDI2'],['bdi3','BDI3']];
+  var tipoDe = {}, preenchidos = [], sobra = [];
+  valores.forEach(function(v){
+    if(v===0){ tipoDe[v]='ZERO'; return; }
+    var s = slots.find(function(x){ return arred(Number(cfg[x[0]])||0)===v; });
+    if(!s){
+      s = slots.find(function(x){ return !(Number(cfg[x[0]])>0); });
+      if(s){ cfg[s[0]] = v; preenchidos.push((s[1]==='PRINCIPAL'?'PRINCIPAL':s[1].replace('BDI','BDI '))+' = '+String(v).replace('.',',')+'%'); }
+    }
+    if(s) tipoDe[v] = s[1]; else sobra.push(String(v).replace('.',',')+'%');
+  });
+  custom.forEach(function(it){ if(tipoDe[it.bdi]){ it.bdiTipo = tipoDe[it.bdi]; it.bdi = tipoDe[it.bdi]==='ZERO' ? 0 : it.bdi; } });
+  if(preenchidos.length){
+    var el = {bdi1:'bdi1', bdi2:'bdi2', bdi3:'bdi3', principal:'bdiPrincipal'};
+    Object.keys(el).forEach(function(k){ var e = document.getElementById(el[k]); if(e) e.value = cfg[k] || ''; });
+    if(typeof window.saveBdiConfig==='function') window.saveBdiConfig();
+  }
+  return (preenchidos.length ? '\nBDI da planilha nos campos do topo: '+preenchidos.join(', ')+'.' : '')
+    + (sobra.length ? '\nBDI que não coube nos 4 campos (ficou próprio no item): '+sobra.join(', ')+'.' : '');
+};
+
 (function(){
   function normTxt(s){ return String(s==null?'':s).trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,''); }
   function vazio(v){ return v===null || v===undefined || String(v).trim()===''; }
@@ -9399,9 +9454,9 @@ setTimeout(inicializarBancoSco, 200);
       }
       pintarLinha(saida, {font:{sz:10, bold:true}, fill:{fgColor:{rgb:'E0F2FE'}}});
       linhasItem.push(saida);
-      // valores em cache do TOTAL GERAL = o que as fórmulas dão (I = E*F; J = TRUNC(E*H,2))
+      // valores em cache do TOTAL GERAL = o que as fórmulas dão (I = TRUNC(E*F,2); J = TRUNC(E*H,2), ou ROUND se escolhido)
       var cE = ws[enc({r:saida, c:4})], cF = ws[enc({r:saida, c:5})], cJ = ws[enc({r:saida, c:9})];
-      somaI += (cE && cF && typeof cE.v==='number' && typeof cF.v==='number') ? cE.v*cF.v : 0;
+      somaI += (cE && cF && typeof cE.v==='number' && typeof cF.v==='number') ? truncar2(cE.v*cF.v) : 0;
       somaJ += (cJ && typeof cJ.v==='number') ? cJ.v : 0;
       saida++;
 
@@ -9674,6 +9729,7 @@ setTimeout(inicializarBancoSco, 200);
   };
 
   var RE_LINHA_TOTAL = /^(sub-?\s*total|total|valor total|preco total|bdi)\b/;
+  var RE_FIM_ORC = /^(total geral|valor global|total global|total do orcamento|total da obra|valor total geral|valor total do orcamento|valor total da obra|preco total geral|resumo( do orcamento| geral)?$|quadro resumo)/;
   async function importarComMapaDeColunas(matrix, headerIdx, colMap){
     var parseNum = window.parseNumeroFlexivel;
     var dataRows = matrix.slice(headerIdx+1);
@@ -9690,7 +9746,8 @@ setTimeout(inicializarBancoSco, 200);
     }
     var mapFull={}; full.forEach(function(it){ mapFull[String(it.CODIGO).toUpperCase()]=it; });
 
-    var importados=0, titulos=0, ignorados=0, naoEncontrados=[];
+    var importadosLista=[], importados=0, titulos=0, ignorados=0, naoEncontrados=[];
+    var fimOrc=false, ignoradosFim=0; // V1-02-43
     var dataBaseVal = (document.getElementById('dataBaseTodos')?document.getElementById('dataBaseTodos').value:'') || (document.getElementById('dataBaseEMOP')?document.getElementById('dataBaseEMOP').value:'');
 
     dataRows.forEach(function(r){
@@ -9698,9 +9755,19 @@ setTimeout(inicializarBancoSco, 200);
       var codigo = colMap.codigo!=null && r[colMap.codigo]!=null ? String(r[colMap.codigo]).trim() : '';
       var descrArq = colMap.descr!=null && r[colMap.descr]!=null ? String(r[colMap.descr]).trim() : '';
       if(!codigo && !descrArq) return;
+      // V1-02-43: depois do TOTAL GERAL vêm resumo, composição do BDI, assinaturas... não são itens
+      // (antes entravam de novo no fim do orçamento, com o descritivo no lugar do código)
+      if(fimOrc){ ignoradosFim++; return; }
+      if((importados || titulos) && r.some(function(c){ return c!=null && c!=='' && RE_FIM_ORC.test(normTxt(String(c)).trim()); })){ fimOrc=true; ignorados++; return; }
+      // V1-02-43: na coluna do código veio um texto (ex.: "SERVIÇOS PRELIMINARES"): é descritivo, não código
+      var codigoEraTexto = false;
+      if(codigo && !/\d/.test(codigo) && /[A-Za-zÀ-ÿ]{3,}\s+[A-Za-zÀ-ÿ]{2,}/.test(codigo)){
+        if(!descrArq) descrArq = codigo;
+        codigo = ''; codigoEraTexto = true;
+      }
 
       // com a coluna ITEM marcada: linha sem código, quantidade e preço unitário = título
-      if(colMap.item!=null && !codigo && descrArq){
+      if((colMap.item!=null || codigoEraTexto) && !codigo && descrArq){
         var semQtd = colMap.qtd==null || vazio(r[colMap.qtd]);
         var semPreco = colMap.custo==null || vazio(r[colMap.custo]);
         if(semQtd && semPreco){
@@ -9773,15 +9840,18 @@ setTimeout(inicializarBancoSco, 200);
         dataBase: dataBaseVal
       };
       if(typeof inserirNoOrc==='function') inserirNoOrc(novo); else orc.push(novo);
+      importadosLista.push(novo);
       importados++;
       if(!itCatalog && codU) naoEncontrados.push(codU);
     });
 
+    var msgBdi = (typeof window.distribuirBdiImportado==='function') ? window.distribuirBdiImportado(importadosLista) : '';
     if(typeof saveOrc==='function') saveOrc();
     if(typeof renderOrc==='function') renderOrc();
     alert('Importação concluída: '+importados+' linha(s)'
-      + (titulos ? ' + '+titulos+' título(s)' : '')
+      + (titulos ? ' + '+titulos+' título(s)' : '') + msgBdi
       + (ignorados ? '\n'+ignorados+' linha(s) de total/subtotal/BDI ignorada(s)' : '')
+      + (ignoradosFim ? '\n'+ignoradosFim+' linha(s) depois do TOTAL GERAL (resumo, BDI, assinaturas) não importada(s)' : '')
       + '\n'+(naoEncontrados.length?'Códigos não encontrados no catálogo (importados com os dados da própria planilha): '+naoEncontrados.slice(0,20).join(', ')+(naoEncontrados.length>20?'...':''):''));
   }
 })();
@@ -11887,7 +11957,7 @@ document.addEventListener('DOMContentLoaded', limparRestos);
       ocultar: document.querySelector('button[onclick="collapseAllOrc()"]'), diag: $('btnDiagComp'),
       abcCod: document.querySelector('button[onclick="abrirCurvaABC_Codigos()"]'), abcIns: document.querySelector('button[onclick="abrirCurvaABC_Insumos()"]'),
       backup: $('fileBackupXLSX') && $('fileBackupXLSX').closest('label'), fileLista: $('fileImportCodigos'), lista: botao('Importar Lista', P),
-      dataBase: $('dataBaseTodos'), atuBase: botao('Atualizar todas as Bases', P),
+      dataBase: $('dataBaseTodos'), atuBase: botao('Atualizar todas as Bases', P), calc: $('boxCalcArred'),
       comp: document.querySelector('button[onclick="abrirModalComp()"]'), cot: botao('Cotação Quartis', P), hist: botao('Histórico', P),
       bkp: $('btnBackupPasta'), bkpSt: $('statusBackupPasta'), exportar: $('boxExportXlsx'),
       nome: $('nomeOrcAtual'), dataEmop: $('dataBaseEMOP'), salvar: botao('Salvar', O), meus: botao('Meus Orcamentos', O), novo: botao('Novo', O),
@@ -11902,7 +11972,8 @@ document.addEventListener('DOMContentLoaded', limparRestos);
     mover(E.logo, r1);
     if(E.logo){ E.logo.addEventListener('mouseenter', M.dica = function(){ var s = $('dbName'); E.logo.title = s ? s.textContent : ''; }); }
     r1.appendChild(menu('📁 Orçamento', [novo(h('Orçamento')), E.salvar, E.meus, E.novo, novo(el('hr')), E.hist, E.bkp, E.bkpSt,
-      novo(el('hr')), novo(h('Data base de todos os itens')), novo(linha(E.dataBase, E.atuBase))]));
+      novo(el('hr')), novo(h('Data base de todos os itens')), novo(linha(E.dataBase, E.atuBase)),
+      novo(el('hr')), novo(h('Cálculo dos valores')), novo(linha(E.calc))]));
     r1.appendChild(menu('📥 Importar', [novo(h('Importar')), E.backup, E.lista, novo(el('hr')), novo(h('Atualizar bancos (arquivo do mês)')),
       novo(atalho(E.atuEmop, '🗂️ EMOP (XLSX mensal)')), novo(atalho(E.atuSin, '📥 SINAPI (XLSX oficial mensal)')), novo(atalho(E.atuSco, '📥 SCO (mensal)'))]));
     r1.appendChild(menu('📤 Exportar', [novo(h('Exportar orçamento')), E.exportar]));
@@ -11987,6 +12058,442 @@ document.addEventListener('DOMContentLoaded', limparRestos);
 })();
 </script>
 <!-- FIM PATCH V1-02-37 -->
+
+<!-- ==================== PATCH V1-02-42 - CABEÇALHO (TIMBRE) E RODAPÉ: texto e imagens (como no Word) no Excel, Word e PDF ==================== -->
+<style>
+#cabModal{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:100000;display:none;align-items:center;justify-content:center;padding:12px}
+#cabModal.aberto{display:flex}
+#cabModal .cab-caixa{background:#fff;border-radius:12px;width:min(920px,100%);max-height:95vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.35);font-family:Arial,sans-serif}
+#cabModal .cab-topo{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#0f172a;color:#fff;border-radius:12px 12px 0 0;font-weight:800;font-size:13px}
+#cabModal .cab-topo button[data-c=fechar]{margin-left:auto;background:transparent;border:0;color:#fff;font-size:18px;cursor:pointer}
+#cabModal .cab-abas{display:flex;gap:4px;margin-left:12px}
+#cabModal .cab-aba{background:#334155;border:0;color:#e2e8f0;border-radius:6px;padding:4px 12px;font-weight:800;cursor:pointer;font-size:12px}
+#cabModal .cab-aba.ativa{background:#f59e0b;color:#0f172a}
+#cabModal .cab-barra{display:flex;flex-wrap:wrap;gap:4px;padding:8px 10px;border-bottom:1px solid #e2e8f0;background:#f8fafc;align-items:center}
+#cabModal .cab-barra button,#cabModal .cab-barra select,#cabModal .cab-barra label.cab-bt{min-width:30px;height:28px;padding:0 7px;border:1px solid #cbd5e1;border-radius:6px;background:#fff;cursor:pointer;font-size:12px;display:inline-flex;align-items:center;gap:4px;color:#0f172a}
+#cabModal .cab-barra button:hover,#cabModal .cab-barra label.cab-bt:hover{background:#fef3c7}
+#cabModal .cab-barra .cab-sep{width:1px;height:22px;background:#cbd5e1;margin:0 3px}
+#cabModal .cab-barra input[type=color]{width:30px;height:28px;padding:0 2px;border:1px solid #cbd5e1;border-radius:6px;background:#fff}
+#cabEditor{min-height:170px;max-height:52vh;overflow:auto;margin:12px 14px;padding:12px 16px;border:1px dashed #94a3b8;border-radius:8px;font-size:12px;line-height:1.35;color:#0f172a;outline:none}
+#cabEditor:empty:before{content:attr(data-vazio);color:#94a3b8}
+#cabEditor img{max-width:100%;cursor:pointer}
+#cabEditor img.cab-sel{outline:3px solid #f59e0b}
+#cabEditor table{border-collapse:collapse;width:100%}
+#cabEditor td{border:1px dotted #cbd5e1;padding:4px;vertical-align:middle}
+#cabModal .cab-rodape{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 14px;border-top:1px solid #e2e8f0}
+#cabModal .cab-rodape .cab-dica{font-size:10px;color:#64748b;flex:1;min-width:220px}
+#cabModal .cab-rodape button{padding:7px 12px;border-radius:7px;border:0;font-weight:800;cursor:pointer;font-size:12px}
+.rel-cabecalho table{border-collapse:collapse;width:100%}
+.rel-cabecalho td{border:0;padding:2px 4px;vertical-align:middle}
+</style>
+<script>
+(function(){
+  // O cabeçalho é do usuário (empresa, logotipo, contrato...): fica salvo neste navegador e entra no início do
+  // Word e do PDF ("exportarRelatorio"). Imagens vão como data URI; no Word o arquivo vira MHTML para o Word mostrar as imagens.
+  var KEY = 'schueler_cabecalho_rel_v1';
+  function ler(){ try{ var o = JSON.parse(localStorage.getItem(KEY) || 'null'); if(o && typeof o.html === 'string') return o; }catch(e){} return { html:'', rodape:'', ativo:true }; }
+  function gravar(o){
+    try{ localStorage.setItem(KEY, JSON.stringify(o)); return true; }
+    catch(e){ alert('Não foi possível salvar o cabeçalho: as imagens ocupam espaço demais no navegador. Use imagens menores ou menos imagens.'); return false; }
+  }
+  function limparHtml(h){
+    var d = document.createElement('div'); d.innerHTML = h || '';
+    d.querySelectorAll('script,style,iframe,object,embed,link,meta').forEach(function(n){ n.remove(); });
+    d.querySelectorAll('*').forEach(function(n){
+      n.classList.remove('cab-sel'); if(!n.getAttribute('class')) n.removeAttribute('class');
+      Array.prototype.slice.call(n.attributes).forEach(function(a){
+        if(/^on/i.test(a.name) || (/^(src|href)$/i.test(a.name) && /^\s*javascript:/i.test(a.value))) n.removeAttribute(a.name);
+      });
+    });
+    return d.innerHTML;
+  }
+  function temConteudo(h){ return /<img/i.test(h || '') || String(h || '').replace(/<[^>]*>|&nbsp;|\s/g, '') !== ''; }
+  window.cabecalhoRelatorioHtml = function(){
+    var c = ler();
+    return (c.ativo && temConteudo(c.html)) ? '<div class="rel-cabecalho">' + c.html + '</div><hr style="border:0;border-top:1.5px solid #0f172a;margin:8px 0 12px">' : '';
+  };
+  window.rodapeRelatorioHtml = function(){
+    var c = ler();
+    return (c.ativo && temConteudo(c.rodape)) ? '<hr style="border:0;border-top:1.5px solid #0f172a;margin:14px 0 8px"><div class="rel-cabecalho rel-rodape">' + c.rodape + '</div>' : '';
+  };
+  window._cabecalhoRelatorio = function(){ var c = ler(); return { ativo: c.ativo !== false, cab: temConteudo(c.html) ? c.html : '', rod: temConteudo(c.rodape) ? c.rodape : '' }; };
+
+  // ---- entra no Word e no PDF ----
+  var _docOrig = window.documentoRel;
+  if(typeof _docOrig === 'function'){
+    window.documentoRel = function(corpo){
+      var doc = _docOrig(window.cabecalhoRelatorioHtml() + corpo + window.rodapeRelatorioHtml());
+      return doc.replace('</style>', '.rel-cabecalho table{border-collapse:collapse;width:100%}.rel-cabecalho td{border:0;padding:2px 4px;vertical-align:middle}.rel-cabecalho img{max-width:100%}</style>');
+    };
+  }
+  var _expOrig = window.exportarRelatorio;
+  if(typeof _expOrig === 'function'){
+    window.exportarRelatorio = function(tipo, qual){
+      if(tipo !== 'word' || !/<img[^>]+src="data:/i.test(window.cabecalhoRelatorioHtml() + window.rodapeRelatorioHtml())) return _expOrig(tipo, qual);
+      // Word: MHTML (.doc) com as imagens como partes do arquivo
+      var doc = window.documentoRel(relatorioHtml(qual || 'tudo'));
+      var limite = '----=_SchuelerCab_' + Date.now(), partes = [], n = 0;
+      doc = doc.replace(/src="data:(image\/[a-z+.-]+);base64,([^"]+)"/gi, function(m, tipoImg, b64){
+        n++; var ext = (tipoImg.split('/')[1] || 'png').replace('jpeg', 'jpg').replace(/\+.*$/, '');
+        var loc = 'file:///C:/schueler_cab/imagem' + n + '.' + ext;
+        partes.push('--' + limite + '\r\nContent-Location: ' + loc + '\r\nContent-Transfer-Encoding: base64\r\nContent-Type: ' + tipoImg + '\r\n\r\n' + b64.replace(/(.{76})/g, '$1\r\n') + '\r\n');
+        return 'src="' + loc + '"';
+      });
+      var mht = 'MIME-Version: 1.0\r\nContent-Type: multipart/related; boundary="' + limite + '"; type="text/html"\r\n\r\n' +
+        '--' + limite + '\r\nContent-Location: file:///C:/schueler_cab/relatorio.htm\r\nContent-Transfer-Encoding: 8bit\r\nContent-Type: text/html; charset="utf-8"\r\n\r\n' + doc + '\r\n' +
+        partes.join('') + '--' + limite + '--\r\n';
+      var blob = new Blob([mht], {type: 'application/msword'});
+      var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nomeArquivoRel() + '.doc';
+      document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+    };
+  }
+
+  // ---- janela de edição ----
+  var imgSel = null;
+  function cmd(c, v){ document.getElementById('cabEditor').focus(); try{ document.execCommand('styleWithCSS', false, false); }catch(e){} document.execCommand(c, false, v); }
+  function reduzirImagem(file, cb){
+    var fr = new FileReader();
+    fr.onload = function(){
+      var img = new Image();
+      img.onload = function(){
+        var max = 900, w = img.naturalWidth, h = img.naturalHeight;
+        if(w <= max && file.size < 400000){ cb(fr.result, Math.min(w, 260)); return; }
+        var esc = Math.min(1, max / w), cv = document.createElement('canvas');
+        cv.width = Math.round(w * esc); cv.height = Math.round(h * esc);
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        var png = /png|gif|svg/i.test(file.type);
+        cb(cv.toDataURL(png ? 'image/png' : 'image/jpeg', 0.86), Math.min(cv.width, 260));
+      };
+      img.onerror = function(){ alert('Não consegui ler esta imagem.'); };
+      img.src = fr.result;
+    };
+    fr.readAsDataURL(file);
+  }
+  function selecionarImg(im){
+    document.querySelectorAll('#cabEditor img.cab-sel').forEach(function(x){ x.classList.remove('cab-sel'); });
+    imgSel = im || null; if(imgSel) imgSel.classList.add('cab-sel');
+    var st = document.getElementById('cabImgInfo'); if(st) st.textContent = imgSel ? ('Imagem: ' + Math.round(imgSel.getBoundingClientRect().width) + ' px') : '';
+  }
+  function tamanhoImg(f){
+    if(!imgSel){ alert('Clique primeiro na imagem que quer aumentar ou diminuir.'); return; }
+    var w = Math.max(30, Math.round(imgSel.getBoundingClientRect().width * f));
+    imgSel.style.width = w + 'px'; imgSel.style.height = 'auto'; imgSel.setAttribute('width', w); imgSel.removeAttribute('height');
+    selecionarImg(imgSel);
+  }
+  function montar(){
+    if(document.getElementById('cabModal')) return;
+    var m = document.createElement('div'); m.id = 'cabModal'; m.setAttribute('role', 'dialog');
+    m.innerHTML =
+      '<div class="cab-caixa">' +
+      '<div class="cab-topo">🧾 Cabeçalho e rodapé (Excel, Word e PDF)<span class="cab-abas"><button type="button" data-c="abaCab" class="cab-aba ativa">Cabeçalho</button><button type="button" data-c="abaRod" class="cab-aba">Rodapé</button></span><button type="button" data-c="fechar" title="Fechar">✕</button></div>' +
+      '<div class="cab-barra">' +
+        '<button type="button" data-c="bold" title="Negrito"><b>N</b></button>' +
+        '<button type="button" data-c="italic" title="Itálico"><i>I</i></button>' +
+        '<button type="button" data-c="underline" title="Sublinhado"><u>S</u></button>' +
+        '<select data-c="fontSize" title="Tamanho da letra"><option value="">Tamanho</option><option value="1">Muito pequeno</option><option value="2">Pequeno</option><option value="3">Normal</option><option value="4">Médio</option><option value="5">Grande</option><option value="6">Muito grande</option><option value="7">Enorme</option></select>' +
+        '<select data-c="fontName" title="Fonte"><option value="">Fonte</option><option>Arial</option><option>Calibri</option><option>Times New Roman</option><option>Verdana</option><option>Courier New</option></select>' +
+        '<input type="color" data-c="foreColor" value="#0f172a" title="Cor da letra">' +
+        '<span class="cab-sep"></span>' +
+        '<button type="button" data-c="justifyLeft" title="Alinhar à esquerda">⯇≡</button>' +
+        '<button type="button" data-c="justifyCenter" title="Centralizar">≡</button>' +
+        '<button type="button" data-c="justifyRight" title="Alinhar à direita">≡⯈</button>' +
+        '<button type="button" data-c="insertUnorderedList" title="Lista">• Lista</button>' +
+        '<span class="cab-sep"></span>' +
+        '<label class="cab-bt" title="Inserir imagem (logotipo, brasão...)">🖼️ Imagem<input type="file" id="cabArqImg" accept="image/*" style="display:none"></label>' +
+        '<button type="button" data-c="imgMenor" title="Diminuir a imagem selecionada">🔍−</button>' +
+        '<button type="button" data-c="imgMaior" title="Aumentar a imagem selecionada">🔍+</button>' +
+        '<button type="button" data-c="colunas" title="Duas colunas: imagem de um lado e texto do outro">▥ 2 colunas</button>' +
+        '<button type="button" data-c="linha" title="Linha horizontal">― Linha</button>' +
+        '<span class="cab-sep"></span>' +
+        '<button type="button" data-c="undo" title="Desfazer">↶</button>' +
+        '<button type="button" data-c="redo" title="Refazer">↷</button>' +
+        '<button type="button" data-c="removeFormat" title="Tirar a formatação do texto selecionado">⌫ Formatação</button>' +
+        '<span id="cabImgInfo" style="font-size:10px;color:#64748b;margin-left:4px"></span>' +
+      '</div>' +
+      '<div id="cabEditor" contenteditable="true" spellcheck="true" data-vazio="Digite aqui o cabeçalho: nome da empresa ou órgão, CNPJ, endereço, obra, contrato... Use 🖼️ Imagem para o logotipo."></div>' +
+      '<div class="cab-rodape">' +
+        '<label style="font-size:12px;font-weight:700;display:flex;align-items:center;gap:6px"><input type="checkbox" id="cabAtivo"> Incluir nas exportações</label>' +
+        '<span class="cab-dica">O cabeçalho (timbre) sai no início e o rodapé no fim do Excel, do Word e do PDF. Fica salvo neste navegador para os próximos orçamentos.</span>' +
+        '<button type="button" data-c="limpar" style="background:#fee2e2;color:#991b1b">Apagar</button>' +
+        '<button type="button" data-c="previa" style="background:#e0f2fe;color:#0c4a6e">Ver no PDF</button>' +
+        '<button type="button" data-c="salvar" style="background:#16a34a;color:#fff">Salvar</button>' +
+      '</div></div>';
+    document.body.appendChild(m);
+    var ed = document.getElementById('cabEditor');
+    m.addEventListener('mousedown', function(ev){ if(ev.target.closest('.cab-barra button')) ev.preventDefault(); });
+    m.addEventListener('click', function(ev){
+      if(ev.target === m){ fechar(); return; }
+      var im = ev.target.closest('#cabEditor img'); if(im){ selecionarImg(im); return; }
+      if(ev.target.closest('#cabEditor')) selecionarImg(null);
+      var b = ev.target.closest('button[data-c]'); if(!b) return;
+      var c = b.getAttribute('data-c');
+      if(c === 'abaCab' || c === 'abaRod'){ trocarAba(c === 'abaRod' ? 'rod' : 'cab'); return; }
+      if(c === 'fechar') fechar();
+      else if(c === 'salvar'){ if(salvar()) fechar(); }
+      else if(c === 'limpar'){ if(confirm('Apagar todo o cabeçalho?')){ ed.innerHTML = ''; selecionarImg(null); } }
+      else if(c === 'previa'){ if(salvar()) exportarRelatorio('pdf'); }
+      else if(c === 'imgMenor') tamanhoImg(0.85);
+      else if(c === 'imgMaior') tamanhoImg(1.18);
+      else if(c === 'colunas') cmd('insertHTML', '<table style="width:100%;border-collapse:collapse"><tr><td style="width:30%;vertical-align:middle">imagem aqui</td><td style="vertical-align:middle;text-align:center">texto aqui</td></tr></table><p><br></p>');
+      else if(c === 'linha') cmd('insertHTML', '<hr style="border:0;border-top:1.5px solid #0f172a"><p><br></p>');
+      else cmd(c);
+    });
+    m.addEventListener('change', function(ev){
+      var t = ev.target;
+      if(t.id === 'cabArqImg'){
+        var f = t.files && t.files[0]; t.value = ''; if(!f) return;
+        reduzirImagem(f, function(url, w){ cmd('insertHTML', '<img src="' + url + '" width="' + w + '" style="width:' + w + 'px;height:auto">'); });
+      } else if(t.matches('select[data-c]')){
+        if(t.value) cmd(t.getAttribute('data-c'), t.value); t.value = '';
+      } else if(t.matches('input[type=color][data-c]')) cmd('foreColor', t.value);
+    });
+    document.addEventListener('keydown', function(ev){ if(ev.key === 'Escape' && m.classList.contains('aberto')) fechar(); });
+  }
+  var aba = 'cab', rascunho = { cab:'', rod:'' };
+  var VAZIO = { cab: 'Digite aqui o cabeçalho (timbre): nome da empresa ou órgão, CNPJ, endereço, obra, contrato... Use 🖼️ Imagem para o logotipo.',
+    rod: 'Digite aqui o rodapé: endereço, telefone, e-mail, site, responsável técnico... Também aceita imagem.' };
+  function trocarAba(nova){
+    var ed = document.getElementById('cabEditor');
+    rascunho[aba] = ed.innerHTML; aba = nova; ed.innerHTML = rascunho[aba] || ''; ed.setAttribute('data-vazio', VAZIO[aba]);
+    document.querySelectorAll('#cabModal .cab-aba').forEach(function(b){ b.classList.toggle('ativa', b.getAttribute('data-c') === (aba === 'rod' ? 'abaRod' : 'abaCab')); });
+    selecionarImg(null); ed.focus();
+  }
+  function salvar(){
+    rascunho[aba] = document.getElementById('cabEditor').innerHTML;
+    var h = limparHtml(rascunho.cab), r = limparHtml(rascunho.rod);
+    return gravar({ html: temConteudo(h) ? h : '', rodape: temConteudo(r) ? r : '', ativo: document.getElementById('cabAtivo').checked, atualizadoEm: new Date().toISOString() });
+  }
+  function fechar(){ var m = document.getElementById('cabModal'); if(m) m.classList.remove('aberto'); selecionarImg(null); }
+  window.abrirCabecalhoRelatorio = function(){
+    montar();
+    var c = ler();
+    rascunho = { cab: c.html || '', rod: c.rodape || '' }; aba = 'cab';
+    var ed0 = document.getElementById('cabEditor'); ed0.innerHTML = rascunho.cab; ed0.setAttribute('data-vazio', VAZIO.cab);
+    document.querySelectorAll('#cabModal .cab-aba').forEach(function(b){ b.classList.toggle('ativa', b.getAttribute('data-c') === 'abaCab'); });
+    document.getElementById('cabAtivo').checked = c.ativo !== false;
+    document.getElementById('cabModal').classList.add('aberto');
+    setTimeout(function(){ document.getElementById('cabEditor').focus(); }, 50);
+  };
+
+  // ---- botão no Exportar (computador) e no menu do celular ----
+  function botao(){
+    var box = document.getElementById('boxExportXlsx'); if(!box || document.getElementById('btnCabecalhoRel')) return !!box;
+    var b = document.createElement('button'); b.type = 'button'; b.id = 'btnCabecalhoRel'; b.className = 'btn btn-dark';
+    b.textContent = '🧾 Cabeçalho'; b.title = 'Cabeçalho (timbre) e rodapé do Excel, do Word e do PDF: texto e imagens, como no Word';
+    b.onclick = function(){ window.abrirCabecalhoRelatorio(); };
+    box.appendChild(b); return true;
+  }
+  window.addEventListener('load', function(){ var n = 0; (function tenta(){ if(!botao() || !document.getElementById('btnPdfRel')){ if(++n < 20) setTimeout(tenta, 500); } else botao(); })(); });
+  try{
+    var g = (typeof MENU_CEL !== 'undefined') && MENU_CEL.find(function(x){ return /Exportar/.test(x.g); });
+    if(g && !g.itens.some(function(i){ return /Cabeçalho/.test(i.r); })) g.itens.push({ r: 'Cabeçalho e rodapé', d: 'timbre com texto e imagens no Excel, Word e PDF', a: function(){ window.abrirCabecalhoRelatorio(); } });
+  }catch(e){}
+})();
+</script>
+<script>
+(function(){
+  // V1-02-42: cabeçalho (timbre) e rodapé também no Excel. O HTML do editor vira uma imagem (SVG foreignObject →
+  // canvas → PNG), que entra como figura acima da planilha e abaixo da última linha, nas abas do orçamento e da
+  // memória de cálculo. As linhas descem para abrir espaço (fórmulas, mesclagens e filtros acompanham); as linhas
+  // da figura ficam vazias, então o "Importar Backup XLSX" continua achando o cabeçalho da tabela.
+  var LARG = 900; // px da figura (cabe nas colunas A..J do orçamento)
+  function abaAlvo(nome){ var n = String(nome||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase(); return /^orcamento/.test(n) || /memoria/.test(n); }
+
+  function htmlParaPng(html){
+    return new Promise(function(ok, falha){
+      var box = document.createElement('div');
+      box.style.cssText = 'position:fixed;left:-10000px;top:0;width:'+LARG+'px;padding:6px 10px;box-sizing:border-box;background:#fff;color:#0f172a;font-family:Arial,sans-serif;font-size:12px;line-height:1.35';
+      box.className = 'rel-cabecalho'; box.innerHTML = html;
+      box.querySelectorAll('img').forEach(function(i){ i.style.maxWidth = '100%'; });
+      document.body.appendChild(box);
+      var imgs = Array.prototype.slice.call(box.querySelectorAll('img'));
+      Promise.all(imgs.map(function(i){ return i.complete ? 0 : new Promise(function(r){ i.onload = i.onerror = r; }); })).then(function(){
+        var h = Math.ceil(box.getBoundingClientRect().height);
+        var xhtml = new XMLSerializer().serializeToString(box);
+        box.remove();
+        var css = '<style>table{border-collapse:collapse;width:100%}td{border:0;padding:2px 4px;vertical-align:middle}p{margin:0 0 4px}ul{margin:2px 0 4px 18px;padding:0}hr{border:0;border-top:1.5px solid #0f172a}</style>';
+        var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="'+LARG+'" height="'+h+'"><foreignObject x="0" y="0" width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml">'+css+xhtml.replace(/position:\s*fixed;\s*left:\s*-10000px;\s*top:\s*0(px)?;?/,'')+'</div></foreignObject></svg>';
+        var img = new Image();
+        img.onload = function(){
+          try{
+            var esc = 2, cv = document.createElement('canvas'); cv.width = LARG*esc; cv.height = h*esc;
+            var cx = cv.getContext('2d'); cx.fillStyle = '#fff'; cx.fillRect(0,0,cv.width,cv.height); cx.scale(esc, esc); cx.drawImage(img, 0, 0);
+            var url = cv.toDataURL('image/png');
+            ok({ b64: url.split(',')[1], w: LARG, h: h });
+          }catch(e){ falha(e); }
+        };
+        img.onerror = function(){ falha(new Error('não consegui desenhar o cabeçalho')); };
+        img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      });
+    });
+  }
+
+  // ---- desce as linhas da aba ----
+  function moverRefs(f, n){
+    return String(f).replace(/(^|[^A-Za-z0-9_.!$'"])(\$?)([A-Z]{1,3})(\$?)(\d+)(?![\d(A-Za-z_])/g, function(m, pre, d1, col, d2, row){ return pre + d1 + col + d2 + (Number(row) + n); });
+  }
+  function descerAba(ws, n){
+    if(!n) return;
+    var U = XLSX.utils, novo = {};
+    Object.keys(ws).forEach(function(k){
+      if(k.charAt(0) === '!'){ return; }
+      var a = U.decode_cell(k), c = ws[k];
+      if(c && c.f) c.f = moverRefs(c.f, n);
+      novo[U.encode_cell({r:a.r+n, c:a.c})] = c; delete ws[k];
+    });
+    Object.keys(novo).forEach(function(k){ ws[k] = novo[k]; });
+    if(ws['!ref']){ var r = U.decode_range(ws['!ref']); r.s.r = 0; r.e.r += n; ws['!ref'] = U.encode_range(r); }
+    if(ws['!merges']) ws['!merges'].forEach(function(m){ m.s.r += n; m.e.r += n; });
+    if(ws['!autofilter'] && ws['!autofilter'].ref){ var af = U.decode_range(ws['!autofilter'].ref); af.s.r += n; af.e.r += n; ws['!autofilter'].ref = U.encode_range(af); }
+    if(ws['!rows']){ var rr = ws['!rows']; ws['!rows'] = new Array(n).concat(rr); }
+  }
+  function reservarLinhas(ws, ini, qtd){
+    ws['!rows'] = ws['!rows'] || [];
+    for(var i=0;i<qtd;i++) ws['!rows'][ini+i] = { hpx: 20 };
+  }
+
+  // ---- figura no arquivo xlsx (drawing) ----
+  function txt(u8){ return new TextDecoder('utf-8').decode(u8); }
+  function u8(t){ return new TextEncoder().encode(t); }
+  function b64u8(b){ var s = atob(b), a = new Uint8Array(s.length); for(var i=0;i<s.length;i++) a[i] = s.charCodeAt(i); return a; }
+  function anchor(id, nome, row, w, h){
+    var emu = 9525;
+    return '<xdr:oneCellAnchor><xdr:from><xdr:col>0</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>'+row+'</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>' +
+      '<xdr:ext cx="'+(w*emu)+'" cy="'+(h*emu)+'"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="'+(id+1)+'" name="'+nome+'"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>' +
+      '<xdr:blipFill><a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="rIdImg'+id+'"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>' +
+      '<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="'+(w*emu)+'" cy="'+(h*emu)+'"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>';
+  }
+  function inserirFiguras(arr, figurasPorAba, nomes){
+    var CFB = XLSX.CFB, z = CFB.read(new Uint8Array(arr), {type:'array'});
+    function ler(p){ var f = CFB.find(z, p); return f ? txt(f.content) : null; }
+    function gravar(p, conteudo){ var f = CFB.find(z, p); if(f){ f.content = conteudo; f.size = conteudo.length; } else CFB.utils.cfb_add(z, p, conteudo); }
+    var tipos = ler('/[Content_Types].xml');
+    if(!/Extension="png"/.test(tipos)) tipos = tipos.replace('<Default Extension="xml"', '<Default Extension="png" ContentType="image/png"/><Default Extension="xml"');
+    var nMidia = 0, nDesenho = 0;
+    nomes.forEach(function(nome, idx){
+      var figs = figurasPorAba[nome]; if(!figs || !figs.length) return;
+      var folha = '/xl/worksheets/sheet'+(idx+1)+'.xml', xml = ler(folha); if(!xml || /<drawing /.test(xml)) return;
+      nDesenho++;
+      var rels = [], ancoras = [];
+      figs.forEach(function(f, k){
+        nMidia++; gravar('/xl/media/schueler_cab'+nMidia+'.png', b64u8(f.png.b64));
+        rels.push('<Relationship Id="rIdImg'+k+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/schueler_cab'+nMidia+'.png"/>');
+        ancoras.push(anchor(k, f.nome, f.linha, f.png.w, f.png.h));
+      });
+      gravar('/xl/drawings/schueler_desenho'+nDesenho+'.xml', u8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'+ancoras.join('')+'</xdr:wsDr>'));
+      gravar('/xl/drawings/_rels/schueler_desenho'+nDesenho+'.xml.rels', u8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+rels.join('')+'</Relationships>'));
+      tipos = tipos.replace('</Types>', '<Override PartName="/xl/drawings/schueler_desenho'+nDesenho+'.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/></Types>');
+      var relsPath = '/xl/worksheets/_rels/sheet'+(idx+1)+'.xml.rels', srels = ler(relsPath);
+      var rel = '<Relationship Id="rIdSchuelerCab" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/drawing" Target="../drawings/schueler_desenho'+nDesenho+'.xml"/>';
+      if(srels) srels = srels.replace('</Relationships>', rel+'</Relationships>');
+      else srels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+rel+'</Relationships>';
+      gravar(relsPath, u8(srels));
+      if(!/xmlns:r=/.test(xml)) xml = xml.replace('<worksheet ', '<worksheet xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" ');
+      var m = /<(legacyDrawing|legacyDrawingHF|picture|oleObjects|controls|webPublishItems|tableParts|extLst)[ >]|<\/worksheet>/.exec(xml);
+      xml = xml.slice(0, m.index) + '<drawing r:id="rIdSchuelerCab"/>' + xml.slice(m.index);
+      gravar(folha, u8(xml));
+    });
+    gravar('/[Content_Types].xml', u8(tipos));
+    return CFB.write(z, {fileType:'zip', type:'array', compression:true});
+  }
+  window._schuelerCabXlsx = { moverRefs: moverRefs, descerAba: descerAba, inserirFiguras: inserirFiguras, htmlParaPng: htmlParaPng };
+
+  async function gravarComCabecalho(orig, wb, nome, opts){
+    var cfg = window._cabecalhoRelatorio ? window._cabecalhoRelatorio() : null;
+    var abas = (wb && wb.SheetNames || []).filter(abaAlvo);
+    if(!cfg || !cfg.ativo || (!cfg.cab && !cfg.rod) || !abas.length || /\.(csv|xls)$/i.test(nome||'')) return orig.call(XLSX, wb, nome, opts);
+    var pngCab = null, pngRod = null;
+    try{
+      if(cfg.cab) pngCab = await htmlParaPng(cfg.cab);
+      if(cfg.rod) pngRod = await htmlParaPng(cfg.rod);
+    }catch(e){
+      console.error(e);
+      alert('Não consegui colocar o cabeçalho/rodapé no Excel neste navegador (' + (e && e.message || e) + '). O arquivo sai sem eles; no Word e no PDF eles continuam saindo.');
+      return orig.call(XLSX, wb, nome, opts);
+    }
+    var figuras = {};
+    abas.forEach(function(nomeAba){
+      var ws = wb.Sheets[nomeAba], figs = [];
+      if(pngCab){
+        var n = Math.ceil(pngCab.h / 20) + 1;
+        descerAba(ws, n); reservarLinhas(ws, 0, n);
+        figs.push({ nome: 'Cabeçalho', linha: 0, png: pngCab });
+      }
+      if(pngRod){
+        var U = XLSX.utils, r = ws['!ref'] ? U.decode_range(ws['!ref']) : {s:{r:0,c:0}, e:{r:0,c:0}};
+        var ini = r.e.r + 2, q = Math.ceil(pngRod.h / 20) + 1;
+        reservarLinhas(ws, ini, q);
+        r.e.r = ini + q - 1; ws['!ref'] = U.encode_range(r);
+        figs.push({ nome: 'Rodapé', linha: ini, png: pngRod });
+      }
+      figuras[nomeAba] = figs;
+    });
+    var arr = XLSX.write(wb, Object.assign({}, opts || {}, {type:'array', bookType:'xlsx'}));
+    var saida = inserirFiguras(arr, figuras, wb.SheetNames);
+    var blob = new Blob([saida], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome || 'Orcamento.xlsx';
+    document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 3000);
+  }
+  function instalar(){
+    if(typeof XLSX === 'undefined' || typeof XLSX.writeFile !== 'function' || !XLSX.CFB) return false;
+    if(XLSX.writeFile._schuelerCab) return true;
+    var orig = XLSX.writeFile;
+    var novo = function(wb, nome, opts){
+      gravarComCabecalho(orig, wb, nome, opts).catch(function(e){ console.error(e); alert('Erro ao gravar o Excel com cabeçalho: ' + (e && e.message || e) + '. Gravando sem cabeçalho.'); orig.call(XLSX, wb, nome, opts); });
+    };
+    novo._schuelerCab = true;
+    XLSX.writeFile = novo;
+    return true;
+  }
+  if(!instalar()){ var t = 0, iv = setInterval(function(){ if(instalar() || ++t > 120) clearInterval(iv); }, 500); }
+})();
+</script>
+<!-- FIM PATCH V1-02-42 -->
+
+
+<!-- ==================== PATCH V1-02-43 - CÁLCULO DOS VALORES: truncar ou arredondar (padrão: truncar em 2 casas) ==================== -->
+<style>
+.calc-arred{display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:#0f172a;white-space:nowrap}
+.calc-arred select{padding:3px 4px;border:1px solid #cbd5e1;border-radius:5px;font-size:10px;background:#fff}
+</style>
+<script>
+(function(){
+  var KEY = 'schueler_calc_arred_v1';
+  function cfg(){ return window.calcConfig || (window.calcConfig = {modo:'truncar', casas:2}); }
+  function texto(){ var c = cfg(); return (c.modo==='arredondar' ? 'Arredondar' : 'Truncar') + ' em ' + c.casas + ' casa' + (c.casas===1 ? '' : 's'); }
+  function mostrar(){
+    var m = document.getElementById('calcModo'), k = document.getElementById('calcCasas'), c = cfg();
+    if(m) m.value = c.modo; if(k) k.value = String(c.casas);
+  }
+  function aplicar(modo, casas){
+    var c = cfg();
+    c.modo = (modo==='arredondar') ? 'arredondar' : 'truncar';
+    c.casas = Math.max(0, Math.min(4, parseInt(casas, 10)));
+    if(isNaN(c.casas)) c.casas = 2;
+    try{ localStorage.setItem(KEY, JSON.stringify({modo:c.modo, casas:c.casas})); }catch(e){}
+    mostrar();
+    try{ if(typeof renderOrc==='function') renderOrc(); }catch(e){ console.error(e); }
+    var st = document.getElementById('statusOrc');
+    if(st){ st.textContent = '🧮 Cálculo dos valores: ' + texto(); setTimeout(function(){ if(st.textContent.indexOf('🧮 Cálculo')===0) st.textContent=''; }, 6000); }
+  }
+  document.addEventListener('change', function(e){
+    if(e.target && (e.target.id==='calcModo' || e.target.id==='calcCasas')){
+      aplicar(document.getElementById('calcModo').value, document.getElementById('calcCasas').value);
+    }
+  });
+  window.escolherCalculoCelular = function(){
+    var c = cfg();
+    var v = prompt('Cálculo dos valores (agora: ' + texto() + ').\nEscreva T para truncar ou A para arredondar, e as casas decimais. Ex.: T2 (padrão) ou A2.', (c.modo==='arredondar' ? 'A' : 'T') + c.casas);
+    if(v===null) return;
+    var m = /^\s*([TtAa])\s*(\d)?\s*$/.exec(v);
+    if(!m){ alert('Não entendi "' + v + '". Escreva T2 para truncar em 2 casas ou A2 para arredondar em 2 casas.'); return; }
+    aplicar(/[Aa]/.test(m[1]) ? 'arredondar' : 'truncar', m[2]!=null ? m[2] : 2);
+  };
+  window.aplicarCalculoValores = aplicar;
+  mostrar();
+})();
+</script>
+<!-- FIM PATCH V1-02-43 -->
 
 </body>
 </html>
