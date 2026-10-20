@@ -1005,7 +1005,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
   <button class="btn btn-dark" id="btnRelImport" onclick="abrirRelatorioImportacao()" title="Confere cada item importado com a planilha: preço, quantidade, unidade, BDI e total, e explica cada diferença">📋 Relatório da última importação</button>
   <input type="text" id="dataBaseTodos" placeholder="ex.: 09/2026" title="Data base no formato MM/AAAA (ex.: 09/2026)" style="width:100px">
   <button class="btn btn-dark" onclick="atualizarDataBaseTodos()">Atualizar todas as Bases</button>
-  <span id="boxCalcArred" class="calc-arred" title="Como os valores do orçamento são calculados (preço com BDI, totais e Excel). Padrão: truncar em 2 casas decimais.">🧮 Cálculo: <select id="calcModo"><option value="truncar">Truncar</option><option value="arredondar">Arredondar</option></select> em <select id="calcCasas"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select> casas</span>
+  <span id="boxCalcArred" class="calc-arred" title="Como os valores do orçamento são calculados (preço com BDI, totais e Excel). Padrão: truncar em 2 casas decimais.">🧮 Cálculo: <select id="calcModo"><option value="truncar">Truncar</option><option value="arredondar">Arredondar</option></select> em <select id="calcCasas"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select> casas <button type="button" id="calcAplicar" class="btn btn-dark" style="padding:3px 8px;font-size:10px" title="Aplica o critério escolhido em todo o orçamento">Aplicar</button></span>
   <span style="width:1px;align-self:stretch;background:#cbd5e1;margin:0 2px"></span>
   <button class="btn btn-ghost" style="border:1px solid #26c6da" onclick="abrirConsolidacao()">📊 Consolidação</button>
   <button class="btn btn-ghost" style="border:1px solid #f59e0b" onclick="abrirModalCotacaoGeral()">📈 Cotação Quartis</button>
@@ -4667,6 +4667,12 @@ setTimeout(function(){ if(typeof loadBdiConfig==='function') loadBdiConfig(); },
       <div id="areaMapeamentoImport" style="display:none;margin-top:12px">
         <div style="font-size:10px;color:#475569;margin:10px 0 6px"><b>3.</b> Para cada coluna (com o título real que você marcou acima), diga o que ela representa (ou "Não importar"):</div>
         <div id="tabelaMapeamentoImport" style="max-height:280px;overflow:auto;border:1px solid #e2e8f0;border-radius:8px"></div>
+        <div style="font-size:10px;color:#475569;margin:12px 0 6px"><b>4.</b> Como calcular (vale para todo o orçamento, igual ao 🧮 Cálculo do menu Orçamento):</div>
+        <div id="boxImpCalc" style="display:flex;flex-direction:column;gap:6px;font-size:10px;font-weight:700;color:#0f172a;border:1px solid #e2e8f0;border-radius:8px;padding:8px;background:#f8fafc">
+          <label title="Preço com BDI, totais e Excel do orçamento inteiro">🧮 Valores (preço com BDI e totais): <select id="impCalcModo"><option value="truncar">Truncar</option><option value="arredondar">Arredondar</option></select> em <select id="impCalcCasas"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select> casas</label>
+          <label title="Para planilhas com dízimas nas quantidades (ex.: 33,333333...)">📏 Quantidades da planilha: <select id="impQtdModo"><option value="manter">Manter como estão</option><option value="truncar">Truncar</option><option value="arredondar">Arredondar</option></select> em <select id="impQtdCasas"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select> casas</label>
+          <div style="font-weight:500;color:#64748b">Dica: escolha o mesmo critério da planilha de origem para os totais baterem. O relatório da importação mostra as quantidades que foram ajustadas.</div>
+        </div>
       </div>
       <div id="importListaStatus" style="font-size:10px;color:#334155;margin-top:8px"></div>
       <div style="display:flex;gap:8px;justify-content:flex-end;padding:12px 0 0">
@@ -4869,6 +4875,7 @@ setTimeout(function(){ if(typeof loadBdiConfig==='function') loadBdiConfig(); },
       document.getElementById('areaPreviaImport').style.display='block';
       document.getElementById('areaMapeamentoImport').style.display='block';
       document.getElementById('btnConfirmarImportLista').disabled=false;
+      if(typeof window.preencherOpcoesCalculoImport==='function') window.preencherOpcoesCalculoImport();
       var qtdLinhas = matrix.length-headerIdx-1;
       document.getElementById('importListaStatus').textContent = qtdLinhas+' linha(s) de dados a partir da linha '+(headerIdx+2)+'. Confira a linha de título marcada na prévia e o mapeamento das colunas, depois clique em IMPORTAR AGORA.';
     }catch(err){
@@ -9697,6 +9704,7 @@ window.distribuirBdiImportado = function(itens){
       document.getElementById('areaPreviaImport').style.display='block';
       document.getElementById('areaMapeamentoImport').style.display='block';
       document.getElementById('btnConfirmarImportLista').disabled=false;
+      if(typeof window.preencherOpcoesCalculoImport==='function') window.preencherOpcoesCalculoImport();
       var qtdLinhas = matrix.length-headerIdx-1;
       document.getElementById('importListaStatus').textContent = qtdLinhas+' linha(s) de dados a partir da linha '+(headerIdx+2)+'. Confira a linha de título marcada na prévia e o mapeamento das colunas, depois clique em IMPORTAR AGORA.';
     }catch(err){
@@ -9735,6 +9743,10 @@ window.distribuirBdiImportado = function(itens){
   async function importarComMapaDeColunas(matrix, headerIdx, colMap){
     var parseNum = window.parseNumeroFlexivel;
     var dataRows = matrix.slice(headerIdx+1);
+    // V1-02-45: critério de cálculo do orçamento e das quantidades escolhido na importação
+    var opCalc = (typeof window.lerOpcoesCalculoImport==='function') ? window.lerOpcoesCalculoImport() : null;
+    if(opCalc && typeof window.aplicarCalculoValores==='function') window.aplicarCalculoValores(opCalc.modo, opCalc.casas);
+    var ajustaQtd = (opCalc && opCalc.qtdModo!=='manter') ? function(q){ var f = Math.pow(10, opCalc.qtdCasas), a = Math.abs(q), t = opCalc.qtdModo==='arredondar' ? Math.round(a*f + 1e-7)/f : Math.floor(a*f + 1e-7)/f; return q<0 ? -t : t; } : function(q){ return q; };
     var full=null;
     // usa SEMPRE os 3 bancos juntos (EMOP+SINAPI+SCO) pra casar o código, independente da
     // "Fonte de dados" da tela (igual ao V1-02-05)
@@ -9796,7 +9808,8 @@ window.distribuirBdiImportado = function(itens){
       var qtdRaw = colMap.qtd!=null ? r[colMap.qtd] : null;
       // V1-02-44: quantidade 0 da planilha continua 0 (antes virava 1); vazia = 1 e aparece no relatório
       var qtdVazia = vazio(qtdRaw);
-      var qtd = qtdVazia ? 1 : parseNum(qtdRaw);
+      var qtdPlanOrig = qtdVazia ? null : parseNum(qtdRaw);
+      var qtd = qtdVazia ? 1 : ajustaQtd(qtdPlanOrig);
 
       // V1-02-44: o VALOR UNITÁRIO só vem da planilha quando a coluna foi marcada. Sem ela, o item do
       // banco entra com o preço do banco e o item fora do banco entra sem preço (R$ 0,00 - cotar).
@@ -9854,7 +9867,7 @@ window.distribuirBdiImportado = function(itens){
         codPlan: codigo, achado: !!itCatalog, codigo: codigoFinal,
         descrPlan: descrArq, descrBanco: itCatalog ? String(itCatalog.DESCR1||'') : '',
         unidPlan: vazio(unidRaw) ? '' : String(unidRaw).trim(), unidBanco: itCatalog ? String(itCatalog.UNID||'') : '',
-        qtdPlan: qtdVazia ? null : qtd, qtdVazia: qtdVazia && colMap.qtd!=null,
+        qtdPlan: qtdPlanOrig, qtdVazia: qtdVazia && colMap.qtd!=null, qtdModo: opCalc ? opCalc.qtdModo : 'manter', qtdCasas: opCalc ? opCalc.qtdCasas : null,
         unitPlan: vazio(custoRaw) ? null : custo, unitBanco: precoBanco, origemPreco: origemPreco,
         bdiPlan: vazio(bdiRaw) ? null : String(bdiRaw).trim(),
         totalPlan: (colMap.total!=null && !vazio(r[colMap.total])) ? parseNum(r[colMap.total]) : null
@@ -12498,8 +12511,18 @@ document.addEventListener('DOMContentLoaded', limparRestos);
     if(st){ st.textContent = '🧮 Cálculo dos valores: ' + texto(); setTimeout(function(){ if(st.textContent.indexOf('🧮 Cálculo')===0) st.textContent=''; }, 6000); }
   }
   document.addEventListener('change', function(e){
+    // V1-02-45: escolher só marca; o botão "Aplicar" é que recalcula o orçamento
     if(e.target && (e.target.id==='calcModo' || e.target.id==='calcCasas')){
+      var c = cfg(), b = document.getElementById('calcAplicar');
+      var pend = document.getElementById('calcModo').value!==c.modo || String(document.getElementById('calcCasas').value)!==String(c.casas);
+      if(b){ b.style.background = pend ? '#f59e0b' : ''; b.style.color = pend ? '#0f172a' : ''; b.textContent = pend ? 'Aplicar ●' : 'Aplicar'; }
+    }
+  });
+  document.addEventListener('click', function(e){
+    if(e.target && e.target.id==='calcAplicar'){
       aplicar(document.getElementById('calcModo').value, document.getElementById('calcCasas').value);
+      var b = e.target; b.style.background = ''; b.style.color = ''; b.textContent = 'Aplicar';
+      alert('🧮 Cálculo aplicado em todo o orçamento: ' + texto() + '.');
     }
   });
   window.escolherCalculoCelular = function(){
@@ -12517,8 +12540,9 @@ document.addEventListener('DOMContentLoaded', limparRestos);
 <!-- FIM PATCH V1-02-43 -->
 
 
-<!-- ==================== PATCH V1-02-44 - IMPORTAR LISTA: relatório item a item + preço clicável + "Atualizar todas as Bases" atualiza os preços pelo banco ==================== -->
+<!-- ==================== PATCH V1-02-44/45 - IMPORTAR LISTA: relatório item a item, critério de cálculo e de quantidades, + preço clicável + "Atualizar todas as Bases" atualiza os preços pelo banco ==================== -->
 <style>
+#boxImpCalc select{font-size:10px;padding:2px 4px;border:1px solid #cbd5e1;border-radius:5px;background:#fff}
 .ri-modal{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10050;display:flex;align-items:center;justify-content:center;padding:12px}
 .ri-box{background:#fff;border-radius:10px;width:min(1400px,98vw);max-height:94vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.35)}
 .ri-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:10px 14px;border-bottom:1px solid #e2e8f0}
@@ -12556,7 +12580,7 @@ body.mode-mobile .ri-modal{padding:0}
   function num(v){ return Number(v)||0; }
   function fmt(v, c){ if(v==null || !isFinite(v)) return '—'; return Number(v).toLocaleString('pt-BR', {minimumFractionDigits: c==null?2:c, maximumFractionDigits: c==null?2:c}); }
   function rs(v){ return v==null ? '—' : 'R$ '+fmt(v); }
-  function qf(v){ return v==null ? '—' : Number(v).toLocaleString('pt-BR', {maximumFractionDigits: 4}); }
+  function qf(v, c){ return v==null ? '—' : Number(v).toLocaleString('pt-BR', {maximumFractionDigits: c==null ? 4 : c}); }
   function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
   function cfgCalc(){ return window.calcConfig || {modo:'truncar', casas:2}; }
   function corta(v, modo){
@@ -12596,7 +12620,7 @@ body.mode-mobile .ri-modal{padding:0}
       return {linha:x.linha, codPlan:x.codPlan, achado:x.achado, codigo:x.codigo, descr: x.descrPlan || x.descrBanco || it.descr || '',
         descrBanco:x.descrBanco, unidPlan:x.unidPlan, unidBanco:x.unidBanco, unid: it.unid, qtdPlan:x.qtdPlan, qtdVazia:x.qtdVazia, qtd:qtd,
         unitPlan:x.unitPlan, unitBanco:x.unitBanco, custo:custo, origem:x.origemPreco, bdiPlan:x.bdiPlan, bdiPlanNum: bdiNum(x.bdiPlan), bdi:bdi,
-        unitCom:t.unitCom, totSem:t.sem, totCom:t.com, totalPlan:x.totalPlan};
+        unitCom:t.unitCom, totSem:t.sem, totCom:t.com, totalPlan:x.totalPlan, qtdModo:x.qtdModo, qtdCasas:x.qtdCasas};
     });
     // 2) o TOTAL da planilha é com ou sem BDI? (escolhe o que mais se aproxima no conjunto)
     var eSem = 0, eCom = 0, nT = 0;
@@ -12623,6 +12647,7 @@ body.mode-mobile .ri-modal{padding:0}
       }
       if(r.unidPlan && r.unidBanco && normU(r.unidPlan)!==normU(r.unidBanco)) r.avisos.push('Unidade da planilha "'+r.unidPlan+'" é diferente da unidade do banco "'+r.unidBanco+'": confira se a quantidade está na mesma unidade.');
       if(r.qtdVazia) r.avisos.push('Quantidade vazia na planilha: entrou 1.');
+      if(r.qtdPlan!=null && Math.abs(r.qtdPlan - r.qtd) > 1e-9) r.avisos.push('Quantidade da planilha '+qf(r.qtdPlan, 8)+' '+(r.qtdModo==='arredondar'?'arredondada':'truncada')+' em '+r.qtdCasas+' casa'+(r.qtdCasas===1?'':'s')+': '+qf(r.qtd)+'.');
       if(r.qtd===0) r.avisos.push('Quantidade zero.');
       if(!temDif) return;
       // por que o total ficou diferente
@@ -12634,6 +12659,10 @@ body.mode-mobile .ri-modal{padding:0}
         causa(r, 'banco', 'O programa usou o preço do banco '+rs(r.unitBanco)+'; pelo total da planilha o unitário era ≈ '+rs(unitImpl)+'.');
       }
       if(r.qtdVazia) causa(r, 'qtd', 'A planilha não tem quantidade nesta linha e o programa usou 1.');
+      if(r.qtdPlan!=null && Math.abs(r.qtdPlan - r.qtd) > 1e-9){
+        var tQ = totaisPrograma(r.custo, r.qtdPlan, r.bdi), vQ = base==='com' ? tQ.com : tQ.sem;
+        if(Math.abs(vQ - r.totalPlan) < TOL) causa(r, 'qtdarr', 'Quantidade '+(r.qtdModo==='arredondar'?'arredondada':'truncada')+' de '+qf(r.qtdPlan, 8)+' para '+qf(r.qtd)+': com a quantidade da planilha o total bateria ('+rs(vQ)+').');
+      }
       if(base==='com' && bdiPl!=null && Math.abs(bdiPl - r.bdi) >= 0.0001) causa(r, 'bdi', 'BDI da planilha '+fmt(bdiPl,2)+'% e BDI usado no programa '+fmt(r.bdi,2)+'%.');
       // conta da própria planilha: total ≠ quantidade × unitário (com o BDI)
       if(r.unitPlan!=null && r.qtdPlan!=null){
@@ -12679,6 +12708,7 @@ body.mode-mobile .ri-modal{padding:0}
     banco: 'Preço do banco no lugar do preço da planilha (VALOR UNITÁRIO não marcado)',
     sempreco: 'Item sem preço (fora do banco e sem VALOR UNITÁRIO)',
     qtd: 'Quantidade vazia (entrou 1)',
+    qtdarr: 'Quantidade truncada/arredondada na importação',
     bdi: 'BDI diferente',
     conta: 'Conta da própria planilha não bate (total ≠ qtd × unitário)',
     arred: 'Arredondamento / truncamento de centavos',
@@ -12704,7 +12734,7 @@ body.mode-mobile .ri-modal{padding:0}
         + '<td class="ri-cod">'+esc(r.codPlan||'—')+(r.achado && !mesmoCodigo(r.codigo, r.codPlan) ? '<br>→ '+esc(r.codigo) : '')+'</td>'
         + '<td>'+esc(String(r.descr).slice(0,110))+'</td>'
         + '<td>'+esc(r.unidPlan||'—')+(r.unidBanco && normU(r.unidBanco)!==normU(r.unidPlan) ? '<br><small style="color:#64748b">banco: '+esc(r.unidBanco)+'</small>' : '')+'</td>'
-        + '<td class="n">'+qf(r.qtdPlan)+(r.qtdVazia?'<br><small>usou 1</small>':'')+'</td>'
+        + '<td class="n">'+qf(r.qtdPlan, 6)+(r.qtdVazia?'<br><small>usou 1</small>':'')+(r.qtdPlan!=null && Math.abs(r.qtdPlan-r.qtd)>1e-9 ? '<br><small style="color:#b45309">usou '+qf(r.qtd)+'</small>' : '')+'</td>'
         + '<td class="n">'+rs(r.unitPlan)+'</td>'
         + '<td class="n">'+rs(r.unitBanco)+'</td>'
         + '<td class="n">'+rs(r.custo)+'<br>'+tag+'</td>'
@@ -12750,7 +12780,8 @@ body.mode-mobile .ri-modal{padding:0}
     h += '<p class="ri-explica">Colunas importadas: <b>'+rel.colunas.map(function(k){ return NOME_COL[k]||k; }).join(', ')+'</b>. '
       + (rel.totPlan==null ? 'A coluna TOTAL não foi marcada, então o relatório não compara totais (marque TOTAL na importação para conferir item a item). ' : 'O TOTAL da planilha foi comparado com o total '+baseTxt+' de cada item no programa (o programa escolheu o que mais se aproxima da planilha). ')
       + 'O preço só vem da planilha quando a coluna VALOR UNITÁRIO é marcada; sem ela, o item do banco usa o preço do banco e o item fora do banco fica sem preço. '
-      + 'Cálculo atual: '+(rel.calc && rel.calc.modo==='arredondar'?'arredondar':'truncar')+' em '+(rel.calc?rel.calc.casas:2)+' casas. Importado em '+esc(rel.quando)+'. Os números são os do momento da importação.</p>';
+      + 'Cálculo dos valores: '+(rel.calc && rel.calc.modo==='arredondar'?'arredondar':'truncar')+' em '+(rel.calc?rel.calc.casas:2)+' casas. '
+      + 'Quantidades: '+(function(q){ return !q || !q.qtdModo || q.qtdModo==='manter' ? 'mantidas como na planilha' : (q.qtdModo==='arredondar'?'arredondadas':'truncadas')+' em '+q.qtdCasas+' casas'; })(rel.linhas[0])+'. Importado em '+esc(rel.quando)+'. Os números são os do momento da importação.</p>';
     h += '<div class="ri-tools"><label><input type="checkbox" id="riSoDif" '+(soDif?'checked':'')+'> Mostrar só itens com diferença ou aviso</label></div>';
     h += '<table class="ri-tab"><thead><tr><th>Linha</th><th>Código</th><th>Descrição</th><th>Unid.</th><th>Qtd planilha</th><th>Unit. planilha</th><th>Unit. banco</th><th>Unit. adotado</th><th>BDI</th><th>Total planilha</th><th>Total programa</th><th>Diferença</th><th>Por que ficou diferente</th></tr></thead><tbody>'
       + linhasHtml(rel) + '</tbody></table>';
@@ -12794,6 +12825,27 @@ body.mode-mobile .ri-modal{padding:0}
     var nome = (document.getElementById('nomeOrcAtual') && document.getElementById('nomeOrcAtual').value || 'orcamento').trim().replace(/[\\/:*?"<>|]+/g,'_');
     XLSX.writeFile(wb, 'Relatorio_importacao_'+nome+'.xlsx');
   }
+
+  // ------------------------------------------------------------------
+  // V1-02-45: opções de cálculo na importação (valores do orçamento todo + quantidades)
+  // ------------------------------------------------------------------
+  var KEYQ = 'schueler_import_qtd_v1';
+  window.preencherOpcoesCalculoImport = function(){
+    var c = cfgCalc(), q = {modo: 'manter', casas: 2};
+    try{ var j = JSON.parse(localStorage.getItem(KEYQ)||'null'); if(j && j.modo) q = j; }catch(e){}
+    var set = function(id, v){ var e = document.getElementById(id); if(e) e.value = String(v); };
+    set('impCalcModo', c.modo); set('impCalcCasas', c.casas); set('impQtdModo', q.modo); set('impQtdCasas', q.casas);
+  };
+  window.lerOpcoesCalculoImport = function(){
+    var g = function(id){ var e = document.getElementById(id); return e ? e.value : null; };
+    if(g('impCalcModo')==null) return null;
+    var o = {modo: g('impCalcModo')==='arredondar' ? 'arredondar' : 'truncar', casas: parseInt(g('impCalcCasas'),10),
+      qtdModo: ({truncar:1, arredondar:1})[g('impQtdModo')] ? g('impQtdModo') : 'manter', qtdCasas: parseInt(g('impQtdCasas'),10)};
+    if(!(o.casas>=0 && o.casas<=4)) o.casas = 2;
+    if(!(o.qtdCasas>=0 && o.qtdCasas<=4)) o.qtdCasas = 2;
+    try{ localStorage.setItem(KEYQ, JSON.stringify({modo:o.qtdModo, casas:o.qtdCasas})); }catch(e){}
+    return o;
+  };
 
   // ------------------------------------------------------------------
   // Preço unitário: o campo mostrava o cursor de "proibido". Agora um clique abre a edição (✏️).
