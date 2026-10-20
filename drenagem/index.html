@@ -88,6 +88,11 @@ a:hover{text-decoration:underline}
 .app-header .h-logo .h-text{font-family:var(--fh);font-weight:700;color:var(--blue);font-size:1.1rem;line-height:1}
 .app-header .h-logo .h-sub{font-size:.72rem;color:var(--agua);font-family:var(--fb);font-weight:600;letter-spacing:.04em;text-transform:uppercase}
 .h-spacer{flex:1}
+.fz-grp{display:inline-flex;align-items:center;gap:2px;border:1px solid var(--line);border-radius:var(--r-sm);padding:1px}
+.fz-grp button{min-width:30px;height:30px;padding:0 .35rem;border-radius:var(--r-sm);color:var(--muted);font-weight:700;font-size:.85rem;background:none;border:0;cursor:pointer}
+.fz-grp button:hover{color:var(--ink);background:var(--line)}
+.fz-grp .fz-pct{min-width:44px;font-weight:600;font-size:.75rem}
+.modal-header .fz-grp{margin-left:auto;margin-right:.4rem}
 .h-btn{width:36px;height:36px;border-radius:var(--r-sm);display:flex;align-items:center;justify-content:center;color:var(--muted);transition:var(--tr)}
 .h-btn:hover{background:var(--surface2);color:var(--ink)}
 .h-btn svg{pointer-events:none}
@@ -470,6 +475,7 @@ body.cel table.t-cel td[data-l]::before{content:attr(data-l);font-size:.8rem;fon
       </div>
     </a>
     <div class="h-spacer"></div>
+    <span class="fz-grp" role="group" aria-label="Tamanho do texto"><button type="button" onclick="fonteD(-1)" title="Diminuir o texto" aria-label="Diminuir o texto">A−</button><button type="button" class="fz-pct" onclick="fonteD(0)" title="Voltar ao tamanho normal">100%</button><button type="button" onclick="fonteD(1)" title="Aumentar o texto" aria-label="Aumentar o texto">A+</button></span>
     <button class="h-btn h-amb" title="Trocar o ambiente de uso (Computador, Android ou iPhone/iPad)" onclick="abrirAmbiente()">
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="14" height="10" rx="1.5"/><path d="M6 18h6"/><rect x="17" y="8" width="5" height="12" rx="1.2"/></svg><span>Ambiente</span>
     </button>
@@ -2205,7 +2211,16 @@ function stTxt(s) { return s === 'err' ? '✕' : s === 'warn' ? '⚠' : '✓'; }
 /* =====================================================================
    PROJETOS, CONFIGURAÇÃO, BACKUP
    ===================================================================== */
-function openModal(id) { $(id).classList.add('open'); }
+/* tamanho do texto (A− / A+): vale para todas as abas e janelas; o cabeçalho não muda, para os botões não saírem do lugar */
+const FZ_HTML = '<span class="fz-grp" role="group" aria-label="Tamanho do texto"><button type="button" onclick="fonteD(-1)" title="Diminuir o texto" aria-label="Diminuir o texto">A−</button><button type="button" class="fz-pct" onclick="fonteD(0)" title="Voltar ao tamanho normal">100%</button><button type="button" onclick="fonteD(1)" title="Aumentar o texto" aria-label="Aumentar o texto">A+</button></span>';
+function fonteD(dir) { const f = +CFG.fonte || 1; CFG.fonte = dir === 0 ? 1 : Math.round(Math.min(1.8, Math.max(0.6, f + dir * 0.1)) * 10) / 10; lsSet(LS_CFG, CFG); aplicarFonteD(); }
+function aplicarFonteD() {
+  const f = +CFG.fonte || 1, z = f === 1 ? '' : String(f);
+  document.querySelectorAll('.modal-header').forEach(h => { if (!h.querySelector('.fz-grp')) { const b = h.querySelector('.btn-icon'); b ? b.insertAdjacentHTML('beforebegin', FZ_HTML) : h.insertAdjacentHTML('beforeend', FZ_HTML); } });
+  document.querySelectorAll('.project-bar, .tabs-wrap, .tab-panels, .app-footer, .modal').forEach(el => { el.style.zoom = z; });
+  document.querySelectorAll('.fz-pct').forEach(b => { b.textContent = Math.round(f * 100) + '%'; });
+}
+function openModal(id) { aplicarFonteD(); $(id).classList.add('open'); }
 function closeModal(id) { $(id).classList.remove('open'); }
 function openProjetos() {
   const ids = Object.keys(DB.list).sort((a, b) => (DB.list[b].upd || 0) - (DB.list[a].upd || 0));
@@ -2234,6 +2249,7 @@ function excluirProjeto(id) {
 function afterLoad() { $('bar-nome').value = P.proj.nome || ''; calc(); renderTab(); }
 
 function applyConfig() {
+  aplicarFonteD();
   document.documentElement.setAttribute('data-theme', CFG.tema || '');
   $('hdr-empresa').textContent = CFG.empresa || 'Total Civil';
   const im = $('hdr-logo'); if (CFG.logo) { im.src = CFG.logo; im.style.display = ''; } else { im.style.display = 'none'; im.removeAttribute('src'); }
@@ -2556,7 +2572,7 @@ function baixarBlob(nome, b) {
    ===================================================================== */
 function pal(print) {
   const L = {bg: '#ffffff', ink: '#0F1E33', muted: '#5b6678', grid: '#e4dfd5', agua: '#0E7490', aguaF: '#cdeef4', aguaD: '#0b5e74', orange: '#FF6B1A', terr: '#8B5A2B', soil: '#efe4d3', reat: '#e6dcc9', pav: '#3d4450', pass: '#d6d1c6', mf: '#a8a29a', pipe: '#9aa3ad', brita: '#c4bcab', conc: '#cfd3d8', ok: '#16A34A', err: '#DC2626', warn: '#D97706', blue: '#12355F', bl: '#C2410C'};
-  if (print) return L;
+  if (print) return Object.assign({}, L, {print: true});
   const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim().toLowerCase();
   const dark = bg && bg !== '#f6f4ef' && parseInt(bg.slice(1, 3), 16) < 60;
   if (!dark) return L;
@@ -3748,6 +3764,8 @@ svgSecao = function (pvId, K, W = 1100) {
   s += tx(X(-xe) - 20, Y(d.fundoPV) + 4, 'Prof. PV ' + fmt(d.tp - d.fundoPV, 2) + ' m', {fs: 13, a: 'end', c: K.ink, halo: K.soil, w: 700});
   s += tx(X(xe) + 20, Y(d.fundoVala) + 4, 'Fundo da escavação ' + fmt(d.tp - d.fundoVala, 2) + ' m', {fs: 13, c: K.ink, halo: K.soil, w: 700});
   s += dimH(X(-d.larg / 2), X(d.larg / 2), 52, 'Pista ' + fmt(d.larg, 2) + ' m', K, 13);
+  // linhas de cota por cima do desenho
+  s += gradeCotas(K, 's:' + pvId, X(-half), X(half), zBot, zTop, Y, sc, X(-half) - 6);
   // notas
   let yn = H0 + 16;
   if (temVista) { s += ln(20, yn - 4, 60, yn - 4, K.ink, 1.4, DASH) + tx(70, yn, 'Pontilhado: boca de lobo, caixa de ralo ou ramal em vista, fora do plano do corte (em outra estaca, descendo para o PV no sentido da água).', {fs: 12, c: K.ink}); yn += 24; }
@@ -3838,6 +3856,51 @@ function pvEmopPerfil(x, pv, m, sx, sy, PY, K, tIn, tOut) {
   s += rc(U(-0.30) - wAn, PY(tp), 0.60 * hs + 2 * wAn, Math.max(3, 0.06 * sy), K.ink);
   return {s, w: 2 * xe * hs};
 }
+/* ---------- linhas de cota (perfil e seção) ----------
+   Linhas finas por cima do desenho a cada 1 m de altura: fixas, nunca saem. Arrastando uma delas, nasce uma cópia
+   que acompanha o mouse/dedo e mostra a cota ao centímetro; as cópias ficam gravadas no projeto (P.desenho.cotas)
+   e só elas podem ser apagadas (× ao lado do valor). */
+function cotasUsuario(key) { const c = P.desenho && P.desenho.cotas && P.desenho.cotas[key]; return Array.isArray(c) ? c.filter(isNum) : []; }
+function setCotasUsuario(key, l) { const c = Object.assign({}, (P.desenho && P.desenho.cotas) || {}); if (l.length) c[key] = l; else delete c[key]; P.desenho = Object.assign({}, P.desenho || {}, {cotas: c}); save(); }
+function gradeCotas(K, key, x0, x1, zMin, zMax, Y, sy, xLbl) {
+  const ativo = !K.print, lin = (z, cl, w) => ln(x0, Y(z), x1, Y(z), cl, w), hit = (z, a) => ativo ? `<line x1="${x0.toFixed(1)}" y1="${Y(z).toFixed(1)}" x2="${x1.toFixed(1)}" y2="${Y(z).toFixed(1)}" stroke="transparent" stroke-width="9" style="cursor:ns-resize" ${a}/>` : '';
+  let s = `<g class="cotas" data-key="${esc(key)}" data-zref="${zMax}" data-yref="${Y(zMax).toFixed(3)}" data-sy="${sy}" data-zmin="${zMin}" data-zmax="${zMax}">`;
+  for (let z = Math.ceil(zMin - 1e-9); z <= zMax + 1e-9; z += 1)
+    s += `<g>${lin(z, K.ink, 0.5).replace('/>', ' stroke-opacity="0.55"/>')}${tx(xLbl, Y(z) + 4, fmt(z, 2), {fs: 11, a: 'end', c: K.ink, halo: K.bg})}${hit(z, `data-cz="${z}"`)}</g>`;
+  cotasUsuario(key).forEach((z, i) => {
+    if (z < zMin || z > zMax) return;
+    s += `<g data-ui="${i}">${lin(z, K.err, 0.6)}${tx(xLbl, Y(z) + 4, fmt(z, 2), {fs: 11, a: 'end', c: K.err, w: 700, halo: K.bg})}` +
+      (ativo ? `<text x="${(x1 + 4).toFixed(1)}" y="${(Y(z) + 4).toFixed(1)}" font-size="13" font-family="Arial, Helvetica, sans-serif" fill="${K.err}" style="cursor:pointer" data-cx="${i}"><title>Apagar esta linha</title>×</text>` : '') + hit(z, `data-cu="${i}"`) + '</g>';
+  });
+  return s + '</g>';
+}
+function ativarCotas(box, redesenhar) {
+  if (!box || box.dataset.cotas) return; box.dataset.cotas = '1';
+  let arr = null;
+  const zDe = (g, ev) => { const sv = g.ownerSVGElement, pt = sv.createSVGPoint(); pt.x = ev.clientX; pt.y = ev.clientY; const y = pt.matrixTransform(sv.getScreenCTM().inverse()).y;
+    const z = +g.dataset.zref - (y - +g.dataset.yref) / +g.dataset.sy; return Math.round(Math.min(+g.dataset.zmax, Math.max(+g.dataset.zmin, z)) * 100) / 100; };
+  box.addEventListener('pointerdown', ev => {
+    const t = ev.target, g = t.closest && t.closest('g.cotas'); if (!g) return;
+    const key = g.dataset.key, l = cotasUsuario(key);
+    if (t.dataset.cx != null) { l.splice(+t.dataset.cx, 1); setCotasUsuario(key, l); redesenhar(); ev.preventDefault(); return; }
+    let i;
+    if (t.dataset.cz != null) { l.push(+t.dataset.cz); i = l.length - 1; setCotasUsuario(key, l); redesenhar(); }   // cópia da linha fixa
+    else if (t.dataset.cu != null) i = +t.dataset.cu; else return;
+    arr = {key, i}; try { box.setPointerCapture(ev.pointerId); } catch (e) {} ev.preventDefault();
+  });
+  box.addEventListener('pointermove', ev => {
+    if (!arr) return; const g = box.querySelector('g.cotas'); if (!g) return;
+    const z = zDe(g, ev), l = cotasUsuario(arr.key); if (l[arr.i] === z) return;
+    l[arr.i] = z; P.desenho.cotas[arr.key] = l; redesenhar(); ev.preventDefault();
+  });
+  const fim = () => { if (arr) { setCotasUsuario(arr.key, cotasUsuario(arr.key)); arr = null; } };
+  box.addEventListener('pointerup', fim); box.addEventListener('pointercancel', fim);
+  box.style.touchAction = 'pan-x';
+}
+const _drawPerfilC = drawPerfil, _drawSecaoC = drawSecao;
+drawPerfil = function () { _drawPerfilC(); ativarCotas($('perfil-box'), drawPerfil); };
+drawSecao = function () { _drawSecaoC(); ativarCotas($('secao-box'), () => { const b = $('secao-box'); if (b && SEC_PV) b.innerHTML = svgSecao(SEC_PV, pal(false)) || ''; }); };
+
 /* ---------- 9. PERFIL LONGITUDINAL (PV EMOP, caixas de ralo e ramais em vista) ---------- */
 svgPerfil = function (ini, K, W0 = 1200) {
   let W = W0;
@@ -3869,8 +3932,6 @@ svgPerfil = function (ini, K, W0 = 1200) {
   let s = `<svg ${SVGNS} viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="${K.bg}"/>`;
   s += tx(16, 30, 'Perfil longitudinal — ' + pts[0].id + ' → ' + pts[pts.length - 1].id, {fs: 18, w: 700, c: K.blue});
   const ex = sy / sx0; s += tx(W - mr, 26, (E ? 'Escalas vertical / horizontal 1:1 / 1:' + fEsc(E) : 'Escala vertical exagerada ' + fmt(ex, 1) + ' × a horizontal') + (distorce ? ' · trechos curtos ampliados na horizontal' : ''), {fs: 12, a: 'end', c: K.muted});
-  const step = [0.1, 0.2, 0.25, 0.5, 1, 2, 5].find(v => (ymax - ymin) / v <= 9) || 5;
-  for (let v = Math.ceil(ymin / step) * step; v <= ymax; v += step) s += ln(ml, PY(v), W - mr, PY(v), K.grid) + tx(ml - 8, PY(v) + 4, fmt(v, 2), {fs: 12, a: 'end', c: K.muted});
   s += tx(ml - 70, mt + hp / 2, 'Cota (m)', {fs: 13, c: K.muted, rot: -90, a: 'middle'});
   const terr = pts.filter(p => isNum(p.pv.tp));
   if (terr.length > 1) s += `<polygon points="${terr.map(p => PX(p.x) + ',' + PY(p.pv.tp)).join(' ')} ${PX(terr[terr.length - 1].x)},${mt + hp} ${PX(terr[0].x)},${mt + hp}" fill="${K.soil}"/>` + `<polyline points="${terr.map(p => PX(p.x) + ',' + PY(p.pv.tp)).join(' ')}" fill="none" stroke="${K.terr}" stroke-width="3"/>`;
@@ -3921,6 +3982,8 @@ svgPerfil = function (ini, K, W0 = 1200) {
   const pz = [];
   path.forEach((t, k) => { const z = R.tr[t.id].piez; if (!z) return; const x0 = PX(pts[k].x), x1 = PX(pts[k + 1].x); pz.push(`${x0},${PY(z.Hpm)}`, `${x0 + 7},${PY(z.Hm)}`, `${x1},${PY(z.Hj)}`); });
   if (pz.length) s += `<polyline points="${pz.join(' ')}" fill="none" stroke="${K.orange}" stroke-width="2.4" stroke-dasharray="8 4"/>`;
+  // linhas de cota por cima do desenho (a cada 1 m, fixas; as do usuário podem ser arrastadas e apagadas)
+  s += gradeCotas(K, 'p:' + ini, ml, W - mr, ymin, ymax, PY, sy, ml - 8);
   // legenda
   const ly = mt + hp + 20;
   [[K.terr, 'Terreno / tampas', 3], [K.agua, 'Tubo (Ø interno) e lâmina d\'água', 3], [K.orange, 'Linha piezométrica', 2.4]].forEach(([cl, t, w], i) => { const x = ml + i * 300; s += ln(x, ly, x + 30, ly, cl, w, i === 2 ? '8 4' : '') + tx(x + 38, ly + 5, t, {fs: 13, c: K.ink}); });
