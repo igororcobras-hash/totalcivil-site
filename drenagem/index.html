@@ -3470,6 +3470,9 @@ const naSerieH = (x, hmin) => x >= hmin - 1e-6 && Math.abs(x * 10 - Math.round(x
 const fmtCam = m => fmt(m.L, 2) + ' × ' + fmt(m.L, 2) + ' × h ' + fmt(m.Hi, 2) + ' m';
 const mostraRalos = () => !(P && P.desenho && P.desenho.ralos === false);
 function setRalos(v) { P.desenho = Object.assign({}, P.desenho || {}, {ralos: !!v}); save(); }
+/* escala do perfil longitudinal: 0 = automática; 1 = 1:1; 2, 5, 10 = vertical exagerada n × a horizontal */
+const perfilEsc = () => { const v = +(P && P.desenho && P.desenho.perfilEsc) || 0; return [1, 2, 5, 10].includes(v) ? v : 0; };
+function setPerfilEsc(v) { P.desenho = Object.assign({}, P.desenho || {}, {perfilEsc: +v || 0}); save(); drawPerfil(); }
 
 /* parâmetros construtivos (editáveis na aba 6) */
 const EMOP_CRIT = {pvEmopParede: 0.20, pvEmopLajeF: 0.15, pvEmopLajeT: 0.15, pvEmopFolga: 0.20, pvEmopFolgaTopo: 0.20, pvEmopHmin: 1.40, pvEmopChamMax: 1.00};
@@ -3786,7 +3789,10 @@ quadroSecao = function (pvId) {
 const chkRalos = fn => `<label style="font-size:.84rem;display:flex;gap:.45rem;align-items:center;margin:.1rem 0 .55rem;flex-wrap:wrap"><input type="checkbox" ${mostraRalos() ? 'checked' : ''} onchange="setRalos(this.checked);${fn}()"/> <b>Mostrar bocas de lobo, caixas de ralo e ramais</b> <small style="color:var(--muted)">contínuo = no plano do corte · pontilhado = em vista, fora do corte</small></label>`;
 const _vSecao0 = vSecao, _vPerfil0 = vPerfil;
 vSecao = function () { return _vSecao0.apply(this, arguments).replace('<div class="svg-scroll" id="secao-box">', chkRalos('drawSecao') + '<div class="svg-scroll" id="secao-box">'); };
-vPerfil = function () { return _vPerfil0.apply(this, arguments).replace('<div class="svg-scroll" id="perfil-box">', chkRalos('drawPerfil') + '<div class="svg-scroll" id="perfil-box">'); };
+const selEscPerfil = () => '<label style="font-size:.84rem;display:flex;gap:.45rem;align-items:center;margin:.1rem 0 .55rem;flex-wrap:wrap"><b>Escala do desenho</b> <select onchange="setPerfilEsc(this.value)" style="padding:.3rem .5rem;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)">' +
+  [[0, 'Automática (vertical exagerada)'], [1, '1:1 (horizontal = vertical)'], [2, 'Vertical 2 × a horizontal'], [5, 'Vertical 5 × a horizontal'], [10, 'Vertical 10 × a horizontal']].map(([v, t]) => '<option value="' + v + '"' + (perfilEsc() === v ? ' selected' : '') + '>' + t + '</option>').join('') +
+  '</select> <small style="color:var(--muted)">em 1:1 os tubos e ramais aparecem redondos; o desenho fica mais largo (role para o lado)</small></label>';
+vPerfil = function () { return _vPerfil0.apply(this, arguments).replace('<div class="svg-scroll" id="perfil-box">', chkRalos('drawPerfil') + selEscPerfil() + '<div class="svg-scroll" id="perfil-box">'); };
 
 /* PV padrão EMOP no perfil longitudinal: mesmo detalhe da seção transversal (laje de fundo, paredes de blocos
    de concreto armados, laje da tampa, chaminé em anéis Ø0,60 e tampão). A escala horizontal é ampliada só no PV
@@ -3843,20 +3849,24 @@ svgPerfil = function (ini, K, W0 = 1200) {
   const ralos = mostraRalos(), BL = [];
   if (ralos) pts.forEach((p, k) => { const ds = _dadosSecao0(p.id); if (ds) ds.bls.forEach(b => { BL.push({b, k}); vals.push(b.topo, b.fundo); }); });
   const ymin = Math.min(...vals) - 0.6, ymax = Math.max(...vals) + 0.8;
-  const ml = 270, mr = 60, mt = 110, hp = 360, rowH = 28, leg2 = BL.length ? 22 : 0;
+  const ml = 270, mr = 60, mt = 110, rowH = 28, leg2 = BL.length ? 22 : 0, E = perfilEsc();
+  let hp = 360;
+  // escala escolhida (E = exagero vertical; 1 = 1:1): sem ampliar trechos curtos; em perfil muito longo reduz as duas escalas
+  let sxE = 0;
+  if (E) { sxE = hp / (ymax - ymin) / E; const WMAX = 20000; if (X * sxE > WMAX - ml - mr) { sxE = (WMAX - ml - mr) / (X || 1); hp = Math.round(Math.max(60, (ymax - ymin) * sxE * E)); } }
   const rowsPV = [['Estaca', p => estLabel(num(p.p && p.p.dist))], ['Distância acumulada (m)', p => fmt(p.x, 2)], ['Cota da tampa (m)', p => fmt(p.pv.tp, 3)], ['Cota do fundo do PV (m)', p => fmt(p.pv.fundo, 3)], ['Profundidade do PV (m)', p => fmt(p.pv.prof, 2)], ['Nível d\'água no PV (m)', p => isNum(p.pv.H) && p.pv.H > -1e8 ? fmt(p.pv.H, 3) : '—']];
   const rowsTr = [['Trecho', (t, r) => t.id], ['Diâmetro (mm)', (t) => 'Ø ' + t.D], ['Extensão (m)', (t, r) => fmt(r.L, 2)], ['Declividade (%)', (t, r) => isNum(r.S) ? fmt(r.S * 100, 3) : '—'], ['CI montante → jusante', (t, r) => fmt(r.cm, 3) + ' → ' + fmt(r.cj, 3)], ['Vazão Q (L/s)', (t, r) => fL(r.Q)], ['Velocidade V (m/s)', (t, r) => fmt(r.h.V, 2)], ['Lâmina y/D', (t, r) => r.h.carga ? 'em carga' : fmt(r.h.yD, 2)]];
   const H = mt + hp + 30 + leg2 + (rowsPV.length + rowsTr.length) * rowH + 60;
-  const sx0 = (W - ml - mr) / (X || 1), MINW = 120;
+  const sx0 = E ? sxE : (W - ml - mr) / (X || 1), MINW = E ? 0 : 120;
   const seg = path.map(t => Math.max(MINW, (R.tr[t.id].L || 0) * sx0)); let distorce = seg.some((w, k) => w > (R.tr[path[k].id].L || 0) * sx0 + 0.5);
   const cum = [0]; seg.forEach(w => cum.push(cum[cum.length - 1] + w));
-  W = Math.max(W, ml + mr + cum[cum.length - 1]);
-  const sx = (W - ml - mr) / (X || 1), sy = hp / (ymax - ymin);
+  W = E ? Math.ceil(Math.max(900, ml + mr + cum[cum.length - 1])) : Math.max(W, ml + mr + cum[cum.length - 1]);
+  const sx = E ? sxE : (W - ml - mr) / (X || 1), sy = hp / (ymax - ymin);
   const PX = x => { for (let k = 0; k < pts.length - 1; k++) if (x <= pts[k + 1].x + 1e-9) { const f = (x - pts[k].x) / ((pts[k + 1].x - pts[k].x) || 1); return ml + cum[k] + f * seg[k]; } return ml + cum[cum.length - 1]; };
   const PY = y => mt + (ymax - y) * sy;
   let s = `<svg ${SVGNS} viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="${K.bg}"/>`;
   s += tx(16, 30, 'Perfil longitudinal — ' + pts[0].id + ' → ' + pts[pts.length - 1].id, {fs: 18, w: 700, c: K.blue});
-  const ex = sy / sx0; s += tx(W - mr, 26, 'Escala vertical exagerada ' + fmt(ex, 1) + ' × a horizontal' + (distorce ? ' · trechos curtos ampliados na horizontal' : ''), {fs: 12, a: 'end', c: K.muted});
+  const ex = sy / sx0; s += tx(W - mr, 26, (E === 1 ? 'Escala 1:1 (horizontal = vertical)' : 'Escala vertical exagerada ' + fmt(ex, 1) + ' × a horizontal') + (distorce ? ' · trechos curtos ampliados na horizontal' : ''), {fs: 12, a: 'end', c: K.muted});
   const step = [0.1, 0.2, 0.25, 0.5, 1, 2, 5].find(v => (ymax - ymin) / v <= 9) || 5;
   for (let v = Math.ceil(ymin / step) * step; v <= ymax; v += step) s += ln(ml, PY(v), W - mr, PY(v), K.grid) + tx(ml - 8, PY(v) + 4, fmt(v, 2), {fs: 12, a: 'end', c: K.muted});
   s += tx(ml - 70, mt + hp / 2, 'Cota (m)', {fs: 13, c: K.muted, rot: -90, a: 'middle'});
