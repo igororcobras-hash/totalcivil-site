@@ -3788,6 +3788,48 @@ const _vSecao0 = vSecao, _vPerfil0 = vPerfil;
 vSecao = function () { return _vSecao0.apply(this, arguments).replace('<div class="svg-scroll" id="secao-box">', chkRalos('drawSecao') + '<div class="svg-scroll" id="secao-box">'); };
 vPerfil = function () { return _vPerfil0.apply(this, arguments).replace('<div class="svg-scroll" id="perfil-box">', chkRalos('drawPerfil') + '<div class="svg-scroll" id="perfil-box">'); };
 
+/* PV padrão EMOP no perfil longitudinal: mesmo detalhe da seção transversal (laje de fundo, paredes de blocos
+   de concreto armados, laje da tampa, chaminé em anéis Ø0,60 e tampão). A escala horizontal é ampliada só no PV
+   para as paredes ficarem legíveis; a vertical é a do perfil. */
+function pvEmopPerfil(x, pv, m, sx, sy, PY, K, tIn, tOut) {
+  const hs = Math.max(sx, 48 / (m.L + 2 * m.parede)), U = u => x + u * hs, xi = m.L / 2, xe = xi + m.parede, ea = 0.08;
+  const tp = pv.tp, f = pv.fundo, zl = Math.min(f + m.Hi + m.eT, tp - 0.06), zc = Math.max(f + 0.10, zl - m.eT);
+  const pxV = (a, b) => PY(b) - PY(a), wAn = Math.max(2.5, ea * hs);
+  let s = '';
+  // câmara e chaminé por dentro (escondem o solo e a ponta dos tubos)
+  s += rc(U(-xi), PY(zc), 2 * xi * hs, pxV(zc, f), K.bg, null);
+  if (tp - 0.06 > zl) s += rc(U(-0.30), PY(tp - 0.06), 0.60 * hs, pxV(tp - 0.06, zc) + 1, K.bg, null);
+  // laje de fundo (concreto armado)
+  s += rc(U(-xe), PY(f), 2 * xe * hs, pxV(f, f - m.eF), K.conc, K.ink, 1);
+  if (m.eF * sy > 8) s += ln(U(-xe + 0.04), PY(f - m.eF + 0.04), U(xe - 0.04), PY(f - m.eF + 0.04), ACO, 1.2);
+  // paredes: blocos de concreto vazados 20 cm, cheios de concreto e amarrados por barras de aço
+  [-1, 1].forEach(sd => {
+    const x0 = sd > 0 ? xi : -xe;
+    s += rc(U(x0), PY(zc), m.parede * hs, pxV(zc, f), K.conc, K.ink, 1);
+    if (0.20 * sy >= 4) for (let z = f + 0.20; z < zc - 1e-6; z += 0.20) s += ln(U(x0), PY(z), U(x0 + m.parede), PY(z), K.muted, 0.7);
+    s += ln(U(x0 + m.parede / 2), PY(f - m.eF + 0.04), U(x0 + m.parede / 2), PY(zl - 0.04), ACO, 1.2);
+  });
+  // tubos atravessando as paredes (chegada à esquerda, saída à direita)
+  [[tIn, -1, 'cj'], [tOut, 1, 'cm']].forEach(([r, sd, cota]) => {
+    if (!r || !isNum(r[cota])) return;
+    const D = r.D / 1000, ci = r[cota], xa = sd > 0 ? xi : -xe;
+    s += rc(U(xa), PY(ci + D), m.parede * hs, pxV(ci + D, ci), K.bg, null);
+    s += ln(U(xa), PY(ci + D), U(xa + m.parede), PY(ci + D), K.agua, 1.2) + ln(U(xa), PY(ci), U(xa + m.parede), PY(ci), K.agua, 1.2);
+    const y = r.h && r.h.carga ? D : ((r.h && r.h.y) || 0);
+    if (y > 0) s += rc(U(xa), PY(ci + Math.min(y, D)), m.parede * hs, pxV(ci + Math.min(y, D), ci), K.aguaF, null);
+  });
+  // laje da tampa (concreto armado) com abertura central Ø0,60
+  s += rc(U(-xe), PY(zl), (xe - 0.30) * hs, pxV(zl, zc), K.conc, K.ink, 1) + rc(U(0.30), PY(zl), (xe - 0.30) * hs, pxV(zl, zc), K.conc, K.ink, 1);
+  if (m.eT * sy > 8) s += ln(U(-xe + 0.04), PY(zc + 0.04), U(-0.34), PY(zc + 0.04), ACO, 1.2) + ln(U(0.34), PY(zc + 0.04), U(xe - 0.04), PY(zc + 0.04), ACO, 1.2);
+  // pescoço (chaminé) em anéis de concreto Ø0,60 e tampão de ferro fundido Ø0,60
+  const hc = tp - 0.06 - zl;
+  if (hc > 0.02) {
+    [-1, 1].forEach(sd => { const xa = sd > 0 ? U(0.30) : U(-0.30) - wAn; s += rc(xa, PY(tp - 0.06), wAn, pxV(tp - 0.06, zl), K.conc, K.ink, 1);
+      for (let z = zl + 0.50; z < tp - 0.10; z += 0.50) s += ln(xa, PY(z), xa + wAn, PY(z), K.muted, 0.7); });
+  }
+  s += rc(U(-0.30) - wAn, PY(tp), 0.60 * hs + 2 * wAn, Math.max(3, 0.06 * sy), K.ink);
+  return {s, w: 2 * xe * hs};
+}
 /* ---------- 9. PERFIL LONGITUDINAL (PV EMOP, caixas de ralo e ramais em vista) ---------- */
 svgPerfil = function (ini, K, W0 = 1200) {
   let W = W0;
@@ -3836,13 +3878,8 @@ svgPerfil = function (ini, K, W0 = 1200) {
     if (!isNum(p.pv.tp) || !isNum(p.pv.fundo)) return;
     const x = PX(p.x), m = p.pv.emop;
     if (m) {
-      const f = p.pv.fundo, zc = f + m.Hi, zl = zc + m.eT, tp = p.pv.tp;
-      const wC = Math.max(16, (m.L + 2 * m.parede) * sx), wI = Math.max(10, m.L * sx), wN = Math.max(9, 0.76 * sx), wNi = Math.max(5, 0.60 * sx);
-      wPV[p.id] = wC;
-      s += rc(x - wC / 2, PY(Math.min(zl, tp)), wC, PY(f - m.eF) - PY(Math.min(zl, tp)), K.conc, K.ink, 1.4);
-      s += rc(x - wI / 2, PY(zc), wI, PY(f) - PY(zc), K.bg, null);
-      if (tp > zl) { s += rc(x - wN / 2, PY(tp), wN, PY(zl) - PY(tp) + 1, K.conc, K.ink, 1.2); s += rc(x - wNi / 2, PY(tp) + 2, wNi, PY(zc) - PY(tp) - 1, K.bg, null); }
-      else s += rc(x - wNi / 2, PY(zl), wNi, PY(zc) - PY(zl) + 1, K.bg, null);
+      const k = pts.indexOf(p), d = pvEmopPerfil(x, p.pv, m, sx, sy, PY, K, k > 0 ? R.tr[path[k - 1].id] : null, k < path.length ? R.tr[path[k].id] : null);
+      wPV[p.id] = d.w; s += d.s;
     } else {
       const w = Math.max(14, ((num(p.p.dpv) || 1000) / 1000 + 0.3) * sx);
       wPV[p.id] = w;
