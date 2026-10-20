@@ -298,8 +298,9 @@ table.sheet tr.drow .det{padding:.75rem .9rem;position:sticky;left:0;max-width:m
 .item-h .s{font-size:.75rem;color:var(--muted)}
 .item-h .sp{flex:1}
 .item-b{padding:.8rem .9rem}
-.fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:.55rem .65rem}
-.fgrid .field label{font-size:.72rem;line-height:1.25}
+.fgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.55rem .65rem}
+.fgrid .field label{font-size:.72rem;line-height:1.25;min-height:2.7em;align-items:flex-end;flex-wrap:nowrap}
+.fgrid .field label>span{flex:0 1 auto;min-width:0}.fgrid .field label>.qbtn{flex:none}
 .fgrid .field input,.fgrid .field select{padding:.4rem .5rem;font-size:.85rem}
 .fgrid .field.w2{grid-column:span 2}
 .res{margin-top:.7rem;padding-top:.7rem;border-top:1px dashed var(--line)}
@@ -385,6 +386,7 @@ table.tbl-r th:not(:first-child){text-align:right}
 @media screen{
 body.cel .form-grid-2,body.cel .form-grid-3,body.cel .fgrid{grid-template-columns:1fr}
 body.cel .fgrid .field.w2{grid-column:auto}
+body.cel .fgrid .field label{min-height:0}
 body.cel .field label,body.cel .fgrid .field label{font-size:.85rem}
 body.cel .field input,body.cel .field select,body.cel .field textarea{font-size:16px!important}
 body.cel .card{padding:.85rem}
@@ -637,8 +639,9 @@ const CAIXAS = {
   'bld-tj': {nome: 'BL dupla de guia — tijolo maciço (0,60 × 2,20 × 1,20 m)', tipo: 'gd', L: 2.0, constr: 'Alvenaria de tijolo maciço', cxB: 0.60, cxL: 2.20, cxH: 1.20},
   'blc-bl': {nome: 'BL combinada com grelha — blocos de concreto (1,30 × 1,00 × 1,20 m)', tipo: 'cb', L: 1.0, gL: 0.90, gB: 0.30, constr: 'Blocos de concreto', cxB: 1.30, cxL: 1.00, cxH: 1.20},
   'blc-tj': {nome: 'BL combinada com grelha — tijolo maciço (1,30 × 1,00 × 1,20 m)', tipo: 'cb', L: 1.0, gL: 0.90, gB: 0.30, constr: 'Alvenaria de tijolo maciço', cxB: 1.30, cxL: 1.00, cxH: 1.20},
-  'cxr-pm': {nome: 'Caixa de ralo com grelha FoFo 30 × 90 — pré-moldada (0,30 × 0,90 × 0,90 m)', tipo: 'gr', L: 0, gL: 0.90, gB: 0.30, constr: 'Pré-moldada', cxB: 0.30, cxL: 0.90, cxH: 0.90},
-  'cxr-tj': {nome: 'Caixa de ralo com grelha — tijolo maciço (0,40 × 1,00 × 1,00 m)', tipo: 'gr', L: 0, gL: 0.90, gB: 0.30, constr: 'Alvenaria de tijolo maciço', cxB: 0.40, cxL: 1.00, cxH: 1.00},
+  'cxr-pm': {nome: 'Caixa de ralo na sarjeta, grelha de ferro fundido 30 × 90 — pré-moldada (0,30 × 0,90 × 0,90 m)', tipo: 'gr', L: 0, gL: 0.90, gB: 0.30, constr: 'Pré-moldada', cxB: 0.30, cxL: 0.90, cxH: 0.90},
+  'cxr-bl': {nome: 'Caixa de ralo na sarjeta, grelha de ferro fundido 30 × 90 — blocos de concreto (0,40 × 1,00 × 1,00 m)', tipo: 'gr', L: 0, gL: 0.90, gB: 0.30, constr: 'Blocos de concreto', cxB: 0.40, cxL: 1.00, cxH: 1.00},
+  'cxr-tj': {nome: 'Caixa de ralo na sarjeta, grelha de ferro fundido 30 × 90 — tijolo maciço (0,40 × 1,00 × 1,00 m)', tipo: 'gr', L: 0, gL: 0.90, gB: 0.30, constr: 'Alvenaria de tijolo maciço', cxB: 0.40, cxL: 1.00, cxH: 1.00},
   outro: {nome: 'Outro (dimensões livres)'}
 };
 function aplicaModelo(b) { const m = CAIXAS[b.modelo]; if (!m || !m.tipo) return; ['tipo', 'L', 'gL', 'gB', 'constr', 'cxB', 'cxL', 'cxH'].forEach(k => { if (m[k] != null) b[k] = m[k]; }); b.fr = BLTIPOS[m.tipo].fr; }
@@ -757,7 +760,7 @@ function exampleBairro() {
   });
   // caixas de ralo na mesma estaca do PV (a seção transversal do PV mostra a caixa e o ramal no plano do corte)
   [[70, 'PV-T2'], [170, 'PV-T4']].forEach(([d, pvId]) => ['E', 'D'].forEach(l => addBL('R6', d, l, pvId, 0.20, 0.70, 'bld-pm')));
-  [[20, 'PV-T1'], [120, 'PV-T3'], [220, 'PV-T5']].forEach(([d, pvId]) => ['E', 'D'].forEach(l => addBL('R6', d, l, pvId, 0.08, 0.70, 'bls-pm')));
+  [[20, 'PV-T1'], [120, 'PV-T3'], [220, 'PV-T5']].forEach(([d, pvId]) => ['E', 'D'].forEach(l => addBL('R6', d, l, pvId, 0.08, 0.70, 'cxr-pm')));
   // praça a montante lançando direto no PV do início do tronco
   p.bacias.push({id: 'B' + (nb + 1), nome: 'Praça central (galeria de lote)', A: 0.35, C: 0.30, dest: 'PV-2B', tcMode: 'man', tc: 15, kL: '', kH: ''});
   return p;
@@ -1552,7 +1555,7 @@ function ctl(path, o = {}) {
 /* campo de formulário: rótulo + ? + nota + controle + sugestão */
 function fld(path, label, o = {}) {
   const key = helpKey(path), w = o.type === 'area' ? ' style="grid-column:1/-1"' : '';
-  return `<div class="field${o.w2 ? ' w2' : ''}"${w}><label>${label} ${qbtn(key)}</label>
+  return `<div class="field${o.w2 ? ' w2' : ''}"${w}><label><span>${label}</span> ${qbtn(key)}</label>
     ${HELP[key] ? `<div class="fhelp">${esc(HELP[key])}</div>` : ''}
     ${ctl(path, o)}${o.hint ? `<span class="hint">${o.hint}</span>` : ''}<div class="fb" data-fb="${path}"></div></div>`;
 }
@@ -2862,10 +2865,11 @@ function dadosSecao(pvId) {
   const bls = P.bls.filter(b => b.pv === pvId).map(b => {
     const rb = R.bl[b.id] || {}, side = b.lado === 'D' ? 1 : -1;
     const zCurb = zSup(larg / 2);
-    const prof = num(b.cxH) || +c.blProf || 1.0, topo = zCurb + mfH, fundo = topo - prof;
+    const naSarjeta = b.tipo === 'gr';   // caixa de ralo na sarjeta: grelha de ferro fundido no topo, no nível da sarjeta
+    const prof = num(b.cxH) || +c.blProf || 1.0, topo = zCurb + (naSarjeta ? 0 : mfH), fundo = topo - prof;
     const rD = (num(b.rD) || 400) / 1000, rI = (num(b.rI) || 0) / 100, rL = num(b.rL) || 0;
     const ciBL = fundo + 0.05, ciPV = ciBL - rI * rL;
-    return {b, rb, side, zCurb, topo, fundo, prof, rD, rI, rL, ciBL, ciPV, larg: num(b.cxB) || (b.tipo === 'gd' ? 1.2 : 0.6)};
+    return {b, rb, side, zCurb, topo, fundo, prof, rD, rI, rL, ciBL, ciPV, naSarjeta, larg: num(b.cxB) || (b.tipo === 'gd' ? 1.2 : 0.6)};
   });
   return {pv, rp, rua, t, rt, saida, D, e, De, ci, parede, dpv, fundoPV, B, fundoVala, larg, pas, it, bls, tp: rp.tp, mfH, sjW, sjI, zSup};
 }
@@ -3000,11 +3004,11 @@ let SEC_PV = null;
 function vSecao() {
   const pvs = P.pvs.filter(p => dadosSecao(p.id));
   if (!SEC_PV || !pvs.some(p => p.id === SEC_PV)) { const cx = pvs.find(p => P.bls.some(b => b.pv === p.id)); SEC_PV = cx ? cx.id : pvs[0] ? pvs[0].id : null; }  // abre num PV com caixa de ralo
-  return `<h3>Seção transversal — via, caixas de ralo, ramais e vala</h3>
+  return `<h3>Seção transversal — via, bocas de lobo, caixas de ralo, ramais e vala</h3>
   <p class="lead">Corte no poço de visita escolhido, com a pista, os meios-fios, os passeios, as bocas-de-lobo (caixas de ralo) ligadas a este PV, os ramais chegando ao PV e a vala do tubo. Abaixo, o detalhe ampliado da vala com todas as medidas. O meio-fio e a sarjeta vêm do tipo escolhido na rua (aba 3) e as caixas de ralo seguem o modelo e as dimensões escolhidos em cada boca-de-lobo (aba 5).</p>
   <div class="card" style="padding:.6rem">
     <div class="bar-btns"><label style="font-size:.82rem;font-weight:600;color:var(--muted)">Poço de visita</label>
-      <select onchange="SEC_PV=this.value;drawSecao()" style="padding:.35rem .5rem;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)">${pvs.map(p => `<option value="${esc(p.id)}"${p.id === SEC_PV ? ' selected' : ''}>${esc(p.id)} — ${esc(ruaNome(p.rua))} est. ${estLabel(num(p.dist))}${(n => n ? ' · ' + n + ' caixa' + (n > 1 ? 's' : '') + ' de ralo' : '')(P.bls.filter(b => b.pv === p.id).length)}</option>`).join('')}</select></div>
+      <select onchange="SEC_PV=this.value;drawSecao()" style="padding:.35rem .5rem;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)">${pvs.map(p => `<option value="${esc(p.id)}"${p.id === SEC_PV ? ' selected' : ''}>${esc(p.id)} — ${esc(ruaNome(p.rua))} est. ${estLabel(num(p.dist))}${(l => { const g = l.filter(b => b.tipo === 'gr').length, bl = l.length - g; return (bl ? ' · ' + bl + (bl > 1 ? ' bocas de lobo' : ' boca de lobo') : '') + (g ? ' · ' + g + (g > 1 ? ' caixas de ralo' : ' caixa de ralo') : ''); })(P.bls.filter(b => b.pv === p.id))}</option>`).join('')}</select></div>
     <div class="svg-scroll" id="secao-box"></div>
     <div class="svg-scroll" id="vala-box" style="margin-top:.75rem"></div>
     <div id="secao-quadro" style="margin-top:.75rem"></div>
@@ -3622,6 +3626,12 @@ function pvEmopCorte(d, X, Y, sc, K) {
 }
 
 /* por que existe o PV sem caixa de ralo (tubo de concreto não faz curva nem muda de Ø ou de declividade fora do PV) */
+/* grelha de ferro fundido no topo da caixa de ralo da sarjeta (barras no nível da sarjeta) */
+function grelhaFoFo(x, y, w, h, K, vista) {
+  let g = `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(3, h).toFixed(1)}" fill="${vista ? 'none' : '#3F454D'}" stroke="${K.ink}" stroke-width="1"${vista ? ` stroke-dasharray="${DASH}"` : ''}/>`;
+  if (!vista) for (let i = 1, n = Math.max(3, Math.round(w / 7)); i < n; i++) g += `<line x1="${(x + i * w / n).toFixed(1)}" y1="${y.toFixed(1)}" x2="${(x + i * w / n).toFixed(1)}" y2="${(y + Math.max(3, h)).toFixed(1)}" stroke="#A9B1BA" stroke-width="1"/>`;
+  return g;
+}
 const minus = t => t.charAt(0).toLowerCase() + t.slice(1);
 function motivoPV(pvId) {
   const pv = pvById(pvId), rp = R && R.pv[pvId]; if (!pv || !rp) return 'inspeção da rede';
@@ -3683,17 +3693,22 @@ svgSecao = function (pvId, K, W = 1100) {
     s += `<path d="M ${X(-hw)} ${Y(yw)} A ${R0 * sc} ${R0 * sc} 0 ${yw > cy ? 1 : 0} 0 ${X(hw)} ${Y(yw)} Z" fill="${K.aguaF}"/>`; }
   // caixas de ralo e ramais (contínuo = no plano do corte; pontilhado = em vista, fora do corte)
   bls.forEach(b => {
-    const x0 = b.side * d.larg / 2, xin = x0 + b.side * 0.15, xout = xin + b.side * b.larg, xa = Math.min(xin, xout), wb = 0.10;
+    const x0 = b.side * d.larg / 2, wb = 0.10;
+    const xin = b.naSarjeta ? x0 - b.side * (b.larg + wb) : x0 + b.side * 0.15, xout = xin + b.side * b.larg, xa = Math.min(xin, xout);
     const vC = !b.pl.caixa, vR = !b.pl.ramal;
     if (vC) {
       s += rc(X(xa - wb), Y(b.topo), (b.larg + 2 * wb) * sc, (b.topo - b.fundo + wb) * sc, 'none', K.ink, 1.2, DASH);
       s += rc(X(xa), Y(b.topo - 0.08), b.larg * sc, (b.topo - 0.08 - b.fundo) * sc, 'none', K.ink, 1, DASH);
-      s += rc(X(xa), Y(b.topo), b.larg * sc, 0.08 * sc, 'none', K.ink, 1, DASH);
+      if (b.naSarjeta) s += grelhaFoFo(X(xa), Y(b.topo), b.larg * sc, 0.06 * sc, K, true);
+      else s += rc(X(xa), Y(b.topo), b.larg * sc, 0.08 * sc, 'none', K.ink, 1, DASH);
     } else {
       s += rc(X(xa - wb), Y(b.topo), (b.larg + 2 * wb) * sc, (b.topo - b.fundo + wb) * sc, K.conc, K.ink, 1);
       s += rc(X(xa), Y(b.topo - 0.08), b.larg * sc, (b.topo - 0.08 - b.fundo) * sc, K.bg, null);
-      s += rc(X(xa), Y(b.topo), b.larg * sc, 0.08 * sc, K.ink);
-      s += `<path d="M ${X(x0)} ${Y(b.zCurb)} L ${X(xin)} ${Y(b.zCurb + 0.02)}" stroke="${K.agua}" stroke-width="3"/>`;
+      if (b.naSarjeta) s += grelhaFoFo(X(xa), Y(b.topo), b.larg * sc, 0.08 * sc, K) + tx(X(xa + b.larg / 2), Y(b.topo) - 6, 'grelha FoFo', {fs: 11, a: 'middle', c: K.ink, halo: K.bg});
+      else {
+        s += rc(X(xa), Y(b.topo), b.larg * sc, 0.08 * sc, K.ink);
+        s += `<path d="M ${X(x0)} ${Y(b.zCurb)} L ${X(xin)} ${Y(b.zCurb + 0.02)}" stroke="${K.agua}" stroke-width="3"/>`;
+      }
     }
     const xs = xin, xf = b.side * (m ? xi : xe), z1 = b.ciBL, z2 = b.ciPV, rr = b.rD, er = Math.max(0.03, rr * c.espF), rm = (b.rb && b.rb.ram) || {};
     const dR = vR ? ` stroke-dasharray="${DASH}"` : '';
@@ -3708,20 +3723,21 @@ svgSecao = function (pvId, K, W = 1100) {
     const mod = ((CAIXAS[b.b.modelo] || {}).nome || BLTIPOS[b.b.tipo].nome).split(' — ');
     const cxX = Math.max(150, Math.min(W - 150, X((xin + xout) / 2))), cxY = Math.max(Y(b.fundo - wb) + 16, Y(d.fundoVala) + 48);
     if (cxY - 14 > Y(b.fundo - wb) + 4) s += ln(X((xin + xout) / 2), Y(b.fundo - wb) + 2, cxX, cxY - 14, K.muted, 1, '3 3');
-    s += tx(cxX, cxY, 'Caixa de ralo: ' + mod[0], {fs: 12, w: 700, a: 'middle', c: K.ink, halo: K.soil});
+    s += tx(cxX, cxY, b.naSarjeta ? mod[0] : 'Boca de lobo: ' + mod[0].replace(/^BL /, ''), {fs: 12, w: 700, a: 'middle', c: K.ink, halo: K.soil});
     if (mod[1]) s += tx(cxX, cxY + 15, mod[1], {fs: 11, a: 'middle', c: K.ink, halo: K.soil});
     s += tx(cxX, cxY + (mod[1] ? 30 : 15), 'interna ' + fmt(b.larg, 2) + ' × ' + fmt(num(b.b.cxL) || 1, 2) + ' × prof. ' + fmt(b.prof, 2) + ' m', {fs: 11, a: 'middle', c: K.muted, halo: K.soil});
-    if (vC || vR) s += tx(cxX, cxY + (mod[1] ? 46 : 31), (vC ? 'Caixa' : 'Ramal') + ' ' + txtVista(b.pl), {fs: 11, a: 'middle', c: K.aguaD, halo: K.soil});
+    if (vC || vR) s += tx(cxX, cxY + (mod[1] ? 46 : 31), (vC ? (b.naSarjeta ? 'Caixa' : 'Boca de lobo') : 'Ramal') + ' ' + txtVista(b.pl), {fs: 11, a: 'middle', c: K.aguaD, halo: K.soil});
     // ramal: Ø, i, L em cima; vazão e velocidade logo abaixo (centrados no trecho fora da vala do PV)
     const xv = b.side * Math.min(Math.abs(xf) + 0.6 * Math.abs(xs - xf), Math.max(Math.abs(xf), Bpv / 2 + 0.05));
-    const mx = X((xs + xv) / 2), my = Y((z1 + z2) / 2 + rr + er);
+    const mx = X((xs + xv) / 2), emCima = Y((z1 + z2) / 2 + rr + er) - Y(b.zCurb) >= 44;
+    const my = emCima ? Y((z1 + z2) / 2 + rr + er) : Y((z1 + z2) / 2 - er) + 44;   // sem espaço acima do tubo: rótulos embaixo
     s += tx(mx, my - 24, 'Ramal Ø' + b.b.rD + ' · i ' + fmt(b.rI * 100, 1) + '% · L ' + fmt(b.rL, 1) + ' m', {fs: 12, a: 'middle', c: K.aguaD, w: 700, halo: K.reat});
     s += tx(mx, my - 8, 'Q ' + fL(b.rb && b.rb.Qeng) + ' L/s · V ' + (isNum(rm.V) ? fmt(rm.V, 2) : '—') + ' m/s' + (rm.carga ? ' · sob carga' : isNum(rm.yD) ? ' · y/D ' + fmt(rm.yD, 2) : ''), {fs: 11, a: 'middle', c: K.aguaD, w: 700, halo: K.reat});
     if (b.ciPV < d.fundoPV) s += tx(X(xf), Y(z2) + 34, '⚠ chega abaixo do fundo do PV', {fs: 12, a: b.side > 0 ? 'start' : 'end', c: K.err, halo: K.bg});
   });
   if (mostraRalos() && !bls.length) {
     const xm = X(-half) + 12, ym = Y(zR(d.larg / 2)) + 40;
-    s += tx(xm, ym, 'PV sem caixa de ralo:', {fs: 13, w: 700, c: K.muted, halo: K.soil});
+    s += tx(xm, ym, 'PV sem boca de lobo nem caixa de ralo:', {fs: 13, w: 700, c: K.muted, halo: K.soil});
     s += tx(xm, ym + 18, motivoPV(d.pv.id), {fs: 12, c: K.muted, halo: K.soil});
     if (d.pv.obs) s += tx(xm, ym + 34, d.pv.obs, {fs: 12, c: K.muted, halo: K.soil});
   }
@@ -3736,7 +3752,7 @@ svgSecao = function (pvId, K, W = 1100) {
   s += dimH(X(-d.larg / 2), X(d.larg / 2), 52, 'Pista ' + fmt(d.larg, 2) + ' m', K, 13);
   // notas
   let yn = H0 + 16;
-  if (temVista) { s += ln(20, yn - 4, 60, yn - 4, K.ink, 1.4, DASH) + tx(70, yn, 'Pontilhado: caixa de ralo ou ramal em vista, fora do plano do corte (em outra estaca, descendo para o PV no sentido da água).', {fs: 12, c: K.ink}); yn += 24; }
+  if (temVista) { s += ln(20, yn - 4, 60, yn - 4, K.ink, 1.4, DASH) + tx(70, yn, 'Pontilhado: boca de lobo, caixa de ralo ou ramal em vista, fora do plano do corte (em outra estaca, descendo para o PV no sentido da água).', {fs: 12, c: K.ink}); yn += 24; }
   if (m) s += tx(20, yn, 'PV padrão EMOP: câmara interna ' + fmtCam(m) + ' · paredes de blocos de concreto 20 cm, cheios de concreto e amarrados por barras de aço', {fs: 12, c: K.ink}) +
     tx(20, yn + 22, 'Lajes de fundo e de tampa em concreto armado (' + fmt(m.eF, 2) + ' / ' + fmt(m.eT, 2) + ' m) · chaminé centralizada em anéis Ø0,60 (h ' + fmt(Math.max(0, m.hc || 0), 2) + ' m) · tampão de ferro fundido Ø0,60', {fs: 12, c: K.ink});
   return s + '</svg>';
@@ -3744,7 +3760,7 @@ svgSecao = function (pvId, K, W = 1100) {
 quadroSecao = function (pvId) {
   const d = dadosSecao(pvId); if (!d) return '';
   const c = P.crit, ge = d.ci + d.D + d.e, fvT = d.ci - d.e - c.berco, m = d.emop;
-  const L = [['Função do PV', motivoPV(pvId) + (d.bls.length ? ' · recebe ' + d.bls.length + ' ramal(is) de caixa de ralo' : ' · sem caixa de ralo')], ['Cota da tampa do PV', fmt(d.tp, 3) + ' m'], ['Cota do fundo do PV', fmt(d.fundoPV, 3) + ' m'], ['Profundidade do PV', fmt(d.tp - d.fundoPV, 2) + ' m']];
+  const L = [['Função do PV', motivoPV(pvId) + (d.bls.length ? ' · recebe ' + d.bls.length + ' ramal(is) de boca de lobo / caixa de ralo' : ' · sem boca de lobo nem caixa de ralo')], ['Cota da tampa do PV', fmt(d.tp, 3) + ' m'], ['Cota do fundo do PV', fmt(d.fundoPV, 3) + ' m'], ['Profundidade do PV', fmt(d.tp - d.fundoPV, 2) + ' m']];
   if (m) {
     const ext = m.L + 2 * m.parede;
     L.push(['Padrão do PV', 'EMOP — paredes de blocos de concreto 20 cm, cheios de concreto e amarrados com barras de aço'],
@@ -3767,7 +3783,7 @@ quadroSecao = function (pvId) {
     L.push(['Ramal ' + b.b.id + ': vazão e velocidade', 'Q ' + fL(b.rb && b.rb.Qeng) + ' L/s · V ' + (isNum(rm.V) ? fmt(rm.V, 2) : '—') + ' m/s' + (rm.carga ? ' · sob carga' : isNum(rm.yD) ? ' · y/D ' + fmt(rm.yD, 2) : '') + (isNum(rm.Qp) ? ' · capacidade a seção plena ' + fL(rm.Qp) + ' L/s' : '')]); });
   return `<div class="tbl-wrap"><table><thead><tr><th>Quadro de medidas</th><th>Valor</th></tr></thead><tbody>${L.map(([a, b]) => `<tr><td>${esc(a)}</td><td><b>${esc(b)}</b></td></tr>`).join('')}</tbody></table></div>`;
 };
-const chkRalos = fn => `<label style="font-size:.84rem;display:flex;gap:.45rem;align-items:center;margin:.1rem 0 .55rem;flex-wrap:wrap"><input type="checkbox" ${mostraRalos() ? 'checked' : ''} onchange="setRalos(this.checked);${fn}()"/> <b>Mostrar caixas de ralo e ramais</b> <small style="color:var(--muted)">contínuo = no plano do corte · pontilhado = em vista, fora do corte</small></label>`;
+const chkRalos = fn => `<label style="font-size:.84rem;display:flex;gap:.45rem;align-items:center;margin:.1rem 0 .55rem;flex-wrap:wrap"><input type="checkbox" ${mostraRalos() ? 'checked' : ''} onchange="setRalos(this.checked);${fn}()"/> <b>Mostrar bocas de lobo, caixas de ralo e ramais</b> <small style="color:var(--muted)">contínuo = no plano do corte · pontilhado = em vista, fora do corte</small></label>`;
 const _vSecao0 = vSecao, _vPerfil0 = vPerfil;
 vSecao = function () { return _vSecao0.apply(this, arguments).replace('<div class="svg-scroll" id="secao-box">', chkRalos('drawSecao') + '<div class="svg-scroll" id="secao-box">'); };
 vPerfil = function () { return _vPerfil0.apply(this, arguments).replace('<div class="svg-scroll" id="perfil-box">', chkRalos('drawPerfil') + '<div class="svg-scroll" id="perfil-box">'); };
