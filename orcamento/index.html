@@ -697,6 +697,7 @@ var MENU_CEL = [
   {g: '📥 Importar', itens: [
     {r: 'Backup XLSX', d: 'orçamento exportado antes por este programa', a: clicar(botaoPorTexto('Importar Backup XLSX'))},
     {r: 'Lista de itens', d: 'planilha ou texto com códigos e quantidades', a: clicar('#fileImportCodigos')},
+    {r: 'Relatório da última importação', d: 'confere cada item com a planilha e explica as diferenças', a: clicar('#btnRelImport')},
     {r: 'Banco EMOP do mês (XLSX ou DBF)', a: clicar('#fileEmopXLSX')},
     {r: 'Banco SINAPI do mês (XLSX/PDF)', a: clicar('#fileSinapiPDF')},
     {r: 'Banco SCO do mês', a: clicar('#fileScoXLSX')}
@@ -1001,6 +1002,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
   <span style="width:1px;align-self:stretch;background:#cbd5e1;margin:0 2px"></span>
   <input type="file" id="fileImportCodigos" accept=".csv,.txt,.xlsx,.xls">
   <button class="btn btn-primary" onclick="document.getElementById('fileImportCodigos').click()" title="CSV/TXT/XLSX com CODIGO,DESCR,UNID,QTD ou só CODIGOS">📥 Importar Lista</button>
+  <button class="btn btn-dark" id="btnRelImport" onclick="abrirRelatorioImportacao()" title="Confere cada item importado com a planilha: preço, quantidade, unidade, BDI e total, e explica cada diferença">📋 Relatório da última importação</button>
   <input type="text" id="dataBaseTodos" placeholder="ex.: 09/2026" title="Data base no formato MM/AAAA (ex.: 09/2026)" style="width:100px">
   <button class="btn btn-dark" onclick="atualizarDataBaseTodos()">Atualizar todas as Bases</button>
   <span id="boxCalcArred" class="calc-arred" title="Como os valores do orçamento são calculados (preço com BDI, totais e Excel). Padrão: truncar em 2 casas decimais.">🧮 Cálculo: <select id="calcModo"><option value="truncar">Truncar</option><option value="arredondar">Arredondar</option></select> em <select id="calcCasas"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select> casas</span>
@@ -4761,7 +4763,7 @@ setTimeout(function(){ if(typeof loadBdiConfig==='function') loadBdiConfig(); },
     {valor:'qtd',    label:'QUANTIDADE'},
     {valor:'custo',  label:'VALOR UNITÁRIO'},
     {valor:'bdi',    label:'BDI % (ou BDI1/BDI2/BDI3/ZERO)'},
-    {valor:'total',  label:'TOTAL DO ITEM (usado p/ calcular o unitário se não houver Valor Unitário)'}
+    {valor:'total',  label:'TOTAL DO ITEM (só para conferência no relatório de importação)'}
   ];
   window._importListaMatrix = null;
   window._importListaHeaderIdx = -1;
@@ -9555,7 +9557,7 @@ window.distribuirBdiImportado = function(itens){
     {valor:'qtd',    label:'QUANTIDADE'},
     {valor:'custo',  label:'VALOR UNITÁRIO'},
     {valor:'bdi',    label:'BDI % (ou BDI1/BDI2/BDI3/ZERO)'},
-    {valor:'total',  label:'TOTAL DO ITEM (usado p/ calcular o unitário se não houver Valor Unitário)'}
+    {valor:'total',  label:'TOTAL DO ITEM (só para conferência no relatório de importação)'}
   ];
   var RE_ITEM = /^(item|itens|it\.?|n[oº°]\.?|n\.[oº°]|num\.?|numero|ordem|item n[oº°]?\.?)$/;
   function classificarColuna(h){
@@ -9750,7 +9752,8 @@ window.distribuirBdiImportado = function(itens){
     var fimOrc=false, ignoradosFim=0; // V1-02-43
     var dataBaseVal = (document.getElementById('dataBaseTodos')?document.getElementById('dataBaseTodos').value:'') || (document.getElementById('dataBaseEMOP')?document.getElementById('dataBaseEMOP').value:'');
 
-    dataRows.forEach(function(r){
+    var relLinhas = []; // V1-02-44: relatório de importação (item a item)
+    dataRows.forEach(function(r, iLinha){
       if(!r || r.every(function(c){ return c===''||c==null; })) return;
       var codigo = colMap.codigo!=null && r[colMap.codigo]!=null ? String(r[colMap.codigo]).trim() : '';
       var descrArq = colMap.descr!=null && r[colMap.descr]!=null ? String(r[colMap.descr]).trim() : '';
@@ -9791,14 +9794,20 @@ window.distribuirBdiImportado = function(itens){
       }
 
       var qtdRaw = colMap.qtd!=null ? r[colMap.qtd] : null;
-      var qtd = (qtdRaw!==null && qtdRaw!==undefined && qtdRaw!=='') ? (parseNum(qtdRaw)||1) : 1;
+      // V1-02-44: quantidade 0 da planilha continua 0 (antes virava 1); vazia = 1 e aparece no relatório
+      var qtdVazia = vazio(qtdRaw);
+      var qtd = qtdVazia ? 1 : parseNum(qtdRaw);
 
+      // V1-02-44: o VALOR UNITÁRIO só vem da planilha quando a coluna foi marcada. Sem ela, o item do
+      // banco entra com o preço do banco e o item fora do banco entra sem preço (R$ 0,00 - cotar).
+      // O TOTAL da planilha não é mais usado para calcular o unitário: serve só para o relatório.
       var custoRaw = colMap.custo!=null ? r[colMap.custo] : null;
-      var custo = 0;
-      if(custoRaw!==null && custoRaw!==undefined && custoRaw!==''){
-        custo = parseNum(custoRaw);
+      var precoBanco = itCatalog ? custoEfetivoItem(itCatalog) : null;
+      var custo = 0, origemPreco = 'sem preço';
+      if(!vazio(custoRaw)){
+        custo = parseNum(custoRaw); origemPreco = 'planilha';
       } else if(itCatalog){
-        custo = custoEfetivoItem(itCatalog);
+        custo = precoBanco; origemPreco = 'banco';
       }
 
       var descr = descrArq || (itCatalog? itCatalog.DESCR1 : (codigo||'ITEM IMPORTADO'));
@@ -9817,14 +9826,6 @@ window.distribuirBdiImportado = function(itens){
         else { bdiTipo='CUSTOM'; bdiVal=parseNum(bdiRaw); }
       }
 
-      if(colMap.total!=null && colMap.custo==null){
-        var totRaw = r[colMap.total];
-        if(totRaw!==null && totRaw!==undefined && totRaw!==''){
-          var tot = parseNum(totRaw);
-          if(tot>0 && qtd>0) custo = tot/qtd;
-        }
-      }
-
       var codigoFinal = itCatalog ? itCatalog.CODIGO : (codigo || 'IMP_'+Date.now());
       var novo={
         id: Date.now()+Math.random(),
@@ -9839,20 +9840,40 @@ window.distribuirBdiImportado = function(itens){
         data_base: dataBaseVal,
         dataBase: dataBaseVal
       };
+      // preço da planilha diferente do banco: fica marcado como editado, com o ↩ para voltar ao banco
+      if(origemPreco==='planilha'){
+        novo.custo_origem = 'planilha';
+        if(itCatalog && Math.abs(custo-precoBanco)>0.000001){ novo.custo_original = precoBanco; novo.custo_editado_manual = true; }
+      }
       if(typeof inserirNoOrc==='function') inserirNoOrc(novo); else orc.push(novo);
       importadosLista.push(novo);
       importados++;
       if(!itCatalog && codU) naoEncontrados.push(codU);
+      relLinhas.push({
+        linha: headerIdx+2+iLinha, item: novo,
+        codPlan: codigo, achado: !!itCatalog, codigo: codigoFinal,
+        descrPlan: descrArq, descrBanco: itCatalog ? String(itCatalog.DESCR1||'') : '',
+        unidPlan: vazio(unidRaw) ? '' : String(unidRaw).trim(), unidBanco: itCatalog ? String(itCatalog.UNID||'') : '',
+        qtdPlan: qtdVazia ? null : qtd, qtdVazia: qtdVazia && colMap.qtd!=null,
+        unitPlan: vazio(custoRaw) ? null : custo, unitBanco: precoBanco, origemPreco: origemPreco,
+        bdiPlan: vazio(bdiRaw) ? null : String(bdiRaw).trim(),
+        totalPlan: (colMap.total!=null && !vazio(r[colMap.total])) ? parseNum(r[colMap.total]) : null
+      });
     });
 
     var msgBdi = (typeof window.distribuirBdiImportado==='function') ? window.distribuirBdiImportado(importadosLista) : '';
     if(typeof saveOrc==='function') saveOrc();
     if(typeof renderOrc==='function') renderOrc();
+    if(typeof window.montarRelatorioImportacao==='function'){
+      try{ window.montarRelatorioImportacao(relLinhas, colMap, {titulos: titulos, ignorados: ignorados, ignoradosFim: ignoradosFim}); }catch(e){ console.error('Relatório de importação:', e); }
+    }
     alert('Importação concluída: '+importados+' linha(s)'
       + (titulos ? ' + '+titulos+' título(s)' : '') + msgBdi
       + (ignorados ? '\n'+ignorados+' linha(s) de total/subtotal/BDI ignorada(s)' : '')
       + (ignoradosFim ? '\n'+ignoradosFim+' linha(s) depois do TOTAL GERAL (resumo, BDI, assinaturas) não importada(s)' : '')
-      + '\n'+(naoEncontrados.length?'Códigos não encontrados no catálogo (importados com os dados da própria planilha): '+naoEncontrados.slice(0,20).join(', ')+(naoEncontrados.length>20?'...':''):''));
+      + '\n'+(naoEncontrados.length?'Códigos não encontrados no catálogo (importados com os dados da própria planilha): '+naoEncontrados.slice(0,20).join(', ')+(naoEncontrados.length>20?'...':''):'')
+      + '\n\nO relatório de importação (item a item) abre a seguir e fica em 📥 Importar › 📋 Relatório da última importação.');
+    if(typeof window.abrirRelatorioImportacao==='function') window.abrirRelatorioImportacao();
   }
 })();
 </script>
@@ -11956,7 +11977,7 @@ document.addEventListener('DOMContentLoaded', limparRestos);
       titulo: document.querySelector('button[onclick="addTituloGlobal()"]'), exibir: document.querySelector('button[onclick="expandAllOrc()"]'),
       ocultar: document.querySelector('button[onclick="collapseAllOrc()"]'), diag: $('btnDiagComp'),
       abcCod: document.querySelector('button[onclick="abrirCurvaABC_Codigos()"]'), abcIns: document.querySelector('button[onclick="abrirCurvaABC_Insumos()"]'),
-      backup: $('fileBackupXLSX') && $('fileBackupXLSX').closest('label'), fileLista: $('fileImportCodigos'), lista: botao('Importar Lista', P),
+      backup: $('fileBackupXLSX') && $('fileBackupXLSX').closest('label'), fileLista: $('fileImportCodigos'), lista: botao('Importar Lista', P), relImp: $('btnRelImport'),
       dataBase: $('dataBaseTodos'), atuBase: botao('Atualizar todas as Bases', P), calc: $('boxCalcArred'),
       comp: document.querySelector('button[onclick="abrirModalComp()"]'), cot: botao('Cotação Quartis', P), hist: botao('Histórico', P),
       bkp: $('btnBackupPasta'), bkpSt: $('statusBackupPasta'), exportar: $('boxExportXlsx'),
@@ -11974,7 +11995,7 @@ document.addEventListener('DOMContentLoaded', limparRestos);
     r1.appendChild(menu('📁 Orçamento', [novo(h('Orçamento')), E.salvar, E.meus, E.novo, novo(el('hr')), E.hist, E.bkp, E.bkpSt,
       novo(el('hr')), novo(h('Data base de todos os itens')), novo(linha(E.dataBase, E.atuBase)),
       novo(el('hr')), novo(h('Cálculo dos valores')), novo(linha(E.calc))]));
-    r1.appendChild(menu('📥 Importar', [novo(h('Importar')), E.backup, E.lista, novo(el('hr')), novo(h('Atualizar bancos (arquivo do mês)')),
+    r1.appendChild(menu('📥 Importar', [novo(h('Importar')), E.backup, E.lista, E.relImp, novo(el('hr')), novo(h('Atualizar bancos (arquivo do mês)')),
       novo(atalho(E.atuEmop, '🗂️ EMOP (XLSX mensal)')), novo(atalho(E.atuSin, '📥 SINAPI (XLSX oficial mensal)')), novo(atalho(E.atuSco, '📥 SCO (mensal)'))]));
     r1.appendChild(menu('📤 Exportar', [novo(h('Exportar orçamento')), E.exportar]));
     r1.appendChild(menu('🧩 Planilha', [novo(h('Planilha')), E.titulo, E.comp, novo(el('hr')), E.exibir, E.ocultar, E.diag]));
@@ -12494,6 +12515,390 @@ document.addEventListener('DOMContentLoaded', limparRestos);
 })();
 </script>
 <!-- FIM PATCH V1-02-43 -->
+
+
+<!-- ==================== PATCH V1-02-44 - IMPORTAR LISTA: relatório item a item + preço clicável + "Atualizar todas as Bases" atualiza os preços pelo banco ==================== -->
+<style>
+.ri-modal{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10050;display:flex;align-items:center;justify-content:center;padding:12px}
+.ri-box{background:#fff;border-radius:10px;width:min(1400px,98vw);max-height:94vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.35)}
+.ri-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;padding:10px 14px;border-bottom:1px solid #e2e8f0}
+.ri-head small{display:block;font-size:10px;color:#64748b;font-weight:600;margin-top:2px}
+.ri-body{overflow:auto;padding:10px 14px}
+.ri-cards{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px}
+.ri-card{border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;min-width:150px;background:#f8fafc}
+.ri-card b{display:block;font-size:13px;color:#0f172a}
+.ri-card span{font-size:9px;color:#64748b;font-weight:700;text-transform:uppercase}
+.ri-card.dif b{color:#b91c1c}
+.ri-card.ok b{color:#15803d}
+.ri-causas{font-size:10px;margin:4px 0 8px;padding:6px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px}
+.ri-causas li{margin:2px 0}
+.ri-explica{font-size:10px;color:#475569;margin:0 0 8px;line-height:1.45}
+.ri-tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:6px;font-size:10px}
+.ri-tab{width:100%;border-collapse:collapse;font-size:10px}
+.ri-tab th{position:sticky;top:-10px;background:#0f172a;color:#fff;padding:5px 4px;text-align:left;font-size:9px;white-space:nowrap}
+.ri-tab td{border-top:1px solid #e2e8f0;padding:4px;vertical-align:top}
+.ri-tab td.n{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ri-tab tr.dif td{background:#fef2f2}
+.ri-tab tr.av td{background:#fffbeb}
+.ri-tab tr.ri-tot td{background:#f1f5f9;font-weight:800}
+.ri-tab .ri-cod{font-family:monospace;font-size:9px;white-space:nowrap}
+.ri-tab .ri-por{min-width:260px}
+.ri-tab .ri-por div{margin:1px 0}
+.ri-tag{display:inline-block;border-radius:4px;padding:0 4px;font-size:8px;font-weight:800}
+.ri-tag.pl{background:#dbeafe;color:#1e3a8a}.ri-tag.bc{background:#dcfce7;color:#14532d}.ri-tag.sp{background:#fee2e2;color:#7f1d1d}
+.ri-vazio{padding:30px;text-align:center;color:#64748b;font-size:12px}
+body.mode-mobile .ri-box{width:100vw;max-height:100vh;border-radius:0}
+body.mode-mobile .ri-modal{padding:0}
+</style>
+<script>
+(function(){
+  var KEY = 'schueler_relatorio_import_v1';
+  function num(v){ return Number(v)||0; }
+  function fmt(v, c){ if(v==null || !isFinite(v)) return '—'; return Number(v).toLocaleString('pt-BR', {minimumFractionDigits: c==null?2:c, maximumFractionDigits: c==null?2:c}); }
+  function rs(v){ return v==null ? '—' : 'R$ '+fmt(v); }
+  function qf(v){ return v==null ? '—' : Number(v).toLocaleString('pt-BR', {maximumFractionDigits: 4}); }
+  function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function cfgCalc(){ return window.calcConfig || {modo:'truncar', casas:2}; }
+  function corta(v, modo){
+    var c = cfgCalc(), f = Math.pow(10, (c.casas>=0 && c.casas<=4) ? c.casas : 2), n = Number(v)||0, a = Math.abs(n);
+    var t = (modo==='arredondar') ? Math.round(a*f + 1e-7)/f : Math.floor(a*f + 1e-7)/f;
+    return n<0 ? -t : t;
+  }
+  function tr2(v){ return (typeof truncar2==='function') ? truncar2(v) : corta(v, cfgCalc().modo); }
+  // "100289" e "SC-100289" são o mesmo código (o programa só acrescenta o prefixo do banco)
+  function mesmoCodigo(a, b){ var f = function(c){ return String(c==null?'':c).toUpperCase().replace(/^(SCO|SC|SI)-/,'').replace(/\.0$/,'').trim(); }; return f(a)===f(b); }
+  function normU(u){ return String(u==null?'':u).toUpperCase().replace(/²/g,'2').replace(/³/g,'3').replace(/[\s.]/g,''); }
+  function bdiNum(s){
+    if(s==null || s==='') return null;
+    var t = String(s).toUpperCase(); if(/BDI\s*[123]|ZERO|PRINCIPAL/.test(t)) return null;
+    var v = (typeof window.parseNumeroFlexivel==='function') ? window.parseNumeroFlexivel(String(s).replace('%','')) : parseFloat(String(s).replace('%','').replace(',','.'));
+    if(!isFinite(v)) return null;
+    if(v>0 && v<1) v = v*100;
+    return v;
+  }
+  // totais do item exatamente como a tela do orçamento calcula
+  function totaisPrograma(custo, qtd, bdi, modo){
+    var r = modo ? function(v){ return corta(v, modo); } : tr2;
+    var unitCom = r(custo*(1+bdi/100));
+    return {unitCom: unitCom, sem: r(qtd*custo), com: r(qtd*unitCom)};
+  }
+  var TOL = 0.01;
+
+  window.montarRelatorioImportacao = function(linhas, colMap, extra){
+    linhas = linhas || [];
+    var temTotal = colMap.total!=null;
+    // 1) números do programa para cada linha (BDI já distribuído nos campos do topo)
+    var L = linhas.map(function(x){
+      var it = x.item || {};
+      var bdi = (typeof getBdiValor==='function') ? num(getBdiValor(it)) : num(it.bdi);
+      var custo = num(it.custo), qtd = num(it.qtd);
+      var t = totaisPrograma(custo, qtd, bdi);
+      return {linha:x.linha, codPlan:x.codPlan, achado:x.achado, codigo:x.codigo, descr: x.descrPlan || x.descrBanco || it.descr || '',
+        descrBanco:x.descrBanco, unidPlan:x.unidPlan, unidBanco:x.unidBanco, unid: it.unid, qtdPlan:x.qtdPlan, qtdVazia:x.qtdVazia, qtd:qtd,
+        unitPlan:x.unitPlan, unitBanco:x.unitBanco, custo:custo, origem:x.origemPreco, bdiPlan:x.bdiPlan, bdiPlanNum: bdiNum(x.bdiPlan), bdi:bdi,
+        unitCom:t.unitCom, totSem:t.sem, totCom:t.com, totalPlan:x.totalPlan};
+    });
+    // 2) o TOTAL da planilha é com ou sem BDI? (escolhe o que mais se aproxima no conjunto)
+    var eSem = 0, eCom = 0, nT = 0;
+    L.forEach(function(r){ if(r.totalPlan==null) return; nT++; eSem += Math.abs(r.totalPlan-r.totSem); eCom += Math.abs(r.totalPlan-r.totCom); });
+    var algumBdi = L.some(function(r){ return r.bdi>0; });
+    var base = (nT && algumBdi && eCom < eSem) ? 'com' : 'sem';
+    // 3) diferença e causas, linha a linha
+    var resumoCausa = {};
+    function causa(r, chave, txt){ r.causas.push(txt); if(!r.chave) r.chave = chave; }
+    L.forEach(function(r){
+      r.causas = []; r.avisos = [];
+      r.totProg = base==='com' ? r.totCom : r.totSem;
+      r.dif = r.totalPlan!=null ? Math.round((r.totProg - r.totalPlan)*100)/100 : null;
+      var temDif = r.dif!=null && Math.abs(r.dif) >= TOL;
+      // avisos que valem mesmo sem diferença no total
+      if(!r.achado && r.codPlan) r.avisos.push('Código "'+r.codPlan+'" não encontrado nos bancos EMOP/SINAPI/SCO carregados: entrou com descrição, unidade e preço da planilha.');
+      if(!r.achado && !r.codPlan) r.avisos.push('Linha sem código: entrou só com os dados da planilha.');
+      if(r.achado && !mesmoCodigo(r.codigo, r.codPlan)) r.avisos.push('Código da planilha "'+r.codPlan+'" vinculado ao item do banco '+r.codigo+'.');
+      if(r.origem==='sem preço') r.avisos.push('Sem preço: a coluna VALOR UNITÁRIO não foi marcada (ou está vazia) e o item não existe no banco. Entrou com R$ 0,00: cote o preço (✏️).');
+      if(r.origem==='banco') r.avisos.push('Preço do banco ('+rs(r.unitBanco)+'), pois a coluna VALOR UNITÁRIO '+(colMap.custo==null?'não foi marcada':'está vazia nesta linha')+'.');
+      if(r.origem==='planilha' && r.achado && Math.abs(r.unitPlan - r.unitBanco) >= 0.005){
+        var pc = r.unitBanco ? ((r.unitPlan/r.unitBanco-1)*100) : null;
+        r.avisos.push('Preço da planilha '+rs(r.unitPlan)+' é diferente do banco '+rs(r.unitBanco)+(pc!=null?' ('+(pc>=0?'+':'')+fmt(pc,1)+'%)':'')+'. Ficou o da planilha, com ↩ para voltar ao do banco.');
+      }
+      if(r.unidPlan && r.unidBanco && normU(r.unidPlan)!==normU(r.unidBanco)) r.avisos.push('Unidade da planilha "'+r.unidPlan+'" é diferente da unidade do banco "'+r.unidBanco+'": confira se a quantidade está na mesma unidade.');
+      if(r.qtdVazia) r.avisos.push('Quantidade vazia na planilha: entrou 1.');
+      if(r.qtd===0) r.avisos.push('Quantidade zero.');
+      if(!temDif) return;
+      // por que o total ficou diferente
+      var bdiPl = r.bdiPlanNum;
+      var fatorPl = base==='com' ? (1 + ((bdiPl!=null ? bdiPl : r.bdi)/100)) : 1;
+      if(r.origem==='sem preço'){ causa(r, 'sempreco', 'Item sem preço no programa (R$ 0,00): a planilha tem total '+rs(r.totalPlan)+'.'); }
+      else if(r.origem==='banco' && r.qtd>0){
+        var unitImpl = r.totalPlan / r.qtd / fatorPl;
+        causa(r, 'banco', 'O programa usou o preço do banco '+rs(r.unitBanco)+'; pelo total da planilha o unitário era ≈ '+rs(unitImpl)+'.');
+      }
+      if(r.qtdVazia) causa(r, 'qtd', 'A planilha não tem quantidade nesta linha e o programa usou 1.');
+      if(base==='com' && bdiPl!=null && Math.abs(bdiPl - r.bdi) >= 0.0001) causa(r, 'bdi', 'BDI da planilha '+fmt(bdiPl,2)+'% e BDI usado no programa '+fmt(r.bdi,2)+'%.');
+      // conta da própria planilha: total ≠ quantidade × unitário (com o BDI)
+      if(r.unitPlan!=null && r.qtdPlan!=null){
+        var bPl = bdiPl!=null ? bdiPl : r.bdi;
+        var semArr = r.qtdPlan * r.unitPlan * (base==='com' ? (1+bPl/100) : 1);
+        var difConta = r.totalPlan - semArr;
+        var outro = cfgCalc().modo==='arredondar' ? 'truncar' : 'arredondar';
+        var tOutro = totaisPrograma(r.custo, r.qtd, r.bdi, outro);
+        var vOutro = base==='com' ? tOutro.com : tOutro.sem;
+        if(Math.abs(vOutro - r.totalPlan) < TOL){
+          causa(r, 'arred', 'Arredondamento: a planilha '+(outro==='arredondar'?'arredonda':'trunca')+' os valores e o programa está '+(outro==='arredondar'?'truncando':'arredondando')+' (mude em 🧮 Cálculo para ficar igual).');
+        } else if(Math.abs(difConta) > Math.max(0.05, Math.abs(r.qtdPlan)*0.01 + 0.01)){
+          causa(r, 'conta', 'Na própria planilha o total '+rs(r.totalPlan)+' não bate com quantidade × unitário'+(base==='com'?' × (1 + BDI)':'')+' = '+rs(semArr)+' (diferença '+rs(difConta)+'): fórmula, quantidade ou unitário escondido na planilha.');
+        } else if(!r.causas.length){
+          causa(r, 'arred', 'Arredondamento/truncamento de centavos (o programa '+(cfgCalc().modo==='arredondar'?'arredonda':'trunca')+' o unitário com BDI e o total em '+cfgCalc().casas+' casas).');
+        }
+      }
+      if(!r.causas.length) causa(r, 'outra', 'Diferença sem causa identificada pelo programa: confira esta linha na planilha.');
+      var k = r.chave; resumoCausa[k] = resumoCausa[k] || {n:0, v:0}; resumoCausa[k].n++; resumoCausa[k].v += r.dif;
+    });
+    var soma = function(f){ return L.reduce(function(s,r){ var v = f(r); return s + (v==null?0:v); }, 0); };
+    var rel = {
+      quando: new Date().toLocaleString('pt-BR'),
+      base: base, temTotal: temTotal,
+      colunas: Object.keys(colMap).filter(function(k){ return colMap[k]!=null; }),
+      bdiConfig: JSON.parse(JSON.stringify(window.bdiConfig||{})),
+      calc: JSON.parse(JSON.stringify(cfgCalc())),
+      extra: extra || {},
+      linhas: L,
+      totPlan: temTotal ? soma(function(r){ return r.totalPlan; }) : null,
+      totProg: soma(function(r){ return r.totProg; }),
+      totProgSem: soma(function(r){ return r.totSem; }),
+      totProgCom: soma(function(r){ return r.totCom; }),
+      totProgComTotal: soma(function(r){ return r.totalPlan!=null ? r.totProg : null; }),
+      resumoCausa: resumoCausa
+    };
+    window._relatorioImportacao = rel;
+    try{ localStorage.setItem(KEY, JSON.stringify(rel)); }catch(e){}
+    return rel;
+  };
+
+  var NOME_CAUSA = {
+    banco: 'Preço do banco no lugar do preço da planilha (VALOR UNITÁRIO não marcado)',
+    sempreco: 'Item sem preço (fora do banco e sem VALOR UNITÁRIO)',
+    qtd: 'Quantidade vazia (entrou 1)',
+    bdi: 'BDI diferente',
+    conta: 'Conta da própria planilha não bate (total ≠ qtd × unitário)',
+    arred: 'Arredondamento / truncamento de centavos',
+    outra: 'Sem causa identificada'
+  };
+  var NOME_COL = {item:'ITEM', codigo:'CÓDIGO', descr:'DESCRIÇÃO', unid:'UNIDADE', qtd:'QUANTIDADE', custo:'VALOR UNITÁRIO', bdi:'BDI', total:'TOTAL'};
+
+  function carregar(){
+    if(window._relatorioImportacao) return window._relatorioImportacao;
+    try{ var j = localStorage.getItem(KEY); if(j) return (window._relatorioImportacao = JSON.parse(j)); }catch(e){}
+    return null;
+  }
+
+  var soDif = true;
+  function linhasHtml(rel){
+    var h = '';
+    rel.linhas.forEach(function(r){
+      var dif = r.dif!=null && Math.abs(r.dif) >= TOL, av = r.avisos.length>0;
+      if(soDif && !dif && !av) return;
+      var tag = r.origem==='planilha' ? '<span class="ri-tag pl">planilha</span>' : (r.origem==='banco' ? '<span class="ri-tag bc">banco</span>' : '<span class="ri-tag sp">sem preço</span>');
+      h += '<tr class="'+(dif?'dif':(av?'av':''))+'">'
+        + '<td class="n">'+r.linha+'</td>'
+        + '<td class="ri-cod">'+esc(r.codPlan||'—')+(r.achado && !mesmoCodigo(r.codigo, r.codPlan) ? '<br>→ '+esc(r.codigo) : '')+'</td>'
+        + '<td>'+esc(String(r.descr).slice(0,110))+'</td>'
+        + '<td>'+esc(r.unidPlan||'—')+(r.unidBanco && normU(r.unidBanco)!==normU(r.unidPlan) ? '<br><small style="color:#64748b">banco: '+esc(r.unidBanco)+'</small>' : '')+'</td>'
+        + '<td class="n">'+qf(r.qtdPlan)+(r.qtdVazia?'<br><small>usou 1</small>':'')+'</td>'
+        + '<td class="n">'+rs(r.unitPlan)+'</td>'
+        + '<td class="n">'+rs(r.unitBanco)+'</td>'
+        + '<td class="n">'+rs(r.custo)+'<br>'+tag+'</td>'
+        + '<td class="n">'+(r.bdiPlan!=null&&r.bdiPlan!==''?esc(r.bdiPlan):'—')+'<br><small>usado: '+fmt(r.bdi,2)+'%</small></td>'
+        + '<td class="n">'+rs(r.totalPlan)+'</td>'
+        + '<td class="n">'+rs(r.totProg)+'</td>'
+        + '<td class="n" style="font-weight:800;color:'+(dif?'#b91c1c':'#15803d')+'">'+(r.dif==null?'—':(r.dif>0?'+':'')+fmt(r.dif))+'</td>'
+        + '<td class="ri-por">'+r.causas.map(function(c){ return '<div>❗ '+esc(c)+'</div>'; }).join('')+r.avisos.map(function(c){ return '<div style="color:#475569">• '+esc(c)+'</div>'; }).join('')+(!dif&&!av?'<span style="color:#15803d">✔ igual à planilha</span>':'')+'</td>'
+        + '</tr>';
+    });
+    if(!h) h = '<tr><td colspan="13" class="ri-vazio">Nenhum item com diferença ou aviso. Desmarque o filtro para ver todos.</td></tr>';
+    return h;
+  }
+
+  function render(){
+    var rel = carregar(), m = document.getElementById('modalRelImport');
+    if(!m) return;
+    var corpo = m.querySelector('.ri-body');
+    if(!rel){ corpo.innerHTML = '<div class="ri-vazio">Ainda não há relatório: importe uma planilha em 📥 Importar › Importar Lista.</div>'; return; }
+    var nDif = rel.linhas.filter(function(r){ return r.dif!=null && Math.abs(r.dif) >= TOL; }).length;
+    var nAv = rel.linhas.filter(function(r){ return r.avisos.length; }).length;
+    var nNao = rel.linhas.filter(function(r){ return !r.achado; }).length;
+    var nBanco = rel.linhas.filter(function(r){ return r.origem==='banco'; }).length, nPl = rel.linhas.filter(function(r){ return r.origem==='planilha'; }).length, nSP = rel.linhas.filter(function(r){ return r.origem==='sem preço'; }).length;
+    var difTot = rel.totPlan!=null ? Math.round((rel.totProgComTotal - rel.totPlan)*100)/100 : null;
+    var baseTxt = rel.base==='com' ? 'com BDI' : 'sem BDI';
+    var h = '<div class="ri-cards">'
+      + '<div class="ri-card"><span>Itens importados</span><b>'+rel.linhas.length+'</b></div>'
+      + '<div class="ri-card"><span>Preço de onde veio</span><b style="font-size:11px">'+nPl+' planilha • '+nBanco+' banco • '+nSP+' sem preço</b></div>'
+      + (rel.totPlan!=null ? '<div class="ri-card"><span>Total da planilha ('+baseTxt+')</span><b>'+rs(rel.totPlan)+'</b></div>'
+        + '<div class="ri-card"><span>Total no programa ('+baseTxt+')</span><b>'+rs(rel.totProgComTotal)+'</b></div>'
+        + '<div class="ri-card '+(Math.abs(difTot)>=TOL?'dif':'ok')+'"><span>Diferença (programa − planilha)</span><b>'+(difTot>0?'+':'')+rs(difTot)+'</b></div>' : '')
+      + '<div class="ri-card"><span>Itens com diferença / avisos</span><b>'+nDif+' / '+nAv+'</b></div>'
+      + '<div class="ri-card"><span>Códigos não achados no banco</span><b>'+nNao+'</b></div>'
+      + '</div>';
+    var ks = Object.keys(rel.resumoCausa||{});
+    if(ks.length){
+      h += '<div class="ri-causas"><b>Por que o total ficou diferente</b><ul style="margin:3px 0 0 16px;padding:0">'
+        + ks.sort(function(a,b){ return Math.abs(rel.resumoCausa[b].v)-Math.abs(rel.resumoCausa[a].v); }).map(function(k){ var c = rel.resumoCausa[k]; return '<li>'+esc(NOME_CAUSA[k]||k)+': '+c.n+' item(ns), '+(c.v>0?'+':'')+rs(c.v)+'</li>'; }).join('')
+        + '</ul></div>';
+    } else if(rel.totPlan!=null){
+      h += '<div class="ri-causas" style="background:#f0fdf4;border-color:#bbf7d0"><b>✔ Todos os totais batem com a planilha.</b></div>';
+    }
+    h += '<p class="ri-explica">Colunas importadas: <b>'+rel.colunas.map(function(k){ return NOME_COL[k]||k; }).join(', ')+'</b>. '
+      + (rel.totPlan==null ? 'A coluna TOTAL não foi marcada, então o relatório não compara totais (marque TOTAL na importação para conferir item a item). ' : 'O TOTAL da planilha foi comparado com o total '+baseTxt+' de cada item no programa (o programa escolheu o que mais se aproxima da planilha). ')
+      + 'O preço só vem da planilha quando a coluna VALOR UNITÁRIO é marcada; sem ela, o item do banco usa o preço do banco e o item fora do banco fica sem preço. '
+      + 'Cálculo atual: '+(rel.calc && rel.calc.modo==='arredondar'?'arredondar':'truncar')+' em '+(rel.calc?rel.calc.casas:2)+' casas. Importado em '+esc(rel.quando)+'. Os números são os do momento da importação.</p>';
+    h += '<div class="ri-tools"><label><input type="checkbox" id="riSoDif" '+(soDif?'checked':'')+'> Mostrar só itens com diferença ou aviso</label></div>';
+    h += '<table class="ri-tab"><thead><tr><th>Linha</th><th>Código</th><th>Descrição</th><th>Unid.</th><th>Qtd planilha</th><th>Unit. planilha</th><th>Unit. banco</th><th>Unit. adotado</th><th>BDI</th><th>Total planilha</th><th>Total programa</th><th>Diferença</th><th>Por que ficou diferente</th></tr></thead><tbody>'
+      + linhasHtml(rel) + '</tbody></table>';
+    corpo.innerHTML = h;
+    var cb = document.getElementById('riSoDif'); if(cb) cb.onchange = function(){ soDif = cb.checked; render(); };
+  }
+
+  window.abrirRelatorioImportacao = function(){
+    var m = document.getElementById('modalRelImport');
+    if(!m){
+      m = document.createElement('div'); m.id = 'modalRelImport'; m.className = 'ri-modal';
+      m.innerHTML = '<div class="ri-box"><div class="ri-head"><div><div style="font-weight:800;font-size:13px">📋 Relatório da importação</div><small>Cada item importado conferido com a planilha: código, unidade, quantidade, preço, BDI e total, com o motivo de cada diferença.</small></div>'
+        + '<div style="display:flex;gap:6px"><button class="btn btn-primary" data-a="xlsx">📊 Exportar XLSX</button><button class="btn btn-dark" data-a="fechar">✕</button></div></div><div class="ri-body"></div></div>';
+      m.addEventListener('click', function(ev){
+        if(ev.target===m) return fechar();
+        var a = ev.target.closest && ev.target.closest('[data-a]'); if(!a) return;
+        if(a.dataset.a==='fechar') fechar();
+        if(a.dataset.a==='xlsx') exportar();
+      });
+      document.body.appendChild(m);
+    }
+    m.style.display = 'flex';
+    render();
+  };
+  function fechar(){ var m = document.getElementById('modalRelImport'); if(m) m.style.display = 'none'; }
+  document.addEventListener('keydown', function(ev){ if(ev.key==='Escape') fechar(); });
+
+  function exportar(){
+    var rel = carregar(); if(!rel){ alert('Não há relatório de importação.'); return; }
+    if(typeof XLSX==='undefined'){ alert('Biblioteca XLSX não carregada. Recarregue a página.'); return; }
+    var n2 = function(v){ return v==null ? '' : Math.round(v*100)/100; };
+    var aoa = [['RELATÓRIO DA IMPORTAÇÃO - '+rel.quando], [],
+      ['Total da planilha', n2(rel.totPlan), 'Total no programa', n2(rel.totProgComTotal), 'Diferença', rel.totPlan!=null ? n2(rel.totProgComTotal-rel.totPlan) : '', 'Base dos totais', rel.base==='com'?'com BDI':'sem BDI'], [],
+      ['Linha','Código planilha','Código no programa','Descrição','Unid. planilha','Unid. banco','Qtd planilha','Qtd usada','Unit. planilha','Unit. banco','Unit. adotado','Origem do preço','BDI planilha','BDI usado %','Total planilha','Total programa','Diferença','Por que ficou diferente','Avisos']];
+    rel.linhas.forEach(function(r){
+      aoa.push([r.linha, r.codPlan, r.codigo, r.descr, r.unidPlan, r.unidBanco, r.qtdPlan==null?'':r.qtdPlan, r.qtd, n2(r.unitPlan), n2(r.unitBanco), r.custo, r.origem, r.bdiPlan==null?'':r.bdiPlan, r.bdi, n2(r.totalPlan), n2(r.totProg), r.dif==null?'':r.dif, r.causas.join(' | '), r.avisos.join(' | ')]);
+    });
+    var ws = XLSX.utils.aoa_to_sheet(aoa);
+    ws['!cols'] = [{wch:6},{wch:16},{wch:18},{wch:60},{wch:8},{wch:8},{wch:10},{wch:10},{wch:12},{wch:12},{wch:12},{wch:10},{wch:10},{wch:9},{wch:14},{wch:14},{wch:11},{wch:70},{wch:70}];
+    var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Relatório importação');
+    var nome = (document.getElementById('nomeOrcAtual') && document.getElementById('nomeOrcAtual').value || 'orcamento').trim().replace(/[\\/:*?"<>|]+/g,'_');
+    XLSX.writeFile(wb, 'Relatorio_importacao_'+nome+'.xlsx');
+  }
+
+  // ------------------------------------------------------------------
+  // Preço unitário: o campo mostrava o cursor de "proibido". Agora um clique abre a edição (✏️).
+  // ------------------------------------------------------------------
+  function precoClicavel(){
+    var tb = document.getElementById('tbodyOrc'); if(!tb) return;
+    tb.querySelectorAll('input.price[readonly]').forEach(function(inp){
+      var bt = inp.parentNode && inp.parentNode.querySelector('button[onclick^="editarPrecoItem"]');
+      if(!bt) return;
+      inp.style.cursor = 'pointer';
+      inp.title = 'Clique para alterar o valor unitário';
+      inp.onclick = function(){ bt.click(); };
+    });
+  }
+  var _roAnt44 = window.renderOrc;
+  window.renderOrc = function(){
+    var r = _roAnt44.apply(this, arguments);
+    try{ precoClicavel(); }catch(e){ console.error(e); }
+    return r;
+  };
+
+  // ------------------------------------------------------------------
+  // Atualizar os VALORES UNITÁRIOS de todos os itens pelo banco carregado (EMOP/SINAPI/SCO).
+  // Itens importados com preço da planilha ou editados (✏️) também podem ser atualizados.
+  // ------------------------------------------------------------------
+  function mapaBancos(){
+    var full = [];
+    try{
+      full = (typeof catalog!=='undefined' ? catalog.slice() : []);
+      if(typeof extraDBs!=='undefined') extraDBs.forEach(function(db){ full.push.apply(full, db.items||[]); });
+      full = full.concat(window.SINAPI_INSUMOS||[], window.SINAPI_COMPOSICOES||[], window.SCO_ITENS||[], window.SCO_INSUMOS||[]);
+    }catch(e){ try{ full = getFullCatalog(); }catch(e2){ full = []; } }
+    var m = {}; full.forEach(function(it){ if(it && it.CODIGO!=null) m[String(it.CODIGO).toUpperCase()] = it; });
+    return m;
+  }
+  function refBancos(){
+    var r = [];
+    if(window._sinapiImportMeta) r.push('SINAPI '+(window._sinapiImportMeta.competencia || window._sinapiImportMeta.referencia || ''));
+    if(window._scoImportMeta) r.push('SCO '+(window._scoImportMeta.competencia || window._scoImportMeta.referencia || ''));
+    if(typeof catalog!=='undefined' && catalog.length) r.push('EMOP '+((document.getElementById('dataBaseEMOP')||{}).value||''));
+    return r.join(', ');
+  }
+  window.atualizarPrecosPeloBanco = function(){
+    if(typeof orc==='undefined' || !orc.length){ alert('Orçamento vazio.'); return 0; }
+    var M = mapaBancos();
+    if(!Object.keys(M).length){ alert('Nenhum banco carregado para buscar os preços.'); return 0; }
+    var mudar = [], editados = [], fora = [], iguais = 0;
+    orc.forEach(function(l){
+      if(!l || l.tipo!=='ITEM') return;
+      var c = String(l.codigo==null?'':l.codigo).toUpperCase();
+      var it = M[c] || M[c.replace(/\.0$/,'')];
+      if(!it && typeof window.resolverCodigoCanonico==='function'){ var cc = window.resolverCodigoCanonico(l.codigo, l.descr); if(cc) it = M[String(cc).toUpperCase()]; }
+      if(!it){ fora.push(l); return; }
+      var p = (typeof custoEfetivoItem==='function') ? custoEfetivoItem(it) : Number(it.CUSTO);
+      if(!isFinite(p)) return;
+      var atual = parseFloat(String(l.custo).replace(',','.'))||0;
+      var ed = !!(l.custo_editado_manual || l.custo_origem==='planilha');
+      if(Math.abs(atual-p) < 0.000001){ iguais++; if(ed) editados.push({l:l, p:p, igual:true}); return; }
+      (ed ? editados : mudar).push({l:l, p:p});
+    });
+    var edDif = editados.filter(function(x){ return !x.igual; });
+    if(!mudar.length && !edDif.length){
+      editados.forEach(function(x){ delete x.l.custo_original; delete x.l.custo_editado_manual; delete x.l.custo_origem; });
+      alert('Os valores unitários já estão iguais aos do banco carregado ('+refBancos()+').'+(fora.length ? '\n'+fora.length+' item(ns) fora dos bancos ficaram como estão.' : ''));
+      return 0;
+    }
+    var incluirEd = false;
+    if(edDif.length){
+      incluirEd = confirm(edDif.length+' item(ns) estão com preço da planilha importada ou editado à mão (✏️).\n\nOK = atualizar também esses pelo preço do banco\nCancelar = manter o preço deles');
+    }
+    var lista = mudar.concat(incluirEd ? edDif : []);
+    if(!lista.length){ alert('Nada a atualizar: os demais itens já estão com o preço do banco.'); return 0; }
+    var antes = 0, depois = 0;
+    lista.forEach(function(x){
+      var q = parseFloat(String(x.l.qtd).replace(',','.'))||0;
+      antes += q*(parseFloat(String(x.l.custo).replace(',','.'))||0); depois += q*x.p;
+      x.l.custo = x.p; x.l.custo_num = x.p;
+      delete x.l.custo_original; delete x.l.custo_editado_manual; delete x.l.custo_origem;
+    });
+    if(incluirEd) editados.forEach(function(x){ if(x.igual){ delete x.l.custo_original; delete x.l.custo_editado_manual; delete x.l.custo_origem; } });
+    if(typeof saveOrc==='function') saveOrc();
+    if(typeof renderOrc==='function') renderOrc();
+    alert('✅ Valores unitários atualizados pelo banco ('+refBancos()+'): '+lista.length+' item(ns).\n'
+      + 'Soma qtd × unitário desses itens (sem BDI): R$ '+fmt(antes)+' → R$ '+fmt(depois)+'.'
+      + (edDif.length && !incluirEd ? '\n'+edDif.length+' item(ns) com preço da planilha/editado foram mantidos.' : '')
+      + (fora.length ? '\n'+fora.length+' item(ns) fora dos bancos (sem código do banco ou composição própria) ficaram como estão.' : ''));
+    return lista.length;
+  };
+
+  // "Atualizar todas as Bases": depois de gravar a data base, oferece atualizar os preços
+  var _atuBaseAnt44 = window.atualizarDataBaseTodos;
+  if(typeof _atuBaseAnt44==='function'){
+    window.atualizarDataBaseTodos = function(){
+      var r = _atuBaseAnt44.apply(this, arguments);
+      var dbEl = document.getElementById('dataBaseTodos'), val = dbEl ? dbEl.value.trim() : '';
+      var aplicou = val && typeof orc!=='undefined' && orc.length && orc.every(function(it){ return it.data_base===val; });
+      if(aplicou){
+        if(confirm('Atualizar também os VALORES UNITÁRIOS de todos os itens pelo banco carregado ('+refBancos()+')?')) window.atualizarPrecosPeloBanco();
+      }
+      return r;
+    };
+  }
+})();
+</script>
+<!-- FIM PATCH V1-02-44 -->
 
 </body>
 </html>
