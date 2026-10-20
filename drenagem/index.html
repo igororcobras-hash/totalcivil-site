@@ -4319,4 +4319,427 @@ tabelasMemoria = function () {
   return T;
 };
 </script>
+<script>
+/* =====================================================================
+   PATCH DR-03 (20/10/2026) — 3 soluções com orçamento licitável
+   Botão "💰 3 soluções com orçamento" (rede, PVs, verificação, custos e
+   relatório da correção automática). Sobre a rede já dimensionada pela
+   topografia, monta três soluções construtivas e, para cada uma, a planilha
+   no formato dos orçamentos de drenagem licitados (Niterói/EMOP, Macaé,
+   Santarém/SINAPI): preliminares, demolição, movimento de terra,
+   transporte, tubos, PVs, captação e recomposição do pavimento.
+   - EMOP: códigos do catálogo; preços lidos do banco EMOP que o usuário
+     carregou no programa de Orçamento neste aparelho (IndexedDB do site).
+     Sem ele, os códigos saem e o Orçamento põe o preço ao importar.
+   - SINAPI RJ e SCO-Rio: bancos mensais do site (/orcamento/dados).
+   - Item sem código no banco escolhido usa o equivalente de outro banco
+     (coluna Fonte), como se faz nos orçamentos oficiais.
+   - Excel no formato do "📥 Importar Lista" do programa de Orçamento
+     (ITEM, CÓDIGO, DESCRIÇÃO, UNIDADE, QUANTIDADE, VALOR UNITÁRIO).
+   ===================================================================== */
+const EMOP_PA = {"PA-1": {"300": "06.004.0060", "400": "06.004.0062", "500": "06.004.0064", "600": "06.004.0066", "700": "06.004.0068", "800": "06.004.0070", "900": "06.004.0072", "1000": "06.004.0074", "1100": "06.004.0076", "1200": "06.004.0078", "1500": "06.004.0080", "2000": "06.004.0084"}, "PA-2": {"300": "06.004.0090", "400": "06.004.0092", "500": "06.004.0094", "600": "06.004.0096", "700": "06.004.0098", "800": "06.004.0100", "900": "06.004.0102", "1000": "06.004.0104", "1200": "06.004.0108", "1500": "06.004.0110", "2000": "06.004.0114"}};
+const EMOP_PVBL = [["06.015.0010", 1.2, 1.4, 0.7], ["06.015.0011", 1.3, 1.4, 0.8], ["06.015.0012", 1.4, 1.5, 0.9], ["06.015.0013", 1.5, 1.6, 1.0], ["06.015.0014", 1.6, 1.7, 1.1], ["06.015.0015", 1.7, 1.8, 1.2], ["06.015.0016", 2.0, 2.1, 1.5]];   // [código, lado interno, altura, Ø máx. do tubo]
+const EMOP_PVCA = [["06.012.0200",1.1,1.2,0.6],["06.012.0201",1.1,1.5,0.6],["06.012.0202",1.1,1.8,0.6],["06.012.0203",1.1,2.1,0.6],["06.012.0204",1.1,2.4,0.6],["06.012.0205",1.1,2.7,0.6],["06.012.0206",1.1,3.0,0.6],["06.012.0207",1.1,3.3,0.6],["06.012.0208",1.1,3.6,0.6],["06.012.0209",1.1,3.9,0.6],["06.012.0210",1.1,4.2,0.6],["06.012.0211",1.1,4.5,0.6],["06.012.0212",1.1,4.8,0.6],["06.012.0213",1.1,5.1,0.6],["06.012.0214",1.1,5.4,0.6],["06.012.0215",1.1,5.7,0.6],["06.012.0216",1.1,6.0,0.6],["06.012.0217",1.2,1.5,0.7],["06.012.0218",1.2,1.8,0.7],["06.012.0219",1.2,2.1,0.7],["06.012.0220",1.2,2.4,0.7],["06.012.0221",1.2,2.7,0.7],["06.012.0222",1.2,3.0,0.7],["06.012.0223",1.2,3.3,0.7],["06.012.0224",1.2,3.6,0.7],["06.012.0225",1.2,3.9,0.7],["06.012.0226",1.2,4.2,0.7],["06.012.0227",1.2,4.5,0.7],["06.012.0228",1.2,4.8,0.7],["06.012.0229",1.2,5.1,0.7],["06.012.0230",1.2,5.4,0.7],["06.012.0231",1.2,5.7,0.7],["06.012.0232",1.2,6.0,0.7],["06.012.0233",1.3,1.5,0.8],["06.012.0234",1.3,1.8,0.8],["06.012.0235",1.3,2.1,0.8],["06.012.0236",1.3,2.4,0.8],["06.012.0238",1.3,3.0,0.8],["06.012.0239",1.3,3.3,0.8],["06.012.0240",1.3,3.6,0.8],["06.012.0241",1.3,3.9,0.8],["06.012.0242",1.3,4.2,0.8],["06.012.0243",1.3,4.5,0.8],["06.012.0244",1.3,4.8,0.8],["06.012.0245",1.3,5.1,0.8],["06.012.0247",1.3,5.7,0.8],["06.012.0248",1.3,6.0,0.8],["06.012.0249",1.4,1.8,0.9],["06.012.0250",1.4,2.1,0.9],["06.012.0251",1.4,2.4,0.9],["06.012.0252",1.4,2.7,0.9],["06.012.0253",1.4,3.0,0.9],["06.012.0254",1.4,3.3,0.9],["06.012.0255",1.4,3.6,0.9],["06.012.0256",1.4,3.9,0.9],["06.012.0257",1.4,4.2,0.9],["06.012.0258",1.4,4.5,0.9],["06.012.0259",1.4,4.8,0.9],["06.012.0260",1.4,5.1,0.9],["06.012.0261",1.4,5.4,0.9],["06.012.0262",1.4,5.7,0.9],["06.012.0263",1.4,6.0,0.9],["06.012.0264",1.5,1.8,1.0],["06.012.0265",1.5,2.1,1.0],["06.012.0266",1.5,2.4,1.0],["06.012.0267",1.5,2.7,1.0],["06.012.0268",1.5,3.0,1.0],["06.012.0269",1.5,3.3,1.0],["06.012.0270",1.5,3.6,1.0],["06.012.0271",1.5,3.9,1.0],["06.012.0272",1.5,4.2,1.0],["06.012.0273",1.5,4.5,1.0],["06.012.0274",1.5,4.8,1.0],["06.012.0275",1.5,5.1,1.0],["06.012.0276",1.5,5.4,1.0],["06.012.0277",1.5,5.7,1.0],["06.012.0278",1.5,6.0,1.0],["06.012.0310",1.6,1.8,1.1],["06.012.0312",1.6,2.1,1.1],["06.012.0315",1.6,2.4,1.1],["06.012.0317",1.6,2.7,1.1],["06.012.0319",1.6,3.0,1.1],["06.012.0320",1.6,3.3,1.1],["06.012.0322",1.6,3.6,1.1],["06.012.0325",1.6,3.9,1.1],["06.012.0327",1.6,4.2,1.1],["06.012.0329",1.6,4.5,1.1],["06.012.0331",1.6,4.8,1.1],["06.012.0332",1.6,5.1,1.1],["06.012.0335",1.6,5.4,1.1],["06.012.0337",1.6,5.7,1.1],["06.012.0340",1.6,6.0,1.1],["06.012.0345",1.7,1.8,1.2],["06.012.0347",1.7,2.1,1.2],["06.012.0348",1.7,2.4,1.2],["06.012.0349",1.7,2.7,1.2],["06.012.0351",1.7,3.0,1.2],["06.012.0352",1.7,3.3,1.2],["06.012.0355",1.7,3.6,1.2],["06.012.0357",1.7,3.9,1.2],["06.012.0359",1.7,4.2,1.2],["06.012.0362",1.7,4.5,1.2],["06.012.0363",1.7,4.8,1.2],["06.012.0364",1.7,5.1,1.2],["06.012.0366",1.7,5.4,1.2],["06.012.0368",1.7,5.7,1.2],["06.012.0370",1.7,6.0,1.2],["06.012.0372",2.0,2.4,1.5],["06.012.0375",2.0,2.7,1.5],["06.012.0377",2.0,3.0,1.5],["06.012.0379",2.0,3.3,1.5],["06.012.0381",2.0,3.6,1.5],["06.012.0383",2.0,3.9,1.5],["06.012.0385",2.0,4.2,1.5],["06.012.0387",2.0,4.5,1.5],["06.012.0389",2.0,4.8,1.5],["06.012.0391",2.0,5.1,1.5],["06.012.0393",2.0,5.4,1.5],["06.012.0395",2.0,5.7,1.5],["06.012.0400",2.0,6.0,1.5]];   // [código, lado interno, profundidade, Ø da galeria]
+const EMOP_TAB = {"01.018.0002":["M","LOCACAO DE OBRA COM APARELHO TOPOGRAFICO SOBRE CERCA DE MARCACAO,INCLUSIVE CONSTRUCAO DESTA E SUA PRE-LOCACAO E O FORNECIMENTO DO MATERIAL E TENDO POR","0"],"02.020.0001":["M2","PLACA DE IDENTIFICACAO DE OBRA PUBLICA,INCLUSIVE PINTURA E SUPORTES DE MADEIRA.FORNECIMENTO E COLOCACAO","0"],"02.011.0010":["M2","CERCA PROTETORA DE BORDA DE VALA OU OBRA,COM TELA PLASTICA NA COR LARANJA OU AMARELA,CONSIDERANDO 2 VEZES DE UTILIZACAO,INCLUSIVE APOIOS,FORNECIMENTO,","0"],"05.002.0005":["M2","DEMOLICAO COM EQUIPAMENTO DE AR COMPRIMIDO,DE PAVIMENTACAO DE CONCRETO ASFALTICO,COM 5CM DE ESPESSURA,INCLUSIVE EMPILHAMENTO LATERAL DENTRO DO CANTEIR","1"],"03.020.0050":["M3","ESCAVACAO MECANICA DE VALA NAO ESCORADA,EM MATERIAL DE 1ªCATEGORIA,ATE 1,50M DE PROFUNDIDADE,UTILIZANDO ESCAVADEIRA HIDRAULICA DE 0,78M3,EXCLUSIVE ESG","1"],"03.020.0085":["M3","ESCAVACAO MECANICA DE VALA ESCORADA,EM MATERIAL DE 1ªCATEGORIA,ENTRE 1,50 E 3,00M DE PROFUNDIDADE,UTILIZANDO ESCAVADEIRAHIDRAULICA DE 0,78M3,EXCLUSIVE","1"],"03.020.0090":["M3","ESCAVACAO MECANICA DE VALA ESCORADA,EM MATERIAL DE 1ªCATEGORIA,ENTRE 3,00 E 4,50M DE PROFUNDIDADE,UTILIZANDO ESCAVADEIRAHIDRAULICA DE 0,78M3,EXCLUSIVE","1"],"03.020.0100":["M3","ESCAVACAO MECANICA DE VALA ESCORADA,EM MATERIAL DE 1ªCATEGORIA,ENTRE 4,50 E 6,00M DE PROFUNDIDADE,UTILIZANDO ESCAVADEIRAHIDRAULICA DE 0,78M3,EXCLUSIVE","1"],"05.080.0020":["M2","ENSECADEIRA DE ESTACAS-PRANCHAS DE ACO EM CAVAS OU VALAS COMPROFUNDIDADE ATE 4,00M.O CUSTO INCLUI O FORNECIMENTO,EXECUCAO E RETIRADA DE TODOS OS MATER","0"],"05.080.0025":["M2","ENSECADEIRA DE ESTACAS-PRANCHAS DE ACO EM CAVAS OU VALAS COMPROFUNDIDADE ATE 4,00M.O CUSTO INCLUI O FORNECIMENTO,EXECUCAO E RETIRADA DE TODOS OS MATER","0"],"05.080.0030":["M2","ENSECADEIRA DE ESTACAS-PRANCHAS DE ACO EM CAVAS OU VALAS COMPROFUNDIDADE ATE 4,00M.O CUSTO INCLUI O FORNECIMENTO,EXECUCAO E RETIRADA DE TODOS OS MATER","0"],"03.011.0015":["M3","REATERRO DE VALA/CAVA COM MATERIAL DE BOA QUALIDADE,UTILIZANDO VIBRO COMPACTADOR PORTATIL,EXCLUSIVE MATERIAL","1"],"03.015.0010":["M3","REATERRO DE VALA/CAVA COM PO-DE-PEDRA,INCLUSIVE FORNECIMENTODO MATERIAL E COMPACTACAO MANUAL","0"],"06.088.0010":["M3","EMBASAMENTO DE TUBULACAO,FEITO COM PO-DE-PEDRA","0"],"04.011.0052":["T","CARGA E DESCARGA MECANICA,COM PA-CARREGADEIRA,COM 1,30M3 DECAPACIDADE,UTILIZANDO CAMINHAO BASCULANTE A OLEO DIESEL,COMCAPACIDADE UTIL DE 8T,CONSIDERAD","1"],"04.005.0143":["T X KM","TRANSPORTE DE CARGA DE QUALQUER NATUREZA,EXCLUSIVE AS DESPESAS DE CARGA E DESCARGA,TANTO DE ESPERA DO CAMINHAO COMO DO SERVENTE OU EQUIPAMENTO AUXILIA","1"],"06.017.0080":["M","CORPO DE POCO DE VISITA DE ANEIS PRE-MOLDADOS,COM DIAMETRO DE 600MM,COM DEGRAUS,MEDIDA PELA ALTURA UTIL,INCLUSIVE MAO-DE-OBRA E MATERIAL","0"],"06.016.0007":["UN","TAMPAO COMPLETO DE FERRO FUNDIDO DUCTIL (NODULAR) ARTICULADO,CIRCULAR,DN 600MM,COM TAMPA PARA ACESSO DE MANUTENCAO E SOBRETAMPA PARA MANOBRA,CLASSE D4","0"],"06.015.0030":["UN","CAIXA DE RALO ALVENARIA BLOCOS CONCRETO (20X20X40CM),PAREDESDE 0,20M DE ESP.,(0,30X0,90X0,90)M,P/AGUAS PLUVIAIS,SENDO PAREDES CHAPISCADAS E REVESTIDAS","0"],"06.014.0101":["UN","CAIXA DE RALO EM ALVENARIA DE TIJOLO MACICO (7X10X20CM),EM PAREDES DE UMA VEZ(0,20M),DE (0,30X0,90X0,90)M,PARA AGUAS PLUVIAIS,UTILIZANDO ARGAMASSA DE","0"],"06.015.0031":["UN","CAIXA DE RALO ALVENARIA BLOCOS CONCRETO (20X20X40CM),PAREDES0,20M DE ESP.,(0,90X1,20X1,50)M,P/AGUAS PLUVIAIS,SENDO PAREDES CHAPISCADAS E REVESTIDAS IN","0"],"06.014.0100":["UN","CAIXA DE RALO EM ALVENARIA DE TIJOLO MACICO (7X10X20CM),EM PAREDES DE UMA VEZ (0,20M),DE (0,90X1,20X1,50)M (MEDIDAS EXTERNAS),UTILIZANDO ARGAMASSA DE","1"],"08.001.0002":["M3","BASE DE BRITA GRADUADA,INCLUSIVE FORNECIMENTO DOS MATERIAIS,MEDIDA APOS A COMPACTACAO","1"],"08.026.0001":["M2","IMPRIMACAO DE BASE DE PAVIMENTACAO,DE ACORDO COM AS \"INSTRUCOES PARA EXECUCAO\",DO DER-RJ","0"],"08.026.0002":["M2","PINTURA DE LIGACAO,DE ACORDO COM AS \"INSTRUCOES PARA EXECUCAO\",DO DER-RJ","0"],"08.015.0068":["T","REVESTIMENTO DE CONCRETO BETUMINOSO USINADO A QUENTE,IMPORTADO DE USINA,EXECUTADO EM UMA CAMADA,DE ACORDO COM AS INSTRUCOES/ESPECIFICACOES DO CONTRATA","0"],"08.037.0070":["T","REVESTIMENTO DE CONCRETO BETUMINOSO USINADO A QUENTE,DE ACORDO COM AS INSTRUCOES/ESPECIFICACOES DO CONTRATANTE,CONSIDERANDO SOMENTE O ESPALHAMENTO COM","0"],"06.004.0060":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-1,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 300MM,ATERROE SOCA ATE A ALTURA DA GERATRIZ","0"],"06.004.0062":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-1,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 400MM,ATERROE SOCA ATE A ALTURA DA GERATRIZ","0"],"06.004.0064":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-1,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 500MM,ATERROE SOCA ATE A ALTURA DA GERATRIZ","0"],"06.004.0066":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-1,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 600MM,ATERROE SOCA ATE A ALTURA DA GERATRIZ","0"],"06.004.0068":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-1,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 700MM,ATERROE SOCA ATE A ALTURA DA GERATRIZ","0"],"06.004.0070":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-1,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 800MM,ATERROE SOCA ATE A ALTURA DA GERATRIZ","0"],"06.004.0072":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-1,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 900MM,ATERROE SOCA ATE A ALTURA DA GERATRIZ","0"],"06.004.0074":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-1,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 1000MM,ATERROE SOCA ATE A ALTURA DA GERATRI","0"],"06.004.0076":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-1,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 1100MM,ATERROE SOCA ATE A ALTURA DA GERATRI","0"],"06.004.0078":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-1,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 1200MM,ATERROE SOCA ATE A ALTURA DA GERATRI","0"],"06.004.0080":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-1,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 1500MM,ATERROE SOCA ATE A ALTURA DA GERATRI","0"],"06.004.0084":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-1,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 2000MM,ATERROE SOCA ATE A ALTURA DA GERATRI","0"],"06.004.0090":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-2,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 300MM,ATERROE SOCA ATE A ALTURA DA GERATRIZ","0"],"06.004.0092":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-2,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 400MM,ATERROE SOCA ATE A ALTURA DA GERATRIZ","0"],"06.004.0094":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-2,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 500MM,ATERROE SOCA ATE A ALTURA DA GERATRIZ","0"],"06.004.0096":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-2,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 600MM,ATERROE SOCA ATE A ALTURA DE GERATRIZ","0"],"06.004.0098":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-2,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 700MM,ATERROE SOCA ATE A ALTURA DA GERATRIZ","0"],"06.004.0100":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-2,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 800MM,ATERROE SOCA ATE A ALTURA DA GERATRIZ","0"],"06.004.0102":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-2,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 900MM,ATERROE SOCA ATE A ALTURA DA GERATRIZ","0"],"06.004.0104":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-2,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 1000MM,ATERROE SOCA ATE A ALTURA DA GERATRI","0"],"06.004.0108":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-2,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 1200MM,ATERROE SOCA ATE A ALTURA DA GERATRI","0"],"06.004.0110":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-2,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 1500MM,ATERROE SOCA ATE A ALTURA DA GERATRI","0"],"06.004.0114":["M","TUBO DE CONCRETO ARMADO,CLASSE PA-2,CONFORME ABNT NBR 8890,PARA GALERIAS DE AGUAS PLUVIAIS,COM DIAMETRO DE 2000MM,ATERROE SOCA ATE A ALTURA DA GERATRI","0"],"06.015.0010":["UN","POCO DE VISITA EM ALVENARIA DE BLOCOS DE CONCRETO(20X20X40CM),PAREDES 0,20M DE ESP.C/1,20X1,20X1,40M,P/COLETOR AGUAS PLUVIAIS 0,40 A 0,70M DE DIAM.UTI","0"],"06.015.0011":["UN","POCO DE VISITA EM ALVENARIA DE BLOCOS DE CONCRETO(20X20X40CM),EM PAREDES DE 0,20M DE ESP.C/1,30X1,30X1,40M,P/COLETOR DEAGUAS PLUVIAIS DE 0,80M DE DIAM","0"],"06.015.0012":["UN","POCO DE VISITA EM ALVENARIA DE BLOCOS DE CONCRETO(20X20X40CM),PAREDES DE 0,20M DE ESP.C/1,40X1,40X1,50M,P/COLETOR AGUASPLUVIAIS DE 0,90M DE DIAM.UTILI","0"],"06.015.0013":["UN","POCO DE VISITA EM ALVENARIA DE BLOCOS DE CONCRETO(20X20X40CM),EM PAREDES DE 0,20M DE ESP.C/1,50X1,50X1,60M,P/COLETOR DEAGUAS PLUVIAIS DE 1,00M DE DIAM","0"],"06.015.0014":["UN","POCO DE VISITA EM ALVENARIA DE BLOCOS DE CONCRETO(20X20X40CM),EM PAREDES DE 0,20M DE ESP.C/1,60X1,60X1,70M,P/COLETOR DEAGUAS PLUVIAIS DE 1,10M DE DIAM","0"],"06.015.0015":["UN","POCO DE VISITA EM ALVENARIA DE BLOCOS DE CONCRETO(20X20X40CM),EM PAREDES DE 0,20M DE ESP.C/1,70X1,70X1,80M,P/COLETOR DEAGUAS PLUVIAIS DE 1,20M DE DIAM","0"],"06.015.0016":["UN","POCO DE VISITA EM ALVENARIA DE BLOCOS DE CONCRETO(20X20X40CM),EM PAREDES DE 0,20M DE ESP.C/2,00X2,00X2,10M,P/COLETOR DEAGUAS PLUVIAIS DE 1,50M DE DIAM","0"]};   // código → [unidade, descrição, sufixo do código não desonerado]
+EMOP_PVCA.forEach(([c, L, H, D]) => { EMOP_TAB[c] = ['UN', 'POCO DE VISITA DE CONCRETO ARMADO COM MEDIDAS INTERNAS DO POCO E PROFUNDIDADE DE ' + fmt(L, 2) + 'X' + fmt(L, 2) + 'X' + fmt(H, 2) + 'M,E DIAMETRO DA GALERIA DE ' + fmt(D, 2) + 'M', '0']; });
+
+const BANCOS_LIC = {emop: 'EMOP', sinapi: 'SINAPI RJ', sco: 'SCO-Rio'};
+const SOLUCOES = [
+  {k: 'eco', nome: 'Solução 1 — Econômica', curto: 'Econômica',
+    desc: 'Tubos PA-1 em toda a rede, escoramento leve, reaterro com o próprio solo da vala, PV de blocos de concreto com chaminé, caixas de ralo de blocos e recomposição do asfalto só na largura da vala (+ 0,15 m de cada lado).',
+    classe: {rede: 'PA-1', ram: 'PA-1'}, escor: {sinapi: 'PONTALETEAMENTO', emop: '05.080.0020', nome: 'pontaleteamento / estaca-prancha com 60 reutilizações'}, env: false, pv: 'blocos', cx: 'Blocos de concreto', sobra: 0.15, base: 0.15},
+  {k: 'rec', nome: 'Solução 2 — Recomendada', curto: 'Recomendada',
+    desc: 'Tubos PA-2 na rede sob a pista e PA-1 nos ramais, escoramento descontínuo, reaterro com o solo da vala, PV de blocos de concreto com chaminé, caixas de ralo como no projeto e recomposição com 0,30 m de folga de cada lado.',
+    classe: {rede: 'PA-2', ram: 'PA-1'}, escor: {sinapi: 'DESCONTÍNUO', emop: '05.080.0025', nome: 'descontínuo / estaca-prancha com 40 reutilizações'}, env: false, pv: 'blocos', cx: null, sobra: 0.30, base: 0.15},
+  {k: 'dur', nome: 'Solução 3 — Maior durabilidade', curto: 'Durável',
+    desc: 'Tubos PA-2 na rede e nos ramais, escoramento contínuo, envoltória do tubo em pó de pedra até 0,30 m acima do tubo, PV de concreto armado, caixas de ralo pré-moldadas e recomposição com 0,50 m de folga e base de 0,20 m.',
+    classe: {rede: 'PA-2', ram: 'PA-2'}, escor: {sinapi: 'CONTÍNUO', emop: '05.080.0030', nome: 'contínuo / estaca-prancha com 15 reutilizações'}, env: true, pv: 'concreto', cx: 'Pré-moldada', sobra: 0.50, base: 0.20}
+];
+const GRUPOS_LIC = ['SERVIÇOS PRELIMINARES E SINALIZAÇÃO', 'DEMOLIÇÕES E REMOÇÕES', 'MOVIMENTO DE TERRA', 'TRANSPORTE E BOTA-FORA', 'TUBULAÇÃO DE CONCRETO (REDE E RAMAIS)', 'POÇOS DE VISITA', 'CAIXAS DE RALO E BOCAS DE LOBO', 'RECOMPOSIÇÃO DO PAVIMENTO'];
+function licCfg() { P.lic = Object.assign({dmt: 10, placa: 6, esp: 0.05, sol: 'rec', banco: ''}, P.lic || {}); return P.lic; }
+
+/* ---------- banco EMOP do programa de Orçamento (mesmo site, IndexedDB) ---------- */
+let EMOP_LOCAL;   // undefined = ainda não lido; null = não há
+async function lerEmopLocal(forcar) {
+  if (EMOP_LOCAL !== undefined && !forcar) return EMOP_LOCAL;
+  EMOP_LOCAL = null;
+  const montar = (lista, meta) => { const map = {}; lista.forEach(d => { if (d && d.CODIGO) map[String(d.CODIGO).trim()] = d; }); return Object.keys(map).length ? {map, meta: meta || {}, n: Object.keys(map).length} : null; };
+  try {
+    let existe = true;
+    if (indexedDB.databases) { const l = await indexedDB.databases(); existe = l.some(d => d.name === 'SchuelerHistoricoDB_v1'); }
+    if (existe) {
+      const db = await new Promise((ok, ko) => {
+        const rq = indexedDB.open('SchuelerHistoricoDB_v1');
+        rq.onupgradeneeded = e => { try { e.target.transaction.abort(); } catch (x) {} };   // não cria o banco do Orçamento
+        rq.onsuccess = () => ok(rq.result); rq.onerror = () => ko(rq.error);
+      });
+      if (db.objectStoreNames.contains('settings')) {
+        const get = k => new Promise(ok => { try { const r = db.transaction('settings').objectStore('settings').get(k); r.onsuccess = () => ok(r.result ? r.result.value : null); r.onerror = () => ok(null); } catch (e) { ok(null); } });
+        const dipr = await get('emopDiprOverride'), meta = await get('emopImportMeta');
+        if (Array.isArray(dipr) && dipr.length) EMOP_LOCAL = montar(dipr, meta);
+      }
+      db.close();
+    }
+  } catch (e) { /* sem acesso ao banco do Orçamento */ }
+  if (!EMOP_LOCAL) {
+    try { const c = JSON.parse(localStorage.getItem('orcadipr_base_v11') || '[]'); if (Array.isArray(c) && c.some(x => /^\d\d\.\d{3}\.\d{4}-/.test(x.CODIGO))) EMOP_LOCAL = montar(c, {origem: 'catálogo salvo'}); } catch (e) {}
+  }
+  return EMOP_LOCAL;
+}
+
+/* ---------- localização do código em cada banco ---------- */
+const sufEmop = (s, regime) => regime === 'D' ? (s === '1' ? 'B' : 'A') : s;
+function idxSco(B) {
+  if (B.idx) return B.idx;
+  B.idx = {}; Object.keys(B.map).forEach(k => { B.idx[k.replace(/\s*\([^)]*\)\s*$/, '')] = k; });
+  return B.idx;
+}
+function resolve1(bank, s, BK, regime) {
+  if (s == null || s === false) return null;
+  if (bank === 'emop') {
+    if (typeof s !== 'string') return null;
+    const t = EMOP_TAB[s] || ['', '', '0'], E = BK.emop;
+    const full = s + '-' + sufEmop(t[2], regime);
+    if (E) {
+      const v = E.map[full] || E.map[s + '-' + sufEmop(t[2] === '0' ? '1' : '0', regime)];
+      if (!v) return null;
+      const p = +v.CUSTO;
+      return {full: v.CODIGO, cod: v.CODIGO, descr: v.DESCR1 || t[1], unid: v.UNID || t[0], preco: p > 0 ? p : null, src: 'emop'};
+    }
+    return {full, cod: full, descr: t[1], unid: t[0], preco: null, src: 'emop', semBanco: true};
+  }
+  const B = BK[bank]; if (!B) return null;
+  let key = null;
+  if (typeof s === 'string') key = bank === 'sco' ? (B.map[s] ? s : idxSco(B)[s]) : (B.map[s] ? s : null);
+  else key = procura(B.map, s.re, s.pref || [], s.nao || []);
+  if (!key) return null;
+  const v = B.map[key], p = precoDe(v, regime);
+  return {full: key, cod: key.replace(/^S[CI]-|^SCO-/, ''), descr: v.descr, unid: v.unid, preco: p > 0 ? p : null, src: bank};
+}
+const ruleDe = (k, tipo, cfg) => { const r = regras(cfg).find(x => x.k === k); return r && r[tipo] ? {re: r[tipo][0], pref: r[tipo][1]} : null; };
+const scoTubo = (cl, D) => ({re: [new RegExp('^Tubo de concreto armado, classe ' + cl + ', para galerias de [aá]guas pluviais, com di[aâ]metro de ' + fx(D) + 'm', 'i')]});
+const eHL = [/PROFUNDIDADE DE 0 A 1,5 M/, /PROFUNDIDADE DE 1,5( M)? A 3,0 M/, /PROFUNDIDADE DE 3,0( M)? A 4,5 M/, /PROFUNDIDADE DE 4,5( M)? A 6,0 M/];
+
+/* ---------- quantidades e itens de cada solução (por banco) ---------- */
+function itensLic(sol, bank) {
+  const c = P.crit, q = R.quantEmop, cfg = custosCfg(), lic = licCfg();
+  if (!q) return [];
+  const esp = +c.espF || 0.10, so = q.solo, s = sol.sobra, eA = +lic.esp || 0.05;
+  const L = [], add = (g, nome, un, qv, cod, memo, qb) => { if (qv > 1e-6) L.push({g, nome, un, q: qv, cod, memo, qb: qb || {}}); };
+  let Lrede = 0, Lram = 0, area = 0, Venv = 0, hw = 0, hl = 0, Bmax = 0;
+  const tubos = {};
+  P.trechos.forEach(t => {
+    const r = R.tr[t.id]; if (!r || !(r.L > 0)) return;
+    Lrede += r.L; const k = sol.classe.rede + ':' + (+t.D); tubos[k] = (tubos[k] || 0) + r.L;
+    if (r.vala) {
+      area += r.vala.L * (r.vala.B + 2 * s); hw += r.vala.L * (r.vala.hM + r.vala.hJ) / 2; hl += r.vala.L; Bmax = Math.max(Bmax, r.vala.B);
+      if (sol.env) { const De = r.D / 1000 * (1 + 2 * esp); Venv += Math.max(0, r.vala.L * r.vala.B * (De + 0.30) - (r.vala.tubo || 0)); }
+    }
+  });
+  P.bls.forEach(b => {
+    const Lr = num(b.rL) || 0, D = num(b.rD) || c.ramalDmin; if (Lr > 0) { Lram += Lr; const k = sol.classe.ram + ':' + D; tubos[k] = (tubos[k] || 0) + Lr; }
+    const rb = R.bl[b.id]; if (rb && rb.vala && rb.vala.L > 0) {
+      area += rb.vala.L * (rb.vala.B + 2 * s);
+      if (sol.env) { const De = D / 1000 * (1 + 2 * esp); Venv += Math.max(0, rb.vala.L * rb.vala.B * (De + 0.30) - Math.PI * De * De / 4 * rb.vala.L); }
+    }
+  });
+  P.pvs.forEach(pv => { const k = R.pv[pv.id] && R.pv[pv.id].cava; if (k) area += Math.pow(k.lado + 2 * s, 2); });
+  const hm = hl > 0 ? hw / hl : 1.5, hb = bandaH(hm), wb = Bmax < 0.8 ? 0 : Bmax < 1.5 ? 1 : 2, w2 = Bmax < 1.5 ? 0 : 1;
+  const Lt = Lrede + Lram, g = GRUPOS_LIC;
+
+  /* 1. preliminares */
+  add(g[0], 'Placa de identificação da obra', 'm²', +lic.placa || 0, {emop: '02.020.0001', sinapi: 'SC-103689', sco: 'SCO-AD 20.25.0300'}, 'Placa padrão de ' + fmt(+lic.placa || 0, 2) + ' m²');
+  add(g[0], 'Locação da rede e dos ramais com aparelho topográfico', 'm', Lt, {emop: '01.018.0002', sinapi: 'SC-99063'}, 'Rede ' + fmt(Lrede, 2) + ' m + ramais ' + fmt(Lram, 2) + ' m');
+  add(g[0], 'Cerca protetora de borda de vala (tela plástica)', 'm²', 2 * Lt * 1.2, {emop: '02.011.0010'}, '2 lados × ' + fmt(Lt, 2) + ' m × 1,20 m de altura');
+  /* 2. demolição */
+  add(g[1], 'Demolição do pavimento asfáltico (5 cm) na faixa da vala e das cavas', 'm²', area, {emop: '05.002.0005', sinapi: false, sco: 'SCO-SC 05.10.0450'}, 'Largura da vala + ' + fmt(s, 2) + ' m de cada lado, nas valas da rede e dos ramais e nas cavas dos PVs' + (bank === 'sinapi' ? '; no SINAPI a demolição está na recomposição do revestimento (102098)' : ''));
+  /* 3. movimento de terra (critérios EMOP, por faixa) */
+  const fx5 = [0, 1, 2, 3, 4].map(k => q.T.f[k] + q.RM.f[k] + q.PV.f[k] + q.CX.f[k]);
+  const eCod = ['03.020.0050', '03.020.0085', '03.020.0090', '03.020.0100', '03.020.0100'];
+  fx5.forEach((v, k) => add(g[2], 'Escavação mecânica de vala em material de 1ª categoria, ' + FAIXA_NOME[k] + (k ? ' (vala escorada)' : ''), 'm³', v,
+    {emop: eCod[k], sinapi: ruleDe(`esc:${Math.min(k, 3)}:${wb}`, 'sinapi', cfg)}, 'Critérios EMOP: rede, ramais e cavas dos PVs e das caixas, camada de ' + FAIXA_NOME[k]));
+  add(g[2], 'Escoramento de vala e cava (' + sol.escor.nome + ')', 'm²', q.escor,
+    {emop: sol.escor.emop, sinapi: {re: [new RegExp('^ESCORAMENTO DE VALA, TIPO ' + sol.escor.sinapi + ','), eHL[hb]], pref: [w2 ? /MAIOR OU IGUAL A 1,5/ : /LARGURA MENOR QUE 1,5 M/]}, sco: {re: [/^Escoramento para valas/], pref: [/2,50m/]}},
+    'Paredes das valas e cavas com mais de 1,25 m de profundidade; profundidade média da rede ' + fmt(hm, 2) + ' m');
+  const reat = Math.max(0, q.reat - Venv);
+  add(g[2], q.Q.reaprov ? 'Reaterro compactado de vala e cava com o material escavado' : 'Reaterro compactado de vala e cava com material de jazida (inclusive fornecimento)', 'm³', reat,
+    {emop: q.Q.reaprov ? '03.011.0015' : '03.015.0014', sinapi: ruleDe(`reat:${hb}:${wb}`, 'sinapi', cfg)}, 'Volume da cava − volume das estruturas (EMOP 6.b)' + (Venv ? ' − envoltória em pó de pedra' : ''));
+  add(g[2], 'Envoltória do tubo em pó de pedra, até 0,30 m acima da geratriz superior', 'm³', Venv,
+    {emop: '03.015.0010', sinapi: {re: [/^PREPARO DE FUNDO DE VALA/, /CAMADA DE AREIA/, /MECANIZADO/], pref: [w2 ? /MAIOR OU IGUAL A 1,5/ : /MENOR QUE 1,5 M/]}, sco: 'SCO-DR 55.05.0450'}, 'Largura da vala × (Ø externo + 0,30 m) − volume do tubo');
+  add(g[2], 'Berço / lastro de pó de pedra sob tubos, PVs e caixas', 'm³', q.berco,
+    {emop: '06.088.0010', sinapi: ruleDe('berco:' + w2, 'sinapi', cfg), sco: 'SCO-DR 55.05.0450'}, 'Espessura de ' + fmt(+c.berco || 0, 2) + ' m sob a rede, os ramais, os PVs e as caixas');
+  /* 4. transporte e bota-fora */
+  const usado = q.Q.reaprov ? Math.min(q.esc, reat * so.compLocal) : 0, bfCorte = Math.max(0, q.esc - usado);
+  const tAsf = area * eA * 2.4, vAsf = area * eA * 1.3, massa = bfCorte * GAMA_CORTE + tAsf, vol = bfCorte * so.solto + vAsf, dmt = +lic.dmt || 0;
+  const memoBf = 'Escavado ' + fmt(q.esc, 2) + ' m³ − reaproveitado ' + fmt(usado, 2) + ' m³ = ' + fmt(bfCorte, 2) + ' m³ no corte (× ' + fmt(GAMA_CORTE, 1) + ' t/m³; × ' + fmt(so.solto, 2) + ' solto) + asfalto demolido ' + fmt(tAsf, 2) + ' t';
+  add(g[3], 'Carga e descarga mecânica do material de bota-fora', 't', massa, {emop: '04.011.0052', sinapi: 'SC-100978', sco: 'SCO-TC 10.05.0200'}, memoBf, {sinapi: vol});
+  add(g[3], 'Transporte do bota-fora em caminhão basculante, DMT ' + fmt(dmt, 1) + ' km', 't·km', massa * dmt, {emop: '04.005.0143', sinapi: 'SC-95875', sco: 'SCO-TC 05.05.0400'}, memoBf + '; DMT ' + fmt(dmt, 1) + ' km', {sinapi: vol * dmt});
+  /* 5. tubos */
+  Object.entries(tubos).sort((a, b) => a[0].localeCompare(b[0], 'pt', {numeric: true})).forEach(([k, m]) => {
+    const [cl, D] = [k.split(':')[0], +k.split(':')[1]];
+    const e = (EMOP_PA[cl] || {})[D] || EMOP_PA['PA-1'][D];
+    add(g[4], 'Tubo de concreto armado ' + cl + ' Ø' + D + ' mm, fornecimento e assentamento', 'm', m, {emop: e, sinapi: ruleDe('tubo:' + D, 'sinapi', cfg), sco: [scoTubo(cl, D), scoTubo('PA-1', D)]},
+      'Comprimento dos trechos' + (sol.classe.rede === sol.classe.ram ? ' e ramais' : cl === sol.classe.rede ? ' da rede' : ' dos ramais') + ' com Ø' + D);
+  });
+  /* 6. PVs */
+  P.pvs.forEach(pv => {
+    const r = R.pv[pv.id]; if (!r || !isNum(r.prof)) return;
+    const Dt = Math.max(0, ...r.ins.map(t => num(t.D) || 0), ...r.outs.map(t => num(t.D) || 0)) / 1000;
+    const lado = r.emop ? r.emop.L : (num(pv.dpv) || 1000) / 1000, prof = r.prof;
+    const ref = r.emop ? r.emop.L * 1000 : (num(pv.dpv) || 1000), d = [1000, 1200, 1500, 2000].find(x => x >= ref - 1e-6) || 2000;
+    if (bank === 'emop') {
+      if (sol.pv === 'concreto') {
+        const cand = EMOP_PVCA.filter(x => x[1] >= lado - 1e-6 && x[3] >= Dt - 1e-6);
+        const ok = cand.filter(x => x[2] >= prof - 1e-6).sort((a, b) => a[1] - b[1] || a[2] - b[2])[0] || cand.sort((a, b) => a[1] - b[1] || b[2] - a[2])[0];
+        if (ok) { add(g[5], 'PV de concreto armado ' + fmt(ok[1], 2) + ' × ' + fmt(ok[1], 2) + ' m, profundidade ' + fmt(ok[2], 2) + ' m (galeria até Ø' + fmt(ok[3], 2) + ')', 'un', 1, {emop: ok[0]}, pv.id + ': câmara ' + fmt(lado, 2) + ' m, maior tubo Ø' + fmt(Dt, 2) + ' m, profundidade ' + fmt(prof, 2) + ' m');
+          if (prof > ok[2] + 0.05) add(g[5], 'Chaminé do PV em anéis pré-moldados Ø0,60 m', 'm', prof - ok[2], {emop: '06.017.0080'}, pv.id + ': profundidade acima da tabela EMOP'); return; }
+      }
+      const bl = EMOP_PVBL.find(x => x[1] >= lado - 1e-6 && x[3] >= Dt - 1e-6) || EMOP_PVBL[EMOP_PVBL.length - 1];
+      add(g[5], 'PV de alvenaria de blocos de concreto ' + fmt(bl[1], 2) + ' × ' + fmt(bl[1], 2) + ' × ' + fmt(bl[2], 2) + ' m', 'un', 1, {emop: bl[0]}, pv.id + ': câmara ' + fmt(lado, 2) + ' m, maior tubo Ø' + fmt(Dt, 2) + ' m');
+      const ch = prof - bl[2] - 0.15;
+      if (ch > 0.05) add(g[5], 'Chaminé do PV em anéis pré-moldados Ø0,60 m', 'm', ch, {emop: '06.017.0080'}, pv.id + ': profundidade ' + fmt(prof, 2) + ' m − altura da câmara ' + fmt(bl[2], 2) + ' m − laje 0,15 m');
+    } else {
+      const base = resolve1(bank, ruleDe('pvbase:' + d, bank, cfg), LIC.BK, cfg.regime);
+      add(g[5], bank === 'sco' ? 'Poço de visita de blocos de concreto (equivalente à câmara de ' + fmt(lado, 2) + ' m)' : 'Base de PV circular pré-moldado Ø' + fmt(d / 1000, 1) + ' m (sem tampão)', 'un', 1, {[bank]: ruleDe('pvbase:' + d, bank, cfg), emop: (EMOP_PVBL.find(x => x[1] >= lado - 1e-6) || EMOP_PVBL[6])[0]}, pv.id + ': câmara ' + fmt(lado, 2) + ' m');
+      if (bank === 'sinapi') { const hB = base && base.descr && (base.descr.match(/PROFUNDIDADE = ([\d,]+) M/) || [])[1]; const ac = prof - (hB ? parseFloat(hB.replace(',', '.')) : 1.35);
+        if (ac > 0.05) add(g[5], 'Acréscimo de PV circular pré-moldado Ø' + fmt(d / 1000, 1) + ' m', 'm', ac, {sinapi: ruleDe('pvacr:' + d, 'sinapi', cfg), emop: '06.017.0080'}, pv.id + ': profundidade ' + fmt(prof, 2) + ' m − altura da base'); }
+    }
+    add(g[5], 'Tampão de ferro fundido dúctil Ø0,60 m, classe D400 (articulado)', 'un', 1, {emop: '06.016.0007', sco: 'SCO-DR 35.05.0225'}, pv.id);
+  });
+  /* 7. captação */
+  P.bls.forEach(b => {
+    const constr = sol.cx || b.constr || 'Pré-moldada', gr = b.tipo === 'gr', n = b.tipo === 'gd' ? 2 : 1;
+    const e = gr ? (constr === 'Alvenaria de tijolo maciço' ? '06.014.0101' : constr === 'Pré-moldada' ? null : '06.015.0030') : (constr === 'Alvenaria de tijolo maciço' ? '06.014.0100' : constr === 'Pré-moldada' ? null : '06.015.0031');
+    const nome = gr ? 'Caixa de ralo na sarjeta com grelha de ferro fundido 30 × 90 — ' + constr.toLowerCase() : 'Caixa de boca de lobo (' + (BLTIPOS[b.tipo] ? BLTIPOS[b.tipo].nome.toLowerCase() : b.tipo) + ') — ' + constr.toLowerCase();
+    const sco = gr && constr === 'Pré-moldada' ? ['SCO-DR 30.15.0200', ruleDe(`bl:${b.tipo}:${constr}`, 'sco', cfg)] : ruleDe(`bl:${b.tipo}:${constr}`, 'sco', cfg);
+    add(g[6], nome, 'un', bank !== 'sinapi' && !gr ? n : 1, {emop: e || (gr ? '06.015.0030' : '06.015.0031'), sinapi: ruleDe(`bl:${b.tipo}:${constr}`, 'sinapi', cfg), sco}, b.id + (n > 1 && !gr && bank !== 'sinapi' ? ': guia dupla = 2 caixas' : '') + (e || bank !== 'emop' ? '' : ': a EMOP não tem caixa pré-moldada; usado o equivalente em blocos'));
+  });
+  /* 8. recomposição */
+  add(g[7], 'Base de brita graduada, espessura ' + fmt(sol.base, 2) + ' m', 'm³', area * sol.base, {emop: '08.001.0002', sinapi: 'SC-101849', sco: 'SCO-BP 05.05.0025'}, fmt(area, 2) + ' m² × ' + fmt(sol.base, 2) + ' m');
+  add(g[7], 'Imprimação da base', 'm²', area, {emop: '08.026.0001', sinapi: 'SC-102469', sco: 'SCO-BP 05.05.0400'}, 'Área recomposta');
+  add(g[7], 'Pintura de ligação', 'm²', area, {emop: '08.026.0002', sinapi: 'SC-104388'}, 'Área recomposta');
+  add(g[7], 'Concreto betuminoso usinado a quente (CBUQ), ' + fmt(eA * 100, 0) + ' cm', 't', area * eA * 2.4, {emop: '08.015.0068', sinapi: 'SC-102098', sco: 'SCO-BP 10.05.0100'}, fmt(area, 2) + ' m² × ' + fmt(eA, 2) + ' m × 2,4 t/m³', {sinapi: area * eA});
+  add(g[7], 'Espalhamento com vibroacabadora e compactação do CBUQ', 't', area * eA * 2.4, {emop: '08.037.0070', sinapi: false, sco: 'SCO-BP 10.05.0300'}, fmt(area, 2) + ' m² × ' + fmt(eA, 2) + ' m × 2,4 t/m³');
+  return L;
+}
+
+/* ---------- orçamento de uma solução num banco ---------- */
+function orcLic(sol, bank) {
+  const cfg = custosCfg(), BK = LIC.BK, rg = cfg.regime;
+  const ordem = bank === 'emop' ? ['emop', 'sinapi', 'sco'] : bank === 'sinapi' ? ['sinapi', 'sco', 'emop'] : ['sco', 'sinapi', 'emop'];
+  const linhas = [], porCod = {};
+  itensLic(sol, bank).forEach(it => {
+    let r = null, b = null;
+    if (it.cod[bank] !== false) for (const bb of ordem) {
+      if (bb !== bank && it.cod[bb] === false) continue;
+      const x = resolve1(bb, Array.isArray(it.cod[bb]) ? null : it.cod[bb], BK, rg) || (Array.isArray(it.cod[bb]) ? it.cod[bb].map(s => resolve1(bb, s, BK, rg)).find(Boolean) : null);
+      if (!x) continue;
+      if (x.preco == null && !(bb === 'emop' && bank === 'emop' && x.semBanco)) continue;
+      r = x; b = bb; break;
+    }
+    if (it.cod[bank] === false) return;
+    const qv = b && it.qb[b] != null ? it.qb[b] : it.q;
+    const k = it.g + '|' + (r ? r.full : it.nome);
+    if (porCod[k]) { const o = porCod[k]; o.q += qv; o.memo.push(it.memo);
+      if (o.nome !== it.nome) o.nome = /^Tubo/.test(o.nome) ? o.nome.replace(/PA-\d/, 'PA-1 e PA-2') : o.nome.split(' — ')[0].replace(/\s*\([^)]*\)\s*$/, '').replace(/ [\d,]+ × [\d,]+.*$/, '') + ' (tipos e medidas na memória)';
+      return; }
+    const L = {g: it.g, nome: it.nome, un: r && r.unid ? r.unid : it.un, q: qv, r, b, memo: [it.memo]};
+    porCod[k] = L; linhas.push(L);
+  });
+  linhas.forEach(L => { L.preco = L.r ? L.r.preco : null; L.total = L.preco != null ? L.q * L.preco : null; });
+  const sub = linhas.reduce((a, x) => a + (x.total || 0), 0), bdi = +cfg.bdi || 0;
+  const semPreco = linhas.filter(x => x.preco == null).length;
+  return {sol, bank, linhas, sub, bdi, total: sub * (1 + bdi / 100), semPreco};
+}
+/* ---------- estado, leitura dos bancos e cálculo dos 9 orçamentos ---------- */
+const LIC = {BK: {}, res: null, ver: 'rec', carregando: false, aviso: [], refs: {}};
+const R$L = v => isNum(v) ? 'R$ ' + fmt(v, 2) : '—';
+const r2 = v => Math.round(v * 100) / 100;
+async function carregarBancosLic() {
+  const cfg = custosCfg(); LIC.aviso = [];
+  try {
+    const idx = await lerIndice();
+    for (const t of ['sinapi', 'sco']) {
+      const ref = cfg.refFix && (idx[t] || []).some(x => x.ref === cfg.refFix) ? cfg.refFix : ultimoRef(idx, t);
+      if (!ref) { LIC.aviso.push((t === 'sinapi' ? 'SINAPI' : 'SCO-Rio') + ': nenhum mês publicado no site.'); continue; }
+      try { LIC.BK[t] = await lerBanco(t, ref); LIC.refs[t] = LIC.BK[t].comp || ref; } catch (e) { LIC.aviso.push((t === 'sinapi' ? 'SINAPI' : 'SCO-Rio') + ': ' + e.message + '. Confira a internet e toque em "⟳ Recarregar bancos".'); }
+    }
+  } catch (e) { LIC.aviso.push('Bancos SINAPI e SCO-Rio indisponíveis (' + e.message + '). Confira a internet e toque em "⟳ Recarregar bancos".'); }
+  LIC.BK.emop = await lerEmopLocal(true);
+  LIC.refs.emop = LIC.BK.emop ? (LIC.BK.emop.meta.importadoEm ? 'importada em ' + String(LIC.BK.emop.meta.importadoEm).slice(0, 10) : 'importada no Orçamento') : '';
+}
+function calcLic() {
+  LIC.res = {};
+  SOLUCOES.forEach(s => { LIC.res[s.k] = {}; Object.keys(BANCOS_LIC).forEach(b => { LIC.res[s.k][b] = orcLic(s, b); }); });
+}
+function bancoLic() { const b = licCfg().banco; return BANCOS_LIC[b] ? b : (LIC.BK.emop ? 'emop' : custosCfg().banco); }
+
+function garantirModalLic() {
+  if ($('modal-lic')) return;
+  const d = document.createElement('div');
+  const st = document.createElement('style');
+  st.textContent = '#modal-lic td.cod{white-space:nowrap}body.cel #modal-lic td{min-width:0!important;white-space:normal!important}';
+  document.head.appendChild(st);
+  d.className = 'modal-backdrop'; d.id = 'modal-lic';
+  d.innerHTML = `<div class="modal" style="max-width:1120px">
+    <div class="modal-header"><h3>3 soluções com orçamento — EMOP, SINAPI e SCO-Rio</h3><button class="btn-icon" onclick="closeModal('modal-lic')">✕</button></div>
+    <div class="modal-body" id="lic-body"></div>
+    <div class="modal-footer" style="flex-wrap:wrap;gap:.5rem">
+      <button class="btn btn-secondary" onclick="exportLicComparativo()">📊 Comparativo das 3 soluções (.xlsx)</button>
+      <button class="btn btn-primary" onclick="exportLicXLSX(LIC.ver, bancoLic())">📤 Exportar a solução escolhida para o Orçamento</button>
+      <button class="btn btn-secondary" onclick="closeModal('modal-lic')">Fechar</button></div></div>`;
+  document.body.appendChild(d);
+}
+async function abrirSolucoes(recarregar) {
+  if (!P.trechos.length) { toast('Lance a rede (trechos e PVs) antes de gerar os orçamentos.'); return; }
+  calc();
+  if (!R.quantEmop) { toast('Faltam cotas na rede para calcular as quantidades: use 🛠 Corrigir automaticamente.'); return; }
+  garantirModalLic(); openModal('modal-lic');
+  if (recarregar || !LIC.BK.sinapi || !LIC.BK.sco || LIC.BK.emop === undefined) {
+    LIC.carregando = true; $('lic-body').innerHTML = '<div class="msg info">⏳ <span>Lendo os bancos SINAPI e SCO-Rio do site e a EMOP importada no programa de Orçamento…</span></div>';
+    await carregarBancosLic(); LIC.carregando = false;
+  }
+  LIC.ver = LIC.ver || licCfg().sol || 'rec';
+  calcLic(); renderLic();
+}
+function licSet(k, v) {
+  const lic = licCfg();
+  if (k === 'regime' || k === 'bdi') { P.custos[k] = k === 'bdi' ? (+v || 0) : v; }
+  else lic[k] = ['dmt', 'placa', 'esp'].includes(k) ? Math.max(0, +String(v).replace(',', '.') || 0) : v;
+  save(); calcLic(); renderLic();
+}
+function verLic(k) { LIC.ver = k; P.lic.sol = k; save(); renderLic(); const el = $('lic-det'); if (el) el.scrollIntoView({behavior: 'smooth', block: 'start'}); }
+
+function renderLic() {
+  const body = $('lic-body'); if (!body || !LIC.res) return;
+  const cfg = custosCfg(), lic = licCfg(), bk = bancoLic(), rs = SOLUCOES.map(s => LIC.res[s.k][bk]);
+  const base = LIC.res.rec[bk].total, menor = Math.min(...rs.map(o => o.total));
+  const nErr = (R.checks || []).filter(x => x.st === 'err').length;
+  const av = [];
+  if (nErr) av.push(`<div class="msg warn">⚠ <span>O projeto ainda tem ${nErr} erro(s) de cálculo. Para os orçamentos saírem da rede corrigida, feche esta janela e use <b>🛠 Corrigir automaticamente</b>; depois abra as 3 soluções de novo.</span></div>`);
+  if (!LIC.BK.emop) av.push(`<div class="msg warn">⚠ <span><b>EMOP sem preços neste aparelho.</b> Os itens EMOP saem com o código certo e sem preço; o programa de Orçamento põe o preço do catálogo ao importar. Para ver aqui os totais EMOP, abra o <b>Orçamento</b> neste mesmo navegador, importe os 4 arquivos DBF da EMOP (DIPR, MAT, REUT e COMP) e toque em <b>⟳ Recarregar bancos</b>.</span></div>`);
+  LIC.aviso.forEach(t => av.push(`<div class="msg warn">⚠ <span>${esc(t)}</span></div>`));
+  const semP = rs.reduce((a, o) => a + o.semPreco, 0);
+  if (semP && (bk !== 'emop' || LIC.BK.emop)) av.push(`<div class="msg info">ℹ <span>${semP} item(ns) sem preço no banco escolhido nem nos outros dois: saem na planilha com quantidade e sem preço. No Orçamento, escolha a composição de cada um pela descrição.</span></div>`);
+  const inp = (k, lab, v, st) => `<div class="field"><label>${lab}</label><input type="number" step="${st}" min="0" value="${v}" onchange="licSet('${k}',this.value)"/></div>`;
+  const card = (s, o) => {
+    const dif = base ? (o.total / base - 1) * 100 : 0, ok = o.total === menor && o.total > 0;
+    return `<div class="card" style="margin:0;display:flex;flex-direction:column;gap:.45rem;${LIC.ver === s.k ? 'outline:2px solid var(--agua);' : ''}">
+      <h4 style="margin:0">${esc(s.nome)}${ok ? ' <span class="badge badge-ok">menor custo</span>' : ''}</h4>
+      <div style="font-size:1.35rem;font-weight:700;color:var(--agua)">${o.total > 0 ? R$L(o.total) : 'sem preços'}</div>
+      <div style="font-size:.78rem;color:var(--muted)">Sem BDI ${R$L(o.sub)} · BDI ${fmt(o.bdi, 2)} %${s.k !== 'rec' && base ? ' · ' + (dif >= 0 ? '+' : '−') + fmt(Math.abs(dif), 1) + ' % da recomendada' : ''} · ${o.linhas.length} itens</div>
+      <p style="font-size:.8rem;margin:0;flex:1">${esc(s.desc)}</p>
+      <div class="bar-btns" style="margin:0"><button class="btn btn-secondary btn-sm" onclick="verLic('${s.k}')">👁 Ver itens</button><button class="btn btn-primary btn-sm" onclick="exportLicXLSX('${s.k}','${bk}')">📤 Exportar para o Orçamento</button></div></div>`;
+  };
+  const o = LIC.res[LIC.ver][bk], sol = SOLUCOES.find(s => s.k === LIC.ver);
+  let det = '', gi = 0;
+  GRUPOS_LIC.forEach(g => {
+    const ls = o.linhas.filter(x => x.g === g); if (!ls.length) return; gi++;
+    const st = ls.reduce((a, x) => a + (x.total || 0), 0);
+    det += `<tr style="background:var(--agua-lt)"><td colspan="6"><b>${gi} ${esc(g)}</b></td><td class="td-num" data-l="Subtotal"><b>${R$L(st)}</b></td></tr>`;
+    ls.forEach((x, j) => {
+      const outro = x.b && x.b !== bk ? ` <span class="badge badge-warn" title="Não há este item no ${BANCOS_LIC[bk]}">do ${BANCOS_LIC[x.b]}</span>` : '';
+      det += `<tr><td data-l="Item">${gi}.${j + 1}</td><td data-l="Código" class="cod">${x.r ? esc(x.r.full) : '<span class="muted">sem composição</span>'}${outro}</td>
+        <td data-l="Descrição" style="white-space:normal;min-width:280px"><b>${esc(x.nome)}</b>${x.r && x.r.descr ? `<br><small>${esc(x.r.descr.slice(0, 220))}</small>` : ''}<br><small style="color:var(--muted)">📐 ${esc(x.memo.join('; '))}</small></td>
+        <td data-l="Unid.">${esc(x.un)}</td><td class="td-num" data-l="Quant.">${fmt(x.q, 2)}</td><td class="td-num" data-l="Preço unit.">${x.preco != null ? fmt(x.preco, 2) : '—'}</td><td class="td-num" data-l="Total"><b>${x.total != null ? fmt(x.total, 2) : '—'}</b></td></tr>`;
+    });
+  });
+  body.innerHTML = `
+    <p class="lead" style="margin-top:0">As três soluções usam a mesma rede dimensionada (diâmetros, cotas, ramais e PVs) e mudam o que mais pesa no preço dos orçamentos de drenagem licitados: classe dos tubos, escoramento, envoltória, tipo de PV e de caixa e a largura da recomposição do asfalto. Quantidades pelos critérios da EMOP; itens na ordem usual das planilhas de licitação.</p>
+    ${av.join('')}
+    <div class="card"><h4>Banco e dados do orçamento</h4><div class="fgrid">
+      <div class="field"><label>Banco de preços</label><select onchange="licSet('banco',this.value)">${Object.entries(BANCOS_LIC).map(([k, n]) => `<option value="${k}"${bk === k ? ' selected' : ''}>${n}${LIC.refs[k] ? ' — ' + esc(LIC.refs[k]) : k === 'emop' ? ' — sem preços (importar no Orçamento)' : ''}</option>`).join('')}</select></div>
+      <div class="field"><label>Regime</label><select onchange="licSet('regime',this.value)"><option value="O"${cfg.regime === 'O' ? ' selected' : ''}>Não desonerado (onerado)</option><option value="D"${cfg.regime === 'D' ? ' selected' : ''}>Desonerado</option></select></div>
+      ${inp('bdi', 'BDI (%)', cfg.bdi, '0.01')}
+      ${inp('dmt', 'Distância do bota-fora — DMT (km)', lic.dmt, '0.1')}
+      ${inp('esp', 'Espessura do asfalto existente e recomposto (m)', lic.esp, '0.01')}
+      ${inp('placa', 'Placa de obra (m²)', lic.placa, '0.5')}
+    </div><div class="bar-btns" style="margin:.6rem 0 0"><button class="btn btn-secondary btn-sm" onclick="abrirSolucoes(true)">⟳ Recarregar bancos</button></div></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:.8rem;margin-bottom:.9rem">${SOLUCOES.map((s, i) => card(s, rs[i])).join('')}</div>
+    <div class="card"><h4>Total com BDI nos três bancos</h4><div class="tbl-wrap"><table class="t-cel"><thead><tr><th>Solução</th>${Object.values(BANCOS_LIC).map(n => `<th class="td-num">${n}</th>`).join('')}</tr></thead><tbody>
+      ${SOLUCOES.map(s => `<tr><td><b>${esc(s.curto)}</b></td>${Object.entries(BANCOS_LIC).map(([b, n]) => { const x = LIC.res[s.k][b]; return `<td class="td-num" data-l="${n}">${x.total > 0 ? R$L(x.total) : 'sem preços'}${x.semPreco ? `<br><small style="color:var(--muted)">${x.semPreco} sem preço</small>` : ''}</td>`; }).join('')}</tr>`).join('')}
+    </tbody></table></div></div>
+    <div class="card" id="lic-det"><h4>Itens — ${esc(sol.nome)} · ${BANCOS_LIC[bk]}</h4>
+      <div class="bar-btns" style="margin:0 0 .5rem"><div class="seg">${SOLUCOES.map(s => `<button class="${LIC.ver === s.k ? 'on' : ''}" onclick="verLic('${s.k}')">${esc(s.curto)}</button>`).join('')}</div></div>
+      <div class="tbl-wrap"><table class="t-cel"><thead><tr><th>Item</th><th>Código</th><th>Descrição e memória</th><th>Unid.</th><th class="td-num">Quant.</th><th class="td-num">Preço unit.</th><th class="td-num">Total</th></tr></thead><tbody>${det}
+        <tr><td colspan="6" style="text-align:right"><b>Total sem BDI</b></td><td class="td-num" data-l="Total sem BDI"><b>${R$L(o.sub)}</b></td></tr>
+        <tr><td colspan="6" style="text-align:right">BDI ${fmt(o.bdi, 2)} %</td><td class="td-num" data-l="BDI">${R$L(o.total - o.sub)}</td></tr>
+        <tr><td colspan="6" style="text-align:right"><b>Total geral</b></td><td class="td-num" data-l="Total geral" style="color:var(--agua)"><b>${R$L(o.total)}</b></td></tr></tbody></table></div>
+      <p class="hint" style="font-size:.74rem;color:var(--muted);margin-top:.5rem">Para levar ao programa de Orçamento: toque em <b>📤 Exportar para o Orçamento</b>, abra o Orçamento e use <b>📥 Importar Lista</b> com o arquivo baixado. Os códigos são localizados nos bancos do Orçamento; os preços do arquivo vêm sem BDI (aplique o BDI no Orçamento). Itens marcados "do SINAPI" ou "do SCO-Rio" não existem no banco escolhido e vieram do outro banco. Não inclui esgotamento, remanejamento de interferências, sinalização de trânsito e mobilização.</p></div>`;
+}
+
+/* ---------- exportação para o programa de Orçamento (Importar Lista) ---------- */
+async function exportLicXLSX(solK, bank) {
+  try { await loadScript(LIB_XLSX); } catch (e) { toast('Sem internet para gerar o .xlsx. Conecte e tente de novo.'); return; }
+  const o = LIC.res[solK][bank], sol = o.sol, cfg = custosCfg();
+  const H = ['ITEM', 'CÓDIGO', 'DESCRIÇÃO', 'UNIDADE', 'QUANTIDADE', 'VALOR UNITÁRIO', 'TOTAL', 'FONTE'];
+  const aoa = [['ORÇAMENTO — DRENAGEM PLUVIAL — ' + sol.nome.toUpperCase()], [P.proj.nome + (P.proj.municipio ? ' — ' + P.proj.municipio : '')],
+    ['Banco ' + BANCOS_LIC[bank] + (LIC.refs[bank] ? ' ' + LIC.refs[bank] : '') + ' · ' + (cfg.regime === 'D' ? 'desonerado' : 'não desonerado') + ' · preços sem BDI; BDI de referência ' + fmt(+cfg.bdi || 0, 2) + ' %'], [], H];
+  const mem = [['MEMÓRIA DE CÁLCULO DAS QUANTIDADES — ' + sol.nome.toUpperCase()], [P.proj.nome], [], ['ITEM', 'DESCRIÇÃO', 'UNIDADE', 'QUANTIDADE', 'MEMÓRIA DE CÁLCULO']];
+  let gi = 0, sub = 0;
+  GRUPOS_LIC.forEach(g => {
+    const ls = o.linhas.filter(x => x.g === g); if (!ls.length) return; gi++;
+    aoa.push([String(gi), '', g, '', '', '', '', '']); mem.push([String(gi), g, '', '', '']);
+    let st = 0;
+    ls.forEach((x, j) => {
+      const q = r2(x.q), p = x.preco != null ? r2(x.preco) : '', t = p !== '' ? r2(q * p) : '';
+      if (t !== '') st += t;
+      const fonte = x.r ? BANCOS_LIC[x.r.src] + (x.r.semBanco ? ' (preço no Orçamento)' : '') : 'sem composição — escolher no Orçamento';
+      aoa.push([gi + '.' + (j + 1), x.r ? x.r.full : '', x.r && x.r.descr && !x.r.semBanco ? x.r.descr : x.nome, x.un, q, p, t, fonte]);
+      mem.push([gi + '.' + (j + 1), x.nome, x.un, q, x.memo.join('; ')]);
+    });
+    aoa.push(['', '', 'SUBTOTAL DO ITEM ' + gi, '', '', '', r2(st), '']); sub += st;
+  });
+  const bdi = +cfg.bdi || 0;
+  aoa.push([], ['', '', 'TOTAL SEM BDI', '', '', '', r2(sub), ''], ['', '', 'BDI ' + fmt(bdi, 2) + ' %', '', '', '', r2(sub * bdi / 100), ''], ['', '', 'TOTAL GERAL', '', '', '', r2(sub * (1 + bdi / 100)), '']);
+  const wb = XLSX.utils.book_new(), ws = XLSX.utils.aoa_to_sheet(aoa);
+  aoa.forEach((row, ri) => row.forEach((v, ci) => { if (typeof v === 'number' && ri > 4) { const c = ws[XLSX.utils.encode_cell({r: ri, c: ci})]; if (c) c.z = '#,##0.00'; } }));
+  ws['!cols'] = [{wch: 7}, {wch: 26}, {wch: 80}, {wch: 8}, {wch: 12}, {wch: 14}, {wch: 15}, {wch: 26}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Orçamento');
+  const wm = XLSX.utils.aoa_to_sheet(mem); wm['!cols'] = [{wch: 7}, {wch: 60}, {wch: 8}, {wch: 12}, {wch: 110}];
+  XLSX.utils.book_append_sheet(wb, wm, 'Memória de cálculo');
+  const wsol = XLSX.utils.aoa_to_sheet([['SOLUÇÃO'], [sol.nome], [sol.desc], [], ['A rede (diâmetros, cotas, ramais e PVs) é a mesma nas três soluções; o que muda são os materiais e métodos acima.'], ['Quantidades pelos Critérios de Quantitativos da EMOP; DMT do bota-fora ' + fmt(+licCfg().dmt || 0, 1) + ' km; asfalto de ' + fmt(+licCfg().esp || 0, 2) + ' m.']]);
+  wsol['!cols'] = [{wch: 120}]; XLSX.utils.book_append_sheet(wb, wsol, 'Solução');
+  wb.Props = {Title: 'Orçamento — Drenagem Pluvial', Author: P.proj.resp || CFG.empresa || 'Total Civil', Company: CFG.empresa || 'Total Civil'};
+  XLSX.writeFile(wb, 'orcamento-drenagem-' + sol.k + '-' + bank + '-' + slug(P.proj.nome) + '-' + dataHoje() + '.xlsx');
+  toast('Planilha gerada. No Orçamento, use 📥 Importar Lista com este arquivo.');
+}
+async function exportLicComparativo() {
+  try { await loadScript(LIB_XLSX); } catch (e) { toast('Sem internet para gerar o .xlsx. Conecte e tente de novo.'); return; }
+  const bk = bancoLic(), cfg = custosCfg();
+  const aoa = [['COMPARATIVO DAS 3 SOLUÇÕES — DRENAGEM PLUVIAL'], [P.proj.nome + (P.proj.municipio ? ' — ' + P.proj.municipio : '')], ['Totais com BDI de ' + fmt(+cfg.bdi || 0, 2) + ' % · ' + (cfg.regime === 'D' ? 'desonerado' : 'não desonerado')], [],
+    ['SOLUÇÃO', ...Object.values(BANCOS_LIC).map(n => n + ' (R$)'), 'DESCRIÇÃO']];
+  SOLUCOES.forEach(s => aoa.push([s.nome, ...Object.keys(BANCOS_LIC).map(b => r2(LIC.res[s.k][b].total)), s.desc]));
+  aoa.push([], ['SUBTOTAL POR GRUPO — ' + BANCOS_LIC[bk] + ' (sem BDI)', ...SOLUCOES.map(s => s.curto)]);
+  GRUPOS_LIC.forEach(g => aoa.push([g, ...SOLUCOES.map(s => r2(LIC.res[s.k][bk].linhas.filter(x => x.g === g).reduce((a, x) => a + (x.total || 0), 0)))]));
+  aoa.push(['TOTAL SEM BDI', ...SOLUCOES.map(s => r2(LIC.res[s.k][bk].sub))]);
+  const wb = XLSX.utils.book_new(), ws = XLSX.utils.aoa_to_sheet(aoa);
+  aoa.forEach((row, ri) => row.forEach((v, ci) => { if (typeof v === 'number') { const c = ws[XLSX.utils.encode_cell({r: ri, c: ci})]; if (c) c.z = '#,##0.00'; } }));
+  ws['!cols'] = [{wch: 44}, {wch: 18}, {wch: 18}, {wch: 18}, {wch: 120}];
+  XLSX.utils.book_append_sheet(wb, ws, 'Comparativo');
+  XLSX.writeFile(wb, 'comparativo-drenagem-' + slug(P.proj.nome) + '-' + dataHoje() + '.xlsx');
+  toast('Comparativo gerado');
+}
+
+/* ---------- botões junto da correção automática, no relatório e na aba Custos ---------- */
+const BTN_LIC = '<button class="btn btn-primary btn-sm" onclick="abrirSolucoes()" title="Três soluções de custo (econômica, recomendada e durável) com orçamento EMOP, SINAPI ou SCO-Rio pronto para o programa de Orçamento">💰 3 soluções com orçamento</button>';
+const comBtnLic = h => h.replace(/(<button[^>]*onclick="autoCorrigir\(\)"[^>]*>[^<]*<\/button>)/, '$1' + BTN_LIC);
+const _vRedeL = vRede; vRede = function () { return comBtnLic(_vRedeL.apply(this, arguments)); };
+const _vPVsL = vPVs; vPVs = function () { return comBtnLic(_vPVsL.apply(this, arguments)); };
+const _vVerifL = vVerif;
+vVerif = function () {
+  const h = _vVerifL.apply(this, arguments);
+  return /onclick="autoCorrigir\(\)"/.test(h) ? comBtnLic(h) : h.replace(/(<div class="sumbar">[\s\S]*?<\/div>)/, '$1<div class="bar-btns">' + BTN_LIC + '</div>');
+};
+const _vCustosL = vCustos;
+vCustos = function () {
+  return _vCustosL.apply(this, arguments).replace(/(<h3>[^<]*<\/h3>)/, `$1<div class="card" style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap">${BTN_LIC.replace('btn-sm', '')}<span style="font-size:.8rem;color:var(--muted);flex:1;min-width:220px">Orçamento completo para licitação, como nas planilhas de drenagem licitadas (preliminares, demolição, movimento de terra, bota-fora, tubos, PVs, caixas de ralo e recomposição do asfalto), em três soluções e nos bancos EMOP, SINAPI ou SCO-Rio, exportável para o programa de Orçamento.</span></div>`);
+};
+const _relCorL = relatorioCorrecao;
+relatorioCorrecao = function () {
+  const out = _relCorL.apply(this, arguments), b = $('auto-body');
+  if (b) b.insertAdjacentHTML('beforeend', `<div class="section-title">Três soluções de custo</div><div class="msg info" style="align-items:center;flex-wrap:wrap">💰 <span style="flex:1;min-width:200px">Com a rede corrigida, veja três soluções (econômica, recomendada e durável), cada uma com o orçamento completo em EMOP, SINAPI ou SCO-Rio, pronto para levar ao programa de Orçamento.</span>${BTN_LIC.replace('abrirSolucoes()', "closeModal('modal-auto');abrirSolucoes()")}</div>`);
+  return out;
+};
+</script>
 </body></html>
