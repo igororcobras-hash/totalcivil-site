@@ -12018,6 +12018,7 @@ document.addEventListener('DOMContentLoaded', limparRestos);
     r1.appendChild(menu('📤 Exportar', [novo(h('Exportar orçamento')), E.exportar]));
     r1.appendChild(menu('🧩 Planilha', [novo(h('Planilha')), E.titulo, E.comp, novo(el('hr')), E.exibir, E.ocultar, E.diag]));
     r1.appendChild(menu('📈 Análises', [novo(h('Análises')), E.abcCod, E.abcIns, E.cot, E.cotTodos, E.pedProp]));
+    var bCot = atalho(E.cotTodos, '🛒 Cotar', 'btn', 'background:#f59e0b;color:#0f172a;border:1px solid #f59e0b;border-radius:8px;padding:5px 8px;font-size:10px;font-weight:800'); bCot.title = 'Cotação de mercado de todos os itens com as IAs (Gemini, ChatGPT, Grok, Meta AI...)'; r1.appendChild(novo(bCot));
     var wB = el('div', ''); ['barEmop', 'barSinapi', 'barSco'].forEach(function(id){ mover($(id), wB); });
     r1.appendChild(menu('🗄️ Bancos', [novo(wB)], 'tp-bancos'));
     r1.appendChild(el('span', 'tp-sp'));
@@ -13012,7 +13013,7 @@ body.mode-mobile .ri-modal{padding:0}
 
 
 
-<!-- ==================== PATCH V1-02-47 - PESQUISA DE MERCADO EM VÁRIAS IAs + COTAÇÃO DE TODOS OS ITENS + PEDIDO DE PROPOSTA A FORNECEDORES ==================== -->
+<!-- ==================== PATCH V1-02-47/48 - PESQUISA DE MERCADO EM VÁRIAS IAs + COTAÇÃO DE TODOS OS ITENS + PEDIDO DE PROPOSTA A FORNECEDORES ==================== -->
 <style>
 .pm-modal{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10040;display:none;align-items:center;justify-content:center;padding:12px}
 .pm-box{background:#fff;border-radius:10px;width:min(980px,98vw);max-height:94vh;display:flex;flex-direction:column;box-shadow:0 20px 50px rgba(0,0,0,.35);font-size:11px;color:#0f172a}
@@ -13118,6 +13119,12 @@ body.mode-mobile .pm-modal{padding:0}
       if(/n[ãa]o encontrad/i.test(t) && !/https?:\/\//i.test(t)){ if(comNumero){ var mn = /^\|?\s*(\d{1,3})\b/.exec(t); if(mn) out.push({n: parseInt(mn[1],10), nao: true}); } return; }
       var mp = /R\$\s*([\d.]+,\d{1,2}|[\d]+(?:\.\d{1,2})?)/i.exec(t) || /\b(\d{1,3}(?:\.\d{3})*,\d{2})\b/.exec(t);
       var ml = /(https?:\/\/[^\s|)\]>"']+)/i.exec(t);
+      if(!mp){ // V1-02-48: preço sem "R$" nem centavos, numa coluna só dele (ex.: "| 600 |")
+        var cs = t.replace(/^\||\|$/g,'').split(/\s*\|\s*|\t/).map(function(c){ return c.replace(/\*\*/g,'').trim(); });
+        if(comNumero && /^\d{1,3}\)?$/.test(cs[0]||'')) cs.shift();
+        var cp = cs.find(function(c){ return /^(\d{1,3}(\.\d{3})+|\d+)([.,]\d{1,2})?$/.test(c); });
+        if(cp) mp = [cp, cp];
+      }
       if(!mp) return;
       if(!ml){ semLink++; return; }
       var cel = t.replace(/^\||\|$/g,'').split(/\s*\|\s*|\t/).map(function(c){ return c.replace(/\*\*/g,'').trim(); }).filter(function(c){ return c!==''; });
@@ -13165,7 +13172,8 @@ body.mode-mobile .pm-modal{padding:0}
       M.body.innerHTML =
         '<div class="pm-sec" style="background:#fff"><b>'+esc(l.codigo)+'</b> • '+esc(l.descr)+' <span style="color:#64748b">('+esc(l.unid||'')+')</span></div>'
         + '<div class="pm-sec"><h4>1. Pesquisar em</h4><div class="pm-ias">'+FONTES.map(function(f){ return '<button type="button" class="pm-ia" data-f="'+f.id+'">'+f.nome+'</button>'; }).join('')+'</div>'
-        +   '<div class="pm-dica" id="pmAviso">As IAs recebem um pedido pronto: preço real de lojas, com link, só de produto com a mesma especificação e sem inventar valores.</div></div>'
+        +   '<div class="pm-dica" id="pmAviso">As IAs recebem um pedido pronto: preço real de lojas, com link, só de produto com a mesma especificação e sem inventar valores.</div>'
+        +   '<div class="pm-row" style="margin-top:6px"><button type="button" class="btn btn-dark" id="pmTodos">🛒 Cotar TODOS os itens com todas as IAs</button></div></div>'
         + '<div class="pm-sec"><h4>2. Cole a resposta da IA (ou a tabela que montar)</h4><textarea class="pm-txt" id="pmCola" placeholder="Loja | Produto | Preço R$ | Unidade | Link"></textarea>'
         +   '<div class="pm-row" style="margin-top:6px"><button type="button" class="btn btn-primary" id="pmLer">📋 Ler resposta</button><span class="pm-dica" id="pmLido" style="margin:0"></span></div></div>'
         + '<div class="pm-sec"><h4>3. Cotações deste item</h4><table class="pm-tab"><thead><tr><th style="width:24%">Loja / fonte</th><th>Produto anunciado</th><th style="width:13%">Preço R$</th><th style="width:28%">Link</th><th style="width:22px"></th></tr></thead><tbody>'
@@ -13177,6 +13185,7 @@ body.mode-mobile .pm-modal{padding:0}
       M.body.querySelectorAll('[data-f]').forEach(function(b){ b.onclick = function(){ abrirFonte(b.dataset.f, prompt, termo, $('pmAviso')); }; });
       M.body.querySelectorAll('input[data-i]').forEach(function(inp){ inp.oninput = function(){ var c = lista[+inp.dataset.i]; c[inp.dataset.k] = inp.dataset.k==='preco' ? (parseFloat(inp.value)||0) : inp.value; }; inp.onchange = function(){ if(inp.dataset.k==='preco') desenhar(); }; });
       M.body.querySelectorAll('[data-del]').forEach(function(b){ b.onclick = function(){ lista.splice(+b.dataset.del,1); desenhar(); }; });
+      $('pmTodos').onclick = function(){ M.m.style.display='none'; window.abrirCotacaoTodos(); };
       $('pmAdd').onclick = function(){ lista.push({loja:'', produto:'', preco:0, link:'', data: hoje()}); desenhar(); };
       $('pmLer').onclick = function(){
         var r = lerOfertas($('pmCola').value, false);
@@ -13208,6 +13217,10 @@ body.mode-mobile .pm-modal{padding:0}
     var sel = {}; its.forEach(function(l){ sel[l.id] = !l.mercado; });
     if(!its.some(function(l){ return sel[l.id]; })) its.forEach(function(l){ sel[l.id] = true; });
     var lote = 0;
+    // V1-02-48: "todas as IAs" — abre uma IA de cada vez com o mesmo pedido; cada resposta colada soma às cotações
+    var FILA = FONTES.filter(function(f){ return !f.semPrompt; }), pos = 0, aberta = null, respondidas = {};
+    function nomeIA(id){ var f = FONTES.find(function(x){ return x.id===id; }); return f ? f.nome : id; }
+    function zerarFila(){ pos = 0; aberta = null; respondidas = {}; }
     var M = modal('modalCotacaoTodos', '🛒 Cotação de mercado de todos os itens', 'A IA pesquisa os itens marcados de uma vez; você cola a resposta e os preços entram com loja e link');
     function marcados(){ return its.filter(function(l){ return sel[l.id]; }); }
     function lotes(){ var m = marcados(), r = []; for(var i=0;i<m.length;i+=LOTE) r.push(m.slice(i,i+LOTE)); return r; }
@@ -13228,26 +13241,38 @@ body.mode-mobile .pm-modal{padding:0}
         + its.map(function(l){ return '<tr><td><input type="checkbox" data-id="'+l.id+'" '+(sel[l.id]?'checked':'')+'></td><td style="font-family:monospace;font-size:9px">'+esc(l.codigo)+'</td><td>'+esc(String(l.descr).slice(0,90))+'</td><td>'+esc(l.unid||'')+'</td><td class="n">'+rs(l.custo)+'</td><td class="n">'+(l.mercado?rs(l.mercado):'—')+'</td><td class="n">'+((l.cotacoes_mercado||[]).length||'—')+'</td></tr>'; }).join('')
         + '</tbody></table></div></div>'
         + '<div class="pm-sec"><h4>2. Pedir à IA'+(LS.length>1 ? ' (lote <select id="ctLote">'+LS.map(function(x,k){ return '<option value="'+k+'">'+(k+1)+' de '+LS.length+'</option>'; }).join('')+'</select>, até '+LOTE+' itens por vez)' : '')+'</h4>'
-        + '<div class="pm-ias">'+FONTES.filter(function(f){ return !f.semPrompt; }).map(function(f){ return '<button type="button" class="pm-ia" data-f="'+f.id+'">'+f.nome+'</button>'; }).join('')+'<button type="button" class="pm-ia" data-copiar="1">📋 Só copiar o pedido</button></div>'
+        + '<div class="pm-row" style="margin-bottom:6px"><button type="button" class="btn btn-primary" id="ctTodasIA" style="font-size:12px;padding:8px 14px">'
+        +   (pos < FILA.length ? '🚀 Todas as IAs: abrir '+FILA[pos].nome+' ('+(pos+1)+' de '+FILA.length+')' : '✅ Todas as IAs já foram abertas')+'</button>'
+        +   '<span class="pm-dica" style="margin:0">'+FILA.map(function(f){ return (respondidas[f.id]!=null ? '✓ ' : (aberta===f.id ? '⏳ ' : '○ '))+f.nome.replace(/^\S+\s/,'')+(respondidas[f.id]!=null ? ' ('+respondidas[f.id]+')' : ''); }).join(' · ')+'</span></div>'
+        + '<div class="pm-dica" style="margin:0 0 4px">Ou escolha só uma:</div>'
+        + '<div class="pm-ias">'+FILA.map(function(f){ return '<button type="button" class="pm-ia" data-f="'+f.id+'">'+f.nome+'</button>'; }).join('')+'<button type="button" class="pm-ia" data-copiar="1">📋 Só copiar o pedido</button></div>'
         + '<div class="pm-dica" id="ctAviso">Use uma IA com pesquisa na internet. O pedido exige loja, preço e link de cada oferta, só de itens com a mesma especificação.</div></div>'
         + '<div class="pm-sec"><h4>3. Cole a resposta da IA</h4><textarea class="pm-txt" id="ctCola" style="min-height:110px" placeholder="Nº | Loja | Produto | Preço R$ | Unidade | Link"></textarea>'
         + '<div class="pm-row" style="margin-top:6px">Valor de mercado de cada item: <select id="ctCrit"><option value="mediana">Mediana</option><option value="menor">Menor preço</option><option value="media">Média</option></select>'
         + '<label><input type="checkbox" id="ctSomar" checked> somar às cotações que o item já tem</label>'
         + '<button type="button" class="btn btn-primary" id="ctLer">📋 Preencher preços</button></div><div class="pm-dica" id="ctLido"></div></div>';
-      if($('ctLote')){ $('ctLote').value = String(lote); $('ctLote').onchange = function(){ lote = +this.value; }; }
+      if($('ctLote')){ $('ctLote').value = String(lote); $('ctLote').onchange = function(){ lote = +this.value; zerarFila(); desenhar(); }; }
       M.body.querySelectorAll('input[data-id]').forEach(function(c){ c.onchange = function(){ sel[c.dataset.id] = c.checked; desenhar(); }; });
       M.body.querySelectorAll('[data-s]').forEach(function(b){ b.onclick = function(){ its.forEach(function(l){ sel[l.id] = b.dataset.s==='todos' ? true : (b.dataset.s==='sem' ? !l.mercado : false); }); desenhar(); }; });
       var L = LS[lote] || [];
-      M.body.querySelectorAll('[data-f]').forEach(function(b){ b.onclick = function(){ if(!L.length){ alert('Marque pelo menos um item.'); return; } abrirFonte(b.dataset.f, promptLote(L), '', $('ctAviso')); }; });
+      M.body.querySelectorAll('[data-f]').forEach(function(b){ b.onclick = function(){ if(!L.length){ alert('Marque pelo menos um item.'); return; } aberta = b.dataset.f; abrirFonte(b.dataset.f, promptLote(L), '', $('ctAviso')); }; });
+      $('ctTodasIA').onclick = function(){
+        if(!L.length){ alert('Marque pelo menos um item.'); return; }
+        if(pos >= FILA.length){ if(!confirm('Todas as IAs já foram abertas para este lote. Começar de novo?')) return; zerarFila(); }
+        var f = FILA[pos++]; aberta = f.id; var av = $('ctAviso').innerHTML;
+        abrirFonte(f.id, promptLote(L), '', null); desenhar();
+        $('ctAviso').innerHTML = '<b>'+f.nome+' aberto com o pedido copiado.</b> Na aba da IA, se o texto não aparecer, clique na caixa de mensagem e cole com <b>Ctrl+V</b>. Copie a resposta inteira, cole abaixo e clique em <b>Preencher preços</b>; depois abra a próxima IA. Cada resposta soma às cotações e o valor de mercado sai do conjunto.';
+      };
       M.body.querySelector('[data-copiar]').onclick = function(){ if(!L.length){ alert('Marque pelo menos um item.'); return; } copiar(promptLote(L)); $('ctAviso').innerHTML = '<b>Pedido copiado.</b> Cole na IA de sua preferência.'; };
       $('ctLer').onclick = function(){
         var r = lerOfertas($('ctCola').value, true), porItem = {}, nao = {};
+        if(aberta){ r.ofertas.forEach(function(o){ if(!o.nao) o.ia = nomeIA(aberta).replace(/^\S+\s/,''); }); }
         r.ofertas.forEach(function(o){ if(o.n && o.n>=1 && o.n<=L.length){ if(o.nao) nao[o.n] = true; else (porItem[o.n] = porItem[o.n] || []).push(o); } });
         var ok = 0, sem = [];
         L.forEach(function(l, k){
           var novas = porItem[k+1] || [];
           if(!novas.length){ sem.push(k+1); return; }
-          var base = $('ctSomar').checked ? (l.cotacoes_mercado||[]).slice() : [];
+          var base = ($('ctSomar').checked || pos > 1) ? (l.cotacoes_mercado||[]).slice() : [];
           novas.forEach(function(o){ delete o.n; if(!base.some(function(c){ return c.link===o.link && c.preco===o.preco; })) base.push(o); });
           if(gravarCotacoes(l, base, $('ctCrit').value)) ok++;
         });
@@ -13255,6 +13280,8 @@ body.mode-mobile .pm-modal{padding:0}
         var msg = '<span class="pm-ok">'+ok+' item(ns) com preço de mercado preenchido.</span>'
           + (sem.length ? ' <span class="pm-av">Sem oferta igual: item(ns) '+sem.join(', ')+' do lote.</span>' : '')
           + (r.semLink ? ' <span class="pm-av">'+r.semLink+' linha(s) sem link foram ignoradas.</span>' : '');
+        if(aberta){ respondidas[aberta] = r.ofertas.filter(function(o){ return !o.nao; }).length; var feita = aberta; aberta = null;
+          msg = '<b>'+nomeIA(feita)+':</b> ' + msg + (pos < FILA.length ? ' Agora clique em <b>🚀 abrir '+FILA[pos].nome+'</b>.' : ' Todas as IAs consultadas.'); }
         desenhar(); $('ctLido').innerHTML = msg;
       };
     }
