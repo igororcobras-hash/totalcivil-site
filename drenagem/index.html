@@ -651,6 +651,25 @@ const CAIXAS = {
   'cxr-tj': {nome: 'Caixa de ralo na sarjeta, grelha de ferro fundido 30 × 90 — tijolo maciço (0,40 × 1,00 × 1,00 m)', tipo: 'gr', L: 0, gL: 0.90, gB: 0.30, constr: 'Alvenaria de tijolo maciço', cxB: 0.40, cxL: 1.00, cxH: 1.00},
   outro: {nome: 'Outro (dimensões livres)'}
 };
+/* medidas internas padronizadas da caixa (largura B × comprimento L, em m) por tipo de boca-de-lobo, e grelhas de ferro fundido (B × L) */
+const CX_PAD = {
+  gs: [[0.60, 1.00], [0.80, 1.00], [0.60, 1.20], [0.80, 1.20], [1.00, 1.00]],
+  gd: [[0.60, 2.20], [0.80, 2.20], [1.00, 2.20], [0.80, 2.40]],
+  cb: [[1.30, 1.00], [1.30, 1.20], [1.50, 1.20]],
+  gr: [[0.30, 0.90], [0.40, 1.00], [0.50, 1.00], [0.60, 1.00], [0.60, 1.20]]
+};
+const GRELHAS = [[0.30, 0.90], [0.40, 0.90], [0.30, 1.00], [0.40, 1.00], [0.50, 1.00], [0.60, 1.00]];
+const padKey = (B, L) => fmt(num(B) || 0, 2) + ' × ' + fmt(num(L) || 0, 2);
+function optsPad(lista, B, L, txt) {
+  const k = padKey(B, L), o = lista.map(([b, l]) => [padKey(b, l), padKey(b, l) + ' m']);
+  if (!o.some(x => x[0] === k)) o.unshift([k, k + ' m (' + txt + ')']);
+  return o;
+}
+function aplicaPad(b, campo, v) {
+  const m = String(v).match(/([\d.,]+)\s*×\s*([\d.,]+)/); if (!m) return;
+  const B = +m[1].replace(',', '.'), L = +m[2].replace(',', '.');
+  if (campo === 'cxPad') { b.cxB = B; b.cxL = L; } else { b.gB = B; b.gL = L; }
+}
 function aplicaModelo(b) { const m = CAIXAS[b.modelo]; if (!m || !m.tipo) return; ['tipo', 'L', 'gL', 'gB', 'constr', 'cxB', 'cxL', 'cxH'].forEach(k => { if (m[k] != null) b[k] = m[k]; }); b.fr = BLTIPOS[m.tipo].fr; }
 function aplicaMeioFio(r) { const m = MEIOFIO[r.mf]; if (!m || m.h == null) return; r.mfH = m.h; r.sjW = m.W; r.sjI = m.Sw || ''; }
 const PVTIPOS = ['Pré-moldado anel Ø1000', 'Pré-moldado anel Ø1200', 'Alvenaria de blocos Ø1200', 'Concreto armado Ø1200', 'Pré-moldado anel Ø1500', 'Câmara retangular'];
@@ -1319,6 +1338,8 @@ const HELP = {
   'ruas.sjW': 'Largura da sarjeta de concreto junto ao meio-fio (0,30 a 0,60 m). Zero = sem sarjeta: a água escoa direto sobre a pista.',
   'ruas.sjI': 'Caimento transversal da sarjeta em direção à guia. Deve ser maior que o da pista (usual 5 a 10 %).',
   'bls.modelo': 'Modelo da caixa da boca-de-lobo (caixa de ralo), conforme os tipos usuais do SINAPI e do SCO. Ao escolher, o tipo hidráulico, a abertura, a grelha, o material e as dimensões internas da caixa são preenchidos; você pode ajustar nos detalhes (▸). O modelo também define a composição de custo.',
+  'bls.cxPad': 'Medidas internas padronizadas da caixa (largura × comprimento). Escolha uma ou digite nas colunas ao lado; a profundidade fica em Prof. H.',
+  'bls.grPad': 'Grelha de ferro fundido (largura × comprimento). Muda a capacidade de engolimento da grelha. Também pode digitar nos detalhes (▸).',
   'bls.cxB': 'Largura interna da caixa, perpendicular ao meio-fio (sob o passeio).',
   'bls.cxL': 'Comprimento interno da caixa, ao longo do meio-fio.',
   'bls.cxH': 'Profundidade interna da caixa, do topo ao fundo. Define a cota de saída do ramal no desenho.',
@@ -1659,6 +1680,7 @@ function onField(e) {
   setPath(p, v);
   if (/^ruas\.\d+\.mf$/.test(p)) aplicaMeioFio(getPath(p.replace(/\.mf$/, '')));
   if (/^bls\.\d+\.modelo$/.test(p)) aplicaModelo(getPath(p.replace(/\.modelo$/, '')));
+  if (/^bls\.\d+\.(cxPad|grPad)$/.test(p)) aplicaPad(getPath(p.replace(/\.\w+$/, '')), p.split('.').pop(), v);
   if (p === 'proj.nome') { $('bar-nome').value = v; }
   save();
   if (el.tagName === 'SELECT' || (e.type === 'change' && el.dataset.full)) { calc(); renderTab(); return; }
@@ -1956,6 +1978,7 @@ function vBacias() {
 
 /* ---------- 5. SARJETAS E BOCAS-DE-LOBO ---------- */
 function vBLs() {
+  P.bls.forEach(b => { b.cxPad = padKey(b.cxB, b.cxL); b.grPad = padKey(b.gB, b.gL); });
   return `<h3>Sarjetas, bocas-de-lobo e ramais</h3>
   <p class="lead">Uma linha por boca-de-lobo, localizada por estaca. Na mesma linha: vazão que chega pela sarjeta, lâmina, largura alagada, quanto a BL engole, quanto <b>passa</b> para a BL seguinte e o funcionamento do <b>ramal até o PV</b>. Toque em ▸ para grelha, depressão, fator de redução e sugestões.</p>
   <div class="bar-btns"><button class="btn btn-primary btn-sm" onclick="addItem('bls')">＋ Boca-de-lobo</button></div>
@@ -1966,6 +1989,11 @@ function vBLs() {
     {h: 'Lado', p: 'lado', o: {type: 'sel', opts: [['E', 'Esq.'], ['D', 'Dir.']]}, w: 70, k: 'bls.lado'},
     {h: 'Modelo da caixa de ralo', p: 'modelo', o: {type: 'sel', opts: Object.entries(CAIXAS).map(([k, v]) => [k, v.nome])}, w: 330, k: 'bls.modelo'},
     {h: 'Tipo hidráulico', p: 'tipo', o: {type: 'sel', opts: Object.entries(BLTIPOS).map(([k, v]) => [k, v.nome])}, w: 130, k: 'bls.tipo'},
+    {h: 'Caixa interna B × L', p: 'cxPad', o: (o) => ({type: 'sel', opts: optsPad(CX_PAD[o.tipo] || CX_PAD.gs, o.cxB, o.cxL, 'digitada')}), w: 150, k: 'bls.cxPad'},
+    {h: 'Larg. B', u: 'm', p: 'cxB', o: {step: 0.05}, w: 64, k: 'bls.cxB'},
+    {h: 'Comp. L', u: 'm', p: 'cxL', o: {step: 0.05}, w: 64, k: 'bls.cxL'},
+    {h: 'Prof. H', u: 'm', p: 'cxH', o: {step: 0.05}, w: 64, k: 'bls.cxH'},
+    {h: 'Grelha FoFo B × L', p: (o, i) => o.tipo === 'gr' || o.tipo === 'cb' ? `bls.${i}.grPad` : null, o: (o) => ({type: 'sel', opts: optsPad(GRELHAS, o.gB, o.gL, 'digitada')}), w: 140, k: 'bls.grPad'},
     {h: 'L guia', u: 'm', p: (o, i) => o.tipo === 'gr' ? null : `bls.${i}.L`, o: {step: 0.1}, w: 66, k: 'bls.L'},
     {h: 'S sarjeta', u: '%', p: 'S', o: {step: 0.05, ph: 'auto'}, w: 72, k: 'bls.S'},
     {h: 'S usada', u: '%', res: 'Sx'}, {h: 'Q chega', u: 'L/s', res: 'Qafl'}, {h: 'Lâmina y', u: 'cm', res: 'y'}, {h: 'Larg. T', u: 'm', res: 'T'},
