@@ -13086,7 +13086,7 @@ body.mode-mobile .pm-modal{padding:0}
   // apareceu nas fontes da pesquisa do Google, para não aceitar loja ou link inventados.
   // ------------------------------------------------------------------
   var SDK_FB = 'https://www.gstatic.com/firebasejs/12.19.0/';
-  var MODELOS = ['gemini-2.5-flash', 'gemini-flash-latest'];
+  var MODELOS = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.5-flash-lite'];
   var iaPronta = null;
   function carregarIA(){
     if(window.__iaTeste) return Promise.resolve(window.__iaTeste);
@@ -13110,17 +13110,18 @@ body.mode-mobile .pm-modal{padding:0}
         return {texto: r.text(),
           fontes: (meta.groundingChunks||[]).map(function(g){ return g && g.web ? {uri: g.web.uri, titulo: g.web.title||''} : null; }).filter(Boolean),
           sugestoes: (meta.searchEntryPoint && meta.searchEntryPoint.renderedContent) || ''};
-      }catch(e){ ultimo = e; if(!/not.?found|404|not supported|unsupported/i.test(String(e && e.message))) break; }
+      }catch(e){ ultimo = e; try{ console.warn('[cotação IA] '+MODELOS[i], e); }catch(x){} if(!/not.?found|404|not supported|unsupported|no longer available|deprecated/i.test(String(e && e.message))) break; }
     }
     throw ultimo;
   }
   function erroIA(e){
-    var t = String((e && ((e.code||'')+' '+(e.message||''))) || e);
-    if(/api-not-enabled|not been used|has not been|SERVICE_DISABLED|PERMISSION_DENIED|403|ai\/|firebasevertexai|firebaseml/i.test(t) && !/quota|429/i.test(t))
-      return 'A pesquisa automática ainda não está ativada no Firebase. O administrador ativa uma vez em console.firebase.google.com → projeto calculadora-dnit → AI Logic → Começar → Gemini Developer API.';
-    if(/quota|429|RESOURCE_EXHAUSTED/i.test(t)) return 'A cota gratuita de pesquisas da IA acabou por agora. Tente de novo mais tarde (ela renova todo dia).';
-    if(/Failed to fetch|dynamically imported|network/i.test(t)) return 'Não foi possível falar com a IA. Verifique a internet e tente de novo.';
-    return 'A IA não respondeu: '+t.slice(0,200);
+    var t = String((e && ((e.code||'')+' '+(e.message||''))) || e), det = ' [detalhe: '+t.replace(/\s+/g,' ').trim().slice(0,260)+']';
+    if(/api-not-enabled|has not been used|SERVICE_DISABLED|is disabled/i.test(t))
+      return 'A API do Gemini ainda não está ativa no Firebase (se acabou de ativar, aguarde alguns minutos e tente de novo).'+det;
+    if(/API_KEY|api key|referer|API key not valid|blocked/i.test(t)) return 'A chave do site no Google Cloud não tem permissão para a API do Gemini.'+det;
+    if(/quota|429|RESOURCE_EXHAUSTED/i.test(t)) return 'A cota gratuita de pesquisas da IA acabou por agora. Tente de novo mais tarde (ela renova todo dia).'+det;
+    if(/Failed to fetch|dynamically imported|network/i.test(t)) return 'Não foi possível falar com a IA. Verifique a internet e tente de novo.'+det;
+    return 'A IA não respondeu.'+det;
   }
   function dominio(u){ try{ return new URL(u).hostname.replace(/^www\./,'').toLowerCase(); }catch(e){ return ''; } }
   function confirmarFontes(ofertas, fontes){
