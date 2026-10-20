@@ -2016,7 +2016,7 @@ function vProjeto() {
       ${fld('crit.dmin', 'Ø mínimo admitido (mm)', {type: 'sel', num: true, opts: optsD()})}${fld('crit.yD', 'y/D máximo', {step: 0.05})}
       ${fld('crit.vmin', 'V mínima (m/s)', {step: 0.05})}${fld('crit.vmax', 'V máxima (m/s)', {step: 0.1})}
       ${fld('crit.tauMin', 'τ mínima (Pa)', {step: 0.1})}${fld('crit.imin', 'Declividade mín. (%)', {step: 0.05})}
-      ${fld('crit.recob', 'Recobrimento mín. (m)', {step: 0.05})}${fld('crit.recPA1', 'Rec. sem proteção, tubo PA-1 (m)', {step: 0.05})}${fld('crit.recPA2', 'Rec. mín. com tubo PA-2 (m)', {step: 0.05})}${fld('crit.recLaje', 'Rec. mín. com laje de proteção (m)', {step: 0.05})}${fld('crit.recEnv', 'Rec. mín. envelopado em concreto (m)', {step: 0.05})}${fld('crit.tcMin', 'tc mínimo (min)', {step: 1})}</div>
+      ${fld('crit.recob', 'Recobrimento mín. (m)', {step: 0.05})}${fld('crit.recPA1', 'Rec. sem proteção, tubo PA-1 (m)', {step: 0.05})}${fld('crit.recPA2', 'Rec. mín. com tubo PA-2 (m)', {step: 0.05})}${fld('crit.recLaje', 'Rec. mín. com laje de proteção (m)', {step: 0.05})}${fld('crit.recEnv', 'Rec. mín. envelopado em concreto (m)', {step: 0.05})}${fld('crit.trafRoda', 'Carga de roda do veículo-tipo (kN)', {step: 5})}${fld('crit.trafCIV', 'Coef. de impacto CIV', {step: 0.05})}${fld('crit.solGama', 'Peso específico do solo/pavimento (kN/m³)', {step: 0.5})}${fld('crit.fckProt', 'fck da laje e do envelope (MPa)', {step: 5})}${fld('crit.lajeApoio', 'Apoio da laje além da vala, cada lado (m)', {step: 0.05})}${fld('crit.pavProt', 'Camada mín. sobre a laje/envelope (m)', {step: 0.05})}${fld('crit.tcMin', 'tc mínimo (min)', {step: 1})}</div>
     <div class="section-title">Poços de visita, vala e outros</div><div class="fgrid">
       ${fld('crit.profMaxPV', 'Prof. máx. de PV (m)', {step: 0.1})}${fld('crit.folgaPV', 'Folga NA → tampa (m)', {step: 0.05})}
       ${fld('crit.espF', 'Parede do tubo (× D)', {step: 0.01})}${fld('crit.valaFolga', 'Folga lateral vala (m)', {step: 0.05})}
@@ -2327,6 +2327,8 @@ function memorialHTML(sel) {
 
   ${sel.pvs ? `${H('Poços de visita')}
   ${T(['PV', 'Rua / est.', 'Tipo', 'Tampão', 'Tampa (m)', 'Fundo (m)', 'Prof. (m)', 'Escoamento', 'K', 'h<sub>f</sub> (m)', 'NA (m)', 'Folga (m)', ''], P.pvs.map(pv => { const r = R.pv[pv.id]; return tr([esc(pv.id), esc(ruaNome(pv.rua)) + ' ' + estLabel(num(pv.dist)), esc(pv.tipo), esc((pv.tampaCl || '').split(' (')[0]), fmt(r.tp, 3), fmt(r.fundo, 3), fmt(r.prof, 2), DEFL[pv.defl], fmt(r.K, 2), fmt(r.hf, 3), isNum(r.H) && r.H > -1e8 ? fmt(r.H, 3) : '—', fmt(r.folga, 2), stTxt(r.st)]); }))}` : ''}
+
+  ${sel.rede ? protMemorial(H, T, tr) : ''}
 
   ${sel.pvs ? alasMemorial(H, T, tr) : ''}
 
@@ -3569,7 +3571,7 @@ function orcamento() {
   P.trechos.forEach(t => {
     const r = R.tr[t.id]; if (!r || !(r.L > 0)) return;
     if (r.gal) add('gal:' + r.gal.N + ':' + r.gal.B.toFixed(2) + ':' + r.gal.H.toFixed(2) + ':' + r.gal.e.toFixed(2), r.L); else add('tubo:' + t.D, r.L);
-    if (!r.gal && r.prot && r.prot.usa !== 'pa1') { const pq = protQuant(t, r); add(pq.k, pq.q); }
+    if (!r.gal && r.prot && r.prot.usa !== 'pa1') { protQuant(t, r).forEach(pq => add(pq.k, pq.q)); }
     if (r.vala) {
       const h = (r.vala.hM + r.vala.hJ) / 2, B = r.vala.B, hb = bandaH(h), wb = bandaB(B);
       const Vb = B * c.berco * r.L;
@@ -3595,12 +3597,12 @@ function orcamento() {
 }
 const nomeItem = k => {
   const [tp, a, b, c2, d] = k.split(':');
-  if (tp === 'prot') return PROT_ITEM[a] + (a === 'pa2' ? ' Ø' + b + ' mm' : '');
+  if (tp === 'prot') return protItemNome(a) + (a === 'pa2' ? ' Ø' + b + ' mm' : '');
   if (tp === 'gal') return 'Galeria celular em aduelas pré-moldadas ' + (+a > 1 ? a + ' células ' : '') + fmt(+b, 2) + ' × ' + fmt(+c2, 2) + ' m (e = ' + fmt(+d, 2) + ' m), fornecimento e assentamento';
   if (tp === 'ala') return ALA_NOME[a] || k;
   const r = regras(custosCfg()).find(x => x.k === k); return r ? r.nome : k;
 };
-const unidItem = k => k.startsWith('ala:') ? ALA_UN[k.split(':')[1]] : k.startsWith('prot:') ? (k.split(':')[1] === 'pa2' ? 'm' : 'm³') : ({tubo: 'm', gal: 'm', esc: 'm³', reat: 'm³', escor: 'm²', berco: 'm³', pvbase: 'un', pvacr: 'm', bl: 'un'})[k.split(':')[0]];
+const unidItem = k => k.startsWith('ala:') ? ALA_UN[k.split(':')[1]] : k.startsWith('prot:') ? ({pa2: 'm', aco: 'kg'}[k.split(':')[1]] || 'm³') : ({tubo: 'm', gal: 'm', esc: 'm³', reat: 'm³', escor: 'm²', berco: 'm³', pvbase: 'un', pvacr: 'm', bl: 'un'})[k.split(':')[0]];
 
 /* -------- aba Custos -------- */
 function vCustos() {
@@ -4374,7 +4376,7 @@ orcamento = function () {
   P.trechos.forEach(t => {
     const r = R.tr[t.id]; if (!r || !(r.L > 0)) return;
     if (r.gal) add('gal:' + r.gal.N + ':' + r.gal.B.toFixed(2) + ':' + r.gal.H.toFixed(2) + ':' + r.gal.e.toFixed(2), r.L); else add('tubo:' + t.D, r.L);
-    if (!r.gal && r.prot && r.prot.usa !== 'pa1') { const pq = protQuant(t, r); add(pq.k, pq.q); }
+    if (!r.gal && r.prot && r.prot.usa !== 'pa1') { protQuant(t, r).forEach(pq => add(pq.k, pq.q)); }
     if (r.vala) {
       const h = (r.vala.hM + r.vala.hJ) / 2, B = r.vala.B, hb = bandaH(h), wb = bandaB(B);
       const Vb = B * c.berco * r.L;
@@ -4557,7 +4559,7 @@ orcamento = function () {
   P.trechos.forEach(t => {
     const r = R.tr[t.id]; if (!r || !(r.L > 0)) return;
     if (r.gal) add('gal:' + r.gal.N + ':' + r.gal.B.toFixed(2) + ':' + r.gal.H.toFixed(2) + ':' + r.gal.e.toFixed(2), r.L); else add('tubo:' + t.D, r.L);
-    if (!r.gal && r.prot && r.prot.usa !== 'pa1') { const pq = protQuant(t, r); add(pq.k, pq.q); }
+    if (!r.gal && r.prot && r.prot.usa !== 'pa1') { protQuant(t, r).forEach(pq => add(pq.k, pq.q)); }
     if (r.vala) terra(r.vala.V, r.vala.Vb != null ? r.vala.Vb : r.vala.B * c.berco * r.L, r.vala.reat != null ? r.vala.reat : 0, (r.vala.hM + r.vala.hJ) / 2, r.vala.B, r.vala.escor != null ? r.vala.escor : 0);
   });
   P.bls.forEach(b => {
@@ -4754,7 +4756,7 @@ function itensLic(sol, bank) {
   P.trechos.forEach(t => {
     const r = R.tr[t.id]; if (!r || !(r.L > 0)) return;
     Lrede += r.L; if (r.gal) { const k = galNome(r.gal) + ' · e ' + fmt(r.gal.e, 2) + ' m'; galL[k] = (galL[k] || 0) + r.L; } else { const k = (r.prot && r.prot.usa === 'pa2' && sol.classe.rede === 'PA-1' ? 'PA-2' : sol.classe.rede) + ':' + (+t.D); tubos[k] = (tubos[k] || 0) + r.L;
-      if (r.prot && (r.prot.usa === 'laje' || r.prot.usa === 'env')) { const pq = protQuant(t, r); protV[r.prot.usa] = (protV[r.prot.usa] || 0) + pq.q; } }
+      if (r.prot && (r.prot.usa === 'laje' || r.prot.usa === 'env')) protQuant(t, r).forEach(pq => { const kk = pq.k.split(':')[1]; protV[kk] = (protV[kk] || 0) + pq.q; }); }
     if (r.vala) {
       area += r.vala.L * (r.vala.B + 2 * s); hw += r.vala.L * (r.vala.hM + r.vala.hJ) / 2; hl += r.vala.L; Bmax = Math.max(Bmax, r.vala.B);
       if (sol.env) { const hE = r.gal ? r.gal.H + 2 * r.gal.e : deTr(t); Venv += Math.max(0, r.vala.L * r.vala.B * (hE + 0.30) - (r.vala.tubo || 0)); }
@@ -4807,7 +4809,7 @@ function itensLic(sol, bank) {
   });
   Object.entries(galL).forEach(([k, m]) => add(g[4], 'Galeria celular em aduelas pré-moldadas de concreto armado ' + k + ', fornecimento e assentamento', 'm', m,
     {emop: null, sinapi: {re: [/ADUELA|GALERIA CELULAR/]}, sco: {re: [/[Aa]duela|[Gg]aleria celular/]}}, 'Comprimento dos trechos em galeria ' + k + ' (composição a confirmar no banco; sem código encontrado entra sem preço)'));
-  ['laje', 'env'].forEach(k => add(g[4], PROT_ITEM[k], 'm³', protV[k] || 0, {emop: null, sinapi: null, sco: null}, PROT_MEMO[k]));
+  ['laje', 'env', 'aco'].forEach(k => add(g[4], protItemNome(k), k === 'aco' ? 'kg' : 'm³', protV[k] || 0, {emop: null, sinapi: null, sco: null}, PROT_MEMO[k]));
   itensAlasLic(add, g[4]);
   /* 6. PVs */
   P.pvs.forEach(pv => {
@@ -5518,9 +5520,15 @@ const _vProjetoG = vProjeto; vProjeto = function () { const h = _vProjetoG.apply
    ===================================================================== */
 const PROT_NIV = ['pa1', 'pa2', 'laje', 'env'];
 const PROT_NOME = {pa1: 'Nenhuma — tubo PA-1', pa2: 'Tubo PA-2 (armadura dupla)', laje: 'Laje de proteção sobre o tubo', env: 'Envelopamento em concreto'};
-const PROT_ITEM = {pa2: 'Acréscimo de tubo PA-2 (armadura dupla) em lugar de PA-1 por recobrimento reduzido', laje: 'Laje de proteção de concreto armado fck 25 MPa sobre o tubo (e = 0,12 m), inclusive armadura e fôrma', env: 'Envelopamento do tubo em concreto fck 15 MPa até 0,10 m acima da geratriz'};
-const PROT_MEMO = {laje: 'Largura da vala × 0,12 m × extensão dos trechos com recobrimento reduzido', env: 'Largura da vala × (Ø externo + 0,10 m) − área do tubo, × extensão dos trechos com recobrimento muito reduzido'};
-const PROT_REF = {pa2: 0.20, laje: 2400, env: 780};   // PA-2: fração do preço do tubo; laje e envelope: R$/m³ de referência
+const PROT_ITEM = {pa2: 'Acréscimo de tubo PA-2 (armadura dupla) em lugar de PA-1 por recobrimento reduzido'};
+function protItemNome(a) {
+  const f = (P && P.crit && num(P.crit.fckProt)) || 25;
+  return a === 'laje' ? 'Laje de proteção em concreto armado fck ' + f + ' MPa sobre o tubo, apoiada no terreno natural fora da vala (concreto, fôrma e lançamento)'
+    : a === 'env' ? 'Envelopamento do tubo em concreto armado fck ' + f + ' MPa, preenchendo a largura da vala (concreto, fôrma e lançamento)'
+    : a === 'aco' ? 'Armadura em aço CA-50 da laje de proteção e do envelopamento (corte, dobra e colocação)' : PROT_ITEM[a] || a;
+}
+const PROT_MEMO = {laje: 'Largura da laje (vala + 2 apoios) × espessura calculada × extensão, por trecho (ver "Proteção dos tubos" no memorial)', env: '[Largura da vala × (0,10 + Ø externo + capa calculada) − área do tubo] × extensão, por trecho', aco: 'Armadura principal + de distribuição calculadas por trecho × largura × 7.850 kg/m³ × 1,10 (ganchos e traspasses)'};
+const PROT_REF = {pa2: 0.20, laje: 1100, env: 900, aco: 12};   // PA-2: fração do preço do tubo; concreto: R$/m³; aço: R$/kg (referência)
 function protCrit() { const c = P.crit; return {pa1: num(c.recPA1) != null ? +c.recPA1 : 1.0, pa2: num(c.recPA2) != null ? +c.recPA2 : 0.8, laje: num(c.recLaje) != null ? +c.recLaje : 0.5, env: num(c.recEnv) != null ? +c.recEnv : 0.3}; }
 function protNec(rec) { const k = protCrit(); return !isNum(rec) ? 'pa1' : rec >= k.pa1 - 1e-3 ? 'pa1' : rec >= k.pa2 - 1e-3 ? 'pa2' : rec >= k.laje - 1e-3 ? 'laje' : rec >= k.env - 1e-3 ? 'env' : 'x'; }
 function protTrecho(t, rec) {
@@ -5536,17 +5544,18 @@ function optsProt(o) {
   return [['', 'Automático — ' + (nec === 'x' ? 'aprofundar o tubo' : PROT_NOME[nec])]].concat(PROT_NIV.map(k => [k, PROT_NOME[k] + (PROT_NIV.indexOf(k) < PROT_NIV.indexOf(nec) || nec === 'x' ? ' — não basta' : '')]));
 }
 function protQuant(t, r) {
-  const u = r.prot.usa, B = r.vala ? r.vala.B : deTr(t) + 2 * (+P.crit.valaFolga || 0.3), De = deTr(t);
-  if (u === 'pa2') return {k: 'prot:pa2:' + t.D, q: r.L};
-  if (u === 'laje') return {k: 'prot:laje', q: B * 0.12 * r.L};
-  return {k: 'prot:env', q: Math.max(0, B * (De + 0.10) - Math.PI * De * De / 4) * r.L};
+  const u = r.prot.usa;
+  if (u === 'pa2') return [{k: 'prot:pa2:' + t.D, q: r.L}];
+  const pj = r.prot.proj || protProjeto(t, r);
+  if (!pj) return [];
+  return [{k: 'prot:' + u, q: pj.Vm * r.L}, {k: 'prot:aco', q: pj.kgm * r.L}];
 }
 const _precoP = preco;
 preco = function (k) {
   const [tipo, a, D] = k.split(':'); if (tipo !== 'prot') return _precoP.apply(this, arguments);
   const p = (custosCfg().precos || {})[k]; if (p && isNum(p.preco)) return p;
   if (a === 'pa2') { const pt = _precoP('tubo:' + D); return {cod: '—', descr: 'Valor de referência: ' + fmt(PROT_REF.pa2 * 100, 0) + ' % do preço do tubo PA-1 Ø' + D, unid: 'm', preco: (pt && pt.preco || 0) * PROT_REF.pa2, fonte: 'referência'}; }
-  return {cod: '—', descr: 'Valor de referência (sem banco carregado)', unid: 'm³', preco: PROT_REF[a] || 0, fonte: 'referência'};
+  return {cod: '—', descr: 'Valor de referência (sem banco carregado)', unid: a === 'aco' ? 'kg' : 'm³', preco: PROT_REF[a] || 0, fonte: 'referência'};
 };
 Object.assign(HELP, {
   'crit.recPA1': 'Recobrimento a partir do qual o tubo de concreto PA-1 resiste ao tráfego sem proteção. Abaixo disso o programa indica PA-2, laje de proteção ou envelopamento.',
@@ -5555,6 +5564,318 @@ Object.assign(HELP, {
   'crit.recEnv': 'Menor recobrimento admitido com o tubo envelopado em concreto. Abaixo dele é preciso aprofundar a rede.',
   'trechos.prot': 'Proteção do tubo contra a carga do tráfego quando o recobrimento é pequeno. "Automático" usa a mínima que atende; escolha outra mais forte se preferir. Entra no orçamento e na licitação.'
 });
+
+
+/* =====================================================================
+   PATCH DR-06 (20/10/2026) — Projeto da laje de proteção e do envelopamento
+   A laje e o envelope deixam de ser volumes fixos: são dimensionados por
+   trecho para receber a carga de roda do veículo-tipo e levá-la ao terreno.
+   - Laje: vence a largura da vala e apoia no terreno natural dos dois
+     lados (apoio crit.lajeApoio), com folga de 5 cm sobre o tubo; a carga
+     de roda se espalha a 45° pelo pavimento até a laje.
+   - Envelope: concreto preenchendo a vala, 10 cm sob o tubo e capa armada
+     sobre a geratriz superior, calculada como laje que vence o Ø externo.
+   Concreto armado pela NBR 6118 (γc 1,4 · γs 1,15 · γf 1,4, CA-50).
+   ===================================================================== */
+const PROT_CRIT = {trafRoda: 75, trafCIV: 1.35, solGama: 19, fckProt: 25, lajeApoio: 0.30, pavProt: 0.10};
+const _defaultCrit2 = defaultCrit;
+defaultCrit = function () { return Object.assign(_defaultCrit2(), PROT_CRIT); };
+Object.assign(CRITR, {trafRoda: [40, 120], trafCIV: [1.0, 1.6], solGama: [16, 22], fckProt: [20, 40], lajeApoio: [0.20, 0.60], pavProt: [0.05, 0.30]});
+function protK() {
+  const c = P.crit, v = (k) => { const x = num(c[k]); return isNum(x) && x > 0 ? x : PROT_CRIT[k]; };
+  return {roda: v('trafRoda'), civ: v('trafCIV'), gs: v('solGama'), fck: v('fckProt'), apoio: v('lajeApoio'), pav: v('pavProt')};
+}
+const BITOLAS = [8, 10, 12.5, 16];
+function armSlab(As) {   // As em m²/m → bitola e espaçamento (10 a 20 cm)
+  for (const f of BITOLAS) { const a = Math.PI * Math.pow(f / 1000, 2) / 4, s = Math.min(0.20, Math.floor(a / As / 0.025 + 1e-9) * 0.025); if (s >= 0.10) return {f, s, As: a / s}; }
+  const f = 16, a = Math.PI * Math.pow(f / 1000, 2) / 4; return {f, s: 0.10, As: a / 0.10};
+}
+function armDist(As) {
+  for (const f of [6.3, 8, 10]) { const a = Math.PI * Math.pow(f / 1000, 2) / 4, s = Math.min(0.30, Math.floor(a / As / 0.025 + 1e-9) * 0.025); if (s >= 0.10) return {f, s, As: a / s}; }
+  return {f: 10, s: 0.10, As: Math.PI * 0.01 * 0.01 / 4 / 0.10};
+}
+/* laje de concreto armado, biapoiada no vão l, sob a roda espalhada a 45° desde a superfície.
+   hsOf(e) = altura de solo/pavimento sobre a face superior para a espessura e.
+   Procura a menor espessura (de eMin a eMax, passo 1 cm) que atende flexão (x/d ≤ 0,45) e cisalhamento sem estribos. */
+function protSlab(l, hsOf, eMin, eMax) {
+  const k = protK(), Pd = k.roda * k.civ, fcd = k.fck * 1000 / 1.4, fyd = 500000 / 1.15;
+  const tRd = 0.25 * 0.7 * 0.3 * Math.pow(k.fck, 2 / 3) / 1.4 * 1000;   // kPa
+  let ult = null;
+  for (let e = eMin; e <= eMax + 1e-9; e = Math.round((e + 0.01) * 100) / 100) {
+    const hs = hsOf(e); if (hs < k.pav - 1e-6) break;
+    const ax = 0.20 + 2 * hs + e, by = 0.50 + 2 * hs + e;          // área de contato 0,20 × 0,50 m espalhada até o plano médio
+    const L = l + e, cx = Math.min(ax, L), Pon = Pd * Math.min(1, L / ax), bw = Math.min(by, 1.50);   // eixos a 1,50 m: as rodas se somam além disso
+    const g = 25 * e + k.gs * hs;                                   // peso próprio + solo/pavimento (kN/m²)
+    const Mk = Pon * (L / 4 - cx / 8) / bw + g * L * L / 8;           // kN·m/m
+    const Vk = Pon / bw * (1 - cx / (2 * L)) + g * L / 2;             // kN/m
+    const Md = 1.4 * Mk, Vd = 1.4 * Vk, d = e - 0.03 - 0.008;
+    const kmd = Md / (d * d * fcd), disc = 0.4624 - 1.088 * kmd;
+    const xi = disc > 0 ? (0.68 - Math.sqrt(disc)) / 0.544 : 9;
+    const Asc = xi <= 0.45 ? Md / (d * (1 - 0.4 * xi) * fyd) : null, Asmin = 0.0015 * e;
+    const As = Asc == null ? null : Math.max(Asc, Asmin);
+    const arm = As != null ? armSlab(As) : null;
+    const kv = Math.max(1, 1.6 - d), r1 = arm ? Math.min(arm.As / d, 0.02) : 0, VRd1 = tRd * kv * (1.2 + 40 * r1) * d;
+    const Asd = arm ? Math.max(arm.As / 5, 0.9e-4, 0.5 * Asmin) : null, dist = Asd ? armDist(Asd) : null;
+    ult = {e, hs, d, L, ax, by, bw, Pd, Pon, g, Mk, Md, Vk, Vd, VRd1, kmd, xi, As, Asmin, arm, dist, ok: xi <= 0.45 && Vd <= VRd1};
+    if (ult.ok) return ult;
+  }
+  return ult ? Object.assign(ult, {ok: false}) : null;
+}
+function protProjeto(t, r) {
+  if (!r || !r.prot || (r.prot.usa !== 'laje' && r.prot.usa !== 'env')) return null;
+  const k = protK(), rec = Math.min(...[r.recM, r.recJ].filter(isNum));
+  if (!isNum(rec)) return null;
+  const De = deTr(t), Bv = r.vala && r.vala.B ? r.vala.B : De + 2 * (+P.crit.valaFolga || 0.3);
+  if (r.prot.usa === 'laje') {
+    const s = protSlab(Bv, e => rec - 0.05 - e, 0.12, 0.40); if (!s) return {tipo: 'laje', ok: false, rec, Bv, nota: 'Recobrimento ' + fmt(rec, 2) + ' m não comporta a laje (0,05 m de folga + 0,12 m de laje + ' + fmt(k.pav, 2) + ' m de pavimento). Use envelopamento.'};
+    const B = Bv + 2 * k.apoio, kgm = (s.arm.As + s.dist.As) * B * 7850 * 1.10;
+    return Object.assign(s, {tipo: 'laje', rec, Bv, B, Vm: B * s.e, kgm, De,
+      nota: s.ok ? '' : 'Laje de ' + fmt(s.e * 100, 0) + ' cm não atende com ' + fmt(rec, 2) + ' m de recobrimento. Use envelopamento ou aprofunde o tubo.'});
+  }
+  const s = protSlab(De, e => rec - e, 0.10, Math.max(0.10, rec - k.pav));
+  if (!s) return {tipo: 'env', ok: false, rec, Bv, nota: 'Recobrimento ' + fmt(rec, 2) + ' m não comporta a capa mínima de 0,10 m + ' + fmt(k.pav, 2) + ' m de pavimento. Aprofunde o tubo.'};
+  const H = 0.10 + De + s.e, kgm = (s.arm.As + s.dist.As) * Bv * 7850 * 1.10;
+  return Object.assign(s, {tipo: 'env', rec, Bv, B: Bv, H, De, lat: (Bv - De) / 2, Vm: Math.max(0, Bv * H - Math.PI * De * De / 4), kgm,
+    nota: s.ok ? '' : 'Capa de ' + fmt(s.e * 100, 0) + ' cm sobre o tubo não atende. Aprofunde o tubo.'});
+}
+const protTxt = pj => pj && pj.arm ? (pj.tipo === 'laje' ? 'Laje e = ' + fmt(pj.e * 100, 0) + ' cm × ' + fmt(pj.B, 2) + ' m de largura (vala ' + fmt(pj.Bv, 2) + ' m + 2 × ' + fmt(protK().apoio, 2) + ' m de apoio)'
+  : 'Envelope ' + fmt(pj.B, 2) + ' × ' + fmt(pj.H, 2) + ' m (10 cm sob o tubo, capa de ' + fmt(pj.e * 100, 0) + ' cm sobre a geratriz)') + ' · armadura ' + bitTxt(pj.arm) + ' + distribuição ' + bitTxt(pj.dist) : '—';
+const bitTxt = a => { const s = Math.round(a.s * 1000) / 10; return 'Ø' + fmt(a.f, a.f % 1 ? 1 : 0) + ' c/ ' + fmt(s, s % 1 ? 1 : 0); };
+const _calcProt = calc;
+calc = function () {
+  const res = _calcProt.apply(this, arguments);
+  try {
+    P.trechos.forEach(t => {
+      const r = res.tr[t.id]; if (!r || r.gal || !r.prot) return;
+      let pj = r.prot.proj = protProjeto(t, r); if (!pj) return;
+      if (pj.tipo === 'laje' && !pj.ok && !r.prot.esc) {   // automático: laje não cabe ou não resiste → envelopa
+        r.prot.usa = 'env'; const pe = protProjeto(t, r);
+        if (pe) { pe.nota = (pe.nota ? pe.nota + ' ' : '') + 'Adotado envelopamento: ' + pj.nota.replace(/ Use envelopamento.*$/, ''); pj = r.prot.proj = pe; r.prot.nota = 'Recobrimento reduzido: laje não atende, envelopamento indicado pelo programa.'; }
+      }
+      const nome = pj.tipo === 'laje' ? 'Laje de proteção' : 'Envelopamento', s = pj.ok ? 'ok' : 'err';
+      const val = pj.arm ? protTxt(pj) : '—', lim = 'Md ≤ Mrd (x/d ≤ 0,45) e Vd ≤ VRd1, roda ' + fmt(protK().roda, 0) + ' kN × ' + fmt(protK().civ, 2);
+      res.checks.push({tab: 'rede', el: t.id, par: nome, val, lim, st: s, nota: pj.nota || ''});
+      r.msgs.push({s, t: nome + ': ' + val + (pj.arm ? ' — Md = ' + fmt(pj.Md, 1) + ' kN·m/m, Vd = ' + fmt(pj.Vd, 1) + ' kN/m' : '') + (s !== 'ok' && pj.nota ? ' — ' + pj.nota : '')});
+      r.st = worst(r.st, s);
+    });
+  } catch (e) { console.error('Proteção:', e); }
+  setTimeout(() => { const el = document.querySelector('[data-protcard]'); if (el) el.innerHTML = protCardBody(); }, 0);
+  return res;
+};
+function protLinhas() { return R && R.ordem ? R.ordem.filter(t => R.tr[t.id] && R.tr[t.id].prot && R.tr[t.id].prot.usa !== 'pa1' && !R.tr[t.id].gal) : []; }
+function protCardBody() {
+  const L = protLinhas();
+  if (!L.length) return '<p class="muted" style="margin:0">Nenhum trecho precisa de proteção: todos têm recobrimento ≥ ' + fmt(protCrit().pa1, 2) + ' m (tubo PA-1).</p>';
+  return `<div class="tbl-wrap"><table><thead><tr><th>Trecho</th><th>Recobr. mín. (m)</th><th>Proteção</th><th>Dimensões e armadura</th><th>Md / Vd</th><th>Concreto (m³/m)</th><th>Aço (kg/m)</th><th>Situação</th></tr></thead><tbody>${L.map(t => {
+    const r = R.tr[t.id], pj = r.prot.proj, rec = Math.min(...[r.recM, r.recJ].filter(isNum));
+    return `<tr><td>${esc(t.id)}</td><td>${fmt(rec, 2)}</td><td>${esc(PROT_NOME[r.prot.usa])}</td><td>${r.prot.usa === 'pa2' ? 'Tubo PA-2 (armadura dupla) — admite recobrimento até ' + fmt(protCrit().pa2, 2) + ' m' : esc(protTxt(pj))}</td><td>${pj && pj.arm ? fmt(pj.Md, 1) + ' kN·m/m / ' + fmt(pj.Vd, 1) + ' kN/m' : '—'}</td><td>${pj && pj.Vm ? fmt(pj.Vm, 3) : '—'}</td><td>${pj && pj.kgm ? fmt(pj.kgm, 1) : '—'}</td><td>${!r.prot.ok || (pj && !pj.ok) ? '<span class="st-err">✗ ' + esc((pj && pj.nota) || r.prot.nota) + '</span>' : '<span class="st-ok">✓</span>'}</td></tr>`; }).join('')}</tbody></table></div>`;
+}
+function protCardHTML() { return `<div class="card"><div class="section-title">Proteção dos tubos — PA-2, laje e envelopamento</div><div data-protcard>${protCardBody()}</div></div>`; }
+const _vRedeProt = vRede;
+vRede = function () { return _vRedeProt.apply(this, arguments) + protCardHTML(); };
+function protMemorial(H, T, tr) {
+  const L = protLinhas(); if (!L.length) return '';
+  const k = protK(), pc = protCrit();
+  return `${H('Proteção dos tubos por recobrimento reduzido')}
+  <p>Critério: recobrimento ≥ ${fmt(pc.pa1, 2)} m, tubo PA-1 sem proteção; até ${fmt(pc.pa2, 2)} m, tubo PA-2 (armadura dupla, NBR 8890), que resiste a carga maior com menos solo por cima; até ${fmt(pc.laje, 2)} m, laje de concreto armado sobre a vala; até ${fmt(pc.env, 2)} m, envelopamento em concreto armado. A laje vence a largura da vala e apoia ${fmt(k.apoio, 2)} m no terreno natural de cada lado, com 5 cm de folga sobre o tubo, de modo que a carga do tráfego não chega ao tubo. O envelope preenche a vala, com 10 cm sob o tubo e capa armada sobre a geratriz superior, e leva a carga às paredes e ao fundo da vala.</p>
+  <p>Carga: roda do veículo-tipo de ${fmt(k.roda, 0)} kN (TB-450 da NBR 7188: 450 kN em 6 rodas) × coeficiente de impacto ${fmt(k.civ, 2)}, contato 0,20 × 0,50 m, espalhada a 45° pelo pavimento e solo (${fmt(k.gs, 1)} kN/m³) até o plano médio da peça; eixos a 1,50 m somam as rodas quando o espalhamento passa disso. Peça biapoiada: M = P·(L/4 − c/8)/b + g·L²/8; V = P·(1 − c/2L)/b + g·L/2. Concreto fck ${fmt(k.fck, 0)} MPa, aço CA-50, cobrimento 3 cm, NBR 6118: γf = γc = 1,4, γs = 1,15, x/d ≤ 0,45, As mín = 0,15 %, cisalhamento sem estribos por VRd1.</p>
+  ${T(['Trecho', 'Rec. (m)', 'Proteção', 'Dimensões e armadura', 'Md (kN·m/m)', 'Vd / VRd1 (kN/m)', 'Concreto (m³/m)', 'Aço (kg/m)'], L.map(t => { const r = R.tr[t.id], pj = r.prot.proj, rec = Math.min(...[r.recM, r.recJ].filter(isNum));
+    return tr([esc(t.id), fmt(rec, 2), esc(PROT_NOME[r.prot.usa]), r.prot.usa === 'pa2' ? 'Tubo PA-2' : esc(protTxt(pj)), pj && pj.arm ? fmt(pj.Md, 1) : '—', pj && pj.arm ? fmt(pj.Vd, 1) + ' / ' + fmt(pj.VRd1, 1) : '—', pj && pj.Vm ? fmt(pj.Vm, 3) : '—', pj && pj.kgm ? fmt(pj.kgm, 1) : '—']); }))}`;
+}
+Object.assign(HELP, {
+  'crit.recPA1': 'Recobrimento mínimo para o tubo de concreto PA-1 (classe básica da NBR 8890) resistir ao tráfego sem proteção. Abaixo dele o programa indica, nesta ordem: PA-2, laje de proteção ou envelopamento. Usual: 1,00 m em vias com tráfego de caminhões.',
+  'crit.recPA2': 'Recobrimento mínimo com tubo PA-2. O PA-2 tem armadura dupla (classe de resistência maior na NBR 8890) e por isso aceita menos solo por cima que o PA-1, mas também tem limite: abaixo deste valor nem o PA-2 basta e o programa passa para laje de proteção. Usual: 0,80 m.',
+  'crit.recLaje': 'Recobrimento mínimo com laje de proteção. A laje de concreto armado vence a largura da vala e apoia no terreno natural dos dois lados, então a carga das rodas vai para o terreno e não para o tubo. Espessura e armadura são calculadas por trecho (veja "Proteção dos tubos" na aba Rede). Abaixo deste valor o programa passa para envelopamento.',
+  'crit.recEnv': 'Recobrimento mínimo com o tubo envelopado em concreto armado (preenche a vala, 10 cm sob o tubo e capa armada sobre ele, calculada por trecho). Abaixo deste valor nenhuma proteção basta: aprofunde a rede.',
+  'crit.trafRoda': 'Carga de uma roda do veículo-tipo usada no cálculo da laje e do envelope. TB-450 da NBR 7188 (450 kN em 3 eixos, 6 rodas) = 75 kN por roda; TB-240 = 40 kN. Área de contato 0,20 × 0,50 m.',
+  'crit.trafCIV': 'Coeficiente de impacto vertical (NBR 7188) que majora a carga de roda pelo efeito dinâmico. Para estruturas enterradas e vãos pequenos usa-se cerca de 1,35; com recobrimento grande pode-se reduzir.',
+  'crit.solGama': 'Peso específico do pavimento e do solo sobre a laje ou o envelope (carga permanente). Usual: 18 a 20 kN/m³.',
+  'crit.fckProt': 'Resistência característica do concreto da laje de proteção e do envelope. Mínimo de 25 MPa para concreto armado enterrado (classe de agressividade II da NBR 6118).',
+  'crit.lajeApoio': 'Quanto a laje avança sobre o terreno natural além de cada parede da vala. É o que faz a carga ir para o terreno firme e não para o reaterro e o tubo. Usual: 0,30 m.',
+  'crit.pavProt': 'Espessura mínima de pavimento e base acima da laje ou do envelope. Se não couber, a proteção não é possível e o programa indica a próxima ou pede aprofundar o tubo.',
+  'trechos.prot': 'Proteção do tubo contra a carga do tráfego quando o recobrimento é pequeno. "Automático" usa a mínima que atende (PA-2, laje ou envelope); escolha outra mais forte se preferir. A laje e o envelope são dimensionados neste trecho (espessura e armadura) e entram no orçamento e na licitação com concreto e aço.'
+});
+
+/* ---------- notas "?" em tudo que é calculado ou constante ---------- */
+const HELP_AUTO = {
+  // 1. Projeto — tabela de perdas no PV
+  'projeto|situação no pv': 'Situação do escoamento dentro do PV: trecho reto, deflexão de 45° ou 90°, confluência em T ou em X, ou PV de início de rede. Cada situação tem um coeficiente K de perda localizada e um degrau mínimo.',
+  'projeto|k': 'Coeficiente de perda localizada no PV. Perda hf = K·V²/(2g), com V = velocidade no tubo de saída e g = 9,81 m/s² (aceleração da gravidade). Quanto mais o fluxo muda de direção, maior o K.',
+  'projeto|faixa usual': 'Faixa de K da bibliografia (Azevedo Netto; DAEE/CETESB, Drenagem Urbana) para cada situação. É referência: o programa aceita outro valor.',
+  'projeto|degrau mín. (m)': 'Desnível mínimo entre o fundo do tubo que chega e o do tubo que sai do PV, para compensar a perda hf no PV e evitar remanso. Usado no lançamento automático das cotas e verificado em cada PV.',
+  'projeto|três soluções de custo': 'O programa monta três versões do orçamento com materiais e dispositivos diferentes (econômica, intermediária e reforçada) para comparar o custo total.',
+  // 2. Chuva
+  'chuva|duração': 'Duração da chuva t (min). No método racional usa-se a duração igual ao tempo de concentração da bacia.',
+  'chuva|tr #': 'Intensidade de chuva (mm/h) para o período de retorno da coluna, pela equação IDF i = a·TR^b / (t + c)^d, com os coeficientes a, b, c, d informados acima.',
+  'chuva|i (# min; tr #)': 'Intensidade de projeto na duração igual ao tc mínimo dos critérios e no TR de projeto: i = a·TR^b / (t + c)^d.',
+  'chuva|i (# min)': 'Intensidade de chuva na duração indicada, no TR de projeto, pela equação IDF.',
+  'chuva|i (tr #)': 'Intensidade para a duração igual ao tc adotado, no TR de projeto.',
+  'chuva|tc kirpich': 'Tempo de concentração pela fórmula de Kirpich: tc = 57·(L³/H)^0,385 (min), com L = comprimento do talvegue em km e H = desnível em m. 57 e 0,385 são as constantes empíricas da fórmula.',
+  'chuva|tc adotado': 'O maior entre o tc de Kirpich e o tc mínimo dos critérios. Valores muito pequenos dariam intensidades irreais, por isso o mínimo (usual 5 a 10 min).',
+  'chuva|tabela de intensidades (mm/h)': 'Intensidades calculadas pela equação IDF para várias durações e períodos de retorno, para conferência com a publicação de origem dos coeficientes.',
+  'chuva|coeficientes da equação idf': 'Coeficientes a, b, c, d da equação de chuvas intensas i = a·TR^b / (t + c)^d do município (Pfafstetter, DAEE, Plúvio/UFV ou estudo local). São constantes da cidade: copie-as da fonte.',
+  'chuva|calculadora de tempo de concentração — kirpich': 'Calcula o tc de uma bacia pelo comprimento L do talvegue e pelo desnível H: tc = 57·(L³/H)^0,385, com L em km e H em m.',
+  // 3. Ruas
+  'ruas|cota do greide (m)': 'Cota do eixo da rua na estaca, do levantamento topográfico ou do projeto geométrico. Alimenta as tampas dos PVs, a declividade das sarjetas e o recobrimento dos tubos.',
+  'ruas|declividade até a próxima': 'Declividade do greide até a estaca seguinte: (cota desta − cota da seguinte) / distância × 100 (%). Positiva desce no sentido do estaqueamento. Abaixo da declividade mínima há risco de empoçamento e é preciso prever captação no ponto baixo.',
+  'ruas|elementos nesta estaca': 'Bocas de lobo e poços de visita cadastrados nesta estaca da rua.',
+  'ruas|obs.': 'Observação livre sobre a estaca. Não entra no cálculo.',
+  'ruas|meio-fio e sarjeta': 'Seção da sarjeta junto ao meio-fio: tipo de meio-fio, altura do espelho, largura e caimento da sarjeta. Define a capacidade de condução da água pela fórmula de Izzard.',
+  'ruas|posição na planta': 'Onde esta rua fica em relação às outras (qual rua cruza, em que estaca e com que ângulo). Com isso o programa monta a planta e acha os cruzamentos.',
+  // 4. Bacias
+  'bacias|c·a': 'C·A = coeficiente de escoamento × área (ha): é a área impermeável equivalente que gera escoamento no método racional.',
+  'bacias|tc adot.': 'Tempo de concentração adotado (min): o informado ou o de Kirpich, tc = 57·(L³/H)^0,385, nunca menor que o tc mínimo dos critérios.',
+  'bacias|i': 'Intensidade de chuva (mm/h) com duração igual ao tc adotado e o TR de projeto: i = a·TR^b / (tc + c)^d.',
+  'bacias|q': 'Vazão de pico pelo método racional: Q = C·i·A / 360 (m³/s, com i em mm/h e A em ha). 360 é a constante de conversão de unidades (mm/h × ha → m³/s). Mostrada em L/s.',
+  'bacias|superfície / ocupação': 'Tipo de superfície ou de ocupação do solo, para escolher o coeficiente de escoamento C da bacia.',
+  'bacias|c': 'Coeficiente de escoamento de referência (fração da chuva que escoa) para a superfície da linha. Fontes: ASCE, Wilken, DAEE/CETESB.',
+  // 5. Sarjetas e BLs
+  'bls|s usada': 'Declividade longitudinal da sarjeta usada no cálculo: a informada na linha ou, em branco, a do greide da rua no trecho que escoa para a boca de lobo.',
+  'bls|q chega': 'Vazão que chega à boca de lobo: Q = ΣC·A·i / 360, somando as bacias ligadas a ela e o que passou da boca de lobo de montante. O tempo de concentração é o maior entre os que chegam.',
+  'bls|lâmina y': 'Altura da água junto à guia pela fórmula de Izzard (Manning em seção triangular): Q = 0,375·(z/n)·S^½·y^(8/3), com z = 1/caimento transversal da sarjeta, n = Manning da sarjeta e S = declividade. 0,375 é a constante da integração de Izzard. Seções compostas somam as partes.',
+  'bls|larg. t': 'Largura alagada medida a partir da guia: T = z·y (soma das partes na seção composta). Comparada com a largura máxima admitida nos critérios.',
+  'bls|q adm. sarjeta': 'Capacidade admissível da sarjeta: Q adm = F·Q teórica (Izzard com a lâmina máxima junto à guia). F = fator de redução do DAEE/CETESB pela declividade: 0,50 até 0,4 %; 0,80 de 1 a 3 %; 0,50 em 5 %; 0,40 em 6 %; 0,27 em 8 %; 0,20 a partir de 10 % (interpolado entre os pontos). Ele considera obstruções e o risco a pedestres em ruas íngremes.',
+  'bls|capacid. bl': 'Capacidade de engolimento da boca de lobo. Guia (vertedor): Q = Cw·L·(y + a)^1,5. Grelha: vertedor Cw·P·h^1,5 até h = 0,12 m e orifício Co·A·√h a partir de 0,42 m, interpolando entre os dois (P = perímetro livre, A = área útil, a = rebaixo). Combinada soma as duas. O total é multiplicado pelo fator de eficiência fr (entupimento). Cw e Co estão nos critérios.',
+  'bls|engolida': 'Vazão que entra na boca de lobo = a menor entre a que chega e a capacidade.',
+  'bls|passa': 'Vazão que não entra (chega − engolida). Segue pela sarjeta e é somada à boca de lobo seguinte; sem boca de lobo seguinte é erro, porque a água se perde na via.',
+  'bls|v ramal': 'Velocidade no ramal (boca de lobo → PV) por Manning em seção parcialmente cheia: V = (1/n)·R^(2/3)·I^½, com n = Manning do tubo, R = raio hidráulico e I = declividade do ramal.',
+  'bls|y/d ramal': 'Grau de enchimento do ramal (lâmina / diâmetro) com a vazão engolida. Limite: y/D máximo dos critérios.',
+  // 6. PVs
+  'pvs|câmara / ø': 'Dimensões internas da câmara do PV (padrão EMOP retangular ou circular), escolhidas pelo maior tubo ou galeria que chega ou sai, com folga para manutenção.',
+  'pvs|tampa usada': 'Cota da tampa usada no cálculo: a informada na linha ou, em branco, a cota do greide da rua na estaca do PV.',
+  'pvs|fundo': 'Cota do fundo do PV = menor cota de fundo (geratriz inferior interna) entre os tubos que chegam e o que sai.',
+  'pvs|prof.': 'Profundidade = cota da tampa − cota do fundo. Acima da profundidade máxima dos critérios o programa alerta (escada, chaminé e escoramento especiais).',
+  'pvs|entra / sai': 'Trechos que chegam e trecho que sai do PV. Cada PV tem no máximo uma saída; o PV sem saída é o lançamento (deságue).',
+  'pvs|k': 'Coeficiente K da perda localizada, pela situação do PV (reta, deflexão, T, X, início), conforme a tabela da aba Projeto.',
+  'pvs|hf pv': 'Perda de carga no PV: hf = K·V²/(2g), com V = velocidade no tubo de saída e g = 9,81 m/s².',
+  'pvs|na': 'Nível d\'água (linha piezométrica) no PV, calculado de jusante para montante: NA de jusante + perda por atrito (quando o tubo está em carga) + hf do PV.',
+  'pvs|folga': 'Folga = cota da tampa − NA. Negativa: a água sai pela tampa (extravasamento). Menor que a folga mínima dos critérios: alerta.',
+  'pvs|boca de lançamento*': 'Medidas da boca de lançamento com alas no PV final (deságue), calculadas pelo diâmetro ou galeria de saída, pelo talude e pelo material escolhidos.',
+  'pvs|boca de lançamento com alas — pv final': 'Estrutura de saída da rede no corpo receptor: soleira, alas e dente de concreto que protegem o talude contra erosão. Medidas e volumes calculados pelo diâmetro de saída.',
+  'perfil|linha piezométrica — todos os trechos (cotas em m)': 'Cálculo do nível d\'água de jusante para montante, trecho a trecho, a partir do deságue: soma as perdas por atrito (em carga) e nos PVs e compara com a tampa.',
+  'pvs|valor': 'Medida calculada do item da linha (em m, salvo indicação).',
+  'pvs|padrão emop — medidas construtivas': 'Medidas construtivas dos PVs no padrão da EMOP-RJ (paredes, lajes de fundo e tampa, folgas e chaminé). São constantes de cálculo usadas nas cotas e nos quantitativos; altere só se o padrão da obra for outro.',
+  // 7. Rede
+  'rede|l usada': 'Extensão do trecho usada no cálculo: a informada ou, em branco, a distância entre os PVs pelas estacas (mesma rua) ou pela planta.',
+  'rede|σc·a': 'Soma acumulada de C·A (ha) de tudo que chega ao trecho: bacias e bocas de lobo ligadas ao PV de montante, contribuição lateral e trechos de montante.',
+  'rede|tc': 'Tempo de concentração no trecho: o maior entre o tc local e (tc + tempo de percurso) de cada trecho de montante, nunca menor que o tc mínimo.',
+  'rede|i': 'Intensidade de chuva (mm/h) com duração igual ao tc do trecho: i = a·TR^b / (tc + c)^d.',
+  'rede|q': 'Vazão de projeto do trecho pelo método racional acumulado: Q = ΣC·A·i / 360 (m³/s), mostrada em L/s.',
+  'rede|decl.': 'Declividade do tubo: S = (cota de fundo de montante − cota de fundo de jusante) / L × 100 (%).',
+  'rede|q plena': 'Capacidade com o tubo cheio por Manning: Q = (1/n)·A·R^(2/3)·S^½, com A = πD²/4 e R = D/4.',
+  'rede|y/d': 'Grau de enchimento com a vazão de projeto, resolvido por iteração na fórmula de Manning em seção parcial. Limite: y/D máximo dos critérios (usual 0,85), para manter escoamento livre e ventilação.',
+  'rede|v': 'Velocidade média com a lâmina y: V = Q / área molhada. Deve ficar entre a mínima (autolimpeza) e a máxima (abrasão) dos critérios.',
+  'rede|τ': 'Tensão trativa τ = γ·R·S (Pa), com γ = peso específico da água (9.810 N/m³), R = raio hidráulico e S = declividade. Garante o arraste de sedimentos (usual ≥ 1,0 Pa).',
+  'rede|recobr. m / j': 'Recobrimento em montante e jusante = cota da tampa − (cota de fundo + diâmetro interno + espessura da parede). Abaixo do recobrimento sem proteção (PA-1) o programa indica PA-2, laje ou envelopamento.',
+  'rede|na pv mont.': 'Nível d\'água no PV de montante (linha piezométrica) e, entre parênteses, a folga até a tampa.',
+  'rede|c·a local no pv': 'C·A (ha) que entra diretamente no PV de montante: bocas de lobo e bacias ligadas a ele.',
+  'rede|c·a do trecho': 'C·A da contribuição lateral ao longo do trecho (área × C informados na linha).',
+  'rede|trechos que chegam': 'Quantidade de trechos que chegam ao PV de montante e somam vazão a este trecho.',
+  'rede|froude': 'Número de Froude Fr = V / √(g·Dh), com Dh = área molhada / largura da superfície e g = 9,81 m/s². Entre 0,86 e 1,13 o escoamento é instável (ondulações).',
+  'rede|lâmina y': 'Altura da água no tubo com a vazão de projeto.',
+  'rede|q / q plena': 'Relação entre a vazão de projeto e a capacidade com tubo cheio.',
+  'rede|tempo de percurso': 'Tempo que a água leva para percorrer o trecho: L / V / 60 (min). Somado ao tc para o trecho seguinte.',
+  'rede|v plena': 'Velocidade com o tubo cheio: Q plena / (πD²/4).',
+  'rede|proteção dos tubos — pa-2, laje e envelopamento': 'Trechos com recobrimento menor que o exigido para o tubo PA-1 e a proteção projetada. A laje e o envelope são dimensionados em concreto armado (NBR 6118) para a carga de roda do veículo-tipo, espalhada a 45° pelo pavimento; a laje apoia no terreno natural fora da vala e o envelope preenche a vala com capa armada sobre o tubo. As quantidades de concreto e aço vão para o orçamento.',
+  'rede|recobr. mín. (m)': 'O menor entre os recobrimentos de montante e de jusante do trecho.',
+  'rede|proteção': 'Proteção adotada no trecho (automática ou escolhida na coluna "Proteção do tubo").',
+  'rede|dimensões e armadura': 'Espessura, largura e armadura calculadas: menor espessura (passo de 1 cm) que atende à flexão (x/d ≤ 0,45) e ao cisalhamento sem estribos (Vd ≤ VRd1). Armadura principal transversal à vala e de distribuição ao longo do tubo (≥ 1/5 da principal e ≥ 0,9 cm²/m).',
+  'rede|md / vd': 'Momento e cortante de cálculo por metro (γf = 1,4): M = P·(L/4 − c/8)/b + g·L²/8 e V = P·(1 − c/2L)/b + g·L/2, com P = roda × CIV, c e b = dimensões da área carregada espalhada, g = peso próprio + solo.',
+  'rede|concreto (m³/m)': 'Volume de concreto por metro de tubo. Laje: largura × espessura. Envelope: largura da vala × altura − área do tubo.',
+  'rede|aço (kg/m)': 'Aço CA-50 por metro de tubo: (armadura principal + distribuição) × largura × 7.850 kg/m³ × 1,10 (ganchos e traspasses).',
+  'rede|situação': 'Resultado da verificação da proteção do trecho.',
+  // 9. Perfil
+  '*|trecho': 'Identificação do trecho da rede.',
+  '*|mont.→jus.': 'PV de montante e PV de jusante do trecho, no sentido do escoamento.',
+  'perfil|regime': 'Livre: a lâmina fica abaixo do topo do tubo. Em carga: tubo cheio e nível d\'água acima do topo, por remanso de jusante ou vazão maior que a capacidade.',
+  'perfil|na jusante': 'Nível d\'água no fim do trecho = o maior entre o NA do PV de jusante e (fundo + lâmina normal).',
+  'perfil|hf atrito': 'Perda por atrito em carga: hf = Sf·L, com Sf pela fórmula de Manning para o tubo cheio. Em escoamento livre não se soma.',
+  'perfil|na montante': 'Nível d\'água no início do trecho: em carga, NA de jusante + hf de atrito; livre, o maior entre (fundo + lâmina normal) e o NA de jusante.',
+  'perfil|k': 'Coeficiente de perda localizada do PV de montante (tabela da aba Projeto).',
+  'perfil|hf pv': 'Perda no PV de montante: hf = K·V²/(2g), g = 9,81 m/s².',
+  'perfil|na no pv': 'Nível d\'água no PV de montante = NA de montante do trecho + hf do PV.',
+  'perfil|tampa': 'Cota da tampa do PV de montante.',
+  'perfil|folga': 'Tampa − NA no PV. Negativa: extravasamento. Abaixo da folga mínima dos critérios: alerta.',
+  // 10. Seção
+  'secao|quadro de medidas': 'Medidas da seção transversal desenhada: via, sarjeta, caixa de ralo, ramal, vala e tubo, tiradas dos dados de entrada e dos cálculos.',
+  'secao|valor': 'Medida calculada do item da linha (em m, salvo indicação).',
+  // 11. Custos
+  'custos|banco principal': 'Banco de preços usado no orçamento: SINAPI (Caixa/IBGE) do RJ ou SCO-Rio (Prefeitura do Rio). Itens sem código no banco principal são procurados no outro.',
+  'custos|mês de referência': 'Mês da tabela de preços. "Mais recente" usa a última tabela carregada.',
+  'custos|regime': 'Desonerado ou não desonerado: muda os encargos sociais sobre a mão de obra e, com isso, o preço unitário das composições.',
+  'custos|interferências no local': 'Nível de interferências na obra (tráfego, redes existentes). Muda a produtividade das composições de escavação e, com isso, o preço.',
+  'custos|escoramento (h > # m)': 'Tipo de escoramento da vala onde a profundidade passa de 1,25 m (NR-18): pontaleteamento, descontínuo ou contínuo, conforme o solo.',
+  'custos|bdi (%)': 'Benefícios e Despesas Indiretas: percentual somado ao custo direto (administração, riscos, lucro e tributos). Referência TCU: 20 a 30 % para obras de saneamento.',
+  'custos|código': 'Código da composição no banco de preços.',
+  'custos|descrição': 'Descrição do serviço conforme o banco de preços.',
+  'custos|fonte': 'Banco de onde veio o preço (SINAPI, SCO-Rio, EMOP ou valor de referência quando não há código).',
+  'custos|unid.': 'Unidade de medição do serviço.',
+  'custos|quant.': 'Quantidade calculada pelo programa a partir do projeto (veja a memória de quantitativos).',
+  'custos|preço unit.': 'Preço unitário do banco no mês de referência (sem BDI).',
+  'custos|total': 'Quantidade × preço unitário.',
+  'custos|item do projeto': 'Item que o programa mede no projeto (tubo de cada diâmetro, escavação, PV, boca de lobo…).',
+  'custos|sinapi #/#': 'Composição do SINAPI escolhida para o item e o seu preço.',
+  'custos|sco-rio #/#': 'Composição do SCO-Rio escolhida para o item e o seu preço.',
+  'custos|usar código': 'Troque o código para usar outra composição para o item.',
+  'custos|pv': 'Poço de visita.',
+  'custos|câmara': 'Dimensões internas da câmara do PV.',
+  'custos|item': 'Serviço medido.',
+  'custos|quantidade': 'Quantidade medida pelos critérios da EMOP.',
+  'custos|alvenaria de blocos*': 'Área de parede da câmara em blocos de concreto de 20 cm cheios e armados: perímetro médio × altura da câmara.',
+  'custos|concreto armado laje de fundo*': 'Volume da laje de fundo do PV: área externa × espessura da laje (padrão EMOP).',
+  'custos|concreto armado laje da tampa*': 'Volume da laje de tampa do PV: área externa × espessura − abertura da chaminé.',
+  'custos|chaminé*': 'Altura da chaminé de anéis Ø0,60 m entre a laje da tampa e o tampão.',
+  'custos|tampão*': 'Tampão de ferro fundido Ø0,60 m, um por PV.',
+  'custos|escavação mecânica*': 'Volume de escavação separado por faixa de profundidade, como pede a EMOP (cada faixa tem preço próprio).',
+  'custos|até # m': 'Volume escavado entre a superfície e 1,50 m de profundidade.',
+  'custos|# a # m': 'Volume escavado na faixa de profundidade indicada.',
+  'custos|quantidades dos pvs padrão emop': 'Quantidades de cada PV medidas pelas medidas construtivas do padrão EMOP (alvenaria, lajes, chaminé, tampão), para conferência do orçamento.',
+  'custos|quantitativos de movimento de terra — critérios emop': 'Escavação por faixa de profundidade, escoramento, reaterro, bota-fora e empolamento medidos pelos critérios da EMOP para a rede, os PVs e as caixas de ralo.',
+  'custos|conferência das composições — sinapi × sco-rio': 'Mesma quantidade com o preço dos dois bancos lado a lado, para escolher a composição mais adequada.',
+  'custos|orçamento estimado da drenagem': 'Quantidades do projeto × preços unitários do banco escolhido, mais o BDI. Itens sem código no banco entram com valor de referência ou sem preço.',
+  // 12. Verificação
+  'verif|grupo': 'Aba ou parte do projeto a que a verificação pertence.',
+  'verif|elemento': 'Bacia, boca de lobo, PV ou trecho verificado.',
+  'verif|verificação': 'O que foi verificado.',
+  'verif|calculado': 'Valor obtido pelo programa.',
+  'verif|critério': 'Limite exigido (critérios da aba Projeto ou norma).',
+  'verif|orientação': 'O que fazer para atender.',
+  'verif|correção': 'Botão para o programa corrigir automaticamente, quando possível.',
+  // comuns
+  '*|notas e sugestões desta linha': 'Resultado das verificações desta linha: ✓ atende, ! alerta, ✗ erro, com a orientação para corrigir.',
+  '*|alterações feitas (#)': 'Lista do que a correção automática mudou no projeto.',
+  '*|precisa da sua decisão (#)': 'Itens que o programa não corrige sozinho porque dependem de uma escolha sua.',
+  // gerador e configurações
+  '*|profundidade do lote atrás do passeio (m)': 'Fundo dos lotes que escoam para a rua, medido a partir do passeio. A bacia de cada captação = (meia pista + passeio + lote) × extensão atendida; em rua com caimento para um lado só, a pista inteira + passeios + lotes dos dois lados.',
+  '*|coeficiente de escoamento c das quadras': 'Coeficiente C único para as bacias geradas (quadras + pista). Usual: 0,70 em área urbana residencial; 0,80 a 0,95 em área comercial densa.',
+  '*|lançamento (deságue)': 'PV ou ponto onde a rede vai descarregar. "Automático" usa o ponto mais baixo do greide entre as ruas.',
+  '*|logotipo (aparece no topo e no memorial)': 'Imagem da empresa ou órgão, impressa no cabeçalho do memorial.',
+  '*|nome da empresa / órgão': 'Nome que aparece no cabeçalho do memorial.',
+  '*|linha secundária do cabeçalho do memorial': 'Texto menor abaixo do nome (setor, endereço, CNPJ).',
+  '*|texto do rodapé': 'Texto impresso no rodapé das páginas do memorial.',
+  '*|tema': 'Cores da tela: claro, escuro ou o do aparelho. Não muda o projeto.',
+  '*|dispositivo': 'Ajusta a tela para computador, Android ou iPhone/iPad. Não muda o projeto.'
+};
+const hNorm = s => String(s || '').toLowerCase().replace(/\d+(?:[.,]\d+)?/g, '#').replace(/\s+/g, ' ').trim().replace(/:$/, '');
+function helpAutoKey(el) {
+  const c = el.cloneNode(true); c.querySelectorAll('small,.qbtn,input,select,textarea,button').forEach(x => x.remove());
+  const t = hNorm(c.textContent); if (!t) return null;
+  const pn = el.closest('.tab-panel'), tab = pn ? pn.id.replace(/^tab-/, '') : '*';
+  for (const k of [tab + '|' + t, '*|' + t]) if (HELP_AUTO[k]) return k;
+  for (const k in HELP_AUTO) if (k.endsWith('*')) { const [tb, pre] = k.slice(0, -1).split('|'); if ((tb === tab || tb === '*') && t.startsWith(pre)) return k; }
+  return null;
+}
+function ajudaAuto() {
+  document.querySelectorAll('th, .field > label, .section-title, h3, h4, .kv small').forEach(el => {
+    if (el.dataset.ha || el.querySelector('.qbtn') || el.closest('#memorial-print, svg, .no-help')) return;
+    el.dataset.ha = '1';
+    const k = helpAutoKey(el); if (!k) return;
+    const hk = 'auto.' + k; HELP[hk] = HELP_AUTO[k];
+    el.insertAdjacentHTML('beforeend', ' ' + qbtn(hk));
+  });
+}
+const _rotTabProt = rotularTabelas;
+rotularTabelas = function () { _rotTabProt.apply(this, arguments); try { ajudaAuto(); } catch (e) { console.error('Ajuda:', e); } };
 
 </script>
 </body></html>
