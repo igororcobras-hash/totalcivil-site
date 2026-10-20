@@ -749,13 +749,15 @@ function exampleBairro() {
   };
   const ruaNomeEx = id => (p.ruas.find(r => r.id === id) || {}).nome || id;
   EW.forEach(([rua], k) => {
-    [[65, 'PV-' + (k + 1) + 'B'], [165, 'PV-' + (k + 1) + 'D']].forEach(([d, pvId]) => ['E', 'D'].forEach(l => addBL(rua, d, l, pvId, 0.18, 0.70, k === 2 ? 'bls-bl' : 'bld-pm')));
+    [[70, 'PV-' + (k + 1) + 'B'], [170, 'PV-' + (k + 1) + 'D']].forEach(([d, pvId]) => ['E', 'D'].forEach(l => addBL(rua, d, l, pvId, 0.18, 0.70, k === 2 ? 'bls-bl' : 'bld-pm')));
   });
   NS.slice(0, 2).forEach(([rua], n) => {
     const col = n === 0 ? 'A' : 'C';
     [[15, 'PV-1' + col, 0.06], [115, 'PV-2' + col, 0.16], [215, 'PV-3' + col, 0.16]].forEach(([d, pvId, A]) => ['E', 'D'].forEach(l => addBL(rua, d, l, pvId, A, 0.65, 'bls-pm', 8)));
   });
-  [[65, 'PV-T2'], [165, 'PV-T4']].forEach(([d, pvId]) => ['E', 'D'].forEach(l => addBL('R6', d, l, pvId, 0.20, 0.70, 'bld-pm')));
+  // caixas de ralo na mesma estaca do PV (a seção transversal do PV mostra a caixa e o ramal no plano do corte)
+  [[70, 'PV-T2'], [170, 'PV-T4']].forEach(([d, pvId]) => ['E', 'D'].forEach(l => addBL('R6', d, l, pvId, 0.20, 0.70, 'bld-pm')));
+  [[20, 'PV-T1'], [120, 'PV-T3'], [220, 'PV-T5']].forEach(([d, pvId]) => ['E', 'D'].forEach(l => addBL('R6', d, l, pvId, 0.08, 0.70, 'bls-pm')));
   // praça a montante lançando direto no PV do início do tronco
   p.bacias.push({id: 'B' + (nb + 1), nome: 'Praça central (galeria de lote)', A: 0.35, C: 0.30, dest: 'PV-2B', tcMode: 'man', tc: 15, kL: '', kH: ''});
   return p;
@@ -2997,7 +2999,7 @@ function quadroSecao(pvId) {
 let SEC_PV = null;
 function vSecao() {
   const pvs = P.pvs.filter(p => dadosSecao(p.id));
-  if (!SEC_PV || !pvs.some(p => p.id === SEC_PV)) SEC_PV = pvs[0] ? pvs[0].id : null;
+  if (!SEC_PV || !pvs.some(p => p.id === SEC_PV)) { const cx = pvs.find(p => P.bls.some(b => b.pv === p.id)); SEC_PV = cx ? cx.id : pvs[0] ? pvs[0].id : null; }  // abre num PV com caixa de ralo
   return `<h3>Seção transversal — via, caixas de ralo, ramais e vala</h3>
   <p class="lead">Corte no poço de visita escolhido, com a pista, os meios-fios, os passeios, as bocas-de-lobo (caixas de ralo) ligadas a este PV, os ramais chegando ao PV e a vala do tubo. Abaixo, o detalhe ampliado da vala com todas as medidas. O meio-fio e a sarjeta vêm do tipo escolhido na rua (aba 3) e as caixas de ralo seguem o modelo e as dimensões escolhidos em cada boca-de-lobo (aba 5).</p>
   <div class="card" style="padding:.6rem">
@@ -3619,6 +3621,21 @@ function pvEmopCorte(d, X, Y, sc, K) {
   return s;
 }
 
+/* por que existe o PV sem caixa de ralo (tubo de concreto não faz curva nem muda de Ø ou de declividade fora do PV) */
+const minus = t => t.charAt(0).toLowerCase() + t.slice(1);
+function motivoPV(pvId) {
+  const pv = pvById(pvId), rp = R && R.pv[pvId]; if (!pv || !rp) return 'inspeção da rede';
+  if (!rp.outs.length) return 'lançamento (saída da rede)';
+  if (pv.defl === 'ini') return 'início de rede (cabeceira)';
+  if (pv.defl === 'd45' || pv.defl === 'd90') return 'mudança de direção (' + minus(DEFL[pv.defl]) + ')';
+  if (pv.defl === 'T' || pv.defl === 'X' || rp.ins.length > 1) return 'junção de redes (' + minus(DEFL[pv.defl] || 'confluência') + ')';
+  const ri = rp.ins[0] && R.tr[rp.ins[0].id], ro = R.tr[rp.outs[0].id];
+  const Di = ri && num(ri.D), Do = ro && num(ro.D);
+  if (Di && Do && Di !== Do) return 'mudança de diâmetro (Ø' + Di + ' → Ø' + Do + ')';
+  const ii = ri && ri.S, io = ro && ro.S;
+  if (isNum(ii) && isNum(io) && Math.abs(ii - io) > 0.05) return 'mudança de declividade';
+  return 'inspeção e limpeza (distância máxima entre PVs)';
+}
 /* ---------- 10. SEÇÃO TRANSVERSAL ---------- */
 svgSecao = function (pvId, K, W = 1100) {
   const d = dadosSecao(pvId); if (!d) return '';
@@ -3694,17 +3711,19 @@ svgSecao = function (pvId, K, W = 1100) {
     s += tx(cxX, cxY, 'Caixa de ralo: ' + mod[0], {fs: 12, w: 700, a: 'middle', c: K.ink, halo: K.soil});
     if (mod[1]) s += tx(cxX, cxY + 15, mod[1], {fs: 11, a: 'middle', c: K.ink, halo: K.soil});
     s += tx(cxX, cxY + (mod[1] ? 30 : 15), 'interna ' + fmt(b.larg, 2) + ' × ' + fmt(num(b.b.cxL) || 1, 2) + ' × prof. ' + fmt(b.prof, 2) + ' m', {fs: 11, a: 'middle', c: K.muted, halo: K.soil});
-    // ramal: Ø, i, L em cima; vazão e velocidade logo abaixo
-    const mx = X((xs + xf) / 2), my = Y((z1 + z2) / 2 + rr + er);
-    s += tx(mx, my - 24, 'Ramal Ø' + b.b.rD + ' · i ' + fmt(b.rI * 100, 1) + '% · L ' + fmt(b.rL, 1) + ' m', {fs: 13, a: 'middle', c: K.aguaD, w: 700, halo: K.reat});
-    s += tx(mx, my - 8, 'Q ' + fL(b.rb && b.rb.Qeng) + ' L/s · V ' + (isNum(rm.V) ? fmt(rm.V, 2) : '—') + ' m/s' + (rm.carga ? ' · sob carga' : isNum(rm.yD) ? ' · y/D ' + fmt(rm.yD, 2) : ''), {fs: 12, a: 'middle', c: K.aguaD, w: 700, halo: K.reat});
-    if (vR) s += tx(mx, Y((z1 + z2) / 2 - er) + 16, txtVista(b.pl), {fs: 12, a: 'middle', c: K.aguaD, halo: K.reat});
+    if (vC || vR) s += tx(cxX, cxY + (mod[1] ? 46 : 31), (vC ? 'Caixa' : 'Ramal') + ' ' + txtVista(b.pl), {fs: 11, a: 'middle', c: K.aguaD, halo: K.soil});
+    // ramal: Ø, i, L em cima; vazão e velocidade logo abaixo (centrados no trecho fora da vala do PV)
+    const xv = b.side * Math.min(Math.abs(xf) + 0.6 * Math.abs(xs - xf), Math.max(Math.abs(xf), Bpv / 2 + 0.05));
+    const mx = X((xs + xv) / 2), my = Y((z1 + z2) / 2 + rr + er);
+    s += tx(mx, my - 24, 'Ramal Ø' + b.b.rD + ' · i ' + fmt(b.rI * 100, 1) + '% · L ' + fmt(b.rL, 1) + ' m', {fs: 12, a: 'middle', c: K.aguaD, w: 700, halo: K.reat});
+    s += tx(mx, my - 8, 'Q ' + fL(b.rb && b.rb.Qeng) + ' L/s · V ' + (isNum(rm.V) ? fmt(rm.V, 2) : '—') + ' m/s' + (rm.carga ? ' · sob carga' : isNum(rm.yD) ? ' · y/D ' + fmt(rm.yD, 2) : ''), {fs: 11, a: 'middle', c: K.aguaD, w: 700, halo: K.reat});
     if (b.ciPV < d.fundoPV) s += tx(X(xf), Y(z2) + 34, '⚠ chega abaixo do fundo do PV', {fs: 12, a: b.side > 0 ? 'start' : 'end', c: K.err, halo: K.bg});
   });
   if (mostraRalos() && !bls.length) {
-    const comBL = P.pvs.filter(p => P.bls.some(b => b.pv === p.id)).map(p => p.id).slice(0, 4);
-    s += tx(X(-d.larg / 2 - d.pas / 2), Y(zR(d.larg / 2)) + 40, 'Nenhuma caixa de ralo tem ramal ligado a este PV.', {fs: 13, w: 700, a: 'middle', c: K.muted, halo: K.soil});
-    if (comBL.length) s += tx(X(-d.larg / 2 - d.pas / 2), Y(zR(d.larg / 2)) + 58, 'Com caixa de ralo: ' + comBL.join(', ') + (comBL.length === 4 ? '…' : ''), {fs: 12, a: 'middle', c: K.muted, halo: K.soil});
+    const xm = X(-half) + 12, ym = Y(zR(d.larg / 2)) + 40;
+    s += tx(xm, ym, 'PV sem caixa de ralo:', {fs: 13, w: 700, c: K.muted, halo: K.soil});
+    s += tx(xm, ym + 18, motivoPV(d.pv.id), {fs: 12, c: K.muted, halo: K.soil});
+    if (d.pv.obs) s += tx(xm, ym + 34, d.pv.obs, {fs: 12, c: K.muted, halo: K.soil});
   }
   // rótulos principais
   s += tx(X(0), Y(d.tp) - 22, d.pv.id + (m ? ' · tampão FoFo Ø0,60' : ' · tampão Ø0,60'), {fs: 15, w: 700, a: 'middle', c: K.ink, halo: K.bg});
@@ -3725,7 +3744,7 @@ svgSecao = function (pvId, K, W = 1100) {
 quadroSecao = function (pvId) {
   const d = dadosSecao(pvId); if (!d) return '';
   const c = P.crit, ge = d.ci + d.D + d.e, fvT = d.ci - d.e - c.berco, m = d.emop;
-  const L = [['Cota da tampa do PV', fmt(d.tp, 3) + ' m'], ['Cota do fundo do PV', fmt(d.fundoPV, 3) + ' m'], ['Profundidade do PV', fmt(d.tp - d.fundoPV, 2) + ' m']];
+  const L = [['Função do PV', motivoPV(pvId) + (d.bls.length ? ' · recebe ' + d.bls.length + ' ramal(is) de caixa de ralo' : ' · sem caixa de ralo')], ['Cota da tampa do PV', fmt(d.tp, 3) + ' m'], ['Cota do fundo do PV', fmt(d.fundoPV, 3) + ' m'], ['Profundidade do PV', fmt(d.tp - d.fundoPV, 2) + ' m']];
   if (m) {
     const ext = m.L + 2 * m.parede;
     L.push(['Padrão do PV', 'EMOP — paredes de blocos de concreto 20 cm, cheios de concreto e amarrados com barras de aço'],
