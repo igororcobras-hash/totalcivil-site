@@ -5878,4 +5878,292 @@ const _rotTabProt = rotularTabelas;
 rotularTabelas = function () { _rotTabProt.apply(this, arguments); try { ajudaAuto(); } catch (e) { console.error('Ajuda:', e); } };
 
 </script>
+<script>
+/* =====================================================================
+   CRONOGRAMA FÍSICO-FINANCEIRO — módulo comum Total Civil (v1, 20/10/2026)
+   Mesmo código na Drenagem, no Orçamento e (depois) no Pavimento Flexível.
+   - auto(etapas, prazo): distribui cada etapa nos meses pela sequência
+     usual de obra (palavras do nome da etapa) e, sem palavra conhecida,
+     pela ordem das etapas, com sobreposição.
+   - render(caixa, estado, etapas, aoMudar): tabela editável (% por mês).
+   - planilha(XLSX, estado, etapas, cab): aba "Cronograma" para o Excel.
+   estado = {prazo, inicio: 'AAAA-MM' ou '', pct: {NOME_DA_ETAPA: [% mês 1, ...]}}
+   ===================================================================== */
+(function(){
+  if (window.TC_CRONO) return;
+  const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/\s+/g, ' ').trim();
+  const r2 = v => Math.round(v * 100) / 100;
+  const nf = (v, d) => (isFinite(v) ? v : 0).toLocaleString('pt-BR', {minimumFractionDigits: d, maximumFractionDigits: d});
+  const MES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+  // [palavras, início, fim (fração do prazo), concentra no 1º mês]
+  const REGRAS = [
+    [/PRELIMINAR.*SINALIZ|SINALIZ.*PRELIMINAR|PRELIMINAR.*ADMINISTRA/, 0, 1, true],
+    [/DESMOBILIZ|LIMPEZA FINAL|LIMPEZA GERAL|ENTREGA|AS ?BUILT|CADASTRO/, 0.85, 1],
+    [/PRELIMINAR|CANTEIRO|MOBILIZ|INSTALAC|PLACA|LOCACAO|PROJETO EXECUTIVO|LEVANTAMENTO|SONDAGE/, 0, 0.25, true],
+    [/ADMINISTRA|MANUTENCAO DO CANTEIRO|SEGURANCA|ENGENHEIRO|CONSUMO|VIGIL|DESVIO|TRAFEGO/, 0, 1],
+    [/DEMOLI|REMOC|RETIRADA|ARRANCAMENTO|FRESAGEM|SUPRESS|DESMATAMENTO|LIMPEZA DO TERRENO|LIMPEZA DE TERRENO|DESTOCA/, 0.03, 0.55],
+    [/TERRAPLEN|MOVIMENTO DE TERRA|ESCAVAC|CORTE|ATERRO|REATERRO|REGULARIZAC|SUBLEITO|REFORCO/, 0.08, 0.7],
+    [/TRANSPORTE|BOTA.?FORA|CARGA E DESCARGA/, 0.08, 0.75],
+    [/FUNDAC|ESTACA|SAPATA|RADIER|BLOCO DE COROAMENTO/, 0.1, 0.5],
+    [/ESGOTAMENTO|ESCORAMENTO|REBAIXAMENTO/, 0.1, 0.8],
+    [/TUBULAC|TUBO|REDE|GALERIA|DRENAGEM|MICRODRENAGEM|MACRODRENAGEM|ADUELA|BUEIRO|ESGOTO|AGUA POTAVEL|ABASTECIMENTO/, 0.15, 0.85],
+    [/POCO|POCOS|PV\b|CAIXA DE PASSAGEM|DISSIPADOR|BOCA DE LANCAMENTO|ALAS/, 0.2, 0.9],
+    [/ESTRUTURA|CONCRETO|ALVENARIA|ARMADURA|FORMA/, 0.15, 0.8],
+    [/CAIXA|BOCA DE LOBO|BOCA-DE-LOBO|RALO|GRELHA|MEIO.?FIO|GUIA|SARJETA|CANALETA/, 0.3, 0.92],
+    [/SUB.?BASE|BASE|IMPRIMAC|PINTURA DE LIGACAO|PAVIMENT|RECOMPOSI|REVESTIMENTO|ASFALT|CBUQ|CONCRETO BETUMINOSO|INTERTRAV|PARALELE|BLOCOS|CALCADA|PASSEIO/, 0.45, 1],
+    [/INSTALACOES ELETRICAS|ILUMINAC|HIDRAULIC|ESQUADRI|COBERTURA|IMPERMEABILIZ/, 0.4, 0.9],
+    [/ACABAMENTO|PINTURA|SINALIZACAO HORIZONTAL|SINALIZACAO VERTICAL|SINALIZACAO VIARIA|PAISAG|PLANTIO|GRAMA|URBANIZ|MOBILIARIO|ACESSIBIL/, 0.65, 1],
+    [/SINALIZAC/, 0, 1]
+  ];
+  function janela(nome, i, n){
+    const t = norm(nome);
+    for (const [re, a, b, frente] of REGRAS) if (re.test(t)) return {a, b, frente: !!frente, regra: true};
+    // sem palavra conhecida: pela ordem das etapas, cada uma ocupando ~45% do prazo
+    const d = n > 1 ? 0.55 / (n - 1) : 0, a = Math.min(0.55, i * d);
+    return {a, b: Math.min(1, a + 0.45), frente: false, regra: false};
+  }
+  function distribuir(prazo, j){
+    const w = [];
+    for (let m = 0; m < prazo; m++){
+      const m0 = m / prazo, m1 = (m + 1) / prazo;
+      w.push(Math.max(0, Math.min(j.b, m1) - Math.max(j.a, m0)));
+    }
+    let s = w.reduce((x, y) => x + y, 0);
+    if (s <= 0){ const k = Math.min(prazo - 1, Math.floor(j.a * prazo)); w.fill(0); w[k] = 1; s = 1; }
+    if (j.frente && prazo > 1) { w[0] += s; s *= 2; }
+    return fechar100(w.map(x => x / s * 100));
+  }
+  // arredonda a 2 casas e põe o resto no último mês com valor, para a linha fechar 100,00 %
+  function fechar100(arr){
+    const p = arr.map(r2); const tot = r2(p.reduce((x, y) => x + y, 0));
+    if (Math.abs(tot - 100) > 1e-9 && p.some(x => x > 0)) { let k = p.length - 1; while (k > 0 && !(p[k] > 0)) k--; p[k] = r2(p[k] + 100 - tot); }
+    return p;
+  }
+  function auto(etapas, prazo){
+    const pct = {};
+    etapas.forEach((e, i) => { pct[e.nome] = distribuir(prazo, janela(e.nome, i, etapas.length)); });
+    return pct;
+  }
+  // garante que o estado tem uma linha para cada etapa e o tamanho do prazo
+  function ajustar(estado, etapas){
+    const pz = +estado.prazo || 0; if (!pz) return estado;
+    estado.pct = estado.pct || {};
+    const novo = auto(etapas, pz);
+    etapas.forEach(e => {
+      let v = estado.pct[e.nome];
+      if (!v) { const k = Object.keys(estado.pct).find(x => norm(x) === norm(e.nome)); if (k) v = estado.pct[k]; }
+      if (!Array.isArray(v) || v.length !== pz) v = novo[e.nome];
+      estado.pct[e.nome] = v.map(x => +x || 0);
+    });
+    return estado;
+  }
+  function rotuloMes(estado, m){
+    if (!estado.inicio || !/^\d{4}-\d{2}$/.test(estado.inicio)) return 'Mês ' + (m + 1);
+    const [a, b] = estado.inicio.split('-').map(Number), d = new Date(a, b - 1 + m, 1);
+    return 'Mês ' + (m + 1) + ' · ' + MES[d.getMonth()] + '/' + String(d.getFullYear()).slice(2);
+  }
+  function calc(estado, etapas){
+    const pz = +estado.prazo || 0, total = etapas.reduce((s, e) => s + (+e.valor || 0), 0);
+    const mens = Array(pz).fill(0), linhas = etapas.map(e => {
+      const p = (estado.pct[e.nome] || []).slice(0, pz), soma = r2(p.reduce((x, y) => x + y, 0));
+      const rs = p.map(x => r2((+e.valor || 0) * x / 100));
+      if (Math.abs(soma - 100) < 0.005) { let k = rs.length - 1; while (k > 0 && !(rs[k] > 0)) k--; rs[k] = r2(rs[k] + r2(+e.valor || 0) - r2(rs.reduce((x, y) => x + y, 0))); }
+      rs.forEach((v, m) => { mens[m] += v; });
+      return {e, p, rs, soma};
+    });
+    let ac = 0; const acum = mens.map(v => (ac += v));
+    return {pz, total, linhas, mens, acum, ok: linhas.every(l => Math.abs(l.soma - 100) < 0.005 || !(+l.e.valor))};
+  }
+  const CSS = `.tcc-wrap{overflow-x:auto;max-width:100%}.tcc{border-collapse:collapse;font-size:11.5px;min-width:100%;font-variant-numeric:tabular-nums}
+.tcc th,.tcc td{border:1px solid rgba(120,130,150,.35);padding:3px 5px;text-align:right;white-space:nowrap;vertical-align:middle}
+.tcc th{background:rgba(23,54,93,.9);color:#fff;font-weight:700;text-align:center}
+.tcc td.tcc-n{text-align:left;white-space:normal;min-width:190px;font-weight:600}
+.tcc input{width:58px;text-align:right;font:inherit;padding:2px 3px;border:1px solid rgba(180,150,0,.6);background:rgba(255,250,200,.55);color:inherit;border-radius:3px}
+.tcc input:focus{outline:2px solid #2563eb}.tcc tr.tcc-rs td{color:rgba(90,100,120,1);font-size:10.5px}
+.tcc td.tcc-ok{color:#1d7a35;font-weight:700}.tcc td.tcc-err{color:#b42318;font-weight:700;background:rgba(220,40,40,.08)}
+.tcc tfoot td{font-weight:700;background:rgba(23,54,93,.08)}.tcc .tcc-bar{display:block;height:5px;background:#2563eb;border-radius:2px;margin-top:2px}
+.tcc-top{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:flex-end;margin-bottom:8px}.tcc-top label{display:flex;flex-direction:column;font-size:11px;font-weight:600;gap:2px}
+.tcc-top select,.tcc-top input{font:inherit;font-size:12px;padding:4px 6px;border:1px solid rgba(120,130,150,.6);border-radius:5px;background:inherit;color:inherit}
+.tcc-top select.tcc-falta{border:2px solid #d97706;background:rgba(255,200,0,.15)}
+.tcc-bt{font:inherit;font-size:11.5px;font-weight:600;padding:5px 10px;border-radius:6px;border:1px solid rgba(23,54,93,.5);background:rgba(23,54,93,.06);color:inherit;cursor:pointer}
+.tcc-bt:hover{background:rgba(23,54,93,.14)}.tcc-msg{font-size:11.5px;padding:6px 9px;border-radius:6px;margin:6px 0;border:1px solid}
+.tcc-msg.av{background:rgba(255,190,0,.13);border-color:#d97706}.tcc-msg.ok{background:rgba(30,160,70,.1);border-color:#1d7a35}.tcc-msg.in{background:rgba(37,99,235,.08);border-color:#2563eb}
+@media(max-width:700px){.tcc td.tcc-n{min-width:130px}.tcc input{width:50px}}`;
+  function estilo(){ if (document.getElementById('tcc-css')) return; const s = document.createElement('style'); s.id = 'tcc-css'; s.textContent = CSS; document.head.appendChild(s); }
+  const esc = t => String(t == null ? '' : t).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+  /* caixa: elemento; estado: objeto salvo pelo programa; etapas: [{nome, valor}]; aoMudar(estado): salvar */
+  function render(caixa, estado, etapas, aoMudar, opc){
+    estilo(); opc = opc || {};
+    const pz = +estado.prazo || 0, total = etapas.reduce((s, e) => s + (+e.valor || 0), 0);
+    let h = `<div class="tcc-top">
+      <label>Prazo da obra (meses) *<select data-tcc="prazo" class="${pz ? '' : 'tcc-falta'}"><option value="">Selecione o prazo…</option>${Array.from({length: 36}, (_, i) => `<option value="${i + 1}"${pz === i + 1 ? ' selected' : ''}>${i + 1} ${i ? 'meses' : 'mês'}</option>`).join('')}</select></label>
+      <label>Início (opcional)<input type="month" data-tcc="inicio" value="${esc(estado.inicio || '')}"></label>
+      ${pz ? `<button type="button" class="tcc-bt" data-tcc="auto" title="Refaz a distribuição pela sequência usual de obra (apaga suas alterações)">↺ Distribuir automaticamente</button>
+      <button type="button" class="tcc-bt" data-tcc="fechar" title="Ajusta cada linha para somar 100 % mantendo as proporções que você digitou">⚖ Fechar linhas em 100 %</button>` : ''}
+      ${opc.botoes || ''}</div>`;
+    if (!pz) {
+      h += `<div class="tcc-msg av">Selecione o <b>prazo da obra</b> para gerar o cronograma. Ele é montado automaticamente pela sequência usual dos serviços (preliminares no início, pavimento e acabamentos no fim) e depois você pode alterar qualquer porcentagem.</div>`;
+      caixa.innerHTML = h; ligar(caixa, estado, etapas, aoMudar, opc); return;
+    }
+    ajustar(estado, etapas);
+    const C = calc(estado, etapas);
+    const ths = Array.from({length: pz}, (_, m) => `<th>${esc(rotuloMes(estado, m))}</th>`).join('');
+    h += C.ok ? `<div class="tcc-msg ok">✓ Todas as etapas somam 100 %. Total ${'R$ ' + nf(C.total, 2)} em ${pz} ${pz > 1 ? 'meses' : 'mês'}. Digite a porcentagem de cada etapa em cada mês para alterar.</div>`
+              : `<div class="tcc-msg av">⚠ Há etapa(s) que não somam 100 % (em vermelho na coluna Soma). Corrija os valores ou use <b>⚖ Fechar linhas em 100 %</b>.</div>`;
+    h += `<div class="tcc-wrap"><table class="tcc"><thead><tr><th style="text-align:left">Etapa</th><th>Valor (R$)</th><th>% obra</th>${ths}<th>Soma</th></tr></thead><tbody>`;
+    C.linhas.forEach((l, i) => {
+      const pe = total ? l.e.valor / total * 100 : 0, bom = Math.abs(l.soma - 100) < 0.005 || !(+l.e.valor);
+      h += `<tr><td class="tcc-n" rowspan="2">${esc(l.e.nome)}</td><td rowspan="2">${nf(+l.e.valor || 0, 2)}</td><td rowspan="2">${nf(pe, 2)} %</td>`
+        + l.p.map((x, m) => `<td><input type="text" inputmode="decimal" data-tcc="pct" data-i="${i}" data-m="${m}" value="${x ? nf(x, 2) : ''}" placeholder="0" aria-label="${esc(l.e.nome)} — ${esc(rotuloMes(estado, m))} (%)"></td>`).join('')
+        + `<td class="${bom ? 'tcc-ok' : 'tcc-err'}" rowspan="2">${nf(l.soma, 2)} %</td></tr>`
+        + `<tr class="tcc-rs">${l.rs.map(v => `<td>${v ? nf(v, 2) : '—'}</td>`).join('')}</tr>`;
+    });
+    h += `</tbody><tfoot>
+      <tr><td class="tcc-n">Total mensal (R$)</td><td>${nf(C.total, 2)}</td><td>100,00 %</td>${C.mens.map(v => `<td>${nf(v, 2)}</td>`).join('')}<td></td></tr>
+      <tr><td class="tcc-n">% mensal</td><td></td><td></td>${C.mens.map(v => `<td>${nf(C.total ? v / C.total * 100 : 0, 2)} %</td>`).join('')}<td></td></tr>
+      <tr><td class="tcc-n">Acumulado (R$)</td><td></td><td></td>${C.acum.map(v => `<td>${nf(v, 2)}</td>`).join('')}<td></td></tr>
+      <tr><td class="tcc-n">% acumulado</td><td></td><td></td>${C.acum.map(v => { const p = C.total ? v / C.total * 100 : 0; return `<td>${nf(p, 2)} %<span class="tcc-bar" style="width:${Math.max(0, Math.min(100, p))}%"></span></td>`; }).join('')}<td></td></tr>
+    </tfoot></table></div>`;
+    if (opc.nota) h += `<div class="tcc-msg in">${opc.nota}</div>`;
+    caixa.innerHTML = h; ligar(caixa, estado, etapas, aoMudar, opc);
+  }
+  function ligar(caixa, estado, etapas, aoMudar, opc){
+    const refaz = () => { aoMudar && aoMudar(estado); render(caixa, estado, etapas, aoMudar, opc); };
+    caixa.querySelectorAll('[data-tcc]').forEach(el => {
+      const k = el.dataset.tcc;
+      if (k === 'prazo') el.onchange = () => { estado.prazo = +el.value || 0; estado.pct = estado.prazo ? auto(etapas, estado.prazo) : {}; refaz(); };
+      else if (k === 'inicio') el.onchange = () => { estado.inicio = el.value || ''; refaz(); };
+      else if (k === 'auto') el.onclick = () => { estado.pct = auto(etapas, +estado.prazo); refaz(); };
+      else if (k === 'fechar') el.onclick = () => {
+        etapas.forEach(e => { const p = estado.pct[e.nome] || [], s = p.reduce((x, y) => x + (+y || 0), 0);
+          estado.pct[e.nome] = s > 0 ? fechar100(p.map(x => (+x || 0) / s * 100)) : distribuir(+estado.prazo, janela(e.nome, 0, 1)); });
+        refaz(); };
+      else if (k === 'pct') el.onchange = () => {
+        const e = etapas[+el.dataset.i], v = parseFloat(String(el.value).replace(/\./g, '').replace(',', '.'));
+        estado.pct[e.nome][+el.dataset.m] = isFinite(v) ? Math.max(0, Math.min(100, r2(v))) : 0; refaz(); };
+    });
+  }
+  /* aba do Excel: linha de % e linha de R$ por etapa + totais (como nos cronogramas de licitação) */
+  function planilha(XLSX, estado, etapas, cab){
+    ajustar(estado, etapas);
+    const C = calc(estado, etapas), pz = C.pz;
+    const meses = Array.from({length: pz}, (_, m) => rotuloMes(estado, m));
+    const aoa = (cab || []).map(x => [x]);
+    aoa.push(['Prazo: ' + pz + (pz > 1 ? ' meses' : ' mês') + (estado.inicio ? ' · início ' + rotuloMes(estado, 0).split(' · ')[1] : '')], []);
+    aoa.push(['ITEM', 'ETAPA', 'VALOR (R$)', '% DA OBRA', '', ...meses, 'TOTAL']);
+    C.linhas.forEach((l, i) => {
+      const pe = C.total ? l.e.valor / C.total : 0;
+      aoa.push([String(i + 1), l.e.nome, r2(+l.e.valor || 0), pe, '%', ...l.p.map(x => x / 100), l.soma / 100]);
+      aoa.push(['', '', '', '', 'R$', ...l.rs, r2(l.rs.reduce((a, b) => a + b, 0))]);
+    });
+    aoa.push([], ['', 'TOTAL MENSAL (R$)', r2(C.total), 1, '', ...C.mens.map(r2), r2(C.total)]);
+    aoa.push(['', '% MENSAL', '', '', '', ...C.mens.map(v => C.total ? v / C.total : 0), 1]);
+    aoa.push(['', 'ACUMULADO (R$)', '', '', '', ...C.acum.map(r2), '']);
+    aoa.push(['', '% ACUMULADO', '', '', '', ...C.acum.map(v => C.total ? v / C.total : 0), '']);
+    const ws = XLSX.utils.aoa_to_sheet(aoa), h0 = (cab || []).length + 2;
+    for (let r = h0 + 1; r < aoa.length; r++) aoa[r].forEach((v, c) => {
+      if (typeof v !== 'number') return; const cel = ws[XLSX.utils.encode_cell({r, c})]; if (!cel) return;
+      const rot = aoa[r][4], tit = aoa[r][1];
+      cel.z = (c === 3 || rot === '%' || /^%/.test(tit)) ? '0.00%' : '#,##0.00';
+    });
+    ws['!cols'] = [{wch: 6}, {wch: 44}, {wch: 15}, {wch: 9}, {wch: 4}, ...meses.map(() => ({wch: 14})), {wch: 14}];
+    return ws;
+  }
+  window.TC_CRONO = {auto, ajustar, render, planilha, calc, rotuloMes, norm, janela, versao: 1};
+})();
+
+</script>
+<script>
+/* =====================================================================
+   PATCH DR-07 (20/10/2026) — Cronograma físico-financeiro e envio direto
+   ao programa de Orçamento.
+   - Nas "3 soluções com orçamento": o usuário escolhe o prazo e o
+     cronograma sai automático (etapas = grupos da planilha, valores com
+     BDI da solução e do banco escolhidos); todas as % são editáveis e
+     ficam salvas no projeto (P.lic.crono).
+   - A planilha exportada ganha a aba "Cronograma".
+   - "🚀 Enviar direto ao Orçamento": abre o Orçamento (ou usa a aba que já
+     está aberta) e entrega a planilha + o cronograma pelo armazenamento do
+     site (mesmo endereço); o Orçamento abre o Importar Lista sozinho.
+   ===================================================================== */
+const TC_ENVIO_KEY = 'tc_envio_orcamento';
+function cronoCfg() { const l = licCfg(); l.crono = Object.assign({prazo: 0, inicio: '', pct: {}}, l.crono || {}); return l.crono; }
+function etapasLic(solK, bank) {
+  const o = LIC.res && LIC.res[solK] && LIC.res[solK][bank]; if (!o) return [];
+  const f = 1 + (+o.bdi || 0) / 100;
+  return GRUPOS_LIC.filter(g => o.linhas.some(x => x.g === g))
+    .map(g => ({nome: g, valor: r2(o.linhas.filter(x => x.g === g).reduce((a, x) => a + (x.total || 0), 0) * f)}));
+}
+function renderCronoLic() {
+  const body = $('lic-body'); if (!body || !LIC.res) return;
+  let card = $('lic-crono');
+  if (!card) { card = document.createElement('div'); card.className = 'card'; card.id = 'lic-crono'; body.appendChild(card); }
+  const bk = bancoLic(), sol = SOLUCOES.find(s => s.k === LIC.ver), et = etapasLic(LIC.ver, bk);
+  card.innerHTML = `<h4>📅 Cronograma físico-financeiro — ${esc(sol.nome)} · ${BANCOS_LIC[bk]}</h4><div id="lic-crono-box"></div>`;
+  const semPreco = et.every(e => !e.valor);
+  TC_CRONO.render($('lic-crono-box'), cronoCfg(), et, () => save(), {
+    botoes: `<button type="button" class="tcc-bt" onclick="exportCronoLic()">📥 Cronograma (.xlsx)</button>`,
+    nota: (semPreco ? '⚠ Este banco ainda está sem preços neste aparelho: as porcentagens valem, e os valores aparecem quando houver preços (no Orçamento, depois de importar). ' : '')
+      + 'As etapas são os grupos da planilha desta solução, com BDI. Trocar de solução ou de banco muda os valores e mantém as porcentagens. O cronograma vai junto em <b>📤 Exportar</b> (aba "Cronograma") e em <b>🚀 Enviar direto ao Orçamento</b>.'
+  });
+}
+const _renderLicCr = renderLic;
+renderLic = function () { const r = _renderLicCr.apply(this, arguments); try { renderCronoLic(); } catch (e) { console.error('Cronograma:', e); } return r; };
+
+// botão de envio direto no rodapé da janela e em cada solução
+const _garantirModalLicCr = garantirModalLic;
+garantirModalLic = function () {
+  const novo = !$('modal-lic'); _garantirModalLicCr.apply(this, arguments);
+  if (novo) { const ft = document.querySelector('#modal-lic .modal-footer');
+    if (ft) ft.insertAdjacentHTML('afterbegin', '<button class="btn btn-primary" style="background:#15803d;border-color:#15803d" onclick="enviarAoOrcamento(LIC.ver, bancoLic())" title="Abre o programa de Orçamento já com esta planilha (e o cronograma) para importar">🚀 Enviar direto ao Orçamento</button>'); }
+};
+
+/* monta a planilha da solução (mesmo conteúdo do 📤 Exportar) sem baixar, e acrescenta o cronograma */
+async function wbLic(solK, bank) {
+  await loadScript(LIB_XLSX);
+  const wf = XLSX.writeFile; let cap = null;
+  XLSX.writeFile = (wb, nome) => { cap = {wb, nome}; };
+  try { await _exportLicXLSXCr(solK, bank); } finally { XLSX.writeFile = wf; }
+  if (!cap) throw new Error('não foi possível montar a planilha');
+  const cr = cronoCfg(), et = etapasLic(solK, bank);
+  if (cr.prazo && et.length) {
+    const sol = SOLUCOES.find(s => s.k === solK);
+    const ws = TC_CRONO.planilha(XLSX, cr, et, ['CRONOGRAMA FÍSICO-FINANCEIRO — DRENAGEM PLUVIAL — ' + sol.nome.toUpperCase(), P.proj.nome + (P.proj.municipio ? ' — ' + P.proj.municipio : ''),
+      'Banco ' + BANCOS_LIC[bank] + ' · valores com BDI de ' + fmt(+custosCfg().bdi || 0, 2) + ' %']);
+    XLSX.utils.book_append_sheet(cap.wb, ws, 'Cronograma');
+  }
+  return cap;
+}
+const _exportLicXLSXCr = exportLicXLSX;
+exportLicXLSX = async function (solK, bank) {
+  let cap; try { cap = await wbLic(solK, bank); } catch (e) { toast('Sem internet para gerar o .xlsx. Conecte e tente de novo.'); return; }
+  XLSX.writeFile(cap.wb, cap.nome);
+  toast(cronoCfg().prazo ? 'Planilha gerada com orçamento, memória e cronograma.' : 'Planilha gerada. Escolha o prazo para incluir o cronograma.');
+};
+async function exportCronoLic() {
+  const cr = cronoCfg(); if (!cr.prazo) { toast('Selecione o prazo da obra primeiro.'); return; }
+  try { await loadScript(LIB_XLSX); } catch (e) { toast('Sem internet para gerar o .xlsx.'); return; }
+  const bk = bancoLic(), sol = SOLUCOES.find(s => s.k === LIC.ver);
+  const ws = TC_CRONO.planilha(XLSX, cr, etapasLic(LIC.ver, bk), ['CRONOGRAMA FÍSICO-FINANCEIRO — DRENAGEM PLUVIAL — ' + sol.nome.toUpperCase(), P.proj.nome, 'Banco ' + BANCOS_LIC[bk] + ' · valores com BDI']);
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Cronograma');
+  XLSX.writeFile(wb, 'cronograma-drenagem-' + sol.k + '-' + bk + '-' + slug(P.proj.nome) + '-' + dataHoje() + '.xlsx');
+}
+
+/* envio direto: mesma origem (totalcivil.com.br), o Orçamento lê e apaga a chave */
+async function enviarAoOrcamento(solK, bank) {
+  let w = null;
+  try { w = window.open('', 'tc_orcamento'); if (w && (!w.location.href || w.location.href === 'about:blank')) w.location.href = '/orcamento/'; } catch (e) { w = null; }
+  let cap; try { cap = await wbLic(solK, bank); } catch (e) { toast('Sem internet para montar a planilha. Conecte e tente de novo.'); return; }
+  const sol = SOLUCOES.find(s => s.k === solK), cr = cronoCfg(), et = etapasLic(solK, bank);
+  const env = {v: 1, origem: 'Drenagem Pluvial', projeto: P.proj.nome || '', municipio: P.proj.municipio || '', solucao: sol.nome, banco: BANCOS_LIC[bank],
+    regime: custosCfg().regime, bdi: +custosCfg().bdi || 0, arquivo: cap.nome, b64: XLSX.write(cap.wb, {bookType: 'xlsx', type: 'base64'}),
+    crono: cr.prazo ? {prazo: cr.prazo, inicio: cr.inicio || '', pct: Object.fromEntries(et.map(e => [e.nome, (cr.pct[e.nome] || []).slice()]))} : null,
+    em: new Date().toISOString()};
+  try { localStorage.setItem(TC_ENVIO_KEY, JSON.stringify(env)); }
+  catch (e) { toast('Não coube no armazenamento do navegador. Use 📤 Exportar e o Importar Lista.'); return; }
+  if (w) { try { w.focus(); } catch (e) {} toast('Enviado. O Orçamento abre o Importar Lista com esta planilha' + (env.crono ? ' e o cronograma.' : '.')); }
+  else toast('Enviado. O navegador bloqueou a nova aba: abra o Orçamento (totalcivil.com.br/orcamento) e a importação começa sozinha.');
+}
+
+</script>
 </body></html>
