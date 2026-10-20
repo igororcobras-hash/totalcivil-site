@@ -250,6 +250,7 @@ td input:focus,td select:focus{outline:none;border-color:var(--agua)}
 #toast{white-space:normal;max-width:min(92vw,560px);text-align:center;border-radius:14px}
 .svg-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--line);border-radius:8px;background:var(--surface)}
 .svg-scroll svg{display:block;width:100%;min-width:900px;height:auto}
+.svg-scroll svg.esc-real{width:auto;max-width:none}   /* perfil em escala real: tamanho natural, rolagem lateral */
 #memorial-print .fig{margin:.6rem 0 1rem;page-break-inside:avoid;break-inside:avoid}
 #memorial-print .fig svg{width:100%;height:auto;border:1px solid #ddd}
 #memorial-print .fig .cap{font-size:.78rem;color:#555;text-align:center;margin-top:.25rem}
@@ -3487,10 +3488,24 @@ const fmtCam = m => fmt(m.L, 2) + ' × ' + fmt(m.L, 2) + ' × h ' + fmt(m.Hi, 2)
 const mostraRalos = () => !(P && P.desenho && P.desenho.ralos === false);
 function setRalos(v) { P.desenho = Object.assign({}, P.desenho || {}, {ralos: !!v}); save(); }
 /* escala do perfil longitudinal (vertical / horizontal): 0 = automática; n = 1:1/1:n (horizontal n vezes menor que a vertical) */
-const PERFIL_ESCALAS = [1, 2, 2.5, 4, 5, 10, 20, 25, 50];
+/* escalas reais do perfil (1 m no desenho = 3779,5 px / denominador, a 96 dpi). Padrão V 1:50 / H 1:1000;
+   "Automática" = vertical exagerada para caber na largura da tela */
+const PERFIL_ESC_PAD = {v: 50, h: 1000}, PX_M = 3779.5;
+const PERFIL_ESC_OPC = [[50, 1000], [100, 1000], [50, 500], [25, 500], [100, 2000], [50, 2000], [100, 100], [50, 50]];
 const fEsc = n => String(+(+n).toFixed(2)).replace('.', ',');
-const perfilEsc = () => { const v = +(P && P.desenho && P.desenho.perfilEsc) || 0; return v >= 0.1 && v <= 500 ? v : 0; };
-function setPerfilEsc(v) { v = +String(v).replace(',', '.') || 0; P.desenho = Object.assign({}, P.desenho || {}, {perfilEsc: v >= 0.1 && v <= 500 ? v : 0}); save(); renderTab(); }
+const escOk = n => n >= 1 && n <= 100000;
+function perfilEscalas() {
+  const d = (P && P.desenho) || {};
+  if (d.perfilAuto) return null;
+  return {v: escOk(+d.perfilV) ? +d.perfilV : PERFIL_ESC_PAD.v, h: escOk(+d.perfilH) ? +d.perfilH : PERFIL_ESC_PAD.h};
+}
+function setPerfilEsc(o) { P.desenho = Object.assign({}, P.desenho || {}, o); save(); renderTab(); }
+function setPerfilEscOpc(val) { if (val === 'auto') return setPerfilEsc({perfilAuto: true}); const [v, h] = String(val).split('/').map(Number); setPerfilEsc({perfilAuto: false, perfilV: v, perfilH: h}); }
+function setPerfilEscVH(qual, txt) {
+  const n = +String(txt).replace(/\s/g, '').replace(/^1:/, '').replace(',', '.');
+  if (!escOk(n)) { toast('Escala inválida: digite o denominador, por exemplo 50 para 1:50.'); return renderTab(); }
+  const e = perfilEscalas() || PERFIL_ESC_PAD; setPerfilEsc(Object.assign({perfilAuto: false, perfilV: e.v, perfilH: e.h}, qual === 'v' ? {perfilV: n} : {perfilH: n}));
+}
 
 /* parâmetros construtivos (editáveis na aba 6) */
 const EMOP_CRIT = {pvEmopParede: 0.20, pvEmopLajeF: 0.15, pvEmopLajeT: 0.15, pvEmopFolga: 0.20, pvEmopFolgaTopo: 0.20, pvEmopHmin: 1.40, pvEmopChamMax: 1.00};
@@ -3802,10 +3817,13 @@ quadroSecao = function (pvId) {
 const chkRalos = fn => `<label style="font-size:.84rem;display:flex;gap:.45rem;align-items:center;margin:.1rem 0 .55rem;flex-wrap:wrap"><input type="checkbox" ${mostraRalos() ? 'checked' : ''} onchange="setRalos(this.checked);${fn}()"/> <b>Mostrar bocas de lobo, caixas de ralo e ramais</b> <small style="color:var(--muted)">contínuo = no plano do corte · pontilhado = em vista, fora do corte</small></label>`;
 const _vSecao0 = vSecao, _vPerfil0 = vPerfil;
 vSecao = function () { return _vSecao0.apply(this, arguments).replace('<div class="svg-scroll" id="secao-box">', chkRalos('drawSecao') + '<div class="svg-scroll" id="secao-box">'); };
-const selEscPerfil = () => '<label style="font-size:.84rem;display:flex;gap:.45rem;align-items:center;margin:.1rem 0 .55rem;flex-wrap:wrap"><b>Escala do desenho (vertical / horizontal)</b> <select onchange="setPerfilEsc(this.value)" style="padding:.3rem .5rem;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)">' +
-  [[0, 'Automática']].concat(PERFIL_ESCALAS.map(n => [n, 'V 1:1 / H 1:' + fEsc(n)])).map(([v, t]) => '<option value="' + v + '"' + (perfilEsc() === v ? ' selected' : '') + '>' + t + '</option>').join('') +
-  (perfilEsc() && !PERFIL_ESCALAS.includes(perfilEsc()) ? '<option selected>V 1:1 / H 1:' + fEsc(perfilEsc()) + '</option>' : '') +
-  '</select> ou digite <span style="white-space:nowrap">V 1:1 / H 1:<input type="text" inputmode="decimal" value="' + (perfilEsc() ? fEsc(perfilEsc()) : '') + '" placeholder="ex. 3" onchange="setPerfilEsc(this.value)" style="width:4.5rem;padding:.3rem .45rem;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)"/></span> <small style="color:var(--muted)">em 1:1 os tubos e ramais aparecem redondos; o desenho fica mais largo (role para o lado)</small></label>';
+const selEscPerfil = () => { const e = perfilEscalas(), at = e ? e.v + '/' + e.h : 'auto', pre = PERFIL_ESC_OPC.some(([v, h]) => v + '/' + h === at);
+  const campo = (q, n) => '<span style="white-space:nowrap">' + (q === 'v' ? 'Vertical' : 'Horizontal') + ' 1:<input type="text" inputmode="decimal" value="' + (e ? fEsc(n) : '') + '" placeholder="' + (q === 'v' ? '50' : '1000') + '" onchange="setPerfilEscVH(\'' + q + '\', this.value)" style="width:5.2rem;padding:.3rem .45rem;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)"/></span>';
+  return '<label style="font-size:.84rem;display:flex;gap:.55rem;align-items:center;margin:.1rem 0 .55rem;flex-wrap:wrap"><b>Escalas do desenho</b> <select onchange="setPerfilEscOpc(this.value)" style="padding:.3rem .45rem;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)">' +
+    PERFIL_ESC_OPC.map(([v, h]) => '<option value="' + v + '/' + h + '"' + (at === v + '/' + h ? ' selected' : '') + '>V 1:' + v + ' · H 1:' + h + (v === PERFIL_ESC_PAD.v && h === PERFIL_ESC_PAD.h ? ' (padrão)' : v === h ? ' (sem exagero)' : '') + '</option>').join('') +
+    (e && !pre ? '<option selected>V 1:' + fEsc(e.v) + ' · H 1:' + fEsc(e.h) + '</option>' : '') +
+    '<option value="auto"' + (e ? '' : ' selected') + '>Automática (cabe na tela)</option></select> ou digite ' + campo('v', e && e.v) + campo('h', e && e.h) +
+    ' <small style="color:var(--muted)">com as duas iguais os tubos e ramais aparecem redondos; desenho largo: role para o lado</small></label>'; };
 vPerfil = function () { return _vPerfil0.apply(this, arguments).replace('<div class="svg-scroll" id="perfil-box">', chkRalos('drawPerfil') + selEscPerfil() + '<div class="svg-scroll" id="perfil-box">'); };
 
 /* PV circular (alvenaria, Ø nos detalhes) nas medidas do desenho EMOP: corpo de alvenaria, laje de fundo, laje da tampa
@@ -3914,11 +3932,12 @@ svgPerfil = function (ini, K, W0 = 1200) {
   const ralos = mostraRalos(), BL = [];
   if (ralos) pts.forEach((p, k) => { const ds = _dadosSecao0(p.id); if (ds) ds.bls.forEach(b => { BL.push({b, k}); vals.push(b.topo, b.fundo); }); });
   const ymin = Math.min(...vals) - 0.6, ymax = Math.max(...vals) + 0.8;
-  const ml = 270, mr = 60, mt = 110, rowH = 28, leg2 = BL.length ? 22 : 0, E = perfilEsc();
+  const ml = 270, mr = 60, mt = 110, rowH = 28, leg2 = BL.length ? 22 : 0, ES = perfilEscalas(), E = !!ES;
   let hp = 360;
   // escala escolhida (E = exagero vertical; 1 = 1:1): sem ampliar trechos curtos; em perfil muito longo reduz as duas escalas
   let sxE = 0;
-  if (E) { sxE = hp / (ymax - ymin) / E; const WMAX = 20000; if (X * sxE > WMAX - ml - mr) { sxE = (WMAX - ml - mr) / (X || 1); hp = Math.round(Math.max(60, (ymax - ymin) * sxE * E)); } }
+  let red = 1;   // escalas reais; se o desenho passar de 30.000 px de largura, as duas são reduzidas na mesma proporção
+  if (ES) { let syE = PX_M / ES.v; sxE = PX_M / ES.h; const WMAX = 30000; if (X * sxE > WMAX - ml - mr) { red = (WMAX - ml - mr) / (X * sxE); sxE *= red; syE *= red; } hp = Math.max(40, Math.round((ymax - ymin) * syE)); }
   const rowsPV = [['Estaca', p => estLabel(num(p.p && p.p.dist))], ['Distância acumulada (m)', p => fmt(p.x, 2)], ['Cota da tampa (m)', p => fmt(p.pv.tp, 3)], ['Cota do fundo do PV (m)', p => fmt(p.pv.fundo, 3)], ['Profundidade do PV (m)', p => fmt(p.pv.prof, 2)], ['Nível d\'água no PV (m)', p => isNum(p.pv.H) && p.pv.H > -1e8 ? fmt(p.pv.H, 3) : '—']];
   const rowsTr = [['Trecho', (t, r) => t.id], ['Diâmetro (mm)', (t) => 'Ø ' + t.D], ['Extensão (m)', (t, r) => fmt(r.L, 2)], ['Declividade (%)', (t, r) => isNum(r.S) ? fmt(r.S * 100, 3) : '—'], ['CI montante → jusante', (t, r) => fmt(r.cm, 3) + ' → ' + fmt(r.cj, 3)], ['Vazão Q (L/s)', (t, r) => fL(r.Q)], ['Velocidade V (m/s)', (t, r) => fmt(r.h.V, 2)], ['Lâmina y/D', (t, r) => r.h.carga ? 'em carga' : fmt(r.h.yD, 2)]];
   const H = mt + hp + 30 + leg2 + (rowsPV.length + rowsTr.length) * rowH + 60;
@@ -3929,9 +3948,9 @@ svgPerfil = function (ini, K, W0 = 1200) {
   const sx = E ? sxE : (W - ml - mr) / (X || 1), sy = hp / (ymax - ymin);
   const PX = x => { for (let k = 0; k < pts.length - 1; k++) if (x <= pts[k + 1].x + 1e-9) { const f = (x - pts[k].x) / ((pts[k + 1].x - pts[k].x) || 1); return ml + cum[k] + f * seg[k]; } return ml + cum[cum.length - 1]; };
   const PY = y => mt + (ymax - y) * sy;
-  let s = `<svg ${SVGNS} viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="${K.bg}"/>`;
+  let s = `<svg ${SVGNS}${ES ? ' class="esc-real"' : ''} viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="${K.bg}"/>`;
   s += tx(16, 30, 'Perfil longitudinal — ' + pts[0].id + ' → ' + pts[pts.length - 1].id, {fs: 18, w: 700, c: K.blue});
-  const ex = sy / sx0; s += tx(W - mr, 26, (E ? 'Escalas vertical / horizontal 1:1 / 1:' + fEsc(E) : 'Escala vertical exagerada ' + fmt(ex, 1) + ' × a horizontal') + (distorce ? ' · trechos curtos ampliados na horizontal' : ''), {fs: 12, a: 'end', c: K.muted});
+  const ex = sy / sx0; s += tx(16, 52, (ES ? 'Escalas: vertical 1:' + fEsc(ES.v) + ' · horizontal 1:' + fEsc(ES.h) + (red < 1 ? ' (reduzidas ' + fmt(red * 100, 0) + '% para caber)' : '') : 'Escala vertical exagerada ' + fmt(ex, 1) + ' × a horizontal') + (distorce ? ' · trechos curtos ampliados na horizontal' : ''), {fs: 13, c: K.muted});
   s += tx(ml - 70, mt + hp / 2, 'Cota (m)', {fs: 13, c: K.muted, rot: -90, a: 'middle'});
   const terr = pts.filter(p => isNum(p.pv.tp));
   if (terr.length > 1) s += `<polygon points="${terr.map(p => PX(p.x) + ',' + PY(p.pv.tp)).join(' ')} ${PX(terr[terr.length - 1].x)},${mt + hp} ${PX(terr[0].x)},${mt + hp}" fill="${K.soil}"/>` + `<polyline points="${terr.map(p => PX(p.x) + ',' + PY(p.pv.tp)).join(' ')}" fill="none" stroke="${K.terr}" stroke-width="3"/>`;
