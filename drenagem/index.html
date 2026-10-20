@@ -3002,7 +3002,7 @@ function vSecao() {
   <p class="lead">Corte no poço de visita escolhido, com a pista, os meios-fios, os passeios, as bocas-de-lobo (caixas de ralo) ligadas a este PV, os ramais chegando ao PV e a vala do tubo. Abaixo, o detalhe ampliado da vala com todas as medidas. O meio-fio e a sarjeta vêm do tipo escolhido na rua (aba 3) e as caixas de ralo seguem o modelo e as dimensões escolhidos em cada boca-de-lobo (aba 5).</p>
   <div class="card" style="padding:.6rem">
     <div class="bar-btns"><label style="font-size:.82rem;font-weight:600;color:var(--muted)">Poço de visita</label>
-      <select onchange="SEC_PV=this.value;drawSecao()" style="padding:.35rem .5rem;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)">${pvs.map(p => `<option value="${esc(p.id)}"${p.id === SEC_PV ? ' selected' : ''}>${esc(p.id)} — ${esc(ruaNome(p.rua))} est. ${estLabel(num(p.dist))}</option>`).join('')}</select></div>
+      <select onchange="SEC_PV=this.value;drawSecao()" style="padding:.35rem .5rem;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)">${pvs.map(p => `<option value="${esc(p.id)}"${p.id === SEC_PV ? ' selected' : ''}>${esc(p.id)} — ${esc(ruaNome(p.rua))} est. ${estLabel(num(p.dist))}${(n => n ? ' · ' + n + ' caixa' + (n > 1 ? 's' : '') + ' de ralo' : '')(P.bls.filter(b => b.pv === p.id).length)}</option>`).join('')}</select></div>
     <div class="svg-scroll" id="secao-box"></div>
     <div class="svg-scroll" id="vala-box" style="margin-top:.75rem"></div>
     <div id="secao-quadro" style="margin-top:.75rem"></div>
@@ -3626,7 +3626,7 @@ svgSecao = function (pvId, K, W = 1100) {
   const bls = mostraRalos() ? d.bls.map(b => Object.assign({pl: blPlano(d, b)}, b)) : [];
   const temVista = bls.some(b => !b.pl.caixa || !b.pl.ramal);
   const notas = (temVista ? 1 : 0) + (m ? 2 : 0);
-  const zTop = d.tp + 0.6, zBot = Math.min(d.fundoVala, ...bls.map(b => b.fundo - 0.1)) - 0.5;
+  const zTop = d.tp + 0.6, zBot = Math.min(d.fundoVala - (bls.length ? 0.75 : 0), ...bls.map(b => b.fundo - 0.1)) - 0.5;
   const sc = (W - 140) / (2 * half), Hd = (zTop - zBot) * sc;
   const H0 = Math.round(70 + Hd + 30), H = H0 + notas * 24;
   const X = x => W / 2 + x * sc, Y = z => 60 + (zTop - z) * sc;
@@ -3678,14 +3678,34 @@ svgSecao = function (pvId, K, W = 1100) {
       s += rc(X(xa), Y(b.topo), b.larg * sc, 0.08 * sc, K.ink);
       s += `<path d="M ${X(x0)} ${Y(b.zCurb)} L ${X(xin)} ${Y(b.zCurb + 0.02)}" stroke="${K.agua}" stroke-width="3"/>`;
     }
-    const xs = xin, xf = b.side * (m ? xi : xe), z1 = b.ciBL, z2 = b.ciPV, rr = b.rD;
-    s += `<polygon points="${X(xs)},${Y(z1)} ${X(xf)},${Y(z2)} ${X(xf)},${Y(z2 + rr)} ${X(xs)},${Y(z1 + rr)}" fill="${vR ? 'none' : K.aguaF}" stroke="${K.agua}" stroke-width="1.6"${vR ? ` stroke-dasharray="${DASH}"` : ''}/>`;
+    const xs = xin, xf = b.side * (m ? xi : xe), z1 = b.ciBL, z2 = b.ciPV, rr = b.rD, er = Math.max(0.03, rr * c.espF), rm = (b.rb && b.rb.ram) || {};
+    const dR = vR ? ` stroke-dasharray="${DASH}"` : '';
+    // tubo do ramal: parede, lâmina d'água e eixo tracejado
+    s += `<polygon points="${X(xs)},${Y(z1 - er)} ${X(xf)},${Y(z2 - er)} ${X(xf)},${Y(z2 + rr + er)} ${X(xs)},${Y(z1 + rr + er)}" fill="${vR ? 'none' : K.pipe}" stroke="${K.ink}" stroke-width="1"${dR}/>`;
+    s += `<polygon points="${X(xs)},${Y(z1)} ${X(xf)},${Y(z2)} ${X(xf)},${Y(z2 + rr)} ${X(xs)},${Y(z1 + rr)}" fill="${vR ? 'none' : K.bg}" stroke="${K.agua}" stroke-width="1.6"${dR}/>`;
+    const yr = rm.carga ? 1 : Math.min(1, rm.yD || 0);
+    if (yr > 0) s += `<polygon points="${X(xs)},${Y(z1)} ${X(xf)},${Y(z2)} ${X(xf)},${Y(z2 + yr * rr)} ${X(xs)},${Y(z1 + yr * rr)}" fill="${K.aguaF}"${vR ? ' fill-opacity=".55"' : ''}/>`;
+    s += `<line x1="${X(xs)}" y1="${Y(z1 + rr / 2)}" x2="${X(xf)}" y2="${Y(z2 + rr / 2)}" stroke="#E8731A" stroke-width="2" stroke-dasharray="9 6"/>`;
     s += tx(X(b.side * (d.larg / 2 + d.pas * 0.5)), Y(b.topo) - 14, b.b.id + (vC ? ' (em vista)' : ''), {fs: 15, w: 700, a: 'middle', c: K.bl, halo: K.bg});
-    const mx = X((xs + xf) / 2), my = Y((z1 + z2) / 2 + rr) - 8;
-    s += tx(mx, my, 'Ramal Ø' + b.b.rD + ' · i ' + fmt(b.rI * 100, 1) + '%', {fs: 13, a: 'middle', c: K.aguaD, w: 700, halo: K.reat});
-    if (vR) s += tx(mx, Y((z1 + z2) / 2) + 16, txtVista(b.pl), {fs: 12, a: 'middle', c: K.aguaD, halo: K.reat});
-    if (b.ciPV < d.fundoPV) s += tx(X(xf), Y(z2) + 18, '⚠ chega abaixo do fundo do PV', {fs: 12, a: b.side > 0 ? 'start' : 'end', c: K.err, halo: K.bg});
+    // caixa de ralo: modelo e medidas internas, embaixo da caixa
+    const mod = ((CAIXAS[b.b.modelo] || {}).nome || BLTIPOS[b.b.tipo].nome).split(' — ');
+    const cxX = Math.max(150, Math.min(W - 150, X((xin + xout) / 2))), cxY = Math.max(Y(b.fundo - wb) + 16, Y(d.fundoVala) + 48);
+    if (cxY - 14 > Y(b.fundo - wb) + 4) s += ln(X((xin + xout) / 2), Y(b.fundo - wb) + 2, cxX, cxY - 14, K.muted, 1, '3 3');
+    s += tx(cxX, cxY, 'Caixa de ralo: ' + mod[0], {fs: 12, w: 700, a: 'middle', c: K.ink, halo: K.soil});
+    if (mod[1]) s += tx(cxX, cxY + 15, mod[1], {fs: 11, a: 'middle', c: K.ink, halo: K.soil});
+    s += tx(cxX, cxY + (mod[1] ? 30 : 15), 'interna ' + fmt(b.larg, 2) + ' × ' + fmt(num(b.b.cxL) || 1, 2) + ' × prof. ' + fmt(b.prof, 2) + ' m', {fs: 11, a: 'middle', c: K.muted, halo: K.soil});
+    // ramal: Ø, i, L em cima; vazão e velocidade logo abaixo
+    const mx = X((xs + xf) / 2), my = Y((z1 + z2) / 2 + rr + er);
+    s += tx(mx, my - 24, 'Ramal Ø' + b.b.rD + ' · i ' + fmt(b.rI * 100, 1) + '% · L ' + fmt(b.rL, 1) + ' m', {fs: 13, a: 'middle', c: K.aguaD, w: 700, halo: K.reat});
+    s += tx(mx, my - 8, 'Q ' + fL(b.rb && b.rb.Qeng) + ' L/s · V ' + (isNum(rm.V) ? fmt(rm.V, 2) : '—') + ' m/s' + (rm.carga ? ' · sob carga' : isNum(rm.yD) ? ' · y/D ' + fmt(rm.yD, 2) : ''), {fs: 12, a: 'middle', c: K.aguaD, w: 700, halo: K.reat});
+    if (vR) s += tx(mx, Y((z1 + z2) / 2 - er) + 16, txtVista(b.pl), {fs: 12, a: 'middle', c: K.aguaD, halo: K.reat});
+    if (b.ciPV < d.fundoPV) s += tx(X(xf), Y(z2) + 34, '⚠ chega abaixo do fundo do PV', {fs: 12, a: b.side > 0 ? 'start' : 'end', c: K.err, halo: K.bg});
   });
+  if (mostraRalos() && !bls.length) {
+    const comBL = P.pvs.filter(p => P.bls.some(b => b.pv === p.id)).map(p => p.id).slice(0, 4);
+    s += tx(X(-d.larg / 2 - d.pas / 2), Y(zR(d.larg / 2)) + 40, 'Nenhuma caixa de ralo tem ramal ligado a este PV.', {fs: 13, w: 700, a: 'middle', c: K.muted, halo: K.soil});
+    if (comBL.length) s += tx(X(-d.larg / 2 - d.pas / 2), Y(zR(d.larg / 2)) + 58, 'Com caixa de ralo: ' + comBL.join(', ') + (comBL.length === 4 ? '…' : ''), {fs: 12, a: 'middle', c: K.muted, halo: K.soil});
+  }
   // rótulos principais
   s += tx(X(0), Y(d.tp) - 22, d.pv.id + (m ? ' · tampão FoFo Ø0,60' : ' · tampão Ø0,60'), {fs: 15, w: 700, a: 'middle', c: K.ink, halo: K.bg});
   s += tx(X(-d.larg / 4), Y(zR(d.larg / 4)) - 10, 'Pista ' + fmt(d.larg, 2) + ' m · i ' + fmt(d.it * 100, 1) + '%', {fs: 13, a: 'middle', c: K.ink, halo: K.soil});
@@ -3723,7 +3743,9 @@ quadroSecao = function (pvId) {
   L.push(['Meio-fio / sarjeta', ((MEIOFIO[d.rua.mf] || {}).nome || '—') + ' · espelho ' + fmt(d.mfH * 100, 0) + ' cm' + (d.sjW > 0 ? ' · sarjeta ' + fmt(d.sjW, 2) + ' m a ' + fmt(d.sjI * 100, 1) + ' %' : '')]);
   d.bls.forEach(b => { const pl = blPlano(d, b);
     L.push(['Boca-de-lobo ' + b.b.id + ' (' + (b.b.lado === 'D' ? 'direita' : 'esquerda') + ')', ((CAIXAS[b.b.modelo] || {}).nome || BLTIPOS[b.b.tipo].nome) + ' · caixa interna ' + fmt(b.larg, 2) + ' × ' + fmt(num(b.b.cxL) || 1, 2) + ' × prof. ' + fmt(b.prof, 2) + ' m · fundo ' + fmt(b.fundo, 3) + ' m · ' + (pl.caixa ? 'no plano do corte' : txtVista(pl))]);
-    L.push(['Ramal ' + b.b.id + ' → ' + d.pv.id, 'Ø ' + b.b.rD + ' mm · L ' + fmt(b.rL, 2) + ' m · i ' + fmt(b.rI * 100, 2) + ' % · CI ' + fmt(b.ciBL, 3) + ' → ' + fmt(b.ciPV, 3) + ' m · ' + (pl.ramal ? 'no plano do corte' : txtVista(pl))]); });
+    L.push(['Ramal ' + b.b.id + ' → ' + d.pv.id, 'Ø ' + b.b.rD + ' mm · L ' + fmt(b.rL, 2) + ' m · i ' + fmt(b.rI * 100, 2) + ' % · CI ' + fmt(b.ciBL, 3) + ' → ' + fmt(b.ciPV, 3) + ' m · ' + (pl.ramal ? 'no plano do corte' : txtVista(pl))]);
+    const rm = (b.rb && b.rb.ram) || {};
+    L.push(['Ramal ' + b.b.id + ': vazão e velocidade', 'Q ' + fL(b.rb && b.rb.Qeng) + ' L/s · V ' + (isNum(rm.V) ? fmt(rm.V, 2) : '—') + ' m/s' + (rm.carga ? ' · sob carga' : isNum(rm.yD) ? ' · y/D ' + fmt(rm.yD, 2) : '') + (isNum(rm.Qp) ? ' · capacidade a seção plena ' + fL(rm.Qp) + ' L/s' : '')]); });
   return `<div class="tbl-wrap"><table><thead><tr><th>Quadro de medidas</th><th>Valor</th></tr></thead><tbody>${L.map(([a, b]) => `<tr><td>${esc(a)}</td><td><b>${esc(b)}</b></td></tr>`).join('')}</tbody></table></div>`;
 };
 const chkRalos = fn => `<label style="font-size:.84rem;display:flex;gap:.45rem;align-items:center;margin:.1rem 0 .55rem;flex-wrap:wrap"><input type="checkbox" ${mostraRalos() ? 'checked' : ''} onchange="setRalos(this.checked);${fn}()"/> <b>Mostrar caixas de ralo e ramais</b> <small style="color:var(--muted)">contínuo = no plano do corte · pontilhado = em vista, fora do corte</small></label>`;
