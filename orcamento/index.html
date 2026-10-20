@@ -9809,6 +9809,7 @@ window.distribuirBdiImportado = function(itens){
       // V1-02-44: quantidade 0 da planilha continua 0 (antes virava 1); vazia = 1 e aparece no relatório
       var qtdVazia = vazio(qtdRaw);
       var qtdPlanOrig = qtdVazia ? null : parseNum(qtdRaw);
+      if(qtdPlanOrig!=null && isFinite(qtdPlanOrig)) qtdPlanOrig = Number(qtdPlanOrig.toPrecision(12));
       var qtd = qtdVazia ? 1 : ajustaQtd(qtdPlanOrig);
 
       // V1-02-44: o VALOR UNITÁRIO só vem da planilha quando a coluna foi marcada. Sem ela, o item do
@@ -12524,14 +12525,14 @@ document.addEventListener('DOMContentLoaded', limparRestos);
     var f = Math.pow(10, casas), a = Math.abs(n), t = modo==='arredondar' ? Math.round(a*f + 1e-7)/f : Math.floor(a*f + 1e-7)/f;
     return n<0 ? -t : t;
   }
-  function decimaisDemais(v, casas){ var n = parseFloat(String(v==null?'':v).replace(',','.')); if(!isFinite(n)) return false; var f = Math.pow(10, casas); return Math.abs(n*f - Math.round(n*f)) > 1e-7; }
+  function decimaisDemais(v, casas, modo){ var n = parseFloat(String(v==null?'':v).replace(',','.')); if(!isFinite(n)) return false; var c = cortar(n, modo||'arredondar', casas); return c!==n || String(v).replace(',','.')!==String(c); }
   function itensOrc(){ return (typeof orc!=='undefined' && Array.isArray(orc)) ? orc.filter(function(l){ return l && l.tipo==='ITEM'; }) : []; }
   function abrirAplicar(){
     var modo = document.getElementById('calcModo').value==='arredondar' ? 'arredondar' : 'truncar';
     var casas = Math.max(0, Math.min(4, parseInt(document.getElementById('calcCasas').value, 10) || 0));
     var its = itensOrc();
-    var nQ = its.filter(function(l){ return decimaisDemais(l.qtd, casas); }).length;
-    var nU = its.filter(function(l){ return decimaisDemais(l.custo, casas); }).length;
+    var nQ = its.filter(function(l){ return decimaisDemais(l.qtd, casas, modo); }).length;
+    var nU = its.filter(function(l){ return decimaisDemais(l.custo, casas, modo); }).length;
     var m = document.getElementById('modalCalcAplicar');
     if(!m){
       m = document.createElement('div'); m.id = 'modalCalcAplicar';
@@ -12556,8 +12557,8 @@ document.addEventListener('DOMContentLoaded', limparRestos);
       if(!q && !u && !k){ alert('Marque pelo menos uma opção.'); return; }
       var mq = 0, mu = 0;
       itensOrc().forEach(function(l){
-        if(q && decimaisDemais(l.qtd, casas)){ var nq = cortar(l.qtd, modo, casas); if(nq!=null){ l.qtd = nq; mq++; } }
-        if(u && decimaisDemais(l.custo, casas)){ var nu = cortar(l.custo, modo, casas); if(nu!=null){ l.custo = nu; l.custo_num = nu; mu++; } }
+        if(q && decimaisDemais(l.qtd, casas, modo)){ var nq = cortar(l.qtd, modo, casas); if(nq!=null){ l.qtd = nq; mq++; } }
+        if(u && decimaisDemais(l.custo, casas, modo)){ var nu = cortar(l.custo, modo, casas); if(nu!=null){ l.custo = nu; l.custo_num = nu; mu++; } }
       });
       m.style.display = 'none';
       if(k) aplicar(modo, casas);
@@ -12900,6 +12901,11 @@ body.mode-mobile .ri-modal{padding:0}
   // ------------------------------------------------------------------
   function precoClicavel(){
     var tb = document.getElementById('tbodyOrc'); if(!tb) return;
+    tb.querySelectorAll('input.qty').forEach(function(inp){
+      if(document.activeElement===inp) return;
+      var v = inp.value; if(!/\.\d{9,}/.test(v)) return;
+      var n = Number(v); if(isFinite(n)) inp.value = String(Number(n.toPrecision(12)));
+    });
     tb.querySelectorAll('input.price[readonly]').forEach(function(inp){
       var bt = inp.parentNode && inp.parentNode.querySelector('button[onclick^="editarPrecoItem"]');
       if(!bt) return;
