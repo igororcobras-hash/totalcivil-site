@@ -690,6 +690,7 @@ function defaultCrit() {
   return {
     tr: 10, nTubo: 0.013, nSarj: 0.016, gama: 9810,
     vmin: 0.60, vmax: 5.00, yD: 0.75, tauMin: 1.0, imin: 0.50, recob: 1.00, espF: 0.10,
+    recPA1: 1.00, recPA2: 0.80, recLaje: 0.50, recEnv: 0.30,
     dmin: 400, profMaxPV: 4.00, folgaPV: 0.30, tcMin: 5,
     ymax: 0.13, Tmax: 2.50, Cw: 1.66, Co: 2.91,
     ramalDmin: 400, ramalLmax: 15, ramalImin: 1.0,
@@ -859,7 +860,8 @@ const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'}[c]));
 const num = v => (v === '' || v == null || isNaN(+v)) ? null : +v;
 const isNum = v => typeof v === 'number' && isFinite(v);
-function fmt(x, d = 2) { if (!isNum(x)) return '—'; return x.toLocaleString('pt-BR', {minimumFractionDigits: d, maximumFractionDigits: d}); }
+const _NF = {};   // formatadores em cache: toLocaleString com opções recria o Intl a cada chamada (lento no cálculo)
+function fmt(x, d = 2) { if (!isNum(x)) return '—'; return (_NF[d] || (_NF[d] = new Intl.NumberFormat('pt-BR', {minimumFractionDigits: d, maximumFractionDigits: d}))).format(x); }
 const fL = q => isNum(q) ? fmt(q * 1000, 1) : '—';           // m³/s → L/s
 function estLabel(dist) {
   if (!isNum(dist)) return '—';
@@ -912,6 +914,21 @@ function greideDecl(rua, dist) {
   // no ponto exato de uma estaca, usa o segmento que chega nela (sentido do escoamento)
   for (let i = 1; i < es.length; i++) if (Math.abs(es[i].dist - dist) < 1e-6) { a = es[i - 1]; b = es[i]; }
   return (a.cota - b.cota) / ((b.dist - a.dist) || 1);
+}
+// declividade da sarjeta (m/m, sempre positiva) que leva a água até o ponto, nos dois sentidos do estaqueamento:
+// usa o segmento que escoa para o ponto (no ponto baixo, o mais íngreme; no ponto alto, o mais íngreme dos dois)
+function sarjDecl(rua, dist) {
+  const es = estacasRua(rua).filter(e => isNum(num(e.cota)));
+  if (es.length < 2 || !isNum(dist)) return null;
+  const z = greideCota(rua, dist), segs = [];
+  let k = es.findIndex(e => e.dist > dist + 1e-6); if (k < 0) k = es.length; // primeira estaca depois do ponto
+  const ant = es.filter(e => e.dist < dist - 1e-6).pop(), pos = es[k];
+  if (ant) segs.push({S: (ant.cota - z) / ((dist - ant.dist) || 1), dz: ant.cota - z});
+  else if (es[1]) segs.push({S: (es[0].cota - es[1].cota) / ((es[1].dist - es[0].dist) || 1), dz: es[0].cota - es[1].cota});
+  if (pos) segs.push({S: (pos.cota - z) / ((pos.dist - dist) || 1), dz: pos.cota - z});
+  const chegam = segs.filter(x => x.dz > 1e-9);
+  const L = chegam.length ? chegam : segs.map(x => ({S: Math.abs(x.S)}));
+  return L.length ? Math.max(...L.map(x => Math.abs(x.S))) : null;
 }
 function ruaById(id) { return P.ruas.find(r => r.id === id); }
 function ruaNome(id) { const r = ruaById(id); return r ? r.nome : '—'; }
@@ -1142,7 +1159,7 @@ function calc() {
     P.bls.filter(u => u.prox === bl.id && res.bl[u.id]).forEach(u => { const x = res.bl[u.id]; r.CAin += x.CAbyp; r.tc = Math.max(r.tc, x.tc); });
     r.i = idf(r.tc); r.Qafl = r.CAin * r.i / 360;
     // sarjeta
-    const Sauto = greideDecl(bl.rua, num(bl.dist));
+    const Sauto = sarjDecl(bl.rua, num(bl.dist));
     const Sp = num(bl.S) != null ? num(bl.S) : (isNum(Sauto) ? Sauto * 100 : null);
     const rua = ruaById(bl.rua);
     const g = geomSarjeta(rua, bl), z = g.z;
@@ -1236,8 +1253,10 @@ function calc() {
         add('Velocidade', fmt(h.V, 2) + ' m/s', fmt(c.vmin, 2) + ' a ' + fmt(c.vmax, 2) + ' m/s', h.V < c.vmin ? 'warn' : h.V > c.vmax ? 'err' : 'ok', h.V < c.vmin ? 'Velocidade baixa: aumente a declividade.' : 'Velocidade alta: preveja degraus/PV de queda.');
         add('Tensão trativa τ', fmt(tau, 2) + ' Pa', '≥ ' + fmt(c.tauMin, 2) + ' Pa', tau >= c.tauMin ? 'ok' : 'warn', 'Autolimpeza não garantida: aumente a declividade.');
       }
-      if (isNum(recM)) add('Recobrimento montante', fmt(recM, 2) + ' m', '≥ ' + fmt(c.recob, 2) + ' m', recM >= c.recob - 1e-3 ? 'ok' : 'err', 'Tubo raso: risco de ruptura pelo tráfego.');
-      if (isNum(recJ)) add('Recobrimento jusante', fmt(recJ, 2) + ' m', '≥ ' + fmt(c.recob, 2) + ' m', recJ >= c.recob - 1e-3 ? 'ok' : 'err', 'Tubo raso: risco de ruptura pelo tráfego.');
+      const pr = r.prot = protTrecho(t, Math.min(...[recM, recJ].filter(isNum)));
+      [['montante', recM], ['jusante', recJ]].forEach(([lado, rc]) => { if (!isNum(rc)) return;
+        const s = !pr.ok ? 'err' : rc >= c.recob - 1e-3 && (gal || rc >= pr.lim - 1e-3) ? 'ok' : 'warn';
+        add('Recobrimento ' + lado, fmt(rc, 2) + ' m', '≥ ' + fmt(c.recob, 2) + ' m' + (gal ? '' : ' (sem proteção ≥ ' + fmt(pr.lim, 2) + ' m)'), s, pr.nota); });
     }
     ins.forEach(u => {
       if (!gal && !galOf(u)) { if ((num(u.D) || 0) > D) add('Diâmetro x montante', u.id + ' Ø' + u.D + ' → Ø' + D, 'não reduzir para jusante', 'err', 'O diâmetro não pode diminuir no sentido do escoamento.'); }
@@ -1402,7 +1421,7 @@ const HELP = {
   'crit.vmax': 'Velocidade máxima para evitar desgaste do tubo. Concreto: 5,0 m/s. Acima disso, use PV de queda ou degraus.',
   'crit.tauMin': 'Tensão trativa mínima (força do escoamento sobre o fundo) para autolimpeza. Usual 1,0 Pa.',
   'crit.imin': 'Declividade mínima aceita na rede e nas sarjetas. Usual 0,5 %; recomendável ≥ 1 % quando o terreno permite.',
-  'crit.recob': 'Distância entre o topo externo do tubo e a superfície. Sob pista com tráfego: mínimo 1,00 m; sob passeio: 0,60 m.',
+  'crit.recob': 'Recobrimento mínimo de projeto (topo externo do tubo até a superfície), usado para lançar as cotas. Pode ser reduzido em terreno plano: abaixo do recobrimento sem proteção o programa indica tubo PA-2, laje de proteção ou envelopamento em concreto.',
   'crit.espF': 'Espessura da parede do tubo como fração do diâmetro interno (≈ 0,10·D para tubos de concreto). Usada no recobrimento e nos volumes.',
   'crit.profMaxPV': 'Profundidade a partir da qual o PV exige soluções especiais (escada, chaminé, escoramento reforçado). Usual 3,5 a 4,5 m.',
   'crit.folgaPV': 'Distância mínima entre o nível d\'água calculado no PV e a tampa. Evita que a água suba pela tampa ou pelas bocas-de-lobo.',
@@ -1422,6 +1441,7 @@ const HELP = {
   'ruas.ref': 'Rua com a qual esta se liga ou cruza. Serve para desenhar a planta: a primeira rua fica na origem e as demais são posicionadas a partir dela.',
   'ruas.refDist': 'Estaca da OUTRA rua onde esta começa ou cruza (ex.: 4+00,00).',
   'ruas.ang': 'Ângulo entre esta rua e a outra, medido a partir do sentido do estaqueamento da outra rua: 90 = à esquerda, −90 = à direita, 0 = em continuação, 45 = diagonal.',
+  'ruas.cai': 'Para onde a pista escoa. Abaulada: metade da água vai para cada sarjeta. Um lado: toda a pista (e as quadras dos dois lados) escoa para a sarjeta baixa, e o gerador põe as bocas de lobo só desse lado.',
   'ruas.dist0': 'Estaca DESTA rua no ponto de ligação. 0+0,00 quando a rua começa no cruzamento; outro valor quando ela atravessa a outra rua.',
   'ruas.az': 'Direção da rua inicial na planta, em graus a partir do leste no sentido anti-horário (0 = para a direita, 90 = para cima).',
   'crit.blProf': 'Profundidade interna da caixa da boca-de-lobo (caixa de ralo), do topo ao fundo. Usada para posicionar a saída do ramal no desenho. Usual 0,80 a 1,20 m.',
@@ -1500,7 +1520,7 @@ const HELP = {
 const CRITR = {
   tcMin: [5, 15], nTubo: [0.010, 0.016], nSarj: [0.013, 0.025], gama: [9700, 9850], ymax: [0.08, 0.15], Tmax: [1.0, 4.0],
   Cw: [1.5, 1.8], Co: [2.5, 3.1], ramalDmin: [300, 400], ramalLmax: [10, 20], ramalImin: [0.5, 2.0], dmin: [300, 600],
-  yD: [0.65, 0.85], vmin: [0.5, 0.9], vmax: [4.0, 6.0], tauMin: [0.6, 2.0], imin: [0.3, 1.0], recob: [0.6, 1.5],
+  yD: [0.65, 0.85], vmin: [0.5, 0.9], vmax: [4.0, 6.0], tauMin: [0.6, 2.0], imin: [0.3, 1.0], recob: [0.3, 1.5],
   espF: [0.06, 0.15], profMaxPV: [2.5, 6.0], folgaPV: [0.15, 0.6], valaFolga: [0.2, 0.5], berco: [0.05, 0.2]
 };
 
@@ -1627,14 +1647,14 @@ const FB = {
   'trechos.cm': (v, o) => {
     const r = R.tr[o.id]; if (!r) return null; const c = P.crit, D = r.D / 1000, hmin = c.recob + D + espTr(o);
     if (!isNum(num(v))) return mk('err', 'Informe a cota ou use "Lançar cotas".');
-    if (isNum(r.recM) && r.recM < c.recob - 1e-3) return mk('err', 'Recobrimento ' + f2(r.recM) + ' m < ' + f2(c.recob) + ' m. Aprofunde o tubo.', +(r.tm - hmin).toFixed(3), 'Usar ' + f2(r.tm - hmin, 3));
+    if (isNum(r.recM) && r.recM < c.recob - 1e-3) return mk(r.prot && r.prot.ok ? 'warn' : 'err', 'Recobrimento ' + f2(r.recM) + ' m < ' + f2(c.recob) + ' m. ' + (r.prot && r.prot.ok ? r.prot.nota + ' Ou aprofunde o tubo.' : 'Aprofunde o tubo.'), +(r.tm - hmin).toFixed(3), 'Usar ' + f2(r.tm - hmin, 3));
     return mk('ok', 'Recobrimento ' + f2(r.recM) + ' m · prof. ' + f2(r.tm - v, 2) + ' m');
   },
   'trechos.cj': (v, o) => {
     const r = R.tr[o.id]; if (!r) return null; const c = P.crit, D = r.D / 1000, hmin = c.recob + D + espTr(o), cm = num(o.cm), L = r.L;
     if (!isNum(num(v))) return mk('err', 'Informe a cota ou use "Lançar cotas".');
     if (isNum(cm) && v >= cm) return mk('err', 'Cota de jusante igual ou acima da de montante: o tubo ficaria em aclive.', +(cm - c.imin / 100 * L).toFixed(3), 'Usar i mínima');
-    if (isNum(r.recJ) && r.recJ < c.recob - 1e-3) return mk('err', 'Recobrimento ' + f2(r.recJ) + ' m < ' + f2(c.recob) + ' m.', +(r.tj - hmin).toFixed(3), 'Usar ' + f2(r.tj - hmin, 3));
+    if (isNum(r.recJ) && r.recJ < c.recob - 1e-3) return mk(r.prot && r.prot.ok ? 'warn' : 'err', 'Recobrimento ' + f2(r.recJ) + ' m < ' + f2(c.recob) + ' m.' + (r.prot && r.prot.ok ? ' ' + r.prot.nota : ''), +(r.tj - hmin).toFixed(3), 'Usar ' + f2(r.tj - hmin, 3));
     if (isNum(r.S) && r.S * 100 < c.imin) return mk('warn', 'Declividade ' + f2(r.S * 100, 3) + ' % < mínima ' + f2(c.imin) + ' %.', +(cm - c.imin / 100 * L).toFixed(3), 'Usar i = ' + f2(c.imin) + ' %');
     if (r.Q > 0 && r.h.V < c.vmin) { const s = slopeForV(r.Q, r.D, c.vmin, o); return mk('warn', 'V = ' + f2(r.h.V) + ' m/s < ' + f2(c.vmin) + ' m/s (autolimpeza).' + (s ? ' Com i = ' + f2(s, 3) + ' % atinge o mínimo.' : ''), s ? +(cm - s / 100 * L).toFixed(3) : undefined, s ? 'Usar i = ' + f2(s, 2) + ' %' : ''); }
     if (r.h.V > c.vmax) return mk('err', 'V = ' + f2(r.h.V) + ' m/s > ' + f2(c.vmax, 1) + ' m/s: reduza a declividade e use PV de queda.');
@@ -1914,7 +1934,7 @@ function cellRes(kind, i, key, el) {
       case 'yD': cc(el, h.carga || h.yD > c.yD ? 'err' : isNum(h.yD) ? 'ok' : ''); return h.carga ? 'carga' : fmt(h.yD, 2);
       case 'V': cc(el, !isNum(h.V) || !(r.Q > 0) ? '' : h.V < c.vmin ? 'warn' : h.V > c.vmax ? 'err' : 'ok'); return fmt(h.V, 2);
       case 'tau': cc(el, isNum(r.tau) && r.Q > 0 ? (r.tau >= c.tauMin ? 'ok' : 'warn') : ''); return fmt(r.tau, 2);
-      case 'rec': cc(el, (isNum(r.recM) && r.recM < c.recob - 1e-3) || (isNum(r.recJ) && r.recJ < c.recob - 1e-3) ? 'err' : ''); return fmt(r.recM, 2) + ' / ' + fmt(r.recJ, 2);
+      case 'rec': cc(el, r.prot && !r.prot.ok ? 'err' : (isNum(r.recM) && r.recM < c.recob - 1e-3) || (isNum(r.recJ) && r.recJ < c.recob - 1e-3) || (r.prot && r.prot.nec !== 'pa1') ? 'warn' : ''); return fmt(r.recM, 2) + ' / ' + fmt(r.recJ, 2);
       case 'NA': { const pv = R.pv[o.m]; const f = pv && pv.folga; cc(el, !isNum(f) ? '' : f < 0 ? 'err' : f < c.folgaPV ? 'warn' : 'ok'); return pv && isNum(pv.H) && pv.H > -1e8 ? fmt(pv.H, 2) + ' <small>(' + fmt(f, 2) + ')</small>' : '—'; }
     }
   }
@@ -1996,7 +2016,7 @@ function vProjeto() {
       ${fld('crit.dmin', 'Ø mínimo admitido (mm)', {type: 'sel', num: true, opts: optsD()})}${fld('crit.yD', 'y/D máximo', {step: 0.05})}
       ${fld('crit.vmin', 'V mínima (m/s)', {step: 0.05})}${fld('crit.vmax', 'V máxima (m/s)', {step: 0.1})}
       ${fld('crit.tauMin', 'τ mínima (Pa)', {step: 0.1})}${fld('crit.imin', 'Declividade mín. (%)', {step: 0.05})}
-      ${fld('crit.recob', 'Recobrimento mín. (m)', {step: 0.05})}${fld('crit.tcMin', 'tc mínimo (min)', {step: 1})}</div>
+      ${fld('crit.recob', 'Recobrimento mín. (m)', {step: 0.05})}${fld('crit.recPA1', 'Rec. sem proteção, tubo PA-1 (m)', {step: 0.05})}${fld('crit.recPA2', 'Rec. mín. com tubo PA-2 (m)', {step: 0.05})}${fld('crit.recLaje', 'Rec. mín. com laje de proteção (m)', {step: 0.05})}${fld('crit.recEnv', 'Rec. mín. envelopado em concreto (m)', {step: 0.05})}${fld('crit.tcMin', 'tc mínimo (min)', {step: 1})}</div>
     <div class="section-title">Poços de visita, vala e outros</div><div class="fgrid">
       ${fld('crit.profMaxPV', 'Prof. máx. de PV (m)', {step: 0.1})}${fld('crit.folgaPV', 'Folga NA → tampa (m)', {step: 0.05})}
       ${fld('crit.espF', 'Parede do tubo (× D)', {step: 0.01})}${fld('crit.valaFolga', 'Folga lateral vala (m)', {step: 0.05})}
@@ -2035,7 +2055,7 @@ function vRuas() {
   const ruas = P.ruas.map((r, i) => `<div class="item" id="it-ruas-${i}"><div class="item-h"><span class="t">${esc(r.nome || r.id)}</span><span class="sp"></span>
     <button class="btn-icon" title="Excluir" onclick="delItem('ruas',${i})">✕</button></div><div class="item-b"><div class="fgrid">
     ${fld(`ruas.${i}.id`, 'Código', {type: 'txt'})}${fld(`ruas.${i}.nome`, 'Nome da rua', {type: 'txt', w2: true})}
-    ${fld(`ruas.${i}.larg`, 'Largura da pista (m)', {step: 0.1})}${fld(`ruas.${i}.passeio`, 'Passeio (m/lado)', {step: 0.1})}${fld(`ruas.${i}.it`, 'Inclinação transversal (%)', {step: 0.5})}
+    ${fld(`ruas.${i}.larg`, 'Largura da pista (m)', {step: 0.1})}${fld(`ruas.${i}.passeio`, 'Passeio (m/lado)', {step: 0.1})}${fld(`ruas.${i}.it`, 'Inclinação transversal (%)', {step: 0.5})}${fld(`ruas.${i}.cai`, 'Caimento da pista', {type: 'sel', opts: [['', 'Dois lados (abaulada)'], ['E', 'Um lado — para a esquerda'], ['D', 'Um lado — para a direita']]})}
     </div><div class="section-title">Meio-fio e sarjeta</div><div class="fgrid">
     ${fld(`ruas.${i}.mf`, 'Tipo de meio-fio', {type: 'sel', w2: true, opts: Object.entries(MEIOFIO).map(([k, v]) => [k, v.nome])})}
     ${fld(`ruas.${i}.mfH`, 'Espelho do meio-fio (m)', {step: 0.01})}${fld(`ruas.${i}.sjW`, 'Largura da sarjeta (m)', {step: 0.05, ph: '0 = sem sarjeta'})}${(num(r.sjW) || 0) > 0 ? fld(`ruas.${i}.sjI`, 'Caimento da sarjeta (%)', {step: 0.5}) : ''}
@@ -2173,7 +2193,9 @@ function vRede() {
     {h: 'Cota inf. mont.', u: 'm', p: 'cm', o: {step: 0.001}, w: 86, k: 'trechos.cm'},
     {h: 'Cota inf. jus.', u: 'm', p: 'cj', o: {step: 0.001}, w: 86, k: 'trechos.cj'},
     {h: 'Decl.', u: '%', res: 'S'}, {h: 'Q plena', u: 'L/s', res: 'Qp'}, {h: 'y/D', res: 'yD'}, {h: 'V', u: 'm/s', res: 'V'}, {h: 'τ', u: 'Pa', res: 'tau'},
-    {h: 'Recobr. m / j', u: 'm', res: 'rec'}, {h: 'NA PV mont.', u: 'm (folga)', res: 'NA'}
+    {h: 'Recobr. m / j', u: 'm', res: 'rec'},
+    {h: 'Proteção do tubo', u: 'conforme o recobrimento', p: (o, i) => galOf(o) ? null : `trechos.${i}.prot`, o: o => ({type: 'sel', opts: optsProt(o)}), w: 230, k: 'trechos.prot'},
+    {h: 'NA PV mont.', u: 'm (folga)', res: 'NA'}
   ], (o, i) => fld(`trechos.${i}.tcL`, 'tc da área do trecho (min)', {step: 1, ph: 'tc mínimo'}) + (galOf(o)
       ? (fld(`trechos.${i}.galB`, 'Aduela — largura interna B (m)', {step: 0.05}) + fld(`trechos.${i}.galH`, 'Aduela — altura interna H (m)', {step: 0.05})).replace(/data-p="trechos\.(\d+)\.gal([BH])"/g, 'data-full="1" data-p="trechos.$1.gal$2"') + fld(`trechos.${i}.galN`, 'Nº de células lado a lado', {type: 'sel', num: true, opts: [[1, '1 célula'], [2, '2 células'], [3, '3 células'], [4, '4 células']]}) + fld(`trechos.${i}.galE`, 'Espessura das paredes e lajes (m)', {step: 0.01, ph: fmt(galEspPad(galOf(o).B, galOf(o).H), 2) + ' (padrão)'}).replace('data-p=', 'data-full="1" data-p=')
       : fld(`trechos.${i}.mat`, 'Tubo (NBR 8890)', {type: 'sel', opts: MATS})) + `<div class="res" data-res="tr-${i}" style="grid-column:1/-1"></div>`)}
@@ -3249,7 +3271,7 @@ function autoCotas(silencioso) {
     if (num(t.iFix) > 0) iLow = Math.max(iLow, num(t.iFix) / 100);
     if (r && r.Q > 0) {
       if (r.h && r.h.R > 0) iLow = Math.max(iLow, c.tauMin / (c.gama * r.h.R));
-      const sx = slopeForVmax(r.Q, num(t.D), c.vmax); if (sx) iHigh = sx / 100;
+      const sx = slopeForVmax(r.Q, num(t.D), c.vmax * 0.99); if (sx) iHigh = sx / 100;   // 1 % de folga: as cotas são arredondadas ao milímetro
     }
     if (iHigh < iLow) iHigh = iLow;
     const iT = (tm - tj) / L;
@@ -3547,6 +3569,7 @@ function orcamento() {
   P.trechos.forEach(t => {
     const r = R.tr[t.id]; if (!r || !(r.L > 0)) return;
     if (r.gal) add('gal:' + r.gal.N + ':' + r.gal.B.toFixed(2) + ':' + r.gal.H.toFixed(2) + ':' + r.gal.e.toFixed(2), r.L); else add('tubo:' + t.D, r.L);
+    if (!r.gal && r.prot && r.prot.usa !== 'pa1') { const pq = protQuant(t, r); add(pq.k, pq.q); }
     if (r.vala) {
       const h = (r.vala.hM + r.vala.hJ) / 2, B = r.vala.B, hb = bandaH(h), wb = bandaB(B);
       const Vb = B * c.berco * r.L;
@@ -3565,18 +3588,19 @@ function orcamento() {
   });
   orcAlas(add);
   const L = Object.values(linhas).map(x => Object.assign(x, {total: x.q * (x.p.preco || 0)}));
-  const ordem = ['tubo', 'gal', 'esc', 'berco', 'reat', 'escor', 'pvbase', 'pvacr', 'bl', 'ala'];
+  const ordem = ['tubo', 'prot', 'gal', 'esc', 'berco', 'reat', 'escor', 'pvbase', 'pvacr', 'bl', 'ala'];
   L.sort((a, b) => ordem.indexOf(a.k.split(':')[0]) - ordem.indexOf(b.k.split(':')[0]) || a.k.localeCompare(b.k, 'pt', {numeric: true}));
   const sub = L.reduce((s, x) => s + x.total, 0), bdi = +cfg.bdi || 0;
   return {linhas: L, sub, bdi, total: sub * (1 + bdi / 100), comBanco: Object.keys(cfg.precos || {}).length > 0};
 }
 const nomeItem = k => {
   const [tp, a, b, c2, d] = k.split(':');
+  if (tp === 'prot') return PROT_ITEM[a] + (a === 'pa2' ? ' Ø' + b + ' mm' : '');
   if (tp === 'gal') return 'Galeria celular em aduelas pré-moldadas ' + (+a > 1 ? a + ' células ' : '') + fmt(+b, 2) + ' × ' + fmt(+c2, 2) + ' m (e = ' + fmt(+d, 2) + ' m), fornecimento e assentamento';
   if (tp === 'ala') return ALA_NOME[a] || k;
   const r = regras(custosCfg()).find(x => x.k === k); return r ? r.nome : k;
 };
-const unidItem = k => k.startsWith('ala:') ? ALA_UN[k.split(':')[1]] : ({tubo: 'm', gal: 'm', esc: 'm³', reat: 'm³', escor: 'm²', berco: 'm³', pvbase: 'un', pvacr: 'm', bl: 'un'})[k.split(':')[0]];
+const unidItem = k => k.startsWith('ala:') ? ALA_UN[k.split(':')[1]] : k.startsWith('prot:') ? (k.split(':')[1] === 'pa2' ? 'm' : 'm³') : ({tubo: 'm', gal: 'm', esc: 'm³', reat: 'm³', escor: 'm²', berco: 'm³', pvbase: 'un', pvacr: 'm', bl: 'un'})[k.split(':')[0]];
 
 /* -------- aba Custos -------- */
 function vCustos() {
@@ -4350,6 +4374,7 @@ orcamento = function () {
   P.trechos.forEach(t => {
     const r = R.tr[t.id]; if (!r || !(r.L > 0)) return;
     if (r.gal) add('gal:' + r.gal.N + ':' + r.gal.B.toFixed(2) + ':' + r.gal.H.toFixed(2) + ':' + r.gal.e.toFixed(2), r.L); else add('tubo:' + t.D, r.L);
+    if (!r.gal && r.prot && r.prot.usa !== 'pa1') { const pq = protQuant(t, r); add(pq.k, pq.q); }
     if (r.vala) {
       const h = (r.vala.hM + r.vala.hJ) / 2, B = r.vala.B, hb = bandaH(h), wb = bandaB(B);
       const Vb = B * c.berco * r.L;
@@ -4369,7 +4394,7 @@ orcamento = function () {
   });
   orcAlas(add);
   const L = Object.values(linhas).map(x => Object.assign(x, {total: x.q * (x.p.preco || 0)}));
-  const ordem = ['tubo', 'gal', 'esc', 'berco', 'reat', 'escor', 'pvbase', 'pvacr', 'bl', 'ala'];
+  const ordem = ['tubo', 'prot', 'gal', 'esc', 'berco', 'reat', 'escor', 'pvbase', 'pvacr', 'bl', 'ala'];
   L.sort((a, b) => ordem.indexOf(a.k.split(':')[0]) - ordem.indexOf(b.k.split(':')[0]) || a.k.localeCompare(b.k, 'pt', {numeric: true}));
   const sub = L.reduce((s, x) => s + x.total, 0), bdi = +cfg.bdi || 0;
   return {linhas: L, sub, bdi, total: sub * (1 + bdi / 100), comBanco: Object.keys(cfg.precos || {}).length > 0};
@@ -4532,6 +4557,7 @@ orcamento = function () {
   P.trechos.forEach(t => {
     const r = R.tr[t.id]; if (!r || !(r.L > 0)) return;
     if (r.gal) add('gal:' + r.gal.N + ':' + r.gal.B.toFixed(2) + ':' + r.gal.H.toFixed(2) + ':' + r.gal.e.toFixed(2), r.L); else add('tubo:' + t.D, r.L);
+    if (!r.gal && r.prot && r.prot.usa !== 'pa1') { const pq = protQuant(t, r); add(pq.k, pq.q); }
     if (r.vala) terra(r.vala.V, r.vala.Vb != null ? r.vala.Vb : r.vala.B * c.berco * r.L, r.vala.reat != null ? r.vala.reat : 0, (r.vala.hM + r.vala.hJ) / 2, r.vala.B, r.vala.escor != null ? r.vala.escor : 0);
   });
   P.bls.forEach(b => {
@@ -4550,7 +4576,7 @@ orcamento = function () {
   });
   orcAlas(add);
   const L = Object.values(linhas).map(x => Object.assign(x, {total: x.q * (x.p.preco || 0)}));
-  const ordem = ['tubo', 'gal', 'esc', 'berco', 'reat', 'escor', 'pvbase', 'pvacr', 'bl', 'ala'];
+  const ordem = ['tubo', 'prot', 'gal', 'esc', 'berco', 'reat', 'escor', 'pvbase', 'pvacr', 'bl', 'ala'];
   L.sort((a, b) => ordem.indexOf(a.k.split(':')[0]) - ordem.indexOf(b.k.split(':')[0]) || a.k.localeCompare(b.k, 'pt', {numeric: true}));
   const sub = L.reduce((s, x) => s + x.total, 0), bdi = +cfg.bdi || 0;
   return {linhas: L, sub, bdi, total: sub * (1 + bdi / 100), comBanco: Object.keys(cfg.precos || {}).length > 0};
@@ -4724,10 +4750,11 @@ function itensLic(sol, bank) {
   const esp = +c.espF || 0.10, so = q.solo, s = sol.sobra, eA = +lic.esp || 0.05;
   const L = [], add = (g, nome, un, qv, cod, memo, qb) => { if (qv > 1e-6) L.push({g, nome, un, q: qv, cod, memo, qb: qb || {}}); };
   let Lrede = 0, Lram = 0, area = 0, Venv = 0, hw = 0, hl = 0, Bmax = 0;
-  const tubos = {}, galL = {};
+  const tubos = {}, galL = {}, protV = {};
   P.trechos.forEach(t => {
     const r = R.tr[t.id]; if (!r || !(r.L > 0)) return;
-    Lrede += r.L; if (r.gal) { const k = galNome(r.gal) + ' · e ' + fmt(r.gal.e, 2) + ' m'; galL[k] = (galL[k] || 0) + r.L; } else { const k = sol.classe.rede + ':' + (+t.D); tubos[k] = (tubos[k] || 0) + r.L; }
+    Lrede += r.L; if (r.gal) { const k = galNome(r.gal) + ' · e ' + fmt(r.gal.e, 2) + ' m'; galL[k] = (galL[k] || 0) + r.L; } else { const k = (r.prot && r.prot.usa === 'pa2' && sol.classe.rede === 'PA-1' ? 'PA-2' : sol.classe.rede) + ':' + (+t.D); tubos[k] = (tubos[k] || 0) + r.L;
+      if (r.prot && (r.prot.usa === 'laje' || r.prot.usa === 'env')) { const pq = protQuant(t, r); protV[r.prot.usa] = (protV[r.prot.usa] || 0) + pq.q; } }
     if (r.vala) {
       area += r.vala.L * (r.vala.B + 2 * s); hw += r.vala.L * (r.vala.hM + r.vala.hJ) / 2; hl += r.vala.L; Bmax = Math.max(Bmax, r.vala.B);
       if (sol.env) { const hE = r.gal ? r.gal.H + 2 * r.gal.e : deTr(t); Venv += Math.max(0, r.vala.L * r.vala.B * (hE + 0.30) - (r.vala.tubo || 0)); }
@@ -4780,6 +4807,7 @@ function itensLic(sol, bank) {
   });
   Object.entries(galL).forEach(([k, m]) => add(g[4], 'Galeria celular em aduelas pré-moldadas de concreto armado ' + k + ', fornecimento e assentamento', 'm', m,
     {emop: null, sinapi: {re: [/ADUELA|GALERIA CELULAR/]}, sco: {re: [/[Aa]duela|[Gg]aleria celular/]}}, 'Comprimento dos trechos em galeria ' + k + ' (composição a confirmar no banco; sem código encontrado entra sem preço)'));
+  ['laje', 'env'].forEach(k => add(g[4], PROT_ITEM[k], 'm³', protV[k] || 0, {emop: null, sinapi: null, sco: null}, PROT_MEMO[k]));
   itensAlasLic(add, g[4]);
   /* 6. PVs */
   P.pvs.forEach(pv => {
@@ -5260,5 +5288,273 @@ function alasMemorial(H, T, tr) {
     return `<p><b>${esc(id)}</b></p>` + T(['Item', 'Valor'], quadroAla(a).map(([x, y]) => tr([esc(x), esc(y)]))) + `<div class="fig">${svgAla(id, pal(true))}</div>`; }).join('') +
     '<p style="font-size:.75rem;color:#555">Testa: altura do conduto + parede + 0,30 m. Alas pelo talude 1:m (projeção = (H − 0,30)·m). Enrocamento: D50 = V²/(2g·C²·Δ), Isbash, C = 0,86; comprimento pelo HEC-14 (FHWA). V > 4,5 m/s: bacia de dissipação.</p>';
 }
+
+/* =====================================================================
+   PATCH DR-04 (20/10/2026) — Gerar a drenagem pela topografia (3 opções)
+   Com ruas, estacas e cotas do greide cadastradas, o programa projeta a
+   rede inteira: cruzamentos achados pela planta, captações espaçadas pela
+   capacidade da sarjeta (Izzard + fator F do DAEE + engolimento do
+   dispositivo), bacias por quadra + meia pista, PVs nas captações, nos
+   cruzamentos e a cada espaçamento máximo, traçado seguindo o greide até
+   o lançamento (caminho de menor aprofundamento), cotas, diâmetros,
+   correção automática e PVs EMOP. Monta 3 opções com custo; a escolhida
+   vira o projeto e pode ser editada normalmente.
+   ===================================================================== */
+const GER_OP = [
+  {k: 'min', nome: 'Opção 1 — Mínima', curto: 'Mínima', modelo: 'bls-pm', uso: 1.0, esp: 100,
+    desc: 'Bocas de lobo simples de guia, espaçadas no limite da sarjeta (lâmina, largura alagada e vazão admissível) e PVs a cada 100 m no máximo. Menos peças.'},
+  {k: 'rec', nome: 'Opção 2 — Recomendada', curto: 'Recomendada', modelo: 'bld-pm', uso: 0.8, esp: 80,
+    desc: 'Bocas de lobo duplas de guia, usando até 80 % da capacidade da sarjeta, e PVs a cada 80 m no máximo. Equilíbrio entre custo e folga.'},
+  {k: 'fol', nome: 'Opção 3 — Folgada', curto: 'Folgada', modelo: 'blc-pm', uso: 0.6, esp: 60,
+    desc: 'Bocas de lobo combinadas (guia + grelha), usando até 60 % da capacidade da sarjeta, e PVs a cada 60 m no máximo. Menos água na rua.'}
+];
+let GER = {lote: 30, C: 0.70, saida: '', ops: null, ver: 'rec', base: null};
+
+/* ruas com greide utilizável e seus extremos */
+function gerRuas() {
+  return P.ruas.map(r => { const es = estacasRua(r.id).filter(e => isNum(num(e.cota))); return es.length >= 2 ? {r, s0: es[0].dist, s1: es[es.length - 1].dist, es} : null; }).filter(Boolean);
+}
+/* cruzamentos pela geometria da planta (reta de cada rua) */
+function gerCruzamentos(G, rs) {
+  const J = [];
+  for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) {
+    const a = rs[i], b = rs[j], ga = G[a.r.id], gb = G[b.r.id]; if (!ga || !gb) continue;
+    const pa = ga.at(0), pb = gb.at(0), cr = ga.ux * gb.uy - ga.uy * gb.ux; if (Math.abs(cr) < 1e-6) continue;
+    const dx = pb.x - pa.x, dy = pb.y - pa.y, sA = (dx * gb.uy - dy * gb.ux) / cr, sB = (dx * ga.uy - dy * ga.ux) / cr;
+    if (sA < a.s0 - 3 || sA > a.s1 + 3 || sB < b.s0 - 3 || sB > b.s1 + 3) continue;
+    J.push({a: a.r.id, sA: Math.min(Math.max(sA, a.s0), a.s1), b: b.r.id, sB: Math.min(Math.max(sB, b.s0), b.s1)});
+  }
+  return J;
+}
+/* maior vazão que uma captação recebe sem passar dos limites da sarjeta e do dispositivo */
+function gerQlim(rua, S, modelo) {
+  const c = P.crit, g = geomSarjeta(rua, null), n = +c.nSarj || 0.016, Sp = S * 100;
+  const bl = {a: 0.05, ga: 60}; aplicaModelo(Object.assign(bl, {modelo}));
+  const Qadm = fatorSarjeta(Sp) * sarjQT(sarjTy(g.ymax, g), g, n, S), QT = sarjQT(c.Tmax, g, n, S);
+  const ok = Q => { const y = sarjY(sarjT(Q, g, n, S), g); return Q <= bl.fr * blCapacidade(bl, Math.min(y, 0.5)).q; };
+  let lo = 0, hi = Math.min(Qadm, QT);
+  if (ok(hi)) return hi;
+  for (let k = 0; k < 50; k++) { const m = (lo + hi) / 2; if (ok(m)) lo = m; else hi = m; }
+  return lo;
+}
+/* monta um projeto completo para a opção op a partir de P (ruas, estacas, critérios, chuva) */
+function gerProjeto(op) {
+  const c = P.crit, base = JSON.parse(JSON.stringify(P));
+  base.bacias = []; base.bls = []; base.pvs = []; base.trechos = [];
+  const P0 = P; P = base;
+  try {
+    const rs = gerRuas(), G = geoRuas(), J = gerCruzamentos(G, rs);
+    const tc = Math.max(c.tcMin, 5), iMm = idf(tc), C = num(GER.C) || 0.7, lote = num(GER.lote) || 0;
+    const nodes = [], nodeAt = (rua, s) => { const L = nodes.filter(n => n.pts.some(p => p.rua === rua && Math.abs(p.s - s) < 1.5)); return L[0] || null; };
+    const addNode = (rua, s, extra) => { let n = nodeAt(rua, s); if (!n) { n = {pts: [{rua, s}], cap: false, cruz: false}; nodes.push(n); } if (extra) Object.assign(n, extra); return n; };
+    J.forEach(j => { const n = addNode(j.a, j.sA, {cruz: true}); if (!n.pts.some(p => p.rua === j.b)) n.pts.push({rua: j.b, s: j.sB}); });
+    // captações por trecho de sarjeta (entre pontos altos/baixos e cruzamentos)
+    const caps = [];
+    rs.forEach(({r, s0, s1, es}) => {
+      const br = new Set([s0, s1]);
+      for (let k = 1; k < es.length - 1; k++) { const d1 = es[k].cota - es[k - 1].cota, d2 = es[k + 1].cota - es[k].cota; if (d1 * d2 < 0) br.add(es[k].dist); }
+      J.forEach(j => { if (j.a === r.id) br.add(j.sA); if (j.b === r.id) br.add(j.sB); });
+      const pts = [...br].sort((x, y) => x - y).filter((s, k, a) => k === 0 || s - a[k - 1] > 1.5);
+      const um = r.cai === 'E' || r.cai === 'D', lados = um ? [r.cai] : ['E', 'D'];   // pista com caimento para um lado: toda a água vai para a sarjeta baixa
+      const w = um ? (num(r.larg) || 7) + 2 * ((num(r.passeio) || 0) + lote) : (num(r.larg) || 7) / 2 + (num(r.passeio) || 0) + lote;
+      for (let k = 0; k < pts.length - 1; k++) {
+        const a = pts[k], b = pts[k + 1], za = greideCota(r.id, a), zb = greideCota(r.id, b), Lr = b - a;
+        const baixo = za >= zb ? b : a, dir = za >= zb ? -1 : 1;           // dir: sentido de montante a partir do ponto baixo
+        const S = Math.max(Math.abs(za - zb) / Lr, 0.003);
+        const Qlim = op.uso * gerQlim(r, S, op.modelo), qm = C * iMm * (w / 10000) / 360;   // m³/s por metro de sarjeta
+        const n = Math.ceil(Lr / Math.max(10, Math.min(Lr, Qlim / qm)) - 1e-6), Lcap = Lr / n;   // espaçamento igual dentro do trecho
+        let prev = {};
+        for (let i = 0; i < n; i++) {
+          const s = +(baixo + dir * i * Lcap).toFixed(1), vao = Lcap, cur = {};
+          lados.forEach(lado => { const x = {rua: r.id, s, lado, A: w * vao / 10000, prox: prev[lado] || null}; caps.push(x); cur[lado] = x; });
+          prev = cur; addNode(r.id, s, {cap: true});
+        }
+      }
+    });
+    // junta captações no mesmo ponto e lado (ponto baixo com água dos dois lados)
+    const capU = [];
+    caps.forEach(x => { const y = capU.find(u => u.rua === x.rua && u.lado === x.lado && Math.abs(u.s - x.s) < 1.5); if (y) { y.A += x.A; x.dup = y; } else capU.push(x); });
+    capU.forEach(x => { while (x.prox && x.prox.dup) x.prox = x.prox.dup; });
+    // PVs intermediários pelo espaçamento máximo
+    rs.forEach(({r}) => {
+      const ss = nodes.flatMap(n => n.pts.filter(p => p.rua === r.id).map(p => p.s)).sort((x, y) => x - y);
+      for (let k = 0; k < ss.length - 1; k++) { const g = ss[k + 1] - ss[k], m = Math.ceil(g / op.esp - 1e-6); for (let q = 1; q < m; q++) addNode(r.id, +(ss[k] + g * q / m).toFixed(1)); }
+    });
+    // lançamento: o escolhido ou o ponto mais baixo da rede
+    let out = null;
+    if (GER.saida) { const [ru, s] = GER.saida.split('@'); out = addNode(ru, +s); }
+    nodes.forEach(n => { n.z = greideCota(n.pts[0].rua, n.pts[0].s); });
+    if (!out) out = nodes.filter(n => n.cap || n.cruz).sort((x, y) => x.z - y.z)[0];
+    if (!out) return null;
+    // arestas entre nós vizinhos na mesma rua
+    const adj = new Map(nodes.map(n => [n, []]));
+    rs.forEach(({r}) => {
+      const L = nodes.flatMap(n => n.pts.filter(p => p.rua === r.id).map(p => ({n, s: p.s}))).sort((x, y) => x.s - y.s);
+      for (let k = 0; k < L.length - 1; k++) if (L[k].n !== L[k + 1].n) { const e = {rua: r.id, L: L[k + 1].s - L[k].s}; adj.get(L[k].n).push(Object.assign({to: L[k + 1].n}, e)); adj.get(L[k + 1].n).push(Object.assign({to: L[k].n}, e)); }
+    });
+    // árvore de menor custo até o lançamento: extensão + penalidade por subir contra o greide
+    const dist = new Map([[out, 0]]), par = new Map(), fila = [out], feito = new Set();
+    while (fila.length) {
+      fila.sort((a, b) => dist.get(a) - dist.get(b)); const v = fila.shift(); if (feito.has(v)) continue; feito.add(v);
+      adj.get(v).forEach(e => { const u = e.to, cst = dist.get(v) + e.L + 40 * Math.max(0, v.z - u.z);
+        if (!feito.has(u) && (!dist.has(u) || cst < dist.get(u))) { dist.set(u, cst); par.set(u, {to: v, rua: e.rua, L: e.L}); fila.push(u); } });
+    }
+    // poda: nós sem captação e sem nada chegando
+    const vivos = new Set(nodes.filter(n => dist.has(n)));
+    let mud = true;
+    while (mud) { mud = false; vivos.forEach(n => { if (n === out || n.cap) return; const filhos = [...vivos].some(u => par.get(u) && par.get(u).to === n); if (!filhos) { vivos.delete(n); mud = true; } }); }
+    const ordR = id => P.ruas.findIndex(r => r.id === id);
+    const lista = [...vivos].sort((a, b) => ordR(a.pts[0].rua) - ordR(b.pts[0].rua) || a.pts[0].s - b.pts[0].s);
+    lista.forEach((n, k) => { n.id = 'PV-' + String(k + 1).padStart(2, '0'); });
+    const nomeRua = id => (ruaById(id) || {}).nome || id;
+    lista.forEach(n => {
+      const ins = lista.filter(u => par.get(u) && par.get(u).to === n), o = par.get(n);
+      let defl = 'reta';
+      if (n !== out) { if (!ins.length) defl = 'ini'; else if (ins.length === 1) defl = par.get(ins[0]).rua === o.rua ? 'reta' : 'd90'; else defl = ins.length === 2 ? 'T' : 'X'; }
+      base.pvs.push({id: n.id, rua: n.pts[0].rua, dist: n.pts[0].s, tipo: EMOP_TIPO, modelo: 'emop', dpv: 1000, tampaCl: TAMPAS[0], tampa: '', defl, na: '', pvL: '', pvHi: '',
+        obs: (n === out ? 'Lançamento' : '') + (n.cruz ? (n === out ? ' · ' : '') + 'Cruzamento ' + n.pts.map(p => nomeRua(p.rua)).join(' × ') : '')});
+    });
+    let nt = 0;
+    lista.filter(n => n !== out).sort((a, b) => dist.get(b) - dist.get(a)).forEach(n => { const o = par.get(n);
+      base.trechos.push({id: 'T' + (++nt), m: n.id, j: o.to.id, L: +o.L.toFixed(2), D: c.dmin, cm: '', cj: '', mat: MATS[1], aL: '', cL: '', tcL: ''}); });
+    // captações, ramais e bacias
+    let nb = 0;
+    const ordC = capU.slice().sort((a, b) => ordR(a.rua) - ordR(b.rua) || a.s - b.s || (a.lado < b.lado ? -1 : 1));
+    ordC.forEach(x => { x.id = 'BL-' + String(++nb).padStart(2, '0'); });
+    ordC.forEach((x, k) => {
+      const rua = ruaById(x.rua) || {}, pv = lista.find(n => n.pts.some(p => p.rua === x.rua && Math.abs(p.s - x.s) < 1.5));
+      const b = {id: x.id, modelo: op.modelo, rua: x.rua, dist: x.s, lado: x.lado, a: 0.05, gL: 0.9, gB: 0.4, ga: 60, S: '', z: '', prox: x.prox ? x.prox.id : '', pv: pv ? pv.id : '',
+        rL: +((num(rua.larg) || 7) / 2 + 1).toFixed(1), rD: c.ramalDmin || 400, rI: 2.0};
+      aplicaModelo(b); base.bls.push(b);
+      base.bacias.push({id: 'B' + (k + 1), nome: 'Quadra + meia pista — ' + nomeRua(x.rua) + ' est. ' + estLabel(x.s) + ' (' + (x.lado === 'D' ? 'dir.' : 'esq.') + ')', A: +x.A.toFixed(4), C, dest: x.id, tcMode: 'man', tc, kL: '', kH: ''});
+    });
+    base.proj.obs = (base.proj.obs ? base.proj.obs + '\n' : '') + 'Rede gerada pela topografia — ' + op.nome + ' (lote ' + fmt(lote, 0) + ' m, C = ' + fmt(C, 2) + ').';
+    // dimensiona e corrige sem abrir janelas
+    gerSemUI(() => { autoCotas(true); calc(); autoDimensionar(); autoCorrigir(); calc(); });
+    const pj = P;   // a correção automática pode trocar o objeto do projeto
+    const ext = pj.trechos.reduce((s, t) => s + (num(t.L) || 0), 0);
+    const maior = pj.trechos.reduce((m, t) => galOf(t) ? m : Math.max(m, num(t.D) || 0), 0);
+    const info = {nPV: pj.pvs.length, nBL: pj.bls.length, nTr: pj.trechos.length, ext, maior: pj.trechos.some(galOf) ? 'galeria de aduelas' : 'Ø ' + maior + ' mm',
+      prof: Math.max(0, ...pj.pvs.map(p => (R.pv[p.id] || {}).prof || 0)), e: R.checks.filter(x => x.st === 'err').length, w: R.checks.filter(x => x.st === 'warn').length,
+      custo: custoRede().total, saida: out.id + ' — ' + nomeRua(out.pts[0].rua) + ' est. ' + estLabel(out.pts[0].s)};
+    return {p: pj, info};
+  } finally { P = P0; calc(); }
+}
+function gerSemUI(fn) {
+  const sv = {save, renderTab, toast, relatorioCorrecao}, nada = () => {};
+  save = nada; renderTab = nada; toast = nada; relatorioCorrecao = nada;
+  try { fn(); } finally { save = sv.save; renderTab = sv.renderTab; toast = sv.toast; relatorioCorrecao = sv.relatorioCorrecao; }
+}
+/* pontos candidatos a lançamento: extremos das ruas, do mais baixo para o mais alto */
+function gerSaidas() {
+  return gerRuas().flatMap(({r, s0, s1}) => [s0, s1].map(s => ({k: r.id + '@' + s, z: greideCota(r.id, s), t: r.nome + ' est. ' + estLabel(s)}))).sort((a, b) => a.z - b.z);
+}
+function garantirModalGer() {
+  if ($('modal-ger')) return;
+  const d = document.createElement('div'); d.className = 'modal-backdrop'; d.id = 'modal-ger';
+  d.innerHTML = `<div class="modal" style="max-width:1120px">
+    <div class="modal-header"><h3>🧭 Gerar a drenagem pela topografia — 3 opções</h3><button class="btn-icon" onclick="closeModal('modal-ger')">✕</button></div>
+    <div class="modal-body" id="ger-body"></div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-ger')">Fechar</button></div></div>`;
+  document.body.appendChild(d);
+}
+function abrirGerador() {
+  const rs = gerRuas();
+  if (!rs.length) { toast('Cadastre as ruas e as estacas com a cota do greide (aba 3) antes de gerar a rede.'); showTab('ruas'); return; }
+  garantirModalGer(); openModal('modal-ger'); GER.ops = null; gerTela();
+}
+function gerSet(k, v) { GER[k] = v; GER.ops = null; gerTela(); }
+function gerTela() {
+  const sai = gerSaidas(), tem = P.pvs.length || P.trechos.length || P.bls.length;
+  const opc = `<option value="">Automático — ponto mais baixo (${sai[0] ? esc(sai[0].t) + ', cota ' + fmt(sai[0].z, 2) : '—'})</option>` + sai.map(s => `<option value="${esc(s.k)}"${GER.saida === s.k ? ' selected' : ''}>${esc(s.t)} — cota ${fmt(s.z, 2)}</option>`).join('');
+  let res = '';
+  if (GER.ops) {
+    const card = (op, x) => !x ? `<div class="card"><h4>${esc(op.nome)}</h4><div class="msg err">✕ <span>Não foi possível gerar esta opção.</span></div></div>` :
+      `<div class="card" style="${GER.ver === op.k ? 'outline:2px solid var(--agua)' : ''}"><h4>${esc(op.nome)}</h4><p style="font-size:.8rem;color:var(--muted);margin:.2rem 0 .6rem">${esc(op.desc)}</p>
+      <table style="font-size:.85rem;width:100%"><tbody>
+      <tr><td>Poços de visita</td><td class="td-num"><b>${x.info.nPV}</b></td></tr><tr><td>Bocas de lobo</td><td class="td-num"><b>${x.info.nBL}</b></td></tr>
+      <tr><td>Extensão da rede</td><td class="td-num"><b>${fmt(x.info.ext, 1)} m</b></td></tr><tr><td>Maior seção</td><td class="td-num"><b>${esc(x.info.maior)}</b></td></tr>
+      <tr><td>PV mais fundo</td><td class="td-num"><b>${fmt(x.info.prof, 2)} m</b></td></tr>
+      <tr><td>Verificação</td><td class="td-num">${x.info.e ? `<span class="badge badge-err">${x.info.e} erro(s)</span>` : '<span class="badge badge-ok">sem erros</span>'}${x.info.w ? ` <span class="badge badge-warn">${x.info.w} alerta(s)</span>` : ''}</td></tr>
+      <tr><td>Custo estimado da rede</td><td class="td-num" style="color:var(--agua)"><b>${R$L(x.info.custo)}</b></td></tr></tbody></table>
+      <p style="font-size:.75rem;color:var(--muted);margin:.4rem 0">Lançamento: ${esc(x.info.saida)}</p>
+      <div class="bar-btns" style="margin:.4rem 0 0"><button class="btn btn-primary btn-sm" onclick="gerUsar('${op.k}')">✓ Usar esta opção</button></div></div>`;
+    res = `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:.8rem;margin-top:.9rem">${GER_OP.map((op, i) => card(op, GER.ops[i])).join('')}</div>
+      <p class="hint" style="font-size:.75rem;color:var(--muted);margin-top:.6rem">Custo da rede pelos preços da aba Custos (tubos, escavação, PVs e ramais). Depois de escolher, use <b>💰 3 soluções com orçamento</b> para a planilha EMOP, SINAPI ou SCO-Rio.</p>`;
+  }
+  $('ger-body').innerHTML = `<p class="lead" style="margin-top:0">Com as <b>ruas</b> e as <b>estacas com a cota do greide</b> cadastradas, o programa projeta a rede inteira: acha os cruzamentos, espaça as bocas de lobo pela capacidade da sarjeta, cria as bacias (quadra + meia pista), põe os PVs, traça a rede seguindo o greide até o lançamento, lança as cotas, escolhe os diâmetros, corrige pelo menor custo e dimensiona os PVs no padrão EMOP.</p>
+    ${tem ? '<div class="msg warn">⚠ <span>Este projeto já tem PVs, bocas de lobo ou trechos. A opção escolhida <b>substitui</b> a rede, as captações e as bacias (ruas, estacas, critérios e chuva ficam). Dá para desfazer depois.</span></div>' : ''}
+    <div class="card"><h4>Dados mínimos</h4><div class="fgrid">
+      <div class="field"><label>Profundidade do lote atrás do passeio (m)</label><input type="number" step="1" value="${GER.lote}" onchange="gerSet('lote',+this.value)"></div>
+      <div class="field"><label>Coeficiente de escoamento C das quadras</label><input type="number" step="0.05" value="${GER.C}" onchange="gerSet('C',+this.value)"></div>
+      <div class="field" style="grid-column:span 2"><label>Lançamento (deságue)</label><select onchange="gerSet('saida',this.value)">${opc}</select></div>
+    </div><p style="font-size:.75rem;color:var(--muted);margin:.5rem 0 0">Chuva (IDF), período de retorno e critérios vêm das abas 1 e 2. Ruas: ${gerRuas().length} com greide.</p>
+    <div class="bar-btns" style="margin:.7rem 0 0"><button class="btn btn-primary" onclick="gerCalcular()">${GER.ops ? '⟳ Gerar de novo' : '🧭 Gerar as 3 opções'}</button></div></div>
+    <div id="ger-res">${res}</div>`;
+}
+function gerCalcular() {
+  $('ger-res').innerHTML = '<div class="msg info">⏳ <span>Projetando as 3 opções…</span></div>';
+  setTimeout(() => { GER.ops = GER_OP.map(op => { try { return gerProjeto(op); } catch (e) { console.error(e); return null; } }); gerTela(); }, 30);
+}
+function gerUsar(k) {
+  const i = GER_OP.findIndex(o => o.k === k), x = GER.ops && GER.ops[i]; if (!x) return;
+  GER.antes = JSON.stringify(P);
+  P = migrate(JSON.parse(JSON.stringify(x.p))); save(); calc(); closeModal('modal-ger'); showTab('planta');
+  toast(GER_OP[i].nome + ' aplicada: ' + x.info.nPV + ' PVs e ' + x.info.nBL + ' bocas de lobo. Edite à vontade nas abas.');
+}
+function gerDesfazer() { if (!GER.antes) return; P = migrate(JSON.parse(GER.antes)); GER.antes = null; save(); calc(); renderTab(); toast('Rede anterior restaurada'); }
+const btnGer = () => '<div class="card" style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap;padding:.8rem 1rem;border-left:4px solid var(--agua)"><button class="btn btn-primary btn-sm" onclick="abrirGerador()">🧭 Gerar a drenagem pela topografia (3 opções)</button><span style="font-size:.8rem;color:var(--muted);flex:1;min-width:220px">Cadastre só as ruas e as estacas com a cota do greide: o programa projeta PVs, bocas de lobo, bacias, rede, cotas, diâmetros e orçamento, e mostra 3 opções para escolher.</span>' + (GER.antes ? '<button class="btn btn-secondary btn-sm" onclick="gerDesfazer()">↶ Voltar à rede anterior</button>' : '') + '</div>';
+const _vRuasG = vRuas; vRuas = function () { return btnGer() + _vRuasG.apply(this, arguments); };
+const _vProjetoG = vProjeto; vProjeto = function () { const h = _vProjetoG.apply(this, arguments), i = h.indexOf('<div class="card"'); return i < 0 ? btnGer() + h : h.slice(0, i) + btnGer() + h.slice(i); };
+
+
+/* =====================================================================
+   PATCH DR-05 (20/10/2026) — Proteção do tubo conforme o recobrimento
+   Recobrimento ≥ recPA1: tubo PA-1 sem proteção. Abaixo disso o programa
+   indica a proteção mínima: tubo PA-2 (armadura dupla) até recPA2, laje de
+   concreto armado sobre o tubo até recLaje, envelopamento em concreto até
+   recEnv; abaixo de recEnv é erro. O usuário pode escolher outra proteção
+   (mais forte) por trecho; a escolha entra no orçamento e na licitação.
+   ===================================================================== */
+const PROT_NIV = ['pa1', 'pa2', 'laje', 'env'];
+const PROT_NOME = {pa1: 'Nenhuma — tubo PA-1', pa2: 'Tubo PA-2 (armadura dupla)', laje: 'Laje de proteção sobre o tubo', env: 'Envelopamento em concreto'};
+const PROT_ITEM = {pa2: 'Acréscimo de tubo PA-2 (armadura dupla) em lugar de PA-1 por recobrimento reduzido', laje: 'Laje de proteção de concreto armado fck 25 MPa sobre o tubo (e = 0,12 m), inclusive armadura e fôrma', env: 'Envelopamento do tubo em concreto fck 15 MPa até 0,10 m acima da geratriz'};
+const PROT_MEMO = {laje: 'Largura da vala × 0,12 m × extensão dos trechos com recobrimento reduzido', env: 'Largura da vala × (Ø externo + 0,10 m) − área do tubo, × extensão dos trechos com recobrimento muito reduzido'};
+const PROT_REF = {pa2: 0.20, laje: 2400, env: 780};   // PA-2: fração do preço do tubo; laje e envelope: R$/m³ de referência
+function protCrit() { const c = P.crit; return {pa1: num(c.recPA1) != null ? +c.recPA1 : 1.0, pa2: num(c.recPA2) != null ? +c.recPA2 : 0.8, laje: num(c.recLaje) != null ? +c.recLaje : 0.5, env: num(c.recEnv) != null ? +c.recEnv : 0.3}; }
+function protNec(rec) { const k = protCrit(); return !isNum(rec) ? 'pa1' : rec >= k.pa1 - 1e-3 ? 'pa1' : rec >= k.pa2 - 1e-3 ? 'pa2' : rec >= k.laje - 1e-3 ? 'laje' : rec >= k.env - 1e-3 ? 'env' : 'x'; }
+function protTrecho(t, rec) {
+  const k = protCrit(), nec = galOf(t) ? 'pa1' : protNec(rec), esc = PROT_NIV.includes(t.prot) ? t.prot : '', usa = esc || (nec === 'x' ? 'env' : nec);
+  const ok = nec !== 'x' && PROT_NIV.indexOf(usa) >= PROT_NIV.indexOf(nec);
+  const nota = nec === 'x' ? 'Recobrimento ' + fmt(rec, 2) + ' m menor que ' + fmt(k.env, 2) + ' m: nem envelopado atende. Aprofunde o tubo.'
+    : !ok ? 'Recobrimento ' + fmt(rec, 2) + ' m pede no mínimo: ' + PROT_NOME[nec] + '. A proteção escolhida (' + PROT_NOME[usa] + ') não basta.'
+    : usa === 'pa1' ? 'Tubo raso: aprofunde o tubo.' : 'Recobrimento reduzido: ' + PROT_NOME[usa] + (esc ? ' (escolhida)' : ' (indicada pelo programa)') + '.';
+  return {nec, usa, esc, ok, nota, lim: k.pa1};
+}
+function optsProt(o) {
+  const r = R && R.tr[o.id], nec = r && r.prot ? r.prot.nec : 'pa1';
+  return [['', 'Automático — ' + (nec === 'x' ? 'aprofundar o tubo' : PROT_NOME[nec])]].concat(PROT_NIV.map(k => [k, PROT_NOME[k] + (PROT_NIV.indexOf(k) < PROT_NIV.indexOf(nec) || nec === 'x' ? ' — não basta' : '')]));
+}
+function protQuant(t, r) {
+  const u = r.prot.usa, B = r.vala ? r.vala.B : deTr(t) + 2 * (+P.crit.valaFolga || 0.3), De = deTr(t);
+  if (u === 'pa2') return {k: 'prot:pa2:' + t.D, q: r.L};
+  if (u === 'laje') return {k: 'prot:laje', q: B * 0.12 * r.L};
+  return {k: 'prot:env', q: Math.max(0, B * (De + 0.10) - Math.PI * De * De / 4) * r.L};
+}
+const _precoP = preco;
+preco = function (k) {
+  const [tipo, a, D] = k.split(':'); if (tipo !== 'prot') return _precoP.apply(this, arguments);
+  const p = (custosCfg().precos || {})[k]; if (p && isNum(p.preco)) return p;
+  if (a === 'pa2') { const pt = _precoP('tubo:' + D); return {cod: '—', descr: 'Valor de referência: ' + fmt(PROT_REF.pa2 * 100, 0) + ' % do preço do tubo PA-1 Ø' + D, unid: 'm', preco: (pt && pt.preco || 0) * PROT_REF.pa2, fonte: 'referência'}; }
+  return {cod: '—', descr: 'Valor de referência (sem banco carregado)', unid: 'm³', preco: PROT_REF[a] || 0, fonte: 'referência'};
+};
+Object.assign(HELP, {
+  'crit.recPA1': 'Recobrimento a partir do qual o tubo de concreto PA-1 resiste ao tráfego sem proteção. Abaixo disso o programa indica PA-2, laje de proteção ou envelopamento.',
+  'crit.recPA2': 'Menor recobrimento em que basta trocar o tubo por PA-2 (armadura dupla, classe superior da NBR 8890).',
+  'crit.recLaje': 'Menor recobrimento em que basta uma laje de concreto armado (e = 0,12 m) sobre o tubo, apoiada nas laterais da vala, distribuindo a carga das rodas.',
+  'crit.recEnv': 'Menor recobrimento admitido com o tubo envelopado em concreto. Abaixo dele é preciso aprofundar a rede.',
+  'trechos.prot': 'Proteção do tubo contra a carga do tráfego quando o recobrimento é pequeno. "Automático" usa a mínima que atende; escolha outra mais forte se preferir. Entra no orçamento e na licitação.'
+});
+
 </script>
 </body></html>
