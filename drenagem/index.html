@@ -3680,14 +3680,7 @@ svgSecao = function (pvId, K, W = 1100) {
   });
   // PV em corte
   const xi = d.dpv / 2, xe = xi + d.parede;
-  if (m) s += pvEmopCorte(d, X, Y, sc, K);
-  else {
-    const pvTopo = d.tp;
-    [-1, 1].forEach(sd => { s += rc(X(sd > 0 ? xi : -xe), Y(pvTopo - 0.35), d.parede * sc, (pvTopo - 0.35 - (d.fundoPV - d.parede)) * sc, K.conc, K.ink, 1); });
-    s += rc(X(-xe), Y(d.fundoPV), 2 * xe * sc, d.parede * sc, K.conc, K.ink, 1);
-    s += rc(X(-xe), Y(pvTopo - 0.20), (xe - 0.30) * sc, 0.15 * sc, K.conc, K.ink, 1) + rc(X(0.30), Y(pvTopo - 0.20), (xe - 0.30) * sc, 0.15 * sc, K.conc, K.ink, 1);
-    s += rc(X(-0.30), Y(pvTopo), 0.60 * sc, 0.05 * sc, K.ink);
-  }
+  s += pvEmopCorte(m ? d : Object.assign({}, d, {emop: pvCircMedidas(d.dpv, d.tp, d.fundoPV)}), X, Y, sc, K);
   // tubo (boca no fundo do PV)
   const cy = d.ci + d.D / 2;
   s += `<circle cx="${X(0)}" cy="${Y(cy)}" r="${d.De / 2 * sc}" fill="${K.pipe}" stroke="${K.ink}" stroke-width="1"/><circle cx="${X(0)}" cy="${Y(cy)}" r="${d.D / 2 * sc}" fill="${K.bg}" stroke="${K.agua}" stroke-width="2"/>`;
@@ -3713,7 +3706,7 @@ svgSecao = function (pvId, K, W = 1100) {
         s += `<path d="M ${X(x0)} ${Y(b.zCurb)} L ${X(xin)} ${Y(b.zCurb + 0.02)}" stroke="${K.agua}" stroke-width="3"/>`;
       }
     }
-    const xs = xin, xf = b.side * (m ? xi : xe), z1 = b.ciBL, z2 = b.ciPV, rr = b.rD, er = Math.max(0.03, rr * c.espF), rm = (b.rb && b.rb.ram) || {};
+    const xs = xin, xf = b.side * xi, z1 = b.ciBL, z2 = b.ciPV, rr = b.rD, er = Math.max(0.03, rr * c.espF), rm = (b.rb && b.rb.ram) || {};
     const dR = vR ? ` stroke-dasharray="${DASH}"` : '';
     // tubo do ramal: parede, lâmina d'água e eixo tracejado
     s += `<polygon points="${X(xs)},${Y(z1 - er)} ${X(xf)},${Y(z2 - er)} ${X(xf)},${Y(z2 + rr + er)} ${X(xs)},${Y(z1 + rr + er)}" fill="${vR ? 'none' : K.pipe}" stroke="${K.ink}" stroke-width="1"${dR}/>`;
@@ -3794,6 +3787,12 @@ const selEscPerfil = () => '<label style="font-size:.84rem;display:flex;gap:.45r
   '</select> <small style="color:var(--muted)">em 1:1 os tubos e ramais aparecem redondos; o desenho fica mais largo (role para o lado)</small></label>';
 vPerfil = function () { return _vPerfil0.apply(this, arguments).replace('<div class="svg-scroll" id="perfil-box">', chkRalos('drawPerfil') + selEscPerfil() + '<div class="svg-scroll" id="perfil-box">'); };
 
+/* PV circular (alvenaria, Ø nos detalhes) nas medidas do desenho EMOP: corpo de alvenaria, laje de fundo, laje da tampa
+   0,35 m abaixo da tampa e pescoço em anéis Ø0,60 até o tampão */
+function pvCircMedidas(Ld, tp, f) {
+  const parede = +P.crit.pvParede || 0.15;
+  return {L: Ld, parede, eF: parede, eT: 0.15, Hi: Math.max(0.30, tp - 0.35 - f)};
+}
 /* PV padrão EMOP no perfil longitudinal: mesmo detalhe da seção transversal (laje de fundo, paredes de blocos
    de concreto armados, laje da tampa, chaminé em anéis Ø0,60 e tampão). A escala horizontal é ampliada só no PV
    para as paredes ficarem legíveis; a vertical é a do perfil. */
@@ -3843,7 +3842,7 @@ svgPerfil = function (ini, K, W0 = 1200) {
   const c = P.crit, pts = []; let X = 0;
   path.forEach((t, k) => { const r = R.tr[t.id]; if (k === 0) pts.push({id: t.m, x: 0, pv: R.pv[t.m], p: pvById(t.m)}); X += r.L || 0; pts.push({id: t.j, x: X, pv: R.pv[t.j], p: pvById(t.j)}); });
   const vals = [];
-  pts.forEach(p => { [p.pv.tp, p.pv.fundo, p.pv.H].forEach(v => { if (isNum(v) && v > -1e8) vals.push(v); }); if (p.pv.emop && isNum(p.pv.fundo)) vals.push(p.pv.fundo - p.pv.emop.eF); });
+  pts.forEach(p => { [p.pv.tp, p.pv.fundo, p.pv.H].forEach(v => { if (isNum(v) && v > -1e8) vals.push(v); }); if (isNum(p.pv.fundo)) vals.push(p.pv.fundo - (p.pv.emop ? p.pv.emop.eF : +P.crit.pvParede || 0.15)); });
   path.forEach(t => { const r = R.tr[t.id]; [r.cm, r.cj].forEach(v => isNum(v) && vals.push(v)); });
   if (!vals.length) return '';
   const ralos = mostraRalos(), BL = [];
@@ -3887,15 +3886,9 @@ svgPerfil = function (ini, K, W0 = 1200) {
   pts.forEach(p => {
     if (!isNum(p.pv.tp) || !isNum(p.pv.fundo)) return;
     const x = PX(p.x), m = p.pv.emop;
-    if (m) {
-      const k = pts.indexOf(p), d = pvEmopPerfil(x, p.pv, m, sx, sy, PY, K, k > 0 ? R.tr[path[k - 1].id] : null, k < path.length ? R.tr[path[k].id] : null);
-      wPV[p.id] = d.w; s += d.s;
-    } else {
-      const w = Math.max(14, ((num(p.p.dpv) || 1000) / 1000 + 0.3) * sx);
-      wPV[p.id] = w;
-      s += rc(x - w / 2, PY(p.pv.tp), w, PY(p.pv.fundo - 0.15) - PY(p.pv.tp), K.conc, K.ink, 1.4);
-      s += rc(x - w / 2 + 4, PY(p.pv.tp) + 2, w - 8, PY(p.pv.fundo) - PY(p.pv.tp) - 2, K.bg, null);
-    }
+    const mm = m || pvCircMedidas((num(p.p.dpv) || 1000) / 1000, p.pv.tp, p.pv.fundo), k = pts.indexOf(p);
+    const d = pvEmopPerfil(x, p.pv, mm, sx, sy, PY, K, k > 0 ? R.tr[path[k - 1].id] : null, k < path.length ? R.tr[path[k].id] : null);
+    wPV[p.id] = d.w; s += d.s;
     s += tx(x, mt - 32, p.id, {fs: 15, w: 700, a: 'middle', c: K.ink});
     s += tx(x, mt - 14, 'CT ' + fmt(p.pv.tp, 3), {fs: 12, a: 'middle', c: K.muted});
     if (isNum(p.pv.H) && isNum(p.pv.tp) && p.pv.H > p.pv.tp) s += `<circle cx="${x}" cy="${PY(p.pv.H)}" r="7" fill="${K.err}"/>`;
