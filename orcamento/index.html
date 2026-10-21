@@ -1003,7 +1003,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
   <label class="btn" style="cursor:pointer;background:#0ea5e9;color:#082f49" title="Reimporta um arquivo .xlsx exportado por este programa (orçamento + bancos DIPR/COMP/Insumos EMOP embutidos nas abas)">📥 Importar Backup XLSX <input type="file" id="fileBackupXLSX" accept=".xlsx,.xls" style="display:none"></label>
   <span style="width:1px;align-self:stretch;background:#cbd5e1;margin:0 2px"></span>
   <input type="file" id="fileImportCodigos" accept=".csv,.txt,.xlsx,.xls">
-  <button class="btn btn-primary" onclick="document.getElementById('fileImportCodigos').click()" title="CSV/TXT/XLSX com CODIGO,DESCR,UNID,QTD ou só CODIGOS">📥 Importar Lista</button>
+  <button class="btn btn-primary" id="btnImportLista" onclick="document.getElementById('fileImportCodigos').click()" title="CSV/TXT/XLSX com CODIGO,DESCR,UNID,QTD ou só CODIGOS">📥 Importar Planilha por Colunas</button>
   <button class="btn btn-dark" id="btnRelImport" onclick="abrirRelatorioImportacao()" title="Confere cada item importado com a planilha: preço, quantidade, unidade, BDI e total, e explica cada diferença">📋 Relatório da última importação</button>
   <input type="text" id="dataBaseTodos" placeholder="ex.: 09/2026" title="Data base no formato MM/AAAA (ex.: 09/2026)" style="width:100px">
   <button class="btn btn-dark" onclick="atualizarDataBaseTodos()">Atualizar todas as Bases</button>
@@ -4658,7 +4658,7 @@ setTimeout(function(){ if(typeof loadBdiConfig==='function') loadBdiConfig(); },
 <div id="modalImportLista">
   <div class="modal-import-box" style="max-width:640px">
     <div class="modal-import-header">
-      <span>📥 IMPORTAR LISTA</span>
+      <span>📥 IMPORTAR PLANILHA POR COLUNAS</span>
       <button class="btn btn-dark" onclick="fecharModalImportLista()">✕</button>
     </div>
     <div style="padding:12px">
@@ -4666,6 +4666,11 @@ setTimeout(function(){ if(typeof loadBdiConfig==='function') loadBdiConfig(); },
       <input type="file" id="fileImportListaModal" accept=".csv,.txt,.xlsx,.xls" style="font-size:11px;width:100%">
       <div id="areaPreviaImport" style="display:none;margin-top:12px">
         <div style="font-size:10px;color:#475569;margin:10px 0 6px"><b>2.</b> Pré-visualização do arquivo — marque qual linha tem os títulos reais das colunas (o sistema já sugere uma, mas confira e corrija se precisar):</div>
+        <div id="barraColunasImport" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px;font-size:10px">
+          <button type="button" class="btn btn-ghost" style="border:1px solid #cbd5e1;padding:3px 8px;font-size:10px" onclick="excluirTitulosVaziosImport()" title="Oculta as colunas sem título na linha marcada ou sem nenhum dado (as sobras de células mescladas)">🧹 Excluir títulos vazios</button>
+          <button type="button" class="btn btn-ghost" style="border:1px solid #cbd5e1;padding:3px 8px;font-size:10px" onclick="mostrarColunasImport()">↺ Mostrar todas</button>
+          <span id="infoColunasOcultasImport" style="color:#64748b"></span>
+        </div>
         <div id="tabelaPreviaImport" style="max-height:220px;overflow:auto;border:1px solid #e2e8f0;border-radius:8px"></div>
       </div>
       <div id="areaMapeamentoImport" style="display:none;margin-top:12px">
@@ -9639,38 +9644,68 @@ window.distribuirBdiImportado = function(itens){
     return XLSX.utils.sheet_to_json(wb.Sheets[nomeAba],{defval:'', header:1, raw:true});
   }
 
+  // V1-02-51: colunas ocultas na importação (✕ em cada coluna e "Excluir títulos vazios").
+  //   Planilhas com células mescladas no título geram várias colunas vazias que atrapalham a
+  //   prévia; a coluna oculta some da prévia e do passo 3 e não é importada.
+  function ocultasImport(){ return window._importListaOcultas || (window._importListaOcultas = {}); }
+  function numColsImport(matrix){ var n = 0; for(var i=0;i<matrix.length;i++) n = Math.max(n, (matrix[i]||[]).length); return n; }
+  function infoOcultasImport(){
+    var n = Object.keys(ocultasImport()).length, el = document.getElementById('infoColunasOcultasImport');
+    if(el) el.textContent = n ? n+' coluna(s) oculta(s), não serão importadas.' : 'Use ✕ no título de uma coluna para ocultá-la.';
+  }
+  function rerenderImport(){
+    if(!window._importListaMatrix) return;
+    renderTabelaPrevia(window._importListaMatrix, window._importListaHeaderIdx);
+    renderTabelaMapeamento(window._importListaMatrix, window._importListaHeaderIdx);
+  }
+  window.ocultarColunaImport = function(c){ ocultasImport()[c] = true; rerenderImport(); };
+  window.mostrarColunasImport = function(){ window._importListaOcultas = {}; rerenderImport(); };
+  window.excluirTitulosVaziosImport = function(){
+    var m = window._importListaMatrix; if(!m) return;
+    var h = window._importListaHeaderIdx, head = m[h]||[], oc = ocultasImport(), n = 0;
+    for(var c=0;c<numColsImport(m);c++){
+      if(oc[c]) continue;
+      var semTitulo = vazio(head[c]), semDados = true;
+      for(var r=h+1;r<m.length && semDados;r++){ if(!vazio((m[r]||[])[c])) semDados = false; }
+      if(semTitulo || semDados){ oc[c] = true; n++; }
+    }
+    rerenderImport();
+    document.getElementById('importListaStatus').textContent = n ? n+' coluna(s) sem título ou sem dados ocultada(s).' : 'Nenhuma coluna sem título ou sem dados.';
+  };
+
   function renderTabelaPrevia(matrix, headerIdxSugerido){
-    var maxLinhas = Math.min(matrix.length, 12);
-    var maxCols = 0;
-    for(var i=0;i<maxLinhas;i++) maxCols = Math.max(maxCols, (matrix[i]||[]).length);
-    maxCols = Math.min(maxCols, 10);
+    var maxLinhas = Math.min(matrix.length, 12), oc = ocultasImport(), cols = [];
+    var nc = numColsImport(matrix.slice(0, Math.max(maxLinhas, headerIdxSugerido+2)));
+    for(var c0=0;c0<nc && cols.length<30;c0++) if(!oc[c0]) cols.push(c0);
     var html = '<table style="width:100%;border-collapse:collapse;font-size:9px">'
       + '<thead><tr style="background:#f1f5f9;text-align:left;position:sticky;top:0"><th style="padding:4px">LINHA</th><th style="padding:4px">É O TÍTULO?</th>';
-    for(var c=0;c<maxCols;c++) html += '<th style="padding:4px">Col '+(c+1)+'</th>';
+    cols.forEach(function(c){ html += '<th style="padding:4px;white-space:nowrap">Col '+(c+1)+' <button type="button" onclick="ocultarColunaImport('+c+')" title="Ocultar esta coluna (não será importada)" style="border:0;background:#fee2e2;border-radius:3px;cursor:pointer;font-size:9px;padding:0 4px;color:#b91c1c">✕</button></th>'; });
     html += '</tr></thead><tbody>';
     for(var r=0;r<maxLinhas;r++){
       var row = matrix[r]||[];
       var marcado = (r===headerIdxSugerido);
       html += '<tr style="border-top:1px solid #e2e8f0'+(marcado?';background:#fffbeb':'')+'" data-preview-row="'+r+'"><td style="padding:4px;color:#64748b">'+(r+1)+'</td><td style="padding:4px"><input type="radio" name="linhaHeaderImport" value="'+r+'" '+(marcado?'checked':'')+' onchange="onMudarLinhaHeaderImport('+r+')"></td>';
-      for(var c2=0;c2<maxCols;c2++){
+      cols.forEach(function(c2){
         var val = row[c2]!=null ? String(row[c2]) : '';
         html += '<td style="padding:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px" title="'+val.replace(/"/g,'&quot;')+'">'+val.replace(/</g,'&lt;').substring(0,28)+'</td>';
-      }
+      });
       html += '</tr>';
     }
     html += '</tbody></table>';
     document.getElementById('tabelaPreviaImport').innerHTML = html;
+    infoOcultasImport();
   }
 
   function renderTabelaMapeamento(matrix, headerIdx){
     var headerRow = matrix[headerIdx]||[];
     var sampleRow = matrix[headerIdx+1]||[];
     var numCols = Math.max(headerRow.length, sampleRow.length);
-    var sug = sugestoesDasColunas(matrix, headerIdx, numCols);
+    var sug = sugestoesDasColunas(matrix, headerIdx, numCols), oc = ocultasImport();
     var html = '<div style="font-size:9px;color:#475569;padding:6px 8px;background:#f8fafc;border-bottom:1px solid #e2e8f0"><b>ITEM</b> é a numeração da planilha (1, 1.1, 1.2...) e <b>CÓDIGO</b> é o código do banco (EMOP, SINAPI ou SCO). Com a coluna ITEM marcada, a linha sem código, quantidade e preço unitário entra como <b>TÍTULO</b> e as linhas de total/subtotal/BDI são ignoradas.</div>'
       + '<table style="width:100%;border-collapse:collapse;font-size:10px">'
       + '<thead><tr style="background:#f1f5f9;text-align:left;position:sticky;top:0"><th style="padding:6px">TÍTULO DA COLUNA (linha '+(headerIdx+1)+')</th><th style="padding:6px">EXEMPLO</th><th style="padding:6px">IMPORTAR COMO</th></tr></thead><tbody>';
     for(var c=0;c<numCols;c++){
+      if(oc[c]) continue;
       var headerTxt = (headerRow[c]!=null && String(headerRow[c]).trim()) ? String(headerRow[c]).trim() : ('Coluna '+(c+1)+' (sem título)');
       var sample = sampleRow[c]!=null ? String(sampleRow[c]) : '';
       html += '<tr style="border-top:1px solid #e2e8f0"><td style="padding:6px"><b>'+headerTxt.replace(/</g,'&lt;')+'</b></td><td style="padding:6px;color:#64748b">'+sample.replace(/</g,'&lt;').substring(0,30)+'</td><td style="padding:6px">'
@@ -9703,6 +9738,7 @@ window.distribuirBdiImportado = function(itens){
       if(headerIdx<0) headerIdx=0;
       window._importListaMatrix = matrix;
       window._importListaHeaderIdx = headerIdx;
+      window._importListaOcultas = {};
       renderTabelaPrevia(matrix, headerIdx);
       renderTabelaMapeamento(matrix, headerIdx);
       document.getElementById('areaPreviaImport').style.display='block';
@@ -11995,7 +12031,7 @@ document.addEventListener('DOMContentLoaded', limparRestos);
       titulo: document.querySelector('button[onclick="addTituloGlobal()"]'), exibir: document.querySelector('button[onclick="expandAllOrc()"]'),
       ocultar: document.querySelector('button[onclick="collapseAllOrc()"]'), diag: $('btnDiagComp'),
       abcCod: document.querySelector('button[onclick="abrirCurvaABC_Codigos()"]'), abcIns: document.querySelector('button[onclick="abrirCurvaABC_Insumos()"]'),
-      backup: $('fileBackupXLSX') && $('fileBackupXLSX').closest('label'), fileLista: $('fileImportCodigos'), lista: botao('Importar Lista', P), relImp: $('btnRelImport'),
+      backup: $('fileBackupXLSX') && $('fileBackupXLSX').closest('label'), fileLista: $('fileImportCodigos'), lista: $('btnImportLista'), relImp: $('btnRelImport'),
       dataBase: $('dataBaseTodos'), atuBase: botao('Atualizar todas as Bases', P), calc: $('boxCalcArred'),
       comp: document.querySelector('button[onclick="abrirModalComp()"]'), cot: botao('Cotação Quartis', P), cotTodos: $('btnCotacaoTodos'), pedProp: $('btnPedidoProposta'), hist: botao('Histórico', P),
       bkp: $('btnBackupPasta'), bkpSt: $('statusBackupPasta'), exportar: $('boxExportXlsx'),
@@ -12807,7 +12843,7 @@ body.mode-mobile .ri-modal{padding:0}
     var rel = carregar(), m = document.getElementById('modalRelImport');
     if(!m) return;
     var corpo = m.querySelector('.ri-body');
-    if(!rel){ corpo.innerHTML = '<div class="ri-vazio">Ainda não há relatório: importe uma planilha em 📥 Importar › Importar Lista.</div>'; return; }
+    if(!rel){ corpo.innerHTML = '<div class="ri-vazio">Ainda não há relatório: importe uma planilha em 📥 Importar › Importar Planilha por Colunas.</div>'; return; }
     var nDif = rel.linhas.filter(function(r){ return r.dif!=null && Math.abs(r.dif) >= TOL; }).length;
     var nAv = rel.linhas.filter(function(r){ return r.avisos.length; }).length;
     var nNao = rel.linhas.filter(function(r){ return !r.achado; }).length;
@@ -13854,5 +13890,175 @@ body.mode-mobile .pm-modal{padding:0}
 
 </script>
 <!-- FIM PATCH V1-02-50 -->
+<script>
+/* =====================================================================
+   PATCH V1-02-52 (21/10/2026) — Modelos de orçamento por tipo de obra
+   - "📚 Modelos" na barra do topo: pavimentação, drenagem, esgoto,
+     urbanização, casa, prédio, escola e unidade de saúde. Cada modelo tem
+     as etapas (títulos) e os serviços com código SINAPI (e o equivalente
+     SCO quando existe), lidos de dados/modelos.json. Os códigos vêm dos
+     bancos do programa; nada é inventado. Quantidades entram zeradas.
+   - O modelo é aberto no "Importar Planilha por Colunas" já preenchido,
+     então o usuário confere antes de importar.
+   - "Salvar o orçamento aberto como modelo": guarda títulos e códigos do
+     orçamento atual (ex.: planilha de uma licitação importada) neste
+     aparelho (tc_modelos_usuario_v1), com as quantidades zeradas.
+   ===================================================================== */
+(function(){
+  var KEY_USR = 'tc_modelos_usuario_v1', MODELOS = null, carregando = null;
+  var ICONE = {pavimentacao: '🛣️', drenagem: '🌧️', esgoto: '🚽', urbanizacao: '🌳', casa: '🏠', predio: '🏢', escola: '🏫', saude: '🏥'};
+  function esc(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
+  function lerUsr(){ try{ var a = JSON.parse(localStorage.getItem(KEY_USR) || '[]'); return Array.isArray(a) ? a : []; }catch(e){ return []; } }
+  function salvarUsr(a){ try{ localStorage.setItem(KEY_USR, JSON.stringify(a)); return true; }catch(e){ alert('Não foi possível salvar o modelo neste aparelho (memória do navegador cheia).'); return false; } }
+  function carregar(){
+    if(MODELOS) return Promise.resolve(MODELOS);
+    if(!carregando) carregando = fetch('dados/modelos.json', {cache: 'no-cache'}).then(function(r){ if(!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(function(j){ MODELOS = j; return j; }).catch(function(e){ carregando = null; throw e; });
+    return carregando;
+  }
+  function contar(m){ return (m.etapas || []).reduce(function(s, e){ return s + (e.itens || []).length; }, 0); }
+
+  /* linhas da planilha do modelo no banco escolhido (SCO sem equivalente usa o SINAPI) */
+  function matrizDoModelo(m, banco){
+    var aoa = [['ITEM', 'CÓDIGO', 'DESCRIÇÃO', 'UNID', 'QUANT.']], misturados = 0;
+    (m.etapas || []).forEach(function(e, i){
+      aoa.push([String(i + 1), '', String(e.nome || 'ETAPA').toUpperCase(), '', '']);
+      (e.itens || []).forEach(function(it, j){
+        var cod, d, u;
+        if(it.codigo){ cod = it.codigo; d = it.descr; u = it.unid; }
+        else if((banco === 'sco' || !it.sinapi) && it.sco){ cod = it.sco; d = it.scoDescr; u = it.scoUnid; if(banco !== 'sco') misturados++; }
+        else { cod = it.sinapi; d = it.descr; u = it.unid; if(banco === 'sco') misturados++; }
+        aoa.push([(i + 1) + '.' + (j + 1), cod, d || '', u || '', 0]);
+      });
+    });
+    return {aoa: aoa, misturados: misturados};
+  }
+  function abrirNoImportador(m, banco){
+    if(typeof XLSX === 'undefined' || typeof window.processarArquivoImportLista !== 'function'){ alert('O programa ainda está carregando. Tente de novo em alguns segundos.'); return; }
+    var r = matrizDoModelo(m, banco), wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(r.aoa), 'Modelo');
+    var buf = XLSX.write(wb, {bookType: 'xlsx', type: 'array'});
+    var file = new File([buf], 'Modelo_' + (m.id || 'obra') + '.xlsx', {type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+    fechar();
+    window.abrirModalImportLista();
+    Promise.resolve(window.processarArquivoImportLista(file)).then(function(){
+      var stEl = document.getElementById('importListaStatus'); if(!stEl || !stEl.parentNode) return;
+      var old = document.getElementById('tcEnvioAviso'); if(old) old.remove();
+      var d = document.createElement('div'); d.id = 'tcEnvioAviso';
+      d.style.cssText = 'margin:8px 0;padding:8px 10px;border:1px solid #2563eb;background:#eff6ff;color:#1e3a8a;border-radius:8px;font-size:11.5px;line-height:1.45';
+      d.innerHTML = '📚 <b>Modelo: ' + esc(m.nome) + '</b> · ' + contar(m) + ' serviços em ' + (m.etapas || []).length + ' etapas' + (m.proprio ? '' : ' · banco ' + (banco === 'sco' ? 'SCO-Rio' : 'SINAPI RJ'))
+        + '.<br>Clique em <b>IMPORTAR AGORA</b>. Os serviços entram com <b>quantidade 0</b>: preencha as quantidades da sua obra e apague o que não houver. Os preços vêm do banco do mês carregado.'
+        + (r.misturados ? '<br>' + r.misturados + ' serviço(s) sem equivalente ' + (banco === 'sco' ? 'no SCO entram com o código SINAPI' : 'no SINAPI entram com o código SCO') + ' (os dois bancos convivem na mesma planilha).' : '');
+      stEl.parentNode.insertBefore(d, stEl);
+    });
+  }
+
+  /* orçamento aberto → modelo do usuário */
+  function salvarAtualComoModelo(){
+    var arr = (typeof orc !== 'undefined' && Array.isArray(orc)) ? orc : [];
+    var etapas = [], atual = null;
+    arr.forEach(function(l){
+      if(!l) return;
+      if(l.tipo === 'TITULO'){ atual = {nome: String(l.titulo || 'ETAPA'), itens: []}; etapas.push(atual); return; }
+      if(l.tipo !== 'ITEM' || !l.codigo) return;
+      if(!atual){ atual = {nome: 'ORÇAMENTO', itens: []}; etapas.push(atual); }
+      atual.itens.push({codigo: String(l.codigo), descr: String(l.descr || ''), unid: String(l.unid || '')});
+    });
+    etapas = etapas.filter(function(e){ return e.itens.length; });
+    if(!etapas.length){ alert('O orçamento aberto não tem serviços. Importe ou monte a planilha e tente de novo.'); return; }
+    var el = document.getElementById('nomeOrcAtual'), sug = (el && el.value || '').trim();
+    var nome = prompt('Nome do modelo (ex.: Pavimentação Rio das Ostras 2026):', sug || 'Meu modelo'); if(!nome) return;
+    var lista = lerUsr(); lista.push({id: 'u' + Date.now(), nome: nome.trim(), descricao: 'Modelo salvo do orçamento ' + (sug || 'aberto') + ' em ' + new Date().toLocaleDateString('pt-BR') + '.', proprio: true, etapas: etapas});
+    if(salvarUsr(lista)) render();
+  }
+  function excluirUsr(id){
+    var lista = lerUsr(), m = lista.find(function(x){ return x.id === id; }); if(!m) return;
+    if(!confirm('Excluir o modelo "' + m.nome + '" deste aparelho?')) return;
+    salvarUsr(lista.filter(function(x){ return x.id !== id; })); render();
+  }
+
+  /* janela */
+  var CSS = '#tcModelos{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:13500;display:none;align-items:center;justify-content:center;padding:12px}'
+    + '#tcModelos .tm-box{background:#fff;border-radius:12px;max-width:900px;width:100%;max-height:92vh;display:flex;flex-direction:column;box-shadow:0 20px 80px rgba(0,0,0,.5);overflow:hidden}'
+    + '#tcModelos .tm-hd{padding:12px 16px;background:#0f172a;color:#fff;display:flex;justify-content:space-between;align-items:center;font-weight:800}'
+    + '#tcModelos .tm-bd{padding:12px 16px;overflow:auto;font-size:12px;color:#0f172a}'
+    + '#tcModelos .tm-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-top:10px}'
+    + '#tcModelos .tm-card{border:1px solid #e2e8f0;border-radius:10px;padding:10px;background:#f8fafc;display:flex;flex-direction:column;gap:6px}'
+    + '#tcModelos .tm-card h4{margin:0;font-size:13px}#tcModelos .tm-card p{margin:0;color:#475569;font-size:11px;line-height:1.35;flex:1}'
+    + '#tcModelos .tm-card .tm-n{font-size:10px;color:#64748b}#tcModelos .tm-acts{display:flex;gap:6px;flex-wrap:wrap}'
+    + '#tcModelos button.tm-b{border:1px solid #cbd5e1;background:#fff;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer}'
+    + '#tcModelos button.tm-p{background:#2563eb;border-color:#2563eb;color:#fff}'
+    + '#tcModelos .tm-ver{margin-top:10px;border:1px solid #e2e8f0;border-radius:8px;max-height:46vh;overflow:auto}'
+    + '#tcModelos .tm-ver table{width:100%;border-collapse:collapse;font-size:10.5px}#tcModelos .tm-ver td{padding:3px 6px;border-top:1px solid #f1f5f9;vertical-align:top}'
+    + '#tcModelos .tm-ver tr.tm-et td{background:#e0e7ff;font-weight:800}';
+  function garantirModal(){
+    var m = document.getElementById('tcModelos'); if(m) return m;
+    var st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
+    m = document.createElement('div'); m.id = 'tcModelos';
+    m.innerHTML = '<div class="tm-box"><div class="tm-hd"><span>📚 MODELOS DE ORÇAMENTO POR TIPO DE OBRA</span><button class="btn btn-dark" id="tcModFechar">✕</button></div><div class="tm-bd" id="tcModBd"></div></div>';
+    document.body.appendChild(m);
+    m.querySelector('#tcModFechar').onclick = fechar;
+    m.addEventListener('click', function(e){ if(e.target === m) fechar(); });
+    return m;
+  }
+  function fechar(){ var m = document.getElementById('tcModelos'); if(m) m.style.display = 'none'; }
+  function banco(){ var s = document.getElementById('tcModBanco'); return s ? s.value : 'sinapi'; }
+  function todos(){ return ((MODELOS && MODELOS.modelos) || []).concat(lerUsr()); }
+  function achar(id){ return todos().find(function(x){ return x.id === id; }); }
+  function render(verId){
+    var bd = document.getElementById('tcModBd'); if(!bd) return;
+    var b = banco(), lista = (MODELOS && MODELOS.modelos) || [], usr = lerUsr();
+    var card = function(m){
+      return '<div class="tm-card"><h4>' + (m.proprio ? '⭐' : (ICONE[m.id] || '📋')) + ' ' + esc(m.nome) + '</h4><p>' + esc(m.descricao || '') + '</p>'
+        + '<div class="tm-n">' + (m.etapas || []).length + ' etapas · ' + contar(m) + ' serviços</div>'
+        + '<div class="tm-acts"><button class="tm-b tm-p" data-usar="' + esc(m.id) + '">Usar este modelo</button><button class="tm-b" data-ver="' + esc(m.id) + '">Ver itens</button>'
+        + (m.proprio ? '<button class="tm-b" data-del="' + esc(m.id) + '" title="Excluir este modelo">🗑️</button>' : '') + '</div></div>';
+    };
+    var h = '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">'
+      + '<label style="font-weight:700">Banco dos códigos: <select id="tcModBanco" style="padding:3px;border:1px solid #cbd5e1;border-radius:4px"><option value="sinapi"' + (b === 'sinapi' ? ' selected' : '') + '>SINAPI — RJ</option><option value="sco"' + (b === 'sco' ? ' selected' : '') + '>SCO — Rio de Janeiro</option></select></label>'
+      + '<button class="tm-b" id="tcModSalvar" title="Guarda os títulos e códigos do orçamento aberto como um modelo seu, neste aparelho">⭐ Salvar o orçamento aberto como modelo</button></div>'
+      + '<div style="color:#475569;margin-top:6px;line-height:1.4">Escolha o tipo de obra: o modelo abre na importação com as etapas e os serviços usuais de uma planilha de licitação, com códigos do banco e <b>quantidade 0</b> para você preencher. ' + esc(MODELOS && MODELOS.fonte || '') + '</div>'
+      + '<div class="tm-grid">' + lista.map(card).join('') + '</div>'
+      + (usr.length ? '<div style="font-weight:800;margin-top:14px">Meus modelos (neste aparelho)</div><div class="tm-grid">' + usr.map(card).join('') + '</div>' : '');
+    var mv = verId && achar(verId);
+    if(mv){
+      var r = matrizDoModelo(mv, b);
+      h += '<div style="font-weight:800;margin-top:14px">Itens do modelo: ' + esc(mv.nome) + '</div><div class="tm-ver"><table>'
+        + r.aoa.slice(1).map(function(l){ return l[1] ? '<tr><td>' + esc(l[0]) + '</td><td style="white-space:nowrap">' + esc(l[1]) + '</td><td>' + esc(l[2]) + '</td><td>' + esc(l[3]) + '</td></tr>' : '<tr class="tm-et"><td>' + esc(l[0]) + '</td><td colspan="3">' + esc(l[2]) + '</td></tr>'; }).join('')
+        + '</table></div>';
+    }
+    bd.innerHTML = h;
+    document.getElementById('tcModBanco').onchange = function(){ render(verId); };
+    document.getElementById('tcModSalvar').onclick = salvarAtualComoModelo;
+    bd.querySelectorAll('[data-usar]').forEach(function(x){ x.onclick = function(){ var m = achar(x.dataset.usar); if(m) abrirNoImportador(m, banco()); }; });
+    bd.querySelectorAll('[data-ver]').forEach(function(x){ x.onclick = function(){ render(x.dataset.ver); var v = bd.querySelector('.tm-ver'); if(v) v.scrollIntoView({block: 'nearest'}); }; });
+    bd.querySelectorAll('[data-del]').forEach(function(x){ x.onclick = function(){ excluirUsr(x.dataset.del); }; });
+  }
+  window.abrirModelosObra = function(){
+    var m = garantirModal(); m.style.display = 'flex';
+    var bd = document.getElementById('tcModBd');
+    if(!MODELOS) bd.innerHTML = '<div style="padding:10px">Carregando os modelos...</div>';
+    carregar().then(function(){ render(); }).catch(function(e){
+      bd.innerHTML = '<div style="padding:10px;color:#b91c1c">Não foi possível carregar os modelos (' + esc(e.message) + '). Confira a internet.</div>';
+      if(lerUsr().length){ MODELOS = {modelos: []}; render(); }
+    });
+  };
+
+  function botao(id, estilo){
+    var b = document.createElement('button'); b.type = 'button'; b.id = id; b.className = 'btn'; b.textContent = '📚 Modelos';
+    b.title = 'Modelos de orçamento por tipo de obra (pavimentação, drenagem, esgoto, urbanização, casa, prédio, escola, saúde)';
+    b.style.cssText = estilo; b.onclick = function(){ window.abrirModelosObra(); }; return b;
+  }
+  function garantirBotoes(){
+    var topo = document.getElementById('topoMenus'), cr = document.getElementById('btnCronoTopo');
+    if(topo && cr && !document.getElementById('btnModelosTopo'))
+      cr.parentNode.insertBefore(botao('btnModelosTopo', 'background:#7c3aed;color:#fff;border:1px solid #7c3aed;border-radius:8px;padding:5px 8px;font-size:10px;font-weight:800;margin-left:4px'), cr.nextSibling);
+    var pb = document.getElementById('patchBar1');
+    if(pb && !document.getElementById('btnModelosBar')) pb.appendChild(botao('btnModelosBar', 'background:#7c3aed;color:#fff;border:1px solid #7c3aed'));
+  }
+  setInterval(function(){ try{ garantirBotoes(); }catch(e){ console.error(e); } }, 1200);
+})();
+</script>
+<!-- FIM PATCH V1-02-52 -->
 </body>
 </html>
