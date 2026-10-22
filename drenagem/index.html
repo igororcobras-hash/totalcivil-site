@@ -1469,7 +1469,7 @@ const HELP = {
   'bacias.tc': 'Tempo que a água leva do ponto mais distante da bacia até a entrada no sistema. Áreas urbanas pequenas: 5 a 15 min.',
   'bacias.kL': 'Comprimento do talvegue da bacia (m).',
   'bacias.kH': 'Desnível do talvegue (m).',
-  'bls.id': 'Código da boca-de-lobo (ex.: BL-01).',
+  'bls.id': 'Código do poço de visita desta linha (ex.: PV-01). Não repete os códigos da aba Poços de visita.',
   'bls.rua': 'Rua onde a boca-de-lobo está.',
   'bls.dist': 'Posição ao longo da rua. Digite em metros (ex.: 38) ou como estaca (ex.: 1+18,00). A declividade da sarjeta é lida do greide nesse ponto.',
   'bls.lado': 'Lado da via em relação ao sentido do estaqueamento.',
@@ -1484,7 +1484,7 @@ const HELP = {
   'bls.S': 'Declividade longitudinal da sarjeta no local. Deixe em branco para usar a do greide cadastrado na aba 3.',
   'bls.z': 'Inverso da declividade transversal (z = 1/i). Em branco usa o valor da rua. Ex.: 3 % → z = 33.',
   'bls.prox': 'Boca-de-lobo que recebe a água que esta não conseguir engolir. Sem indicação, o excedente é considerado perdido na via.',
-  'bls.pv': 'Poço de visita onde o ramal desta boca-de-lobo se liga.',
+  'bls.pv': 'Poço de visita da rede tronco onde o ramal desta linha se liga.',
   'bls.rL': 'Comprimento do tubo de ligação entre a boca-de-lobo e o PV.',
   'bls.rD': 'Diâmetro do tubo de ligação (ramal).',
   'bls.rI': 'Declividade do ramal. Usual ≥ 1 %.',
@@ -1828,6 +1828,20 @@ function renameRef(kind, a, b) {
   if (kind === 'bls') { P.bls.forEach(x => { if (x.prox === a) x.prox = b; }); P.bacias.forEach(x => { if (x.dest === a) x.dest = b; }); }
   if (kind === 'ruas') { P.estacas.forEach(x => { if (x.rua === a) x.rua = b; }); P.pvs.forEach(x => { if (x.rua === a) x.rua = b; }); P.bls.forEach(x => { if (x.rua === a) x.rua = b; }); }
 }
+/* código das linhas da aba 5 (PV-01, PV-02…), sem repetir os códigos da aba de poços de visita */
+function idCapt(p, livre) {
+  p = p || P; const usados = new Set((p.pvs || []).map(x => x.id).concat((p.bls || []).map(x => x.id)));
+  let n = 1; while (usados.has('PV-' + String(n).padStart(2, '0')) || (livre && livre.has('PV-' + String(n).padStart(2, '0')))) n++;
+  return 'PV-' + String(n).padStart(2, '0');
+}
+function blParaPV(p) {
+  const ren = {}, novos = new Set();
+  (p.bls || []).forEach(b => { if (/^BL-\d+$/.test(b.id)) { const id = idCapt(p, novos); novos.add(id); ren[b.id] = id; } });
+  if (!Object.keys(ren).length) return p;
+  (p.bls || []).forEach(b => { if (ren[b.id]) b.id = ren[b.id]; if (ren[b.prox]) b.prox = ren[b.prox]; });
+  (p.bacias || []).forEach(x => { if (ren[x.dest]) x.dest = ren[x.dest]; });
+  return p;
+}
 function nextId(list, pre, dig = 2) {
   let n = list.length + 1; const ids = new Set(list.map(x => x.id));
   while (ids.has(pre + String(n).padStart(dig, '0'))) n++;
@@ -1838,8 +1852,8 @@ function addItem(kind) {
   let o;
   if (kind === 'ruas') o = {id: nextId(L, 'R', 1), nome: 'Rua ' + (L.length + 1), larg: 7, passeio: 2, it: 3};
   if (kind === 'bacias') o = {id: nextId(L, 'B', 1), nome: '', A: 0.2, C: 0.7, dest: last ? last.dest : '', tcMode: 'man', tc: 10, kL: '', kH: ''};
-  if (kind === 'bls') o = Object.assign({rua: (P.ruas[0] || {}).id || '', dist: 0, lado: 'E', tipo: 'gs', L: 1, a: 0.05, gL: 0.9, gB: 0.4, ga: 60, fr: 0.8, S: '', z: '', pv: (P.pvs[0] || {}).id || '', rL: 6, rD: 400, rI: 2, constr: 'Pré-moldada'}, last ? JSON.parse(JSON.stringify(last)) : {}, {id: nextId(L, 'BL-'), prox: ''});
-  if (kind === 'pvs') o = {id: nextId(L, 'PV-'), rua: last ? last.rua : ((P.ruas[0] || {}).id || ''), dist: last ? (num(last.dist) || 0) + 40 : 0, tipo: PVTIPOS[0], dpv: 1000, tampaCl: TAMPAS[0], tampa: '', defl: last ? 'reta' : 'ini', na: '', obs: ''};
+  if (kind === 'bls') o = Object.assign({rua: (P.ruas[0] || {}).id || '', dist: 0, lado: 'E', tipo: 'gs', L: 1, a: 0.05, gL: 0.9, gB: 0.4, ga: 60, fr: 0.8, S: '', z: '', pv: (P.pvs[0] || {}).id || '', rL: 6, rD: 400, rI: 2, constr: 'Pré-moldada'}, last ? JSON.parse(JSON.stringify(last)) : {}, {id: idCapt(), prox: ''});
+  if (kind === 'pvs') o = {id: idCapt(), rua: last ? last.rua : ((P.ruas[0] || {}).id || ''), dist: last ? (num(last.dist) || 0) + 40 : 0, tipo: PVTIPOS[0], dpv: 1000, tampaCl: TAMPAS[0], tampa: '', defl: last ? 'reta' : 'ini', na: '', obs: ''};
   if (kind === 'trechos') {
     const m = last ? last.j : ((P.pvs[0] || {}).id || '');
     const iM = P.pvs.findIndex(p => p.id === m), j = iM >= 0 && P.pvs[iM + 1] ? P.pvs[iM + 1].id : '';
@@ -1850,7 +1864,7 @@ function addItem(kind) {
 }
 function dupItem(kind, i) {
   const L = P[kind], o = JSON.parse(JSON.stringify(L[i]));
-  if ('id' in o) o.id = nextId(L, kind === 'pvs' ? 'PV-' : kind === 'bls' ? 'BL-' : kind === 'trechos' ? 'T' : kind === 'bacias' ? 'B' : 'R', kind === 'pvs' || kind === 'bls' ? 2 : 1);
+  if ('id' in o) o.id = kind === 'bls' || kind === 'pvs' ? idCapt() : nextId(L, kind === 'pvs' ? 'PV-' : kind === 'bls' ? 'BL-' : kind === 'trechos' ? 'T' : kind === 'bacias' ? 'B' : 'R', kind === 'pvs' || kind === 'bls' ? 2 : 1);
   if (kind === 'estacas' || kind === 'pvs' || kind === 'bls') o.dist = (num(o.dist) || 0) + 20;
   L.splice(i + 1, 0, o); OPEN.clear(); save(); calc(); renderTab();
 }
@@ -2116,10 +2130,10 @@ function vBacias() {
 function vBLs() {
   P.bls.forEach(b => { b.cxPad = padKey(b.cxB, b.cxL); b.grPad = padKey(b.gB, b.gL); });
   return `<h3>Sarjetas, bocas-de-lobo e ramais</h3>
-  <p class="lead">Uma linha por boca-de-lobo, localizada por estaca. Na mesma linha: vazão que chega pela sarjeta, lâmina, largura alagada, quanto a BL engole, quanto <b>passa</b> para a BL seguinte e o funcionamento do <b>ramal até o PV</b>. Toque em ▸ para grelha, depressão, fator de redução e sugestões.</p>
-  <div class="bar-btns"><button class="btn btn-primary btn-sm" onclick="addItem('bls')">＋ Boca-de-lobo</button></div>
+  <p class="lead">Uma linha por poço de visita (PV-01, PV-02…), localizado por estaca. Na mesma linha: vazão que chega pela sarjeta, lâmina, largura alagada, quanto o PV engole, quanto <b>passa</b> para o PV seguinte e o funcionamento do <b>ramal até o PV da rede</b>. Toque em ▸ para grelha, depressão, fator de redução e sugestões.</p>
+  <div class="bar-btns"><button class="btn btn-primary btn-sm" onclick="addItem('bls')">＋ Poço de visita</button></div>
   ${sheet('bls', [
-    {h: 'BL', p: 'id', o: {type: 'txt'}, w: 78, k: 'bls.id'},
+    {h: 'PV', p: 'id', o: {type: 'txt'}, w: 78, k: 'bls.id'},
     {h: 'Rua', p: 'rua', o: () => ({type: 'sel', opts: optsRua()}), w: 130, k: 'bls.rua'},
     {h: 'Estaca', p: 'dist', o: {type: 'est'}, w: 84, k: 'bls.dist'},
     {h: 'Lado', p: 'lado', o: {type: 'sel', opts: [['E', 'Esq.'], ['D', 'Dir.']]}, w: 70, k: 'bls.lado'},
@@ -2133,9 +2147,9 @@ function vBLs() {
     {h: 'L guia', u: 'm', p: (o, i) => o.tipo === 'gr' ? null : `bls.${i}.L`, o: {step: 0.1}, w: 66, k: 'bls.L'},
     {h: 'S sarjeta', u: '%', p: 'S', o: {step: 0.05, ph: 'auto'}, w: 72, k: 'bls.S'},
     {h: 'S usada', u: '%', res: 'Sx'}, {h: 'Q chega', u: 'L/s', res: 'Qafl'}, {h: 'Lâmina y', u: 'cm', res: 'y'}, {h: 'Larg. T', u: 'm', res: 'T'},
-    {h: 'Q adm. sarjeta', u: 'L/s', res: 'Qadm'}, {h: 'Capacid. BL', u: 'L/s', res: 'Qcap'}, {h: 'Engolida', u: 'L/s', res: 'Qeng'}, {h: 'Passa', u: 'L/s', res: 'Qbyp'},
+    {h: 'Q adm. sarjeta', u: 'L/s', res: 'Qadm'}, {h: 'Capacid. PV', u: 'L/s', res: 'Qcap'}, {h: 'Engolida', u: 'L/s', res: 'Qeng'}, {h: 'Passa', u: 'L/s', res: 'Qbyp'},
     {h: 'Passa p/', p: 'prox', o: (o) => ({type: 'sel', opts: [['', '—']].concat(P.bls.filter(x => x.id !== o.id).map(x => [x.id, x.id]))}), w: 90, k: 'bls.prox'},
-    {h: 'Ramal → PV', p: 'pv', o: () => ({type: 'sel', opts: optsPV(true)}), w: 100, k: 'bls.pv'},
+    {h: 'Ramal → PV rede', p: 'pv', o: () => ({type: 'sel', opts: optsPV(true)}), w: 100, k: 'bls.pv'},
     {h: 'Ramal Ø', u: 'mm', p: 'rD', o: {type: 'sel', num: true, opts: optsD()}, w: 86, k: 'bls.rD'},
     {h: 'Ramal L', u: 'm', p: 'rL', o: {step: 0.5}, w: 64, k: 'bls.rL'},
     {h: 'Ramal i', u: '%', p: 'rI', o: {step: 0.1}, w: 64, k: 'bls.rI'},
@@ -3402,7 +3416,7 @@ function addBLMontante(id) {
     (bacs.length ? 'As áreas que chegam na ' + b.id + ' (' + bacs.map(x => x.id).join(', ') + ') serão divididas ao meio entre as duas BLs. ' : '') + 'O excedente da nova BL seguirá para a ' + b.id + '.')) return;
   const antes = JSON.stringify(P);
   const pvs = P.pvs.filter(p => p.rua === b.rua && isNum(num(p.dist))).sort((x, y) => Math.abs(num(x.dist) - d) - Math.abs(num(y.dist) - d));
-  const nid = nextId(P.bls, 'BL-');
+  const nid = idCapt();
   const nb = Object.assign(JSON.parse(JSON.stringify(b)), {id: nid, dist: +d.toFixed(2), prox: b.id, pv: pvs[0] ? pvs[0].id : b.pv});
   P.bls.splice(P.bls.indexOf(b), 0, nb);
   if (ant && ant.prox === b.id) ant.prox = nid;
@@ -3728,15 +3742,15 @@ Object.assign(HELP, {
 /* projetos: PVs antigos continuam circulares (mesmo resultado); exemplos e PVs novos usam EMOP */
 const _migrate0 = migrate;
 migrate = function (p) {
-  p = _migrate0(p);
+  p = blParaPV(_migrate0(p));
   p.desenho = Object.assign({ralos: true}, p.desenho || {});
   (p.pvs || []).forEach(pv => { if (!PVMOD[pv.modelo]) pv.modelo = pv.tipo === EMOP_TIPO ? 'emop' : 'circ'; });
   return p;
 };
 const emopNosExemplos = p => { (p.pvs || []).forEach(pv => { pv.modelo = 'emop'; pv.tipo = EMOP_TIPO; pv.pvL = ''; pv.pvHi = ''; }); p.desenho = {ralos: true}; return p; };
 const _exProj0 = exampleProject, _exBairro0 = exampleBairro;
-exampleProject = function () { return emopNosExemplos(_exProj0.apply(this, arguments)); };
-exampleBairro = function () { return emopNosExemplos(_exBairro0.apply(this, arguments)); };
+exampleProject = function () { return blParaPV(emopNosExemplos(_exProj0.apply(this, arguments))); };
+exampleBairro = function () { return blParaPV(emopNosExemplos(_exBairro0.apply(this, arguments))); };
 
 /* ---------- medidas do PV EMOP (a partir dos tubos, ramais e topografia) ---------- */
 const _dadosSecao0 = dadosSecao;
@@ -4315,8 +4329,8 @@ addItem = function (kind) {
   let o;
   if (kind === 'ruas') o = {id: nextId(L, 'R', 1), nome: 'Rua ' + (L.length + 1), larg: 7, passeio: 2, it: 3};
   if (kind === 'bacias') o = {id: nextId(L, 'B', 1), nome: '', A: 0.2, C: 0.7, dest: last ? last.dest : '', tcMode: 'man', tc: 10, kL: '', kH: ''};
-  if (kind === 'bls') o = Object.assign({rua: (P.ruas[0] || {}).id || '', dist: 0, lado: 'E', tipo: 'gs', L: 1, a: 0.05, gL: 0.9, gB: 0.4, ga: 60, fr: 0.8, S: '', z: '', pv: (P.pvs[0] || {}).id || '', rL: 6, rD: 400, rI: 2, constr: 'Pré-moldada'}, last ? JSON.parse(JSON.stringify(last)) : {}, {id: nextId(L, 'BL-'), prox: ''});
-  if (kind === 'pvs') o = {id: nextId(L, 'PV-'), rua: last ? last.rua : ((P.ruas[0] || {}).id || ''), dist: last ? (num(last.dist) || 0) + 40 : 0, modelo: 'emop', tipo: EMOP_TIPO, pvL: '', pvHi: '', dpv: 1000, tampaCl: TAMPAS[0], tampa: '', defl: last ? 'reta' : 'ini', na: '', obs: ''};
+  if (kind === 'bls') o = Object.assign({rua: (P.ruas[0] || {}).id || '', dist: 0, lado: 'E', tipo: 'gs', L: 1, a: 0.05, gL: 0.9, gB: 0.4, ga: 60, fr: 0.8, S: '', z: '', pv: (P.pvs[0] || {}).id || '', rL: 6, rD: 400, rI: 2, constr: 'Pré-moldada'}, last ? JSON.parse(JSON.stringify(last)) : {}, {id: idCapt(), prox: ''});
+  if (kind === 'pvs') o = {id: idCapt(), rua: last ? last.rua : ((P.ruas[0] || {}).id || ''), dist: last ? (num(last.dist) || 0) + 40 : 0, modelo: 'emop', tipo: EMOP_TIPO, pvL: '', pvHi: '', dpv: 1000, tampaCl: TAMPAS[0], tampa: '', defl: last ? 'reta' : 'ini', na: '', obs: ''};
   if (kind === 'trechos') {
     const m = last ? last.j : ((P.pvs[0] || {}).id || '');
     const iM = P.pvs.findIndex(p => p.id === m), j = iM >= 0 && P.pvs[iM + 1] ? P.pvs[iM + 1].id : '';
@@ -5422,7 +5436,7 @@ function gerProjeto(op) {
     // captações, ramais e bacias
     let nb = 0;
     const ordC = capU.slice().sort((a, b) => ordR(a.rua) - ordR(b.rua) || a.s - b.s || (a.lado < b.lado ? -1 : 1));
-    ordC.forEach(x => { x.id = 'BL-' + String(++nb).padStart(2, '0'); });
+    ordC.forEach(x => { x.id = 'PV-' + String(lista.length + (++nb)).padStart(2, '0'); });
     ordC.forEach((x, k) => {
       const rua = ruaById(x.rua) || {}, pv = lista.find(n => n.pts.some(p => p.rua === x.rua && Math.abs(p.s - x.s) < 1.5));
       const b = {id: x.id, modelo: op.modelo, rua: x.rua, dist: x.s, lado: x.lado, a: 0.05, gL: 0.9, gB: 0.4, ga: 60, S: '', z: '', prox: x.prox ? x.prox.id : '', pv: pv ? pv.id : '',
