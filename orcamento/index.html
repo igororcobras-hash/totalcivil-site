@@ -13903,10 +13903,15 @@ body.mode-mobile .pm-modal{padding:0}
    - "Salvar o orçamento aberto como modelo": guarda títulos e códigos do
      orçamento atual (ex.: planilha de uma licitação importada) neste
      aparelho (tc_modelos_usuario_v1), com as quantidades zeradas.
+   V1-02-53: até 10 modelos por tipo (porte, nº de pavimentos), cada um com
+     versões separadas por banco: "sinapi" e "sco" (código, descrição e
+     unidade do banco) e "emop" (só o código: descrição e preço vêm da EMOP
+     que o usuário carregou). Abas por tipo na janela.
    ===================================================================== */
 (function(){
-  var KEY_USR = 'tc_modelos_usuario_v1', MODELOS = null, carregando = null;
-  var ICONE = {pavimentacao: '🛣️', drenagem: '🌧️', esgoto: '🚽', urbanizacao: '🌳', casa: '🏠', predio: '🏢', escola: '🏫', saude: '🏥'};
+  var KEY_USR = 'tc_modelos_usuario_v1', MODELOS = null, carregando = null, ABA = null;
+  var NOME_BANCO = {sinapi: 'SINAPI RJ', sco: 'SCO-Rio', emop: 'EMOP-RJ'};
+  var ICONE = {pavimentacao: '🛣️', drenagem: '🌧️', esgoto: '🚽', urbanizacao: '🌳', casa: '🏠', predio: '🏢', escola: '🏫', saude: '🏥', galpao: '🏭', torre: '🗼'};
   function esc(t){ return String(t == null ? '' : t).replace(/[&<>"]/g, function(c){ return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]; }); }
   function lerUsr(){ try{ var a = JSON.parse(localStorage.getItem(KEY_USR) || '[]'); return Array.isArray(a) ? a : []; }catch(e){ return []; } }
   function salvarUsr(a){ try{ localStorage.setItem(KEY_USR, JSON.stringify(a)); return true; }catch(e){ alert('Não foi possível salvar o modelo neste aparelho (memória do navegador cheia).'); return false; } }
@@ -13916,16 +13921,20 @@ body.mode-mobile .pm-modal{padding:0}
       .then(function(j){ MODELOS = j; return j; }).catch(function(e){ carregando = null; throw e; });
     return carregando;
   }
-  function contar(m){ return (m.etapas || []).reduce(function(s, e){ return s + (e.itens || []).length; }, 0); }
+  function versao(m, banco){ return m.proprio || m.etapas ? m : (m[banco] || null); }
+  function etapasDe(m, banco){ var v = versao(m, banco); return v ? (v.etapas || []) : []; }
+  function contar(m, banco){ return etapasDe(m, banco).reduce(function(s, e){ return s + (e.itens || []).length; }, 0); }
+  function bancosDe(m){ return m.proprio || m.etapas ? ['sinapi', 'sco', 'emop'] : ['sinapi', 'sco', 'emop'].filter(function(b){ return m[b]; }); }
 
   /* linhas da planilha do modelo no banco escolhido (SCO sem equivalente usa o SINAPI) */
   function matrizDoModelo(m, banco){
     var aoa = [['ITEM', 'CÓDIGO', 'DESCRIÇÃO', 'UNID', 'QUANT.']], misturados = 0;
-    (m.etapas || []).forEach(function(e, i){
+    etapasDe(m, banco).forEach(function(e, i){
       aoa.push([String(i + 1), '', String(e.nome || 'ETAPA').toUpperCase(), '', '']);
       (e.itens || []).forEach(function(it, j){
         var cod, d, u;
-        if(it.codigo){ cod = it.codigo; d = it.descr; u = it.unid; }
+        if(it.c){ var dc = (MODELOS && MODELOS.dic && MODELOS.dic[it.c]) || []; cod = it.c; d = it.d || dc[0]; u = it.u || dc[1]; }
+        else if(it.codigo){ cod = it.codigo; d = it.descr; u = it.unid; }
         else if((banco === 'sco' || !it.sinapi) && it.sco){ cod = it.sco; d = it.scoDescr; u = it.scoUnid; if(banco !== 'sco') misturados++; }
         else { cod = it.sinapi; d = it.descr; u = it.unid; if(banco === 'sco') misturados++; }
         aoa.push([(i + 1) + '.' + (j + 1), cod, d || '', u || '', 0]);
@@ -13946,8 +13955,9 @@ body.mode-mobile .pm-modal{padding:0}
       var old = document.getElementById('tcEnvioAviso'); if(old) old.remove();
       var d = document.createElement('div'); d.id = 'tcEnvioAviso';
       d.style.cssText = 'margin:8px 0;padding:8px 10px;border:1px solid #2563eb;background:#eff6ff;color:#1e3a8a;border-radius:8px;font-size:11.5px;line-height:1.45';
-      d.innerHTML = '📚 <b>Modelo: ' + esc(m.nome) + '</b> · ' + contar(m) + ' serviços em ' + (m.etapas || []).length + ' etapas' + (m.proprio ? '' : ' · banco ' + (banco === 'sco' ? 'SCO-Rio' : 'SINAPI RJ'))
+      d.innerHTML = '📚 <b>Modelo: ' + esc(m.nome) + (m.porte ? ' (' + esc(m.porte) + ')' : '') + '</b> · ' + contar(m, banco) + ' serviços em ' + etapasDe(m, banco).length + ' etapas' + (m.proprio ? '' : ' · banco ' + NOME_BANCO[banco])
         + '.<br>Clique em <b>IMPORTAR AGORA</b>. Os serviços entram com <b>quantidade 0</b>: preencha as quantidades da sua obra e apague o que não houver. Os preços vêm do banco do mês carregado.'
+        + (banco === 'emop' && !m.proprio ? '<br>Versão EMOP: a descrição e o preço vêm da EMOP que você carregou em 🗂️ Atualizar EMOP; sem ela os itens entram sem preço.' : '')
         + (r.misturados ? '<br>' + r.misturados + ' serviço(s) sem equivalente ' + (banco === 'sco' ? 'no SCO entram com o código SINAPI' : 'no SINAPI entram com o código SCO') + ' (os dois bancos convivem na mesma planilha).' : '');
       stEl.parentNode.insertBefore(d, stEl);
     });
@@ -13969,7 +13979,7 @@ body.mode-mobile .pm-modal{padding:0}
     var el = document.getElementById('nomeOrcAtual'), sug = (el && el.value || '').trim();
     var nome = prompt('Nome do modelo (ex.: Pavimentação Rio das Ostras 2026):', sug || 'Meu modelo'); if(!nome) return;
     var lista = lerUsr(); lista.push({id: 'u' + Date.now(), nome: nome.trim(), descricao: 'Modelo salvo do orçamento ' + (sug || 'aberto') + ' em ' + new Date().toLocaleDateString('pt-BR') + '.', proprio: true, etapas: etapas});
-    if(salvarUsr(lista)) render();
+    if(salvarUsr(lista)){ ABA = '_meus'; render(); }
   }
   function excluirUsr(id){
     var lista = lerUsr(), m = lista.find(function(x){ return x.id === id; }); if(!m) return;
@@ -14008,28 +14018,37 @@ body.mode-mobile .pm-modal{padding:0}
   function render(verId){
     var bd = document.getElementById('tcModBd'); if(!bd) return;
     var b = banco(), lista = (MODELOS && MODELOS.modelos) || [], usr = lerUsr();
+    var tipos = (MODELOS && MODELOS.tipos) || [];
+    if(!tipos.length){ var vistos = {}; lista.forEach(function(m){ var t = m.tipo || m.id; if(!vistos[t]){ vistos[t] = 1; tipos.push({id: t, nome: m.tipo ? t : m.nome}); } }); }
+    if(usr.length) tipos = tipos.concat([{id: '_meus', nome: 'Meus modelos'}]);
+    if(!ABA || !tipos.some(function(t){ return t.id === ABA; })) ABA = tipos.length ? tipos[0].id : null;
+    var daAba = ABA === '_meus' ? usr : lista.filter(function(m){ return (m.tipo || m.id) === ABA; });
+    var temEmop = lista.some(function(m){ return m.emop; });
     var card = function(m){
-      return '<div class="tm-card"><h4>' + (m.proprio ? '⭐' : (ICONE[m.id] || '📋')) + ' ' + esc(m.nome) + '</h4><p>' + esc(m.descricao || '') + '</p>'
-        + '<div class="tm-n">' + (m.etapas || []).length + ' etapas · ' + contar(m) + ' serviços</div>'
-        + '<div class="tm-acts"><button class="tm-b tm-p" data-usar="' + esc(m.id) + '">Usar este modelo</button><button class="tm-b" data-ver="' + esc(m.id) + '">Ver itens</button>'
+      var tem = bancosDe(m).indexOf(b) >= 0, n = contar(m, b);
+      return '<div class="tm-card"><h4>' + (m.proprio ? '⭐' : (ICONE[m.tipo || m.id] || '📋')) + ' ' + esc(m.nome) + '</h4>' + (m.porte ? '<div class="tm-n" style="font-weight:700;color:#334155">' + esc(m.porte) + '</div>' : '') + '<p>' + esc(m.descricao || '') + '</p>'
+        + '<div class="tm-n">' + (tem ? etapasDe(m, b).length + ' etapas · ' + n + ' serviços' + (m.proprio ? '' : ' · ' + NOME_BANCO[b]) : 'Ainda sem versão ' + NOME_BANCO[b]) + '</div>'
+        + '<div class="tm-acts"><button class="tm-b tm-p" data-usar="' + esc(m.id) + '"' + (tem ? '' : ' disabled style="opacity:.5"') + '>Usar este modelo</button><button class="tm-b" data-ver="' + esc(m.id) + '"' + (tem ? '' : ' disabled') + '>Ver itens</button>'
         + (m.proprio ? '<button class="tm-b" data-del="' + esc(m.id) + '" title="Excluir este modelo">🗑️</button>' : '') + '</div></div>';
     };
     var h = '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">'
-      + '<label style="font-weight:700">Banco dos códigos: <select id="tcModBanco" style="padding:3px;border:1px solid #cbd5e1;border-radius:4px"><option value="sinapi"' + (b === 'sinapi' ? ' selected' : '') + '>SINAPI — RJ</option><option value="sco"' + (b === 'sco' ? ' selected' : '') + '>SCO — Rio de Janeiro</option></select></label>'
+      + '<label style="font-weight:700">Banco: <select id="tcModBanco" style="padding:3px;border:1px solid #cbd5e1;border-radius:4px">'
+      + ['sinapi', 'sco', 'emop'].map(function(k){ return '<option value="' + k + '"' + (b === k ? ' selected' : '') + '>' + {sinapi: 'SINAPI — RJ', sco: 'SCO — Rio de Janeiro', emop: 'EMOP — RJ' + (temEmop ? '' : ' (em preparo)')}[k] + '</option>'; }).join('') + '</select></label>'
       + '<button class="tm-b" id="tcModSalvar" title="Guarda os títulos e códigos do orçamento aberto como um modelo seu, neste aparelho">⭐ Salvar o orçamento aberto como modelo</button></div>'
-      + '<div style="color:#475569;margin-top:6px;line-height:1.4">Escolha o tipo de obra: o modelo abre na importação com as etapas e os serviços usuais de uma planilha de licitação, com códigos do banco e <b>quantidade 0</b> para você preencher. ' + esc(MODELOS && MODELOS.fonte || '') + '</div>'
-      + '<div class="tm-grid">' + lista.map(card).join('') + '</div>'
-      + (usr.length ? '<div style="font-weight:800;margin-top:14px">Meus modelos (neste aparelho)</div><div class="tm-grid">' + usr.map(card).join('') + '</div>' : '');
+      + '<div style="color:#475569;margin-top:6px;line-height:1.4">Escolha o banco, o tipo de obra e o porte: o modelo abre na importação com as etapas e os serviços usuais de uma planilha de licitação, com <b>quantidade 0</b> para você preencher. Cada banco tem a sua versão do modelo. ' + esc(MODELOS && MODELOS.fonte || '') + '</div>'
+      + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:10px">' + tipos.map(function(t){ var on = t.id === ABA; return '<button class="tm-b" data-aba="' + esc(t.id) + '" style="' + (on ? 'background:#0f172a;color:#fff;border-color:#0f172a' : '') + '">' + (t.id === '_meus' ? '⭐' : (ICONE[t.id] || '📋')) + ' ' + esc(t.nome) + '</button>'; }).join('') + '</div>'
+      + '<div class="tm-grid">' + daAba.map(card).join('') + '</div>';
     var mv = verId && achar(verId);
-    if(mv){
+    if(mv && bancosDe(mv).indexOf(b) >= 0){
       var r = matrizDoModelo(mv, b);
-      h += '<div style="font-weight:800;margin-top:14px">Itens do modelo: ' + esc(mv.nome) + '</div><div class="tm-ver"><table>'
-        + r.aoa.slice(1).map(function(l){ return l[1] ? '<tr><td>' + esc(l[0]) + '</td><td style="white-space:nowrap">' + esc(l[1]) + '</td><td>' + esc(l[2]) + '</td><td>' + esc(l[3]) + '</td></tr>' : '<tr class="tm-et"><td>' + esc(l[0]) + '</td><td colspan="3">' + esc(l[2]) + '</td></tr>'; }).join('')
+      h += '<div style="font-weight:800;margin-top:14px">Itens do modelo: ' + esc(mv.nome) + (mv.porte ? ' · ' + esc(mv.porte) : '') + ' · ' + (mv.proprio ? 'meu modelo' : NOME_BANCO[b]) + '</div><div class="tm-ver"><table>'
+        + r.aoa.slice(1).map(function(l){ return l[1] ? '<tr><td>' + esc(l[0]) + '</td><td style="white-space:nowrap">' + esc(l[1]) + '</td><td>' + esc(l[2] || '(descrição da EMOP carregada)') + '</td><td>' + esc(l[3]) + '</td></tr>' : '<tr class="tm-et"><td>' + esc(l[0]) + '</td><td colspan="3">' + esc(l[2]) + '</td></tr>'; }).join('')
         + '</table></div>';
     }
     bd.innerHTML = h;
     document.getElementById('tcModBanco').onchange = function(){ render(verId); };
     document.getElementById('tcModSalvar').onclick = salvarAtualComoModelo;
+    bd.querySelectorAll('[data-aba]').forEach(function(x){ x.onclick = function(){ ABA = x.dataset.aba; render(); }; });
     bd.querySelectorAll('[data-usar]').forEach(function(x){ x.onclick = function(){ var m = achar(x.dataset.usar); if(m) abrirNoImportador(m, banco()); }; });
     bd.querySelectorAll('[data-ver]').forEach(function(x){ x.onclick = function(){ render(x.dataset.ver); var v = bd.querySelector('.tm-ver'); if(v) v.scrollIntoView({block: 'nearest'}); }; });
     bd.querySelectorAll('[data-del]').forEach(function(x){ x.onclick = function(){ excluirUsr(x.dataset.del); }; });
