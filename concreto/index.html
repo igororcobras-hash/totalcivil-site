@@ -1711,5 +1711,169 @@ function expWord(){
 setSubtipo('iso');
 setEstaca('helice');
 </script>
+<script src="/orcamento-comum.js"></script>
+<script>
+/* =====================================================================
+   PATCH CON-ORC (25/10/2026) — Orçamento (EMOP, SINAPI e SCO) das fundações em concreto
+   Mesma janela "3 soluções com orçamento" da Drenagem. As quantidades vêm do que o
+   programa dimensionou: sapatas isoladas, sapata corrida, radier e estacas com bloco
+   (volume de concreto, armadura calculada, fôrmas, escavação, lastro e reaterro).
+   Cada fundação entra no orçamento quando o usuário abre a aba dela (e pode mudar na janela).
+   ===================================================================== */
+(function(){
+  if (!window.TCORC) return;
+  var U = TCORC.util, ACO = 7850;
+  var G = ['SERVIÇOS PRELIMINARES', 'ESCAVAÇÃO, LASTRO E REATERRO', 'SAPATAS ISOLADAS', 'SAPATA CORRIDA', 'RADIER', 'ESTACAS E BLOCOS DE COROAMENTO'];
+  var nf = function(v, d){ return (isFinite(v) ? v : 0).toLocaleString('pt-BR', {minimumFractionDigits: d, maximumFractionDigits: d}); };
+  var SOL = [
+    {k: 'eco', nome: 'Solução 1 — Econômica', curto: 'Econômica', desc: 'Fôrmas de madeira serrada (2 utilizações), concreto bombeado, lastro de concreto magro e armadura em CA-50. Menor custo de execução.', form: 'tabua', imper: false},
+    {k: 'rec', nome: 'Solução 2 — Recomendada', curto: 'Recomendada', desc: 'Fôrmas de chapa compensada resinada (2 utilizações), concreto bombeado, lastro de concreto magro e armadura em CA-50.', form: 'comp2', imper: false},
+    {k: 'dur', nome: 'Solução 3 — Maior durabilidade', curto: 'Durável', desc: 'Fôrmas de compensado resinado (4 utilizações, melhor acabamento), concreto bombeado, lastro de concreto magro e impermeabilização das faces enterradas com emulsão asfáltica.', form: 'comp4', imper: true}
+  ];
+  var FORMA = {
+    sapata: {tabua: ['SC-96532'], comp2: ['SC-96538'], comp4: ['SC-96541']},
+    corrida: {tabua: ['SC-96533'], comp2: ['SC-96539'], comp4: ['SC-104929']},
+    bloco: {tabua: ['SC-96531'], comp2: ['SC-96537'], comp4: ['SC-96540']}
+  };
+  var NOMEF = {tabua: 'madeira serrada (2 utilizações)', comp2: 'chapa compensada resinada (2 utilizações)', comp4: 'chapa compensada resinada (4 utilizações)'};
+  var PRM = {sap: 'inc_sap', cor: 'inc_cor', rad: 'inc_rad', est: 'inc_est'};
+  /* por diâmetro (cm) mais próximo: [diâmetro, SINAPI, SCO] */
+  var EST = {
+    helice: [[30, 'SC-100651', 'SCO-FD 05.23.0025'], [50, 'SC-100652', 'SCO-FD 05.23.0028'], [70, 'SC-100653', 'SCO-FD 05.23.0050'], [80, 'SC-100654', 'SCO-FD 05.23.0050'], [90, 'SC-100655', 'SCO-FD 05.23.0050']],
+    escav: [[25, 'SC-100896'], [40, 'SC-100897'], [60, 'SC-100898']],
+    raiz: [[20, 'SC-102645', 'SCO-FD 05.65.0103'], [31, 'SC-102646', 'SCO-FD 05.65.0203'], [40, 'SC-102647'], [45, 'SC-102648']],
+    premold: [[25, 'SC-100656', 'SCO-FD 05.10.0100'], [35, 'SC-100657', 'SCO-FD 05.10.0150'], [45, 'SC-100658', 'SCO-FD 05.10.0150']],
+    strauss: [[25, 'SC-101177'], [32, 'SC-101178'], [38, 'SC-101179']],
+    franki: [[40, null, 'SCO-FD 05.20.0050'], [60, null, 'SCO-FD 05.20.0100']],
+    tubulao: [[100, null, 'SCO-FD 05.25.0050'], [120, null, 'SCO-FD 05.25.0150']]
+  };
+  function perto(lista, dcm){ var b = lista[0]; lista.forEach(function(x){ if (Math.abs(x[0] - dcm) < Math.abs(b[0] - dcm)) b = x; }); return b; }
+  function valido(){ return typeof _pilares !== 'undefined' && _pilares.length && typeof _sapatas !== 'undefined' && _sapatas.length; }
+
+  /* ---- sapatas isoladas ---- */
+  function sapatas(sol, p, P){
+    var L = [], g = G[2], n = _sapatas.length, vol = 0, forma = 0, kg = 0, escav = 0, lastro = 0, lat = 0;
+    _sapatas.forEach(function(s){
+      vol += s.vol; forma += 2 * (s.B + s.L) * s.h; lat += s.A + 2 * (s.B + s.L) * s.h;
+      kg += (s.AsXa * (s.B - 0.1) + s.AsYa * (s.L - 0.1)) * 1e-4 * ACO;
+      escav += (s.B + 0.4) * (s.L + 0.4) * Math.max(P.D, s.h + 0.1); lastro += (s.B + 0.2) * (s.L + 0.2);
+    });
+    var reat = Math.max(0, escav - vol - lastro * 0.05);
+    L.push({g: G[1], nome: 'Escavação mecanizada para sapatas (inclui escavação para colocação de fôrmas)', un: 'm³', q: escav, cod: {sinapi: 'SC-96521', sco: 'SCO-MT 10.10.0050'}, memo: n + ' sapata(s): (B + 0,40) × (L + 0,40) × profundidade ' + nf(P.D, 2) + ' m'});
+    L.push({g: G[1], nome: 'Lastro de concreto magro sob as sapatas, 5 cm', un: 'm²', q: lastro, cod: {sinapi: 'SC-96619'}, memo: 'Σ (B + 0,20) × (L + 0,20)'});
+    L.push({g: g, nome: 'Fôrma para sapata em ' + NOMEF[sol.form], un: 'm²', q: forma, cod: {sinapi: FORMA.sapata[sol.form][0], sco: false}, memo: 'Σ 2 × (B + L) × h das faces laterais. No SCO a fôrma já está na composição do concreto armado'});
+    L.push({g: g, nome: 'Armação de sapatas isoladas, aço CA-50 (bitola de referência 10 mm)', un: 'kg', q: kg, cod: {sinapi: 'SC-104919', sco: false}, memo: 'Asx e Asy calculadas × comprimento das barras × 7.850 kg/m³. No SCO o aço já está na composição do concreto armado'});
+    L.push({g: g, nome: 'Concretagem de sapatas, fck 30 MPa, com bomba' + sco, un: 'm³', q: vol, cod: {sinapi: 'SC-96558', sco: p.fck <= 20 ? 'SCO-ET 05.60.0150' : 'SCO-ET 05.60.0200'}, memo: 'Volume tronco-piramidal calculado: ' + nf(vol, 3) + ' m³; fck do projeto ' + nf(p.fck, 0) + ' MPa'});
+    if (sol.imper) L.push({g: g, nome: 'Impermeabilização das faces enterradas com emulsão asfáltica, 2 demãos', un: 'm²', q: lat, cod: {sinapi: 'SC-98557'}, memo: 'Área de topo e faces laterais das sapatas'});
+    L.push({g: G[1], nome: 'Reaterro manual compactado das sapatas', un: 'm³', q: reat, cod: {sinapi: 'SC-93382', sco: 'SCO-MT 15.10.0075'}, memo: 'Escavação − sapatas − lastro (o volume do pilar não é descontado)'});
+    return L;
+  }
+  /* ---- sapata corrida (mesmas fórmulas da aba) ---- */
+  function corrida(sol, p){
+    var qk = V('cor_qk'), B = V('cor_B'), h = V('cor_h'), Lc = V('cor_L');
+    if (!(B > 0 && h > 0 && Lc > 0)) return [];
+    var Fd = p.gfg * qk, sF = Fd / B, d = Math.max(0.1, h - p.cob / 1000 - 0.01), Msd = sF * (B - 0.2) * (B - 0.2) / 8;
+    var As = (Msd * 1000) / (0.9 * d * p.fyd) / 100, vol = B * h * Lc, kg = As * 1e-4 * B * 1.2 * Lc * ACO, forma = 2 * h * Lc, esc = (B + 0.4) * Math.max(V('D'), h + 0.1) * Lc, lastro = (B + 0.2) * Lc;
+    var g = G[3], reat = Math.max(0, esc - vol - lastro * 0.05);
+    return [
+      {g: G[1], nome: 'Escavação mecanizada para sapata corrida (inclui escavação para colocação de fôrmas)', un: 'm³', q: esc, cod: {sinapi: 'SC-96525', sco: 'SCO-MT 10.10.0050'}, memo: '(B + 0,40) × profundidade ' + nf(V('D'), 2) + ' m × ' + nf(Lc, 2) + ' m'},
+      {g: G[1], nome: 'Lastro de concreto magro sob a sapata corrida, 5 cm', un: 'm²', q: lastro, cod: {sinapi: 'SC-96619'}, memo: '(B + 0,20) × ' + nf(Lc, 2) + ' m'},
+      {g: g, nome: 'Fôrma para sapata corrida em ' + NOMEF[sol.form], un: 'm²', q: forma, cod: {sinapi: FORMA.corrida[sol.form][0], sco: false}, memo: '2 faces × h × comprimento. No SCO a fôrma já está na composição do concreto armado'},
+      {g: g, nome: 'Armação de sapata corrida, aço CA-50 (bitola de referência 10 mm)', un: 'kg', q: kg, cod: {sinapi: 'SC-104919', sco: false}, memo: 'As transversal ' + nf(As, 2) + ' cm²/m × B × comprimento × 7.850 kg/m³, mais 20 % de armadura de distribuição. No SCO o aço já está na composição'},
+      {g: g, nome: 'Concretagem de sapata corrida, fck 30 MPa, com bomba' + sco, un: 'm³', q: vol, cod: {sinapi: 'SC-104924', sco: p.fck <= 20 ? 'SCO-ET 05.60.0150' : 'SCO-ET 05.60.0200'}, memo: nf(B, 2) + ' × ' + nf(h, 2) + ' × ' + nf(Lc, 2) + ' m; fck do projeto ' + nf(p.fck, 0) + ' MPa'}
+    ].concat(sol.imper ? [{g: g, nome: 'Impermeabilização das faces enterradas com emulsão asfáltica, 2 demãos', un: 'm²', q: B * Lc + 2 * h * Lc, cod: {sinapi: 'SC-98557'}, memo: 'Topo e faces laterais'}] : [],
+      [{g: G[1], nome: 'Reaterro manual compactado da sapata corrida', un: 'm³', q: reat, cod: {sinapi: 'SC-93382', sco: 'SCO-MT 15.10.0075'}, memo: 'Escavação − sapata − lastro'}]);
+  }
+  /* ---- radier ---- */
+  function radier(sol, p){
+    var A = V('rad_A'), h = V('rad_h');
+    if (!(A > 0 && h > 0)) return [];
+    var N = V('rad_N') || (typeof _sapatas !== 'undefined' ? _sapatas.reduce(function(a, s){ return a + s.Nk; }, 0) : 0), sigma = N / A;
+    var d = Math.max(0.1, h - p.cob / 1000 - 0.012), Msd = sigma * 1 * 1 / 10, As = (Msd * 1000) / (0.9 * d * p.fyd) / 100, Asa = Math.max(As, 0.0015 * 1000 * d * 1000 / 100);
+    var vol = A * h, kg = Asa * 1e-4 * ACO * A * 2, per = 4 * Math.sqrt(A), g = G[4];
+    return [
+      {g: g, nome: 'Compactação mecânica do solo para execução do radier', un: 'm²', q: A, cod: {sinapi: 'SC-97083', sco: false}, memo: 'Área do radier: ' + nf(A, 2) + ' m²'},
+      {g: g, nome: 'Camada separadora em lona plástica', un: 'm²', q: A, cod: {sinapi: 'SC-97087', sco: false}, memo: 'Área do radier'},
+      {g: g, nome: 'Lastro de concreto magro sob o radier, 5 cm', un: 'm²', q: A, cod: {sinapi: 'SC-95241'}, memo: 'Área do radier'},
+      {g: g, nome: 'Fôrma lateral do radier, ' + (sol.form === 'tabua' ? 'madeira serrada' : 'compensado resinado') + ' (4 utilizações)', un: 'm²', q: per * h, cod: {sinapi: sol.form === 'tabua' ? 'SC-97086' : 'SC-107283', sco: false}, memo: 'Perímetro estimado como de um quadrado de mesma área (' + nf(per, 2) + ' m) × h. No SCO a fôrma já está na composição do concreto armado'},
+      {g: g, nome: 'Armação do radier, aço CA-50 (bitola de referência 10 mm), duas direções', un: 'kg', q: kg, cod: {sinapi: 'SC-104919', sco: false}, memo: 'As ' + nf(Asa, 2) + ' cm²/m em cada direção × 2 × área × 7.850 kg/m³. No SCO o aço já está na composição'},
+      {g: g, nome: 'Concretagem do radier, fck ' + (p.fck <= 25 ? '25' : '30') + ' MPa' + sco, un: 'm³', q: vol, cod: {sinapi: p.fck <= 25 ? 'SC-107276' : 'SC-97096', sco: p.fck <= 20 ? 'SCO-ET 05.60.0150' : 'SCO-ET 05.60.0200'}, memo: nf(A, 2) + ' m² × ' + nf(h, 2) + ' m; fck do projeto ' + nf(p.fck, 0) + ' MPa'}
+    ];
+  }
+  /* ---- estacas e bloco de coroamento (um bloco; multiplicado pelo número de blocos iguais) ---- */
+  function estacas(sol, p, P){
+    var D = V('est_D'), Le = V('est_L'), Nk = V('est_Nk'), n = parseInt(S('est_n')) || 3, esp = V('est_esp'), nb = Math.max(1, P.nblocos || 1);
+    if (!(D > 0 && Le > 0)) return [];
+    var tipo = (typeof _tipoEstaca !== 'undefined' && _tipoEstaca) || 'helice', lista = EST[tipo] || EST.helice, e = perto(lista, D * 100), g = G[5];
+    var espM = esp * D, lado = function(k){ return (k - 1) * espM + D + 0.3; }, k = Math.ceil(Math.sqrt(n));
+    var C = n === 1 ? D + 0.3 : n === 2 ? espM + D + 0.3 : lado(k), W = n <= 2 ? D + 0.3 : lado(Math.ceil(n / k));
+    var diag = n === 1 ? espM : Math.sqrt(2) * espM, hb = Math.max(0.3, diag / 2), db = Math.max(0.1, hb - p.cob / 1000 - 0.012);
+    var Fd = p.gfg * Nk, Msd = Fd * espM / n / 4, As = db > 0 ? Msd * 1000 / (0.9 * db * p.fyd) / 100 : 0;
+    var vb = C * W * hb, kg = As * 1e-4 * ACO * (C + W), fb = 2 * (C + W) * hb, eb = (C + 0.2) * (W + 0.2) * (hb + 0.1), lb = (C + 0.2) * (W + 0.2);
+    var m = n * nb * Le;
+    var nomes = {helice: 'Estaca hélice contínua monitorada', franki: 'Estaca Franki', strauss: 'Estaca Strauss', escav: 'Estaca escavada mecanicamente', premold: 'Estaca pré-moldada de concreto', raiz: 'Estaca raiz', tubulao: 'Tubulão'};
+    var L = [
+      {g: g, nome: nomes[tipo] + ', diâmetro de ' + nf(D * 100, 0) + ' cm', un: 'm', q: m, cod: {sinapi: e[1] || undefined, sco: e[2] || undefined}, memo: n * nb + ' estaca(s) (' + n + ' por bloco × ' + nb + ' bloco(s)) × ' + nf(Le, 2) + ' m. Composição mais próxima: ' + (e[0] > 0 ? nf(e[0], 0) + ' cm' : '') + (nf(D * 100, 0) !== nf(e[0], 0) ? ' (diâmetro do projeto ' + nf(D * 100, 0) + ' cm)' : '')},
+      {g: g, nome: 'Mobilização e desmobilização de equipamento de estacas', un: 'vb', q: 1, cod: {}, memo: 'Informe o preço no Orçamento'},
+      {g: g, nome: 'Arrasamento de estaca de concreto', un: 'un', q: n * nb, cod: {sinapi: D <= 0.4 ? 'SC-95601' : D <= 0.6 ? 'SC-95602' : D <= 0.8 ? 'SC-95603' : 'SC-95604', sco: D <= 0.3 ? 'SCO-FD 05.40.0050' : D <= 0.5 ? 'SCO-FD 05.40.0100' : 'SCO-FD 05.40.0150'}, memo: n * nb + ' estaca(s)'},
+      {g: G[1], nome: 'Escavação mecanizada para blocos de coroamento (inclui escavação para fôrmas)', un: 'm³', q: eb * nb, cod: {sinapi: 'SC-96521', sco: 'SCO-MT 10.10.0050'}, memo: nb + ' bloco(s) de ' + nf(C, 2) + ' × ' + nf(W, 2) + ' × ' + nf(hb, 2) + ' m (dimensões estimadas pelo espaçamento)'},
+      {g: G[1], nome: 'Lastro de concreto magro sob os blocos, 5 cm', un: 'm²', q: lb * nb, cod: {sinapi: 'SC-96619'}, memo: nb + ' bloco(s)'},
+      {g: g, nome: 'Fôrma para bloco de coroamento em ' + NOMEF[sol.form], un: 'm²', q: fb * nb, cod: {sinapi: FORMA.bloco[sol.form][0], sco: false}, memo: '2 × (C + L) × h por bloco. No SCO a fôrma já está na composição do concreto armado'},
+      {g: g, nome: 'Armação de bloco de coroamento, aço CA-50 (bitola de referência 10 mm)', un: 'kg', q: kg * nb, cod: {sinapi: 'SC-96546', sco: false}, memo: 'As ' + nf(As, 2) + ' cm² nas duas direções × 7.850 kg/m³ por bloco. No SCO o aço já está na composição'},
+      {g: g, nome: 'Concretagem de bloco de coroamento, fck 30 MPa, com bomba' + sco, un: 'm³', q: vb * nb, cod: {sinapi: 'SC-96557', sco: p.fck <= 20 ? 'SCO-ET 05.60.0150' : 'SCO-ET 05.60.0200'}, memo: nf(C, 2) + ' × ' + nf(W, 2) + ' × ' + nf(hb, 2) + ' m por bloco; altura recomendada do programa'}
+    ];
+    if (sol.imper) L.push({g: g, nome: 'Impermeabilização das faces enterradas dos blocos com emulsão asfáltica, 2 demãos', un: 'm²', q: (C * W + 2 * (C + W) * hb) * nb, cod: {sinapi: 'SC-98557'}, memo: 'Topo e faces laterais'});
+    return L;
+  }
+  var sco = '';
+  function itens(sol, bank, ctx){
+    var P = ctx.params, p = getP(), L = [];
+    sco = bank === 'sco' ? ' (composição de concreto armado completo: concreto, fôrma e aço)' : '';
+    var sel = [P.inc_sap === 'S', P.inc_cor === 'S', P.inc_rad === 'S', P.inc_est === 'S'];
+    if (!sel.some(Boolean)) return {erro: 'Nenhuma fundação marcada. Abra a janela “3 soluções com orçamento” e marque Sim nas que entram no orçamento.'};
+    if (sel[0] && !valido()) return {erro: 'Cadastre os pilares e calcule as sapatas para ter o orçamento.'};
+    L = L.concat(U.preliminares(G[0], P.placa, 0));
+    if (sel[0]) L = L.concat(sapatas(sol, p, {D: V('D') || 1.5}));
+    if (sel[1]) L = L.concat(corrida(sol, p));
+    if (sel[2]) L = L.concat(radier(sol, p));
+    if (sel[3]) L = L.concat(estacas(sol, p, P));
+    return L;
+  }
+  var SN = [['S', 'Sim'], ['N', 'Não']];
+  TCORC.registrar({prog: 'concreto', nome: 'Fundações em Concreto Armado', solucoes: SOL, grupos: G, itens: itens,
+    params: [
+      {k: 'inc_sap', label: 'Incluir sapatas isoladas', val: 'S', tipo: 'sel', opts: SN},
+      {k: 'inc_cor', label: 'Incluir sapata corrida', val: 'N', tipo: 'sel', opts: SN},
+      {k: 'inc_rad', label: 'Incluir radier', val: 'N', tipo: 'sel', opts: SN},
+      {k: 'inc_est', label: 'Incluir estacas e blocos', val: 'N', tipo: 'sel', opts: SN},
+      {k: 'nblocos', label: 'Nº de blocos de estacas iguais ao calculado', val: 1, step: '1'},
+      {k: 'placa', label: 'Placa de obra (m²)', val: 6, step: '0.5'}
+    ],
+    projeto: function(){ return {nome: S('endereco') || 'Fundações em concreto armado', municipio: ''}; },
+    intro: 'As três soluções usam as mesmas dimensões calculadas (volumes, armadura, fôrmas, escavação e lastro); mudam as fôrmas e a proteção das faces enterradas.',
+    avisos: function(){ var a = [], p = getP(); if (p.fck > 30) a.push('O fck do projeto (' + nf(p.fck, 0) + ' MPa) é maior que o das composições (30 MPa): o preço do concreto pode estar abaixo do real.'); return a; },
+    rodape: 'Quantidades: volumes e armaduras calculados no programa; escavação com folga de 20 cm por lado; bloco de coroamento com dimensões estimadas pelo espaçamento das estacas; bitola de referência de 10 mm nas composições de armação. No SCO o concreto armado já traz fôrma e aço (12 m² e 90 kg por m³), por isso os itens de fôrma e armação ficam só no SINAPI. Não inclui sondagem, rebaixamento de lençol, esgotamento, escoramento, controle tecnológico e mobilização.'});
+  /* cada fundação entra no orçamento quando o usuário abre a aba dela */
+  function marcar(k){
+    try { var sv = JSON.parse(localStorage.getItem('tcorc_p_concreto') || '{}'); if (sv[k] == null) { sv[k] = 'S'; localStorage.setItem('tcorc_p_concreto', JSON.stringify(sv)); } } catch (e) {}
+  }
+  var _aba = aba; aba = function(id){ var r = _aba.apply(this, arguments); var k = {corrida: 'inc_cor', radier: 'inc_rad', estacas: 'inc_est'}[id]; if (k) { marcar(k); atualizar(); } return r; };
+  /* custo logo após cada cálculo */
+  var alvos = [];
+  function acharAlvos(){
+    if (alvos.length) return;
+    [['sap-resumo', 'tco-res-sap', 1], ['cor-out', 'tco-res-cor'], ['rad-out', 'tco-res-rad'], ['est-cap', 'tco-res-est']].forEach(function(p){
+      var el = document.getElementById(p[0]); if (!el) return; if (p[2]) el = el.closest('.sec') || el;
+      var d = document.createElement('div'); d.id = p[1]; el.parentNode.insertBefore(d, el.nextSibling); alvos.push(d);
+    });
+  }
+  function atualizar(){ try { acharAlvos(); alvos.forEach(function(d){ TCORC.resumo('concreto', d); }); } catch (e) { console.error(e); } }
+  ['calc', 'calcCorreida', 'calcRadier', 'calcEstaca'].forEach(function(nome){
+    var f = window[nome]; if (typeof f !== 'function') return;
+    window[nome] = function(){ var r = f.apply(this, arguments); atualizar(); return r; };
+  });
+  setTimeout(atualizar, 1500);
+})();
+</script>
 </body>
 </html>
