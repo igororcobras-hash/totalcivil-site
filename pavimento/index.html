@@ -5357,5 +5357,94 @@ function salvarUsuario(uid, acao) {
   }, 800);
 })();
 </script>
+<script src="/orcamento-comum.js"></script>
+<script>
+/* =====================================================================
+   PATCH PAV-ORC (25/10/2026) — Orçamento (EMOP, SINAPI e SCO) do Pavimento Flexível
+   Mesma janela "3 soluções com orçamento" da Drenagem. As quantidades vêm do
+   dimensionamento (espessuras das camadas) e da aba Topografia (áreas e volumes
+   com caimento, corte, aterro e meio-fio). O custo aparece logo após o cálculo.
+   ===================================================================== */
+(function(){
+  if (!window.TCORC) return;
+  var U = TCORC.util, G = ['SERVIÇOS PRELIMINARES', 'TERRAPLENAGEM', 'REGULARIZAÇÃO E REFORÇO DO SUBLEITO', 'SUB-BASE', 'BASE', 'IMPRIMAÇÃO E REVESTIMENTO', 'MEIO-FIO'];
+  var nf = function(v, d){ return (isFinite(v) ? v : 0).toLocaleString('pt-BR', {minimumFractionDigits: d, maximumFractionDigits: d}); };
+  var SOL = [
+    {k: 'eco', nome: 'Solução 1 — Econômica', curto: 'Econômica', desc: 'Base de macadame seco, sub-base e reforço de solo estabilizado granulometricamente sem mistura e revestimento em uma só camada. Menor custo de execução.', base: 'macadame', sb: 'sem', ref: 'sem', binder: false},
+    {k: 'rec', nome: 'Solução 2 — Recomendada', curto: 'Recomendada', desc: 'Base de brita graduada simples, sub-base de solo estabilizado com mistura de solos, reforço de solo estabilizado e revestimento em uma só camada.', base: 'bgs', sb: 'mist', ref: 'sem', binder: false},
+    {k: 'dur', nome: 'Solução 3 — Maior durabilidade', curto: 'Durável', desc: 'Base de brita graduada tratada com cimento, sub-base de brita graduada simples, reforço de solo estabilizado com mistura e revestimento em capa de rolamento (4 cm) sobre camada de ligação (binder).', base: 'bgtc', sb: 'bgs', ref: 'mist', binder: true}
+  ];
+  var BGS = [null, 'SC-105727', 'SC-96396', 'SC-105730'], BGTC = [null, 'SC-105732', 'SC-96397', 'SC-105735'], MAC = [null, 'SC-105749', 'SC-96400', 'SC-105752'];
+  var pick = function(e, t){ return e <= 12.5 ? t[1] : e <= 17.5 ? t[2] : t[3]; };
+  function topo(){
+    if (typeof _R === 'undefined' || !_R.e_total) return null;
+    if (!_R._topo && typeof calcTopo === 'function') { try { calcTopo(); } catch (e) {} }
+    return _R._topo || null;
+  }
+  function camada(g, nome, vol, area, e, cod, memo, ton){ return {g: g, nome: nome, un: 'm³', q: vol, cod: cod, memo: memo}; }
+  function itens(sol, bank, ctx){
+    var T = topo(), p = ctx.params;
+    if (!T || !(T.areaPavInc > 0)) return {erro: 'Preencha a aba Topografia (estacas, larguras e cotas) para o programa calcular as áreas e os volumes das camadas.'};
+    var L = [], area = T.areaPavInc, ext = T.extensao;
+    var eR = _R.e_ref || 0, eB = _R.e_base || 0, eS = _R.e_sb || 0, eF = _R.e_r || 0, rev = _R.tipo_rev;
+    L = L.concat(U.preliminares(G[0], p.placa, ext));
+    L = L.concat(U.terra(G[1], {corte: T.totVc, aterro: T.totVa + T.totVre}, p.dmt));
+    var empr = Math.max(0, T.totVa + T.totVre - T.totVc);
+    if (empr > 0.005) L.push({g: G[1], nome: 'Material de empréstimo para o aterro (jazida)', un: 'm³', q: empr, cod: {}, memo: 'Falta de material na Topografia: ' + nf(empr, 2) + ' m³ — informe o preço da jazida no Orçamento'});
+    L.push({g: G[2], nome: 'Regularização e compactação do subleito', un: 'm²', q: area, cod: {sinapi: 'SC-100576', sco: 'SCO-BP 05.05.0450'}, memo: 'Área pavimentada com caimento: ' + nf(area, 2) + ' m²'});
+    if (eF > 0) L.push({g: G[2], nome: 'Reforço do subleito, ' + nf(eF, 1) + ' cm, ' + (sol.ref === 'mist' ? 'solo estabilizado com mistura de solos' : 'solo estabilizado granulometricamente'), un: 'm³', q: T.volRefc,
+      cod: sol.ref === 'mist' ? {sinapi: 'SC-101767', sco: 'SCO-BP 05.05.0056'} : {sinapi: 'SC-101768', sco: 'SCO-BP 05.05.0053'}, memo: nf(area, 2) + ' m² × ' + nf(eF / 100, 3) + ' m (composição exclusive o solo)'});
+    if (eS > 0) {
+      var cs = sol.sb === 'bgs' ? {sinapi: pick(eS, BGS), sco: 'SCO-BP 05.05.0025', emop: '08.001.0002'} : sol.sb === 'mist' ? {sinapi: 'SC-101767', sco: 'SCO-BP 05.05.0056'} : {sinapi: 'SC-101768', sco: 'SCO-BP 05.05.0053'};
+      L.push({g: G[3], nome: 'Sub-base de ' + (sol.sb === 'bgs' ? 'brita graduada simples' : sol.sb === 'mist' ? 'solo estabilizado granulometricamente com mistura de solos' : 'solo estabilizado granulometricamente'), un: 'm³', q: T.volSBc, cod: cs, memo: nf(area, 2) + ' m² × ' + nf(eS / 100, 3) + ' m'});
+    }
+    if (eB > 0) {
+      var cb = sol.base === 'bgtc' ? {sinapi: pick(eB, BGTC)} : sol.base === 'macadame' ? {sinapi: pick(eB, MAC), sco: 'SCO-BP 05.05.0050'} : {sinapi: pick(eB, BGS), sco: 'SCO-BP 05.05.0025', emop: '08.001.0002'};
+      L.push({g: G[4], nome: 'Base de ' + (sol.base === 'bgtc' ? 'brita graduada tratada com cimento' : sol.base === 'macadame' ? 'macadame seco' : 'brita graduada simples'), un: 'm³', q: T.volBasec, cod: cb, memo: nf(area, 2) + ' m² × ' + nf(eB / 100, 3) + ' m'});
+    }
+    L.push({g: G[5], nome: 'Imprimação da base', un: 'm²', q: area, cod: {emop: '08.026.0001', sinapi: 'SC-102470', sco: 'SCO-BP 05.05.0400'}, memo: 'Área pavimentada com caimento'});
+    L.push({g: G[5], nome: 'Pintura de ligação', un: 'm²', q: area, cod: {emop: '08.026.0002', sinapi: 'SC-104375'}, memo: 'Área pavimentada com caimento'});
+    if (rev === 'TS') {
+      var ts = sol.k === 'eco' ? 'SC-97801' : sol.k === 'rec' ? 'SC-97804' : 'SC-97808';
+      L.push({g: G[5], nome: 'Tratamento superficial ' + (sol.k === 'eco' ? 'simples' : sol.k === 'rec' ? 'duplo' : 'triplo'), un: 'm²', q: area, cod: {sinapi: ts}, memo: 'Área pavimentada com caimento'});
+    } else if (eR > 0) {
+      var pmf = rev === 'PMF', fria = pmf ? {sco: 'SCO-BP 10.05.0150'} : null, vol = T.volCBUQc, t = vol * 2.4;
+      if (rev === 'PEN') L.push({g: G[5], nome: 'Revestimento betuminoso por penetração, ' + nf(eR, 1) + ' cm', un: 'm³', q: vol, cod: {}, memo: 'Sem composição nos bancos: escolher no Orçamento'});
+      else if (pmf) L.push({g: G[5], nome: 'Pré-misturado a frio, ' + nf(eR, 1) + ' cm', un: 'm³', q: vol, cod: fria, memo: nf(area, 2) + ' m² × ' + nf(eR / 100, 3) + ' m'});
+      else {
+        var eRol = sol.binder && eR > 5 ? 4 : eR, eBin = sol.binder && eR > 5 ? eR - 4 : 0, vr = area * eRol / 100, vb = area * eBin / 100;
+        L.push({g: G[5], nome: 'Concreto asfáltico (CBUQ) usinado a quente, camada de rolamento, ' + nf(eRol, 1) + ' cm', un: 't', q: vr * 2.4, cod: {emop: '08.015.0068', sinapi: 'SC-95995', sco: 'SCO-BP 10.05.0100'}, qb: {sinapi: vr}, memo: nf(area, 2) + ' m² × ' + nf(eRol / 100, 3) + ' m × 2,4 t/m³ (SINAPI em m³ com usinagem e espalhamento)'});
+        if (eBin > 0) L.push({g: G[5], nome: 'Concreto asfáltico (CBUQ) usinado a quente, camada de ligação (binder), ' + nf(eBin, 1) + ' cm', un: 't', q: vb * 2.4, cod: {sinapi: 'SC-95996', sco: 'SCO-BP 10.05.0050'}, qb: {sinapi: vb}, memo: nf(area, 2) + ' m² × ' + nf(eBin / 100, 3) + ' m × 2,4 t/m³'});
+        L.push({g: G[5], nome: 'Espalhamento com vibroacabadora e compactação do CBUQ', un: 't', q: t, cod: {emop: '08.037.0070', sinapi: false, sco: 'SCO-BP 10.05.0300'}, memo: nf(area, 2) + ' m² × ' + nf(eR / 100, 3) + ' m × 2,4 t/m³ (no SINAPI já incluído na composição do CBUQ)'});
+      }
+    }
+    if (typeof _mf !== 'undefined' && _mf.tipo && _mf.tipo !== 'nenhum' && ext > 0) {
+      var c = _mf.tipo === 'simples', m = ext * 2;
+      var cm = sol.k === 'dur' ? (c ? {sinapi: 'SC-94273', sco: 'SCO-BP 20.20.0050'} : {sinapi: 'SC-94267', sco: 'SCO-BP 20.15.0065'}) : (c ? {sinapi: 'SC-94265', sco: 'SCO-BP 20.10.0300'} : {sinapi: 'SC-94267', sco: 'SCO-BP 20.15.0065'});
+      L.push({g: G[6], nome: c ? (sol.k === 'dur' ? 'Meio-fio de concreto pré-fabricado (15 × 30 cm), assentamento' : 'Meio-fio de concreto moldado in loco com extrusora (15 × 30 cm)') : 'Meio-fio e sarjeta conjugados de concreto moldados in loco (extrusora)', un: 'm', q: m, cod: cm, memo: '2 lados × ' + nf(ext, 2) + ' m (medidas do projeto: ' + (c ? _mf.base + ' × ' + _mf.alt : _mf.sbase + ' × ' + _mf.salt) + ' cm; composição de referência)'});
+    }
+    return L;
+  }
+  TCORC.registrar({prog: 'pavimento', nome: 'Pavimento Flexível', solucoes: SOL, grupos: G, itens: itens,
+    params: [{k: 'placa', label: 'Placa de obra (m²)', val: 6, step: '0.5'}, {k: 'dmt', label: 'Distância do bota-fora — DMT (km)', val: 10, step: '0.1'}],
+    projeto: function(){ var l = typeof s === 'function' ? s('logradouro') : '', t = typeof s === 'function' ? s('trecho') : ''; return {nome: (l || 'Pavimento flexível') + (t ? ' — ' + t : ''), municipio: ''}; },
+    intro: 'As três soluções usam a mesma estrutura dimensionada (espessuras de revestimento, base, sub-base e reforço) e as áreas e volumes da aba Topografia; mudam os materiais e métodos de cada camada.',
+    avisos: function(){ var a = []; if (typeof _R !== 'undefined' && _R.subcamada_fracionada) a.push('A espessura das camadas gera subcamada fracionada na compactação (veja Dimensionamento).'); return a; },
+    rodape: 'Quantidades: áreas e volumes com caimento da aba Topografia; composições com a espessura mais próxima da adotada (10, 15 ou 20 cm); “exclusive material” significa que o solo ou a brita não estão nas composições do reforço e das camadas de solo — informe a jazida no Orçamento. Não inclui drenagem, sinalização e mobilização.'});
+  /* custo logo após cada cálculo */
+  var alvos = [];
+  function acharAlvos(){
+    if (alvos.length) return;
+    [['o_validacao', 'tco-res-dim'], ['topo_status', 'tco-res-topo']].forEach(function(p){
+      var el = document.getElementById(p[0]), sec = el && el.closest('.sec'); if (!sec) return;
+      var d = document.createElement('div'); d.id = p[1]; sec.parentNode.insertBefore(d, sec.nextSibling); alvos.push(d);
+    });
+  }
+  function atualizar(){ try { acharAlvos(); alvos.forEach(function(d){ TCORC.resumo('pavimento', d); }); } catch (e) { console.error(e); } }
+  var _calc = calc; calc = function(){ var r = _calc.apply(this, arguments); atualizar(); return r; };
+  var _ct = calcTopo; calcTopo = function(){ var r = _ct.apply(this, arguments); atualizar(); return r; };
+  setTimeout(atualizar, 1500);
+})();
+</script>
 </body>
 </html>

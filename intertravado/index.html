@@ -3121,3 +3121,85 @@ function renderAdmin(lista){
   }, 800);
 })();
 </script>
+
+<script src="/orcamento-comum.js"></script>
+<script>
+/* =====================================================================
+   PATCH INT-ORC (25/10/2026) — Orçamento (EMOP, SINAPI e SCO) do Pavimento Intertravado
+   Mesma janela "3 soluções com orçamento" da Drenagem. As quantidades vêm das camadas
+   dimensionadas e da aba Topografia (área pavimentada, corte, aterro e meio-fio).
+   O custo aparece logo após o cálculo.
+   ===================================================================== */
+(function(){
+  if (!window.TCORC) return;
+  var U = TCORC.util, G = ['SERVIÇOS PRELIMINARES', 'TERRAPLENAGEM', 'REFORÇO E SUB-BASE', 'BASE', 'REVESTIMENTO INTERTRAVADO', 'MEIO-FIO'];
+  var nf = function(v, d){ return (isFinite(v) ? v : 0).toLocaleString('pt-BR', {minimumFractionDigits: d, maximumFractionDigits: d}); };
+  var SOL = [
+    {k: 'eco', nome: 'Solução 1 — Econômica', curto: 'Econômica', desc: 'Bloco de 16 faces, sub-base de solo estabilizado granulometricamente sem mistura e base de macadame seco (ou CCR quando a base é cimentada). Menor custo de execução.', blk: '16f', sb: 'sem', ref: 'sem', bgtc: false},
+    {k: 'rec', nome: 'Solução 2 — Recomendada', curto: 'Recomendada', desc: 'Bloco de 16 faces, sub-base de solo estabilizado com mistura de solos e base de brita graduada simples (ou CCR quando a base é cimentada).', blk: '16f', sb: 'mist', ref: 'sem', bgtc: false},
+    {k: 'dur', nome: 'Solução 3 — Maior durabilidade', curto: 'Durável', desc: 'Bloco de 16 faces, sub-base de brita graduada simples, reforço com mistura de solos, base de brita graduada tratada com cimento quando cimentada e meio-fio pré-fabricado.', blk: '16f', sb: 'bgs', ref: 'mist', bgtc: true}
+  ];
+  var BGS = [null, 'SC-105727', 'SC-96396', 'SC-105730'], BGTC = [null, 'SC-105732', 'SC-96397', 'SC-105735'], MAC = [null, 'SC-105749', 'SC-96400', 'SC-105752'], CCR = [null, 'SC-105737', 'SC-96398', 'SC-105740'];
+  var pick = function(e, t){ return e <= 12.5 ? t[1] : e <= 17.5 ? t[2] : t[3]; };
+  /* revestimento: espessura 6, 8 ou 10 cm */
+  var RET = {6: ['SC-92397', 'SCO-BP 10.20.0350'], 8: ['SC-92398', 'SCO-BP 10.20.0356'], 10: ['SC-92400', 'SCO-BP 10.20.0362']};
+  var F16 = {6: ['SC-92403', 'SCO-BP 10.20.0350'], 8: ['SC-92404', 'SCO-BP 10.20.0356'], 10: ['SC-92406', 'SCO-BP 10.20.0362']};
+  function topo(){
+    if (typeof resultado === 'undefined' || !resultado) return null;
+    if (!_topo && typeof calcTopo === 'function') { try { calcTopo(); } catch (e) {} }
+    return _topo && _topo.totArea > 0 ? _topo : null;
+  }
+  function itens(sol, bank, ctx){
+    var T = topo(), p = ctx.params;
+    if (!T) return {erro: 'Preencha a aba Topografia (estacas, larguras e cotas) para o programa calcular a área pavimentada e os volumes de cada camada.'};
+    var r = resultado, area = T.totArea, ext = T.extensao, L = [];
+    L = L.concat(U.preliminares(G[0], p.placa, ext));
+    L = L.concat(U.terra(G[1], {corte: T.totC, aterro: T.totA + (T.totR || 0)}, p.dmt));
+    var empr = Math.max(0, T.totA + (T.totR || 0) - T.totC);
+    if (empr > 0.005) L.push({g: G[1], nome: 'Material de empréstimo para o aterro (jazida)', un: 'm³', q: empr, cod: {}, memo: 'Falta de material na Topografia: ' + nf(empr, 2) + ' m³ — informe o preço da jazida no Orçamento'});
+    L.push({g: G[2], nome: 'Regularização e compactação do subleito', un: 'm²', q: area, cod: {sinapi: 'SC-100576', sco: 'SCO-BP 05.05.0450'}, memo: 'Área pavimentada: ' + nf(area, 2) + ' m²'});
+    var eF = r.ref || 0, eS = r.h_sb_adot || 0, eB = r.h_base_adot || 0;
+    if (eF > 0) L.push({g: G[2], nome: 'Reforço do subleito, ' + nf(eF, 1) + ' cm, ' + (sol.ref === 'mist' ? 'solo estabilizado com mistura de solos' : 'solo estabilizado granulometricamente'), un: 'm³', q: area * eF / 100,
+      cod: sol.ref === 'mist' ? {sinapi: 'SC-101767', sco: 'SCO-BP 05.05.0056'} : {sinapi: 'SC-101768', sco: 'SCO-BP 05.05.0053'}, memo: nf(area, 2) + ' m² × ' + nf(eF / 100, 3) + ' m (composição exclusive o solo)'});
+    if (eS > 0) {
+      var cs = sol.sb === 'bgs' ? {sinapi: pick(eS, BGS), sco: 'SCO-BP 05.05.0025', emop: '08.001.0002'} : sol.sb === 'mist' ? {sinapi: 'SC-101767', sco: 'SCO-BP 05.05.0056'} : {sinapi: 'SC-101768', sco: 'SCO-BP 05.05.0053'};
+      L.push({g: G[2], nome: 'Sub-base de ' + (sol.sb === 'bgs' ? 'brita graduada simples' : sol.sb === 'mist' ? 'solo estabilizado granulometricamente com mistura de solos' : 'solo estabilizado granulometricamente'), un: 'm³', q: area * eS / 100, cod: cs, memo: nf(area, 2) + ' m² × ' + nf(eS / 100, 3) + ' m'});
+    }
+    if (eB > 0) {
+      var cim = r.base_tipo === 'cim', cb, nb;
+      if (cim) { cb = sol.bgtc ? {sinapi: pick(eB, BGTC)} : {sinapi: pick(eB, CCR)}; nb = sol.bgtc ? 'brita graduada tratada com cimento' : 'concreto compactado com rolo (CCR)'; }
+      else if (sol.k === 'eco') { cb = {sinapi: pick(eB, MAC), sco: 'SCO-BP 05.05.0050'}; nb = 'macadame seco'; }
+      else { cb = {sinapi: pick(eB, BGS), sco: 'SCO-BP 05.05.0025', emop: '08.001.0002'}; nb = 'brita graduada simples'; }
+      L.push({g: G[3], nome: 'Base de ' + nb, un: 'm³', q: area * eB / 100, cod: cb, memo: nf(area, 2) + ' m² × ' + nf(eB / 100, 3) + ' m'});
+    }
+    var e = r.bloco_teo <= 6 ? 6 : r.bloco_teo <= 8 ? 8 : 10, c = (sol.blk === 'ret' ? RET : F16)[e];
+    L.push({g: G[4], nome: 'Pavimento intertravado com bloco ' + (sol.blk === 'ret' ? 'retangular 20 × 10 cm' : 'de 16 faces') + ', ' + e + ' cm, com colchão de areia e rejuntamento', un: 'm²', q: area,
+      cod: {sinapi: c[0], sco: c[1]}, memo: nf(area, 2) + ' m² · fpk ≥ ' + (r.fpk_min || 35) + ' MPa · colchão de ' + nf(r.areia || 0, 0) + ' cm de areia incluído na composição' + (r.bloco_teo !== e ? ' (composição de ' + e + ' cm, a mais próxima de ' + nf(r.bloco_teo, 0) + ' cm)' : '')});
+    if (typeof _mf !== 'undefined' && _mf.tipo && _mf.tipo !== 'nenhum' && ext > 0) {
+      var s = _mf.tipo === 'simples', m = ext * 2;
+      var cm = sol.k === 'dur' ? (s ? {sinapi: 'SC-94273', sco: 'SCO-BP 20.20.0050'} : {sinapi: 'SC-94267', sco: 'SCO-BP 20.15.0065'}) : (s ? {sinapi: 'SC-94265', sco: 'SCO-BP 20.10.0300'} : {sinapi: 'SC-94267', sco: 'SCO-BP 20.15.0065'});
+      L.push({g: G[5], nome: s ? (sol.k === 'dur' ? 'Meio-fio de concreto pré-fabricado (15 × 30 cm), assentamento' : 'Meio-fio de concreto moldado in loco com extrusora (15 × 30 cm)') : 'Meio-fio e sarjeta conjugados de concreto moldados in loco (extrusora)', un: 'm', q: m, cod: cm, memo: '2 lados × ' + nf(ext, 2) + ' m (composição de referência)'});
+    }
+    return L;
+  }
+  TCORC.registrar({prog: 'intertravado', nome: 'Pavimento Intertravado', solucoes: SOL, grupos: G, itens: itens,
+    params: [{k: 'placa', label: 'Placa de obra (m²)', val: 6, step: '0.5'}, {k: 'dmt', label: 'Distância do bota-fora — DMT (km)', val: 10, step: '0.1'}],
+    projeto: function(){ return {nome: (typeof logradouro === 'string' && logradouro) || 'Pavimento intertravado', municipio: ''}; },
+    intro: 'As três soluções usam a mesma estrutura dimensionada (espessura do bloco, base, sub-base e reforço) e as áreas e volumes da aba Topografia; mudam os materiais de cada camada e o meio-fio.',
+    avisos: function(){ return []; },
+    rodape: 'Quantidades: área pavimentada e volumes da aba Topografia; composições com a espessura mais próxima da adotada; “exclusive material” significa que o solo não está na composição do reforço e das camadas de solo — informe a jazida no Orçamento. A composição do revestimento já inclui blocos, colchão de areia, compactação e rejuntamento. Não inclui drenagem, sinalização e mobilização.'});
+  /* custo logo após cada cálculo */
+  var alvos = [];
+  function acharAlvos(){
+    if (alvos.length) return;
+    var a = document.getElementById('tbl-camadas'), b = document.getElementById('sec-volumes');
+    [[a && a.closest('.g2'), 'tco-res-dim'], [b, 'tco-res-topo']].forEach(function(p){
+      if (!p[0]) return; var d = document.createElement('div'); d.id = p[1]; p[0].parentNode.insertBefore(d, p[0].nextSibling); alvos.push(d);
+    });
+  }
+  function atualizar(){ try { acharAlvos(); alvos.forEach(function(d){ TCORC.resumo('intertravado', d); }); } catch (e) { console.error(e); } }
+  var _calc = calcular; calcular = function(){ var r = _calc.apply(this, arguments); atualizar(); return r; };
+  var _ct = calcTopo; calcTopo = function(){ var r = _ct.apply(this, arguments); atualizar(); return r; };
+  setTimeout(atualizar, 1500);
+})();
+</script>
