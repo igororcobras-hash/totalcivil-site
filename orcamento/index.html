@@ -13932,9 +13932,15 @@ body.mode-mobile .pm-modal{padding:0}
     return carregando;
   }
   function versao(m, banco){ return m.proprio || m.etapas ? m : (m[banco] || null); }
-  function etapasDe(m, banco){ var v = versao(m, banco); return v ? (v.etapas || []) : []; }
+  /* etapasDe: para EMOP sem versão nativa, cai no SINAPI (mostra estrutura; códigos podem diferir) */
+  function etapasDe(m, banco){
+    var v = versao(m, banco);
+    if(!v && banco === 'emop' && !m.proprio && !m.etapas) v = versao(m, 'sinapi');
+    return v ? (v.etapas || []) : [];
+  }
+  function temEmopNativo(m){ return !!(m.proprio || m.etapas || m.emop); }
   function contar(m, banco){ return etapasDe(m, banco).reduce(function(s, e){ return s + (e.itens || []).length; }, 0); }
-  function bancosDe(m){ return m.proprio || m.etapas ? ['sinapi', 'sco', 'emop'] : ['sinapi', 'sco', 'emop'].filter(function(b){ return m[b]; }); }
+  function bancosDe(m){ return m.proprio || m.etapas ? ['sinapi', 'sco', 'emop'] : (['sinapi','sco'].filter(function(b){ return m[b]; }).concat(['emop'])); }
 
   /* linhas da planilha do modelo no banco escolhido (SCO sem equivalente usa o SINAPI) */
   function matrizDoModelo(m, banco){
@@ -13967,7 +13973,7 @@ body.mode-mobile .pm-modal{padding:0}
       d.style.cssText = 'margin:8px 0;padding:8px 10px;border:1px solid #2563eb;background:#eff6ff;color:#1e3a8a;border-radius:8px;font-size:11.5px;line-height:1.45';
       d.innerHTML = '📚 <b>Modelo: ' + esc(m.nome) + (m.porte ? ' (' + esc(m.porte) + ')' : '') + '</b> · ' + contar(m, banco) + ' serviços em ' + etapasDe(m, banco).length + ' etapas' + (m.proprio ? '' : ' · banco ' + NOME_BANCO[banco])
         + '.<br>Clique em <b>IMPORTAR AGORA</b>. Os serviços entram com <b>quantidade 0</b>: preencha as quantidades da sua obra e apague o que não houver. Os preços vêm do banco do mês carregado.'
-        + (banco === 'emop' && !m.proprio ? '<br>Versão EMOP: a descrição e o preço vêm da EMOP que você carregou em 🗂️ Atualizar EMOP; sem ela os itens entram sem preço.' : '')
+        + (banco === 'emop' && !temEmopNativo(m) ? '<br>⚠️ Versão EMOP ainda sem códigos pré-configurados: os códigos importados são do SINAPI. O preço virá da EMOP carregada se o código coincidir; caso contrário entre sem preço. Ajuste os códigos pela tabela EMOP.' : banco === 'emop' && !m.proprio ? '<br>Versão EMOP: a descrição e o preço vêm da EMOP que você carregou em 🗂️ Atualizar EMOP; sem ela os itens entram sem preço.' : '')
         + (r.misturados ? '<br>' + r.misturados + ' serviço(s) sem equivalente ' + (banco === 'sco' ? 'no SCO entram com o código SINAPI' : 'no SINAPI entram com o código SCO') + ' (os dois bancos convivem na mesma planilha).' : '');
       stEl.parentNode.insertBefore(d, stEl);
     });
@@ -14010,7 +14016,9 @@ body.mode-mobile .pm-modal{padding:0}
     + '#tcModelos button.tm-p{background:#2563eb;border-color:#2563eb;color:#fff}'
     + '#tcModelos .tm-ver{margin-top:10px;border:1px solid #e2e8f0;border-radius:8px;max-height:46vh;overflow:auto}'
     + '#tcModelos .tm-ver table{width:100%;border-collapse:collapse;font-size:10.5px}#tcModelos .tm-ver td{padding:3px 6px;border-top:1px solid #f1f5f9;vertical-align:top}'
-    + '#tcModelos .tm-ver tr.tm-et td{background:#e0e7ff;font-weight:800}';
+    + '#tcModelos .tm-ver tr.tm-et td{background:#e0e7ff;font-weight:800}'
+    + '#tcModelos .tm-badd{padding:1px 5px;min-width:26px;font-size:11px}'
+    + '#tcModelos .tm-ver td:last-child{width:32px;text-align:center;border-left:1px solid #e2e8f0}';
   function garantirModal(){
     var m = document.getElementById('tcModelos'); if(m) return m;
     var st = document.createElement('style'); st.textContent = CSS; document.head.appendChild(st);
@@ -14033,26 +14041,35 @@ body.mode-mobile .pm-modal{padding:0}
     if(usr.length) tipos = tipos.concat([{id: '_meus', nome: 'Meus modelos'}]);
     if(!ABA || !tipos.some(function(t){ return t.id === ABA; })) ABA = tipos.length ? tipos[0].id : null;
     var daAba = ABA === '_meus' ? usr : lista.filter(function(m){ return (m.tipo || m.id) === ABA; });
-    var temEmop = lista.some(function(m){ return m.emop; });
     var card = function(m){
-      var tem = bancosDe(m).indexOf(b) >= 0, n = contar(m, b);
+      var n = contar(m, b), nativo = b !== 'emop' || temEmopNativo(m);
       return '<div class="tm-card"><h4>' + (m.proprio ? '⭐' : (ICONE[m.tipo || m.id] || '📋')) + ' ' + esc(m.nome) + '</h4>' + (m.porte ? '<div class="tm-n" style="font-weight:700;color:#334155">' + esc(m.porte) + '</div>' : '') + '<p>' + esc(m.descricao || '') + '</p>'
-        + '<div class="tm-n">' + (tem ? etapasDe(m, b).length + ' etapas · ' + n + ' serviços' + (m.proprio ? '' : ' · ' + NOME_BANCO[b]) : 'Ainda sem versão ' + NOME_BANCO[b]) + '</div>'
-        + '<div class="tm-acts"><button class="tm-b tm-p" data-usar="' + esc(m.id) + '"' + (tem ? '' : ' disabled style="opacity:.5"') + '>Usar este modelo</button><button class="tm-b" data-ver="' + esc(m.id) + '"' + (tem ? '' : ' disabled') + '>Ver itens</button>'
+        + '<div class="tm-n">' + etapasDe(m, b).length + ' etapas · ' + n + ' serviços' + (m.proprio ? '' : ' · ' + NOME_BANCO[b]) + (!nativo ? ' · <span style="color:#b45309">códigos SINAPI</span>' : '') + '</div>'
+        + '<div class="tm-acts"><button class="tm-b tm-p" data-usar="' + esc(m.id) + '">Usar este modelo</button><button class="tm-b" data-ver="' + esc(m.id) + '">Ver itens</button>'
         + (m.proprio ? '<button class="tm-b" data-del="' + esc(m.id) + '" title="Excluir este modelo">🗑️</button>' : '') + '</div></div>';
     };
     var h = '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">'
       + '<label style="font-weight:700">Banco: <select id="tcModBanco" style="padding:3px;border:1px solid #cbd5e1;border-radius:4px">'
-      + ['sinapi', 'sco', 'emop'].map(function(k){ return '<option value="' + k + '"' + (b === k ? ' selected' : '') + '>' + {sinapi: 'SINAPI — RJ', sco: 'SCO — Rio de Janeiro', emop: 'EMOP — RJ' + (temEmop ? '' : ' (em preparo)')}[k] + '</option>'; }).join('') + '</select></label>'
+      + ['sinapi', 'sco', 'emop'].map(function(k){ return '<option value="' + k + '"' + (b === k ? ' selected' : '') + '>' + {sinapi: 'SINAPI — RJ', sco: 'SCO — Rio de Janeiro', emop: 'EMOP — RJ'}[k] + '</option>'; }).join('') + '</select></label>'
       + '<button class="tm-b" id="tcModSalvar" title="Guarda os títulos e códigos do orçamento aberto como um modelo seu, neste aparelho">⭐ Salvar o orçamento aberto como modelo</button></div>'
       + '<div style="color:#475569;margin-top:6px;line-height:1.4">Escolha o banco, o tipo de obra e o porte: o modelo abre na importação com as etapas e os serviços usuais de uma planilha de licitação, com <b>quantidade 0</b> para você preencher. Cada banco tem a sua versão do modelo. ' + esc(MODELOS && MODELOS.fonte || '') + '</div>'
       + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:10px">' + tipos.map(function(t){ var on = t.id === ABA; return '<button class="tm-b" data-aba="' + esc(t.id) + '" style="' + (on ? 'background:#0f172a;color:#fff;border-color:#0f172a' : '') + '">' + (t.id === '_meus' ? '⭐' : (ICONE[t.id] || '📋')) + ' ' + esc(t.nome) + '</button>'; }).join('') + '</div>'
       + '<div class="tm-grid">' + daAba.map(card).join('') + '</div>';
     var mv = verId && achar(verId);
     if(mv && bancosDe(mv).indexOf(b) >= 0){
-      var r = matrizDoModelo(mv, b);
-      h += '<div style="font-weight:800;margin-top:14px">Itens do modelo: ' + esc(mv.nome) + (mv.porte ? ' · ' + esc(mv.porte) : '') + ' · ' + (mv.proprio ? 'meu modelo' : NOME_BANCO[b]) + '</div><div class="tm-ver"><table>'
-        + r.aoa.slice(1).map(function(l){ return l[1] ? '<tr><td>' + esc(l[0]) + '</td><td style="white-space:nowrap">' + esc(l[1]) + '</td><td>' + esc(l[2] || '(descrição da EMOP carregada)') + '</td><td>' + esc(l[3]) + '</td></tr>' : '<tr class="tm-et"><td>' + esc(l[0]) + '</td><td colspan="3">' + esc(l[2]) + '</td></tr>'; }).join('')
+      var r = matrizDoModelo(mv, b), etIdxVer = -1, nativoMv = b !== 'emop' || temEmopNativo(mv);
+      h += '<div style="font-weight:800;margin-top:14px">Itens do modelo: ' + esc(mv.nome) + (mv.porte ? ' · ' + esc(mv.porte) : '') + ' · ' + (mv.proprio ? 'meu modelo' : NOME_BANCO[b])
+        + ' <span style="font-weight:400;font-size:10.5px;color:#64748b">— <b>+</b> insere o item, <b>+…</b> insere a seção inteira no orçamento aberto</span>'
+        + (!nativoMv ? '<div style="margin-top:6px;padding:7px 10px;background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;font-size:10.5px;font-weight:400;color:#92400e">⚠️ Este modelo ainda não tem códigos EMOP pré-configurados. Os códigos mostrados são do SINAPI. O preço virá do banco EMOP se o mesmo código existir na sua tabela. Use <b>+…</b> para inserir as etapas e ajuste os códigos pelo banco EMOP carregado.</div>' : '')
+        + '</div><div class="tm-ver"><table>'
+        + r.aoa.slice(1).map(function(l){
+            if(!l[1]){ etIdxVer++;
+              return '<tr class="tm-et"><td>' + esc(l[0]) + '</td><td colspan="3">' + esc(l[2]) + '</td>'
+                + '<td><button class="tm-b tm-badd" data-add-et="' + etIdxVer + '" title="Inserir esta seção no orçamento aberto">+…</button></td></tr>';
+            }
+            return '<tr><td>' + esc(l[0]) + '</td><td style="white-space:nowrap">' + esc(l[1]) + '</td><td>' + esc(l[2] || '(descrição da EMOP carregada)') + '</td><td>' + esc(l[3]) + '</td>'
+              + '<td><button class="tm-b tm-badd" data-add-cod="' + esc(l[1]) + '" data-add-descr="' + esc(l[2]||'') + '" data-add-unid="' + esc(l[3]||'') + '" title="Inserir este item no orçamento aberto">+</button></td></tr>';
+          }).join('')
         + '</table></div>';
     }
     bd.innerHTML = h;
@@ -14062,6 +14079,43 @@ body.mode-mobile .pm-modal{padding:0}
     bd.querySelectorAll('[data-usar]').forEach(function(x){ x.onclick = function(){ var m = achar(x.dataset.usar); if(m) abrirNoImportador(m, banco()); }; });
     bd.querySelectorAll('[data-ver]').forEach(function(x){ x.onclick = function(){ render(x.dataset.ver); var v = bd.querySelector('.tm-ver'); if(v) v.scrollIntoView({block: 'nearest'}); }; });
     bd.querySelectorAll('[data-del]').forEach(function(x){ x.onclick = function(){ excluirUsr(x.dataset.del); }; });
+    /* botão "+" — inserir item único no orçamento aberto */
+    bd.querySelectorAll('[data-add-cod]').forEach(function(btn){
+      btn.onclick = function(){
+        var cod = btn.dataset.addCod, descr = btn.dataset.addDescr, unid = btn.dataset.addUnid;
+        var cat = typeof getFullCatalog === 'function' ? getFullCatalog() : [];
+        var it = cat.find(function(x){ return x.CODIGO === cod; });
+        var item = it
+          ? { id: Date.now()+Math.random(), tipo:'ITEM', codigo:it.CODIGO, descr:it.DESCR1, unid:it.UNID, qtd:1, custo:(typeof custoEfetivoItem==='function'?custoEfetivoItem(it):0), bdi:0 }
+          : { id: Date.now()+Math.random(), tipo:'ITEM', codigo:cod, descr:descr||'', unid:unid||'', qtd:1, custo:0, bdi:0 };
+        inserirNoOrc(item); saveOrc(); renderOrc();
+        btn.textContent='✓'; btn.disabled=true; btn.style.cssText+='background:#22c55e;color:#fff;border-color:#22c55e';
+      };
+    });
+    /* botão "+…" — inserir seção inteira (título + todos os itens) no orçamento aberto */
+    bd.querySelectorAll('[data-add-et]').forEach(function(btn){
+      btn.onclick = function(){
+        var etIdx = parseInt(btn.dataset.addEt, 10);
+        if(!mv) return;
+        var et = etapasDe(mv, b)[etIdx]; if(!et) return;
+        var cat = typeof getFullCatalog === 'function' ? getFullCatalog() : [];
+        inserirNoOrc({ id: Date.now()+Math.random(), tipo:'TITULO', titulo: String(et.nome||'ETAPA').toUpperCase() });
+        (et.itens || []).forEach(function(orig, j){
+          var cod, descr, unid;
+          if(orig.c){ var dc=(MODELOS&&MODELOS.dic&&MODELOS.dic[orig.c])||[]; cod=orig.c; descr=orig.d||dc[0]||''; unid=orig.u||dc[1]||''; }
+          else if(orig.codigo){ cod=orig.codigo; descr=orig.descr||''; unid=orig.unid||''; }
+          else if((b==='sco'||!orig.sinapi)&&orig.sco){ cod=orig.sco; descr=orig.scoDescr||''; unid=orig.scoUnid||''; }
+          else { cod=orig.sinapi||''; descr=orig.descr||''; unid=orig.unid||''; }
+          var it = cat.find(function(x){ return x.CODIGO === cod; });
+          var item = it
+            ? { id: Date.now()+Math.random()+j, tipo:'ITEM', codigo:it.CODIGO, descr:it.DESCR1, unid:it.UNID, qtd:1, custo:(typeof custoEfetivoItem==='function'?custoEfetivoItem(it):0), bdi:0 }
+            : { id: Date.now()+Math.random()+j, tipo:'ITEM', codigo:cod, descr:descr, unid:unid, qtd:1, custo:0, bdi:0 };
+          inserirNoOrc(item);
+        });
+        saveOrc(); renderOrc();
+        btn.textContent='✓'; btn.disabled=true; btn.style.cssText+='background:#22c55e;color:#fff;border-color:#22c55e';
+      };
+    });
   }
   window.abrirModelosObra = function(){
     var m = garantirModal(); m.style.display = 'flex';
