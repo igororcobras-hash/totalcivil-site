@@ -66,7 +66,17 @@ tr:hover{background:#fffbeb}
 .qty,.price{width:110px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;text-align:right}
 .qty{width:150px} .price{width:130px}
 /* V1-02-39: no computador a caixa da quantidade acompanha a largura da coluna Qtd (que pode ser arrastada) */
-body:not(.mode-mobile) #tblOrc th.th-qtd{min-width:190px}
+/* V1-02-55: larguras iniciais das colunas (as que o Igor deixou ajustadas); ainda dá para arrastar */
+body:not(.mode-mobile) #tblOrc th:nth-child(1){width:22px;min-width:22px}
+body:not(.mode-mobile) #tblOrc th:nth-child(2){width:68px;min-width:68px}
+body:not(.mode-mobile) #tblOrc th:nth-child(3){width:228px;min-width:228px}
+body:not(.mode-mobile) #tblOrc th:nth-child(4){width:44px;min-width:44px}
+body:not(.mode-mobile) #tblOrc th.th-qtd{width:80px;min-width:80px}
+body:not(.mode-mobile) #tblOrc th:nth-child(6){width:40px;min-width:40px}
+body:not(.mode-mobile) #tblOrc th:nth-child(7){width:81px;min-width:81px}
+body:not(.mode-mobile) #tblOrc th:nth-child(8){width:57px;min-width:57px}
+body:not(.mode-mobile) #tblOrc th:nth-child(9){width:63px;min-width:63px}
+body:not(.mode-mobile) #tblOrc th:nth-child(10){width:62px;min-width:62px}
 body:not(.mode-mobile) #tblOrc td:has(> input.qty){white-space:nowrap}
 body:not(.mode-mobile) #tblOrc input.qty{width:calc(100% - 34px);min-width:48px;box-sizing:border-box}
 /* remove setas/spinners dos inputs number - usuário digita */
@@ -1096,7 +1106,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
       <select id="selPosInsert" class="select" style="font-size:9px;max-width:320px"></select>
       <span style="font-size:8px;color:#94a3b8">(clique no <b>#</b> da linha para escolher onde inserir; a lista avança sozinha após cada inserção; setas ↑↓ para ajustes)</span>
     </div>
-    <div class="wrap"><table id="tblOrc"><thead><tr><th style="width:24px">#</th><th style="min-width:80px">Código</th><th>Descrição</th><th>Un</th><th class="th-qtd">Qtd</th><th>Unit</th><th style="background:#e0f2fe">BDI %</th><th style="background:#fef9c3">Unit c/ BDI</th><th>Total</th><th style="background:#e0f2fe;font-weight:800">Total c/ BDI</th><th style="background:#fffbeb;border-left:2px solid #f59e0b">Mercado 1 clique</th><th>Ações</th></tr></thead><tbody id="tbodyOrc"></tbody></table></div>
+    <div class="wrap"><table id="tblOrc"><thead><tr><th style="width:24px">#</th><th style="min-width:68px">Código</th><th>Descrição</th><th>Un</th><th class="th-qtd">Qtd</th><th>Unit</th><th style="background:#e0f2fe">BDI %</th><th style="background:#fef9c3">Unit c/ BDI</th><th>Total</th><th style="background:#e0f2fe;font-weight:800">Total c/ BDI</th><th style="background:#fffbeb;border-left:2px solid #f59e0b">Mercado 1 clique</th><th>Ações</th></tr></thead><tbody id="tbodyOrc"></tbody></table></div>
     <div class="footer"><div class="kpis"><div class="kpi"><label>Itens / Mercado</label><strong id="kItens">0</strong></div><div class="kpi"><label>Subtotal DIPR / Mercado</label><strong id="kSub">R$ 0,00</strong></div><div class="kpi"><label>BDI % e Total</label><div style="display:flex;gap:4px;align-items:center"><input id="bdi" type="number" class="qty" value="0" style="width:50px" onkeydown="handleTabQtd(event, this.dataset.id || this.getAttribute('data-id'))"><strong id="kTot">R$ 0,00</strong></div></div></div></div>
   </div>
 </div>
@@ -14079,5 +14089,47 @@ body.mode-mobile .pm-modal{padding:0}
 })();
 </script>
 <!-- FIM PATCH V1-02-52 -->
+<script>
+/* =====================================================================
+   PATCH V1-02-54 (22/10/2026) — Janelas só fecham pelo ✕ ou ao confirmar
+   - Clicar fora (no fundo escuro) não fecha mais nenhuma janela: o clique
+     no fundo de tela cheia é barrado antes de chegar aos fechamentos
+     antigos (onclick "event.target===this", listeners das janelas novas).
+   - Rolagem: a janela mais alta que a tela rola com a roda do mouse até o
+     fim (o fundo vira rolável e a caixa fica centralizada só quando cabe).
+   ===================================================================== */
+(function(){
+  function cobreTela(el){
+    if(!el || el === document.body || el === document.documentElement || !el.firstElementChild) return false;
+    var cs = getComputedStyle(el); if(cs.position !== 'fixed' || cs.display === 'none') return false;
+    var r = el.getBoundingClientRect();
+    return r.width >= innerWidth * 0.9 && r.height >= innerHeight * 0.9;
+  }
+  /* o mobile menu e o splash de escolha do ambiente continuam como estão */
+  function excecao(el){ return el.id === 'mobMenu' || el.id === 'splash' || el.id === 'authOverlay' || el.closest('#mobMenu'); }
+  ['click', 'mousedown', 'mouseup'].forEach(function(tipo){
+    window.addEventListener(tipo, function(ev){
+      var t = ev.target;
+      if(t && t.nodeType === 1 && cobreTela(t) && !excecao(t)){ ev.stopPropagation(); if(tipo === 'click') ev.preventDefault(); }
+    }, true);
+  });
+  /* rolagem até o fim */
+  var SEL = 'body > div, [id^="modal"], [class*="modal"], [class*="overlay"], .admin-panel, #tcModelos';
+  function ajustar(){
+    document.querySelectorAll(SEL).forEach(function(el){
+      if(!cobreTela(el) || excecao(el) || el.dataset.rolagemOk) return;
+      el.dataset.rolagemOk = '1';
+      el.style.overflowY = 'auto'; el.style.overscrollBehavior = 'contain';
+      var cs = getComputedStyle(el);
+      if(cs.display === 'flex' && cs.flexDirection !== 'column'){
+        el.style.alignItems = 'flex-start';
+        Array.prototype.forEach.call(el.children, function(c){ c.style.marginTop = 'auto'; c.style.marginBottom = 'auto'; c.style.flexShrink = '0'; });
+      }
+    });
+  }
+  setInterval(function(){ try{ ajustar(); }catch(e){} }, 600);
+})();
+</script>
+<!-- FIM PATCH V1-02-54 -->
 </body>
 </html>
