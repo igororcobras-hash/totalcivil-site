@@ -781,7 +781,7 @@ function abaEmHtml(ws, ehMemoria){
     var cheias = r.filter(function(c){ return String(c).trim() !== ''; }).length;
     if (!cheias){ out += '<tr><td colspan="' + ncol + '" style="border:none;height:6px"></td></tr>'; return; }
     var primeira = String(r[0] || '');
-    var ehCab = !achouCab && cheias >= 3 && /^(ITEM|#|CÓDIGO|CODIGO)$/i.test(primeira.trim());
+    var ehCab = !achouCab && cheias >= 3 && /^(ITEM|#|CÓDIGO|CODIGO|DESCRIÇÃO|DESCRICAO)$/i.test(primeira.trim());
     if (ehCab) achouCab = true;
     if (!achouCab && cheias === 1){ out += '<tr class="' + (out.indexOf('rel-tit') < 0 ? 'rel-tit' : 'rel-info') + '"><td colspan="' + ncol + '">' + escHtml(primeira) + '</td></tr>'; return; }
     var cls = ehCab ? 'rel-cab' : (ehMemoria && /^\d+$/.test(primeira.trim()) ? 'rel-item' : '');
@@ -803,7 +803,7 @@ function abaEmLista(ws, ehMemoria){
     var cheias = r.filter(function(c){ return String(c).trim() !== ''; }).length;
     if (!cheias) return;
     var primeira = String(r[0] || '').trim();
-    if (!cab && cheias >= 3 && /^(ITEM|#|CÓDIGO|CODIGO)$/i.test(primeira)){ cab = r.map(function(c){ return String(c).trim(); }); return; }
+    if (!cab && cheias >= 3 && /^(ITEM|#|CÓDIGO|CODIGO|DESCRIÇÃO|DESCRICAO)$/i.test(primeira)){ cab = r.map(function(c){ return String(c).trim(); }); return; }
     if (!cab){ out += '<div class="rel-linha' + (out.indexOf('rel-ltit') < 0 ? ' rel-ltit' : '') + '">' + r.filter(function(c){ return String(c).trim() !== ''; }).map(escHtml).join(' · ') + '</div>'; return; }
     var sub = ehMemoria && !primeira;
     if (!sub){ fecha(); out += '<div class="rel-faixa">'; aberto = true; }
@@ -822,7 +822,7 @@ function abaEmLista(ws, ehMemoria){
 function relatorioHtml(qual, lista){
   var wb = workbookDoExport(), partes = [], aba = lista ? abaEmLista : abaEmHtml;
   var abaMem = wb.SheetNames.find(function(n){ return /mem[oó]ria de c[aá]lculo/i.test(n); });
-  if (qual !== 'memoria') partes.push('<h2>Planilha orçamentária</h2>' + aba(wb.Sheets['Orçamento'], false));
+  if (qual !== 'memoria') partes.push('<h2>Planilha orçamentária</h2>' + aba(wb.Sheets['Planilha orçamentária'] || wb.Sheets['Orçamento'], false));
   if (qual !== 'planilha'){
     if (abaMem) partes.push('<h2>Memória de cálculo</h2>' + aba(wb.Sheets[abaMem], true));
     else if (qual === 'memoria') partes.push('<div class="rel-vazio">Nenhum item tem memória de cálculo ainda.<br>No passo Planilha, toque no 📐 ao lado da quantidade de um item para montar a memória.</div>');
@@ -9389,7 +9389,8 @@ window.distribuirBdiImportado = function(itens){
     if(typeof window.exportXLSX!=='function') throw new Error('Exportação XLSX indisponível.');
     var gravarOriginal = XLSX.writeFile, capt = null;
     XLSX.writeFile = function(wb, nome){ capt = {wb:wb, nome:nome}; };
-    try{ window.exportXLSX(); } finally { XLSX.writeFile = gravarOriginal; }
+    window.__orcBase = true;
+    try{ window.exportXLSX(); } finally { XLSX.writeFile = gravarOriginal; window.__orcBase = false; }
     if(!capt || !capt.wb || !capt.wb.Sheets || !capt.wb.Sheets['Orçamento']) throw new Error('Não foi possível montar a planilha do orçamento.');
     return capt;
   }
@@ -14441,5 +14442,372 @@ setInterval(function(){ try{ garantirBtnInstr(); }catch(e){} }, 1200);
 })();
 </script>
 <!-- FIM PATCH V1-02-55 -->
+<!-- PATCH V1-02-56 -->
+<script>
+/* =====================================================================
+   PATCH V1-02-56 (25/10/2026)
+   (1) Colunas da planilha à escolha (tela, Excel, Word e PDF), com colunas próprias,
+       BDI, valor unitário com BDI, totais com BDI e subtotal por título (sem e com BDI),
+       numeração por título (1, 1.1, 1.2) ou sequencial.
+   (2) Excel: nova aba "Planilha orçamentária" (a primeira) com as colunas escolhidas;
+       a aba "Orçamento" continua como era (oculta) porque o Backup XLSX e o
+       "Excel com composições" leem essa aba. Word e PDF usam a nova planilha.
+   (3) 🔎 Codificar por descrição: itens sem código (ou com código que não existe nos
+       bancos) são comparados por semelhança de descrição com EMOP, SINAPI e SCO.
+   ===================================================================== */
+(function(){
+  'use strict';
+  var KEY = 'tc_colunas_orc_v1';
+  var BUILT = [['item', 'ITEM', 6], ['codigo', 'CÓDIGO', 14], ['descr', 'DESCRIÇÃO', 60], ['unid', 'UNID', 8], ['qtd', 'QTD', 12], ['custo', 'VALOR UNITÁRIO', 16], ['bdi', 'BDI %', 9], ['unitbdi', 'VALOR UNIT. C/ BDI', 18], ['total', 'TOTAL', 18], ['totalbdi', 'TOTAL C/ BDI', 18], ['fonte', 'FONTE', 12], ['database', 'DATA BASE', 11], ['merc', 'MERCADO UNIT', 16], ['mtot', 'MERCADO TOTAL', 18], ['dif', 'DIF', 12], ['loja', 'LOJA', 22], ['link', 'LINK', 32]];
+  var PAD = {item: 1, codigo: 1, descr: 1, unid: 1, qtd: 1, custo: 1, bdi: 1, unitbdi: 1, total: 1, totalbdi: 1, merc: 1};
+  var TELA = {codigo: 2, unid: 4, qtd: 5, custo: 6, bdi: 7, unitbdi: 8, total: 9, totalbdi: 10, merc: 11};
+  var NOME_ABA = 'Planilha orçamentária';
+  function lsGet(k, d){ try { var v = JSON.parse(localStorage.getItem(k)); return v == null ? d : v; } catch (e) { return d; } }
+  function lsSet(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }
+  function esc(t){ return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  function nf(v, d){ return (isFinite(v) ? v : 0).toLocaleString('pt-BR', {minimumFractionDigits: d, maximumFractionDigits: d}); }
+  function t2(v){ return typeof window.truncar2 === 'function' ? window.truncar2(v) : Math.floor(Number(v || 0) * 100 + 1e-7) / 100; }
+  function num(v){ var n = parseFloat(String(v == null ? '' : v).replace(',', '.')); return isFinite(n) ? n : 0; }
+  function cfg(){
+    var s = lsGet(KEY, {}) || {}, c = {};
+    BUILT.forEach(function(x){ c[x[0]] = s.cols && s.cols[x[0]] != null ? !!s.cols[x[0]] : !!PAD[x[0]]; });
+    c.descr = true;
+    return {cols: c, custom: Array.isArray(s.custom) ? s.custom : [], subtotais: s.subtotais !== false, numeracao: s.numeracao === 'seq' ? 'seq' : 'hier'};
+  }
+  function salvarCfg(c){ var s = lsGet(KEY, {}) || {}; s.cols = c.cols; s.custom = c.custom; s.subtotais = c.subtotais; s.numeracao = c.numeracao; lsSet(KEY, s); }
+  function bdiDe(l){ try { if (typeof getBdiValor === 'function') return num(getBdiValor(l)); } catch (e) {} return num(l.bdi); }
+  function fonteDe(cod){ cod = String(cod || ''); return /^SCO-/i.test(cod) ? 'SCO' : /^(SC|SI)-/i.test(cod) ? 'SINAPI' : cod ? 'EMOP' : ''; }
+
+  /* ---------- subtotais por título ---------- */
+  function secoes(){
+    var out = [], atual = null;
+    orc.forEach(function(l, i){
+      if (l.tipo === 'TITULO') { atual = {idx: i, titulo: l.titulo, sem: 0, com: 0, n: 0}; out.push(atual); return; }
+      if (!atual) return;
+      var q = t2(l.qtd), c = t2(l.custo), b = t2(bdiDe(l)), ub = t2(c * (1 + b / 100));
+      atual.sem += t2(q * c); atual.com += t2(q * ub); atual.n++;
+    });
+    return out;
+  }
+
+  /* ---------- tela: colunas escondidas, colunas próprias e subtotal no título ---------- */
+  var st = document.createElement('style');
+  st.textContent = '.tcc-bg{position:fixed;inset:0;background:rgba(15,23,42,.6);z-index:99990;display:none;align-items:flex-start;justify-content:center;padding:4vh 10px;overflow:auto}.tcc-bg.on{display:flex}.tcc-m{background:#fff;color:#0f172a;border-radius:10px;max-width:860px;width:100%;padding:14px 16px;font-family:Arial,sans-serif}.tcc-m h3{margin:0 0 8px}.tcc-g{display:flex;flex-wrap:wrap;gap:6px 18px;margin:8px 0}.tcc-m label{font-size:13px}.tcc-m input[type=text],.tcc-m select{padding:4px 6px;border:1px solid #94a3b8;border-radius:5px}.tcc-b{border:0;border-radius:6px;padding:7px 12px;font-weight:700;cursor:pointer;background:#0f172a;color:#fff;margin-right:6px}.tcc-b.g{background:#16a34a}.tcc-b.r{background:#dc2626}.tcc-sub{margin-left:10px;font-size:10px;font-weight:700;color:#fde68a;white-space:nowrap}.tcc-cx{width:90px;padding:2px 3px;font-size:10px}.tcc-t{border-collapse:collapse;width:100%;font-size:12px}.tcc-t th{background:#0f172a;color:#fff;padding:4px;position:sticky;top:0}.tcc-t td{border:1px solid #cbd5e1;padding:3px 5px;vertical-align:top}.tcc-ok{color:#166534;font-weight:700}.tcc-md{color:#b45309;font-weight:700}.tcc-bx{color:#b91c1c;font-weight:700}';
+  document.head.appendChild(st);
+  var stCols = document.createElement('style'); stCols.id = 'tccCols'; document.head.appendChild(stCols);
+  function aplicarCss(){
+    var c = cfg(), css = '';
+    Object.keys(TELA).forEach(function(id){ if (!c.cols[id]) css += '#tblOrc tr:not(.row-title) > :nth-child(' + TELA[id] + '){display:none}'; });
+    stCols.textContent = css;
+  }
+  function posRender(){
+    try {
+      aplicarCss();
+      var tb = document.getElementById('tbodyOrc'), tbl = document.getElementById('tblOrc'); if (!tb || !tbl) return;
+      var c = cfg(), th = tbl.querySelector('thead tr');
+      if (th) {
+        th.querySelectorAll('th.tcc-th').forEach(function(x){ x.remove(); });
+        var ac = th.lastElementChild;
+        c.custom.forEach(function(cu){ var h = document.createElement('th'); h.className = 'tcc-th'; h.textContent = cu.nome; th.insertBefore(h, ac); });
+      }
+      var S = secoes(), porIdx = {}; S.forEach(function(s){ porIdx[s.idx] = s; });
+      tb.querySelectorAll('tr[data-orc-idx]').forEach(function(tr){
+        var i = +tr.getAttribute('data-orc-idx'), l = orc[i]; if (!l) return;
+        if (l.tipo === 'TITULO') {
+          var s = porIdx[i], cel = tr.children[1];
+          if (s && cel && cfg().subtotais) { var sp = document.createElement('span'); sp.className = 'tcc-sub'; sp.textContent = 'Subtotal R$ ' + nf(s.sem, 2) + ' · c/ BDI R$ ' + nf(s.com, 2); cel.appendChild(sp); }
+          return;
+        }
+        if (!c.custom.length || tr.children.length < 5) return;
+        var last = tr.lastElementChild;
+        c.custom.forEach(function(cu){
+          var td = document.createElement('td'); td.className = 'tcc-td';
+          var inp = document.createElement('input'); inp.type = 'text'; inp.className = 'tcc-cx'; inp.value = (l.extra && l.extra[cu.id]) != null ? l.extra[cu.id] : '';
+          inp.oninput = function(){ if (!l.extra) l.extra = {}; l.extra[cu.id] = inp.value; if (typeof saveOrc === 'function') saveOrc(); };
+          td.appendChild(inp); tr.insertBefore(td, last);
+        });
+      });
+    } catch (e) { console.error('V1-02-56:', e); }
+  }
+  (function(){ var ant = window.renderOrc; if (typeof ant !== 'function') return; window.renderOrc = function(){ var r = ant.apply(this, arguments); posRender(); return r; }; })();
+  aplicarCss();
+
+  /* ---------- janela de colunas ---------- */
+  function janelaColunas(){
+    var m = document.getElementById('tccColunas');
+    if (!m) { m = document.createElement('div'); m.id = 'tccColunas'; m.className = 'tcc-bg'; document.body.appendChild(m); }
+    var c = cfg();
+    m.innerHTML = '<div class="tcc-m"><h3>📑 Colunas da planilha orçamentária</h3><p style="font-size:12px;color:#475569;margin:0">Vale para a tela, o Excel, o Word e o PDF. Valor unitário com BDI, total, total com BDI e os subtotais por título são calculados sozinhos.</p><div class="tcc-g">' +
+      BUILT.map(function(x){ return '<label><input type="checkbox" data-c="' + x[0] + '"' + (c.cols[x[0]] ? ' checked' : '') + (x[0] === 'descr' ? ' disabled' : '') + '> ' + esc(x[1]) + '</label>'; }).join('') +
+      '</div><div class="tcc-g"><label><input type="checkbox" id="tccSub"' + (c.subtotais ? ' checked' : '') + '> Subtotal por título (sem e com BDI)</label><label>Numeração <select id="tccNum"><option value="hier"' + (c.numeracao === 'hier' ? ' selected' : '') + '>1, 1.1, 1.2 (por título)</option><option value="seq"' + (c.numeracao === 'seq' ? ' selected' : '') + '>1, 2, 3 (sequencial)</option></select></label></div>' +
+      '<h4 style="margin:10px 0 4px">Colunas próprias</h4><p style="font-size:12px;color:#475569;margin:0 0 6px">Ex.: Observação, Fornecedor, Local. Aparecem na tela, ao lado das demais, e saem no Excel, Word e PDF.</p><div class="tcc-g" id="tccCust">' +
+      c.custom.map(function(cu){ return '<span style="border:1px solid #cbd5e1;border-radius:6px;padding:3px 8px">' + esc(cu.nome) + ' <button class="tcc-b r" style="padding:1px 6px;margin:0 0 0 4px" data-del="' + esc(cu.id) + '">✕</button></span>'; }).join('') + '</div>' +
+      '<div class="tcc-g"><input type="text" id="tccNovo" placeholder="Nome da nova coluna"><button class="tcc-b" id="tccAdd">+ Adicionar coluna</button></div>' +
+      '<div style="margin-top:10px"><button class="tcc-b g" id="tccOk">Aplicar</button><button class="tcc-b" id="tccFecha">Fechar</button></div></div>';
+    m.classList.add('on');
+    function ler(){
+      var n = cfg(); BUILT.forEach(function(x){ var el = m.querySelector('input[data-c="' + x[0] + '"]'); if (el && x[0] !== 'descr') n.cols[x[0]] = el.checked; });
+      n.subtotais = m.querySelector('#tccSub').checked; n.numeracao = m.querySelector('#tccNum').value; return n;
+    }
+    m.querySelector('#tccFecha').onclick = function(){ m.classList.remove('on'); };
+    m.querySelector('#tccOk').onclick = function(){ salvarCfg(ler()); m.classList.remove('on'); if (typeof renderOrc === 'function') renderOrc(); };
+    m.querySelector('#tccAdd').onclick = function(){
+      var nome = m.querySelector('#tccNovo').value.trim(); if (!nome) return;
+      var n = ler(); n.custom.push({id: 'x' + Date.now().toString(36), nome: nome.toUpperCase()}); salvarCfg(n); janelaColunas(); if (typeof renderOrc === 'function') renderOrc();
+    };
+    m.querySelectorAll('[data-del]').forEach(function(b){
+      b.onclick = function(){ var n = ler(); n.custom = n.custom.filter(function(x){ return x.id !== b.getAttribute('data-del'); }); salvarCfg(n); janelaColunas(); if (typeof renderOrc === 'function') renderOrc(); };
+    });
+  }
+  window.abrirColunasOrcamento = janelaColunas;
+
+  /* ---------- Excel / Word / PDF: nova aba com as colunas escolhidas ---------- */
+  function montarPlanilha(wbBase){
+    var c = cfg(), cols = BUILT.filter(function(x){ return c.cols[x[0]]; }).map(function(x){ return {id: x[0], nome: x[1], w: x[2]}; });
+    c.custom.forEach(function(cu){ cols.push({id: cu.id, nome: cu.nome, w: 20, extra: true}); });
+    var base = wbBase.Sheets['Orçamento'], cab = [];
+    for (var r = 0; r < 5; r++) { var a = base && base[XLSX.utils.encode_cell({r: r, c: 0})]; cab.push(a ? String(a.v) : ''); }
+    var L = {}; cols.forEach(function(x, i){ L[x.id] = XLSX.utils.encode_col(i); });
+    var aoa = cab.map(function(t){ return [t]; }); aoa.push([]); aoa.push(cols.map(function(x){ return x.nome; }));
+    var h0 = aoa.length, rows = [], gi = 0, sec = null, seq = 0, temTitInicial = orc.length && orc[0].tipo === 'TITULO', hier = c.numeracao === 'hier' && temTitInicial;
+    function fechaSec(){
+      if (!sec) return;
+      if (c.subtotais) rows.push({t: 'sub', ini: sec.ini, fim: rows.length - 1 + 0, titulo: sec.titulo, sem: sec.sem, com: sec.com, ext: sec.ext});
+      sec = null;
+    }
+    orc.forEach(function(l){
+      if (l.tipo === 'TITULO') { fechaSec(); gi++; sec = {ini: rows.length + 1, titulo: String(l.titulo || '').toUpperCase(), sem: 0, com: 0, ext: {}}; rows.push({t: 'tit', titulo: sec.titulo, n: String(gi)}); return; }
+      seq++;
+      var q = t2(l.qtd), cu = t2(l.custo), b = t2(bdiDe(l)), ub = t2(cu * (1 + b / 100)), tot = t2(q * cu), tb = t2(q * ub), tm = l.mercado ? t2(l.mercado) : '', k = hier && sec ? (sec.k = (sec.k || 0) + 1) : seq;
+      if (sec) { sec.sem += tot; sec.com += tb; }
+      var rr = {t: 'item', l: l, n: hier && sec ? gi + '.' + k : String(seq), q: q, cu: cu, b: b, ub: ub, tot: tot, tb: tb, tm: tm};
+      rows.push(rr);
+      if (sec) { c.custom.forEach(function(x){ var v = num(l.extra && l.extra[x.id]); if (v) sec.ext[x.id] = (sec.ext[x.id] || 0) + v; }); }
+    });
+    fechaSec();
+    function val(rr, id){
+      var l = rr.l || {};
+      switch (id) {
+        case 'item': return rr.n; case 'codigo': return l.codigo; case 'descr': return rr.t === 'tit' ? rr.titulo : l.descr; case 'unid': return l.unid; case 'qtd': return rr.q; case 'custo': return rr.cu;
+        case 'bdi': return rr.b; case 'unitbdi': return rr.ub; case 'total': return rr.tot; case 'totalbdi': return rr.tb; case 'fonte': return fonteDe(l.codigo); case 'database': return l.data_base || '';
+        case 'merc': return rr.tm; case 'mtot': return l.mercado ? t2(rr.q * rr.tm) : ''; case 'dif': return l.mercado ? t2(rr.tm - rr.cu) : ''; case 'loja': return l.mercado_loja || ''; case 'link': return l.mercado_link || '';
+      }
+      return l.extra && l.extra[id] != null ? l.extra[id] : '';
+    }
+    rows.forEach(function(rr){
+      var linha = cols.map(function(x){
+        if (rr.t === 'tit') return x.id === 'item' ? rr.n : x.id === 'descr' ? rr.titulo : '';
+        if (rr.t === 'sub') return x.id === 'descr' ? 'SUBTOTAL — ' + rr.titulo : x.id === 'total' ? t2(rr.sem) : x.id === 'totalbdi' ? t2(rr.com) : (x.extra && rr.ext[x.id] != null ? rr.ext[x.id] : '');
+        var v = val(rr, x.id); return v == null ? '' : v;
+      });
+      aoa.push(linha);
+    });
+    var totRow = null;
+    if (rows.some(function(r){ return r.t === 'item'; })) { totRow = aoa.length; aoa.push(cols.map(function(x){ return x.id === 'descr' ? 'TOTAL GERAL' : ''; })); }
+    var ws = XLSX.utils.aoa_to_sheet(aoa), enc = XLSX.utils.encode_cell;
+    function ci(id){ return cols.findIndex(function(x){ return x.id === id; }); }
+    function cel(r, id){ var i = ci(id); return i < 0 ? null : ws[enc({r: r, c: i})]; }
+    var somaT = 0, somaB = 0, refs = {total: [], totalbdi: []}, comSub = c.subtotais;
+    rows.forEach(function(rr, k){
+      var ri = h0 + k, n = ri + 1;
+      if (rr.t === 'item') {
+        var a = cel(ri, 'unitbdi'), b = cel(ri, 'total'), d = cel(ri, 'totalbdi'), f = window.formulaCalc || function(e){ return 'TRUNC(' + e + ',2)'; };
+        if (a && L.custo && L.bdi) a.f = f(L.custo + n + '*(1+' + L.bdi + n + '/100)');
+        if (b && L.qtd && L.custo) b.f = f(L.qtd + n + '*' + L.custo + n);
+        if (d && L.qtd && L.unitbdi) d.f = f(L.qtd + n + '*' + L.unitbdi + n); else if (d && L.total && L.bdi) d.f = f(L.total + n + '*(1+' + L.bdi + n + '/100)');
+        var m = cel(ri, 'mtot'); if (m && L.qtd && L.merc && rr.l.mercado) m.f = f(L.qtd + n + '*' + L.merc + n);
+        somaT += rr.tot; somaB += rr.tb;
+        if (!comSub) { refs.total.push(L.total + n); refs.totalbdi.push(L.totalbdi + n); }
+      }
+      if (rr.t === 'sub') {
+        ['total', 'totalbdi'].forEach(function(id){ var z = cel(ri, id); if (z && L[id]) z.f = 'SUM(' + L[id] + (h0 + rr.ini + 1) + ':' + L[id] + (h0 + rr.fim + 1) + ')'; });
+        c.custom.forEach(function(x){ var z = cel(ri, x.id); if (z && typeof z.v === 'number') z.f = 'SUM(' + L[x.id] + (h0 + rr.ini + 1) + ':' + L[x.id] + (h0 + rr.fim + 1) + ')'; });
+        if (L.total) refs.total.push(L.total + n); if (L.totalbdi) refs.totalbdi.push(L.totalbdi + n);
+      }
+    });
+    if (totRow != null) ['total', 'totalbdi'].forEach(function(id){
+      if (ci(id) < 0) return; var addr = enc({r: totRow, c: ci(id)});
+      ws[addr] = {t: 'n', v: t2(id === 'total' ? somaT : somaB), f: refs[id].length ? 'SUM(' + refs[id].join(',') + ')' : undefined};
+    });
+    ws['!ref'] = XLSX.utils.encode_range({s: {r: 0, c: 0}, e: {r: aoa.length - 1, c: cols.length - 1}});
+    ws['!cols'] = cols.map(function(x){ return {wch: x.w}; });
+    ws['!merges'] = [0, 1, 2, 3, 4].map(function(r){ return {s: {r: r, c: 0}, e: {r: r, c: Math.max(cols.length - 1, 1)}}; });
+    var borda = {top: {style: 'thin'}, bottom: {style: 'thin'}, left: {style: 'thin'}, right: {style: 'thin'}};
+    for (var R = 0; R < aoa.length; R++) for (var C = 0; C < cols.length; C++) {
+      var ad = enc({r: R, c: C}), z = ws[ad]; if (!z) { if (R >= 5) z = ws[ad] = {t: 's', v: ''}; else continue; }
+      var id = cols[C].id, rr = R >= h0 ? rows[R - h0] : null;
+      z.s = {border: borda, alignment: {wrapText: true, vertical: 'center'}};
+      if (R >= h0 && ['qtd', 'custo', 'unitbdi', 'total', 'totalbdi', 'merc', 'mtot', 'dif'].indexOf(id) >= 0 && z.t === 'n') z.z = '#,##0.00';
+      if (R === 0) { z.s.font = {sz: 14, bold: true}; z.s.fill = {fgColor: {rgb: 'FEF3C7'}}; }
+      if (R >= 1 && R <= 4) z.s.font = {bold: true};
+      if (R === 5) z.s = {};
+      if (R === 6) { z.s.font = {bold: true, color: {rgb: 'FFFFFF'}}; z.s.fill = {fgColor: {rgb: '0F172A'}}; z.s.alignment = {horizontal: 'center', vertical: 'center', wrapText: true}; }
+      if (rr && rr.t === 'tit') { z.s.font = {bold: true}; z.s.fill = {fgColor: {rgb: 'E2E8F0'}}; }
+      if (rr && rr.t === 'sub') { z.s.font = {bold: true}; z.s.fill = {fgColor: {rgb: 'F1F5F9'}}; }
+      if (R === totRow) { z.s.font = {bold: true}; z.s.fill = {fgColor: {rgb: 'FEF3C7'}}; }
+    }
+    ws['!autofilter'] = {ref: 'A7:' + XLSX.utils.encode_col(cols.length - 1) + (h0 + rows.length)};
+    return ws;
+  }
+  var _exp = window.exportXLSX;
+  window.exportXLSX = function(){
+    if (window.__orcBase || typeof _exp !== 'function') return _exp.apply(this, arguments);
+    var orig = XLSX.writeFile;
+    XLSX.writeFile = function(wb, nome, o){
+      try {
+        if (wb && wb.Sheets && wb.Sheets['Orçamento'] && wb.SheetNames.indexOf(NOME_ABA) < 0) {
+          var ws = montarPlanilha(wb); wb.Sheets[NOME_ABA] = ws; wb.SheetNames.unshift(NOME_ABA);
+          wb.Workbook = wb.Workbook || {}; wb.Workbook.Sheets = wb.SheetNames.map(function(n){ return {Hidden: n === 'Orçamento' ? 1 : 0}; });
+          wb.Workbook.Views = [{activeTab: 0}];
+        }
+      } catch (e) { console.error('V1-02-56 planilha:', e); }
+      return orig.call(XLSX, wb, nome, o);
+    };
+    try { return _exp.apply(this, arguments); } finally { XLSX.writeFile = orig; }
+  };
+  window.exportXLSX.__crono = _exp && _exp.__crono;
+
+  /* ---------- botões ---------- */
+  function botoes(){
+    var ref = document.getElementById('btnImportLista'); if (!ref || document.getElementById('btnColunasOrc')) return;
+    var b1 = document.createElement('button'); b1.type = 'button'; b1.id = 'btnColunasOrc'; b1.className = 'btn btn-dark'; b1.textContent = '📑 Colunas'; b1.title = 'Escolher as colunas da planilha, criar colunas próprias e ligar os subtotais'; b1.onclick = janelaColunas;
+    var b2 = document.createElement('button'); b2.type = 'button'; b2.id = 'btnCodificar'; b2.className = 'btn'; b2.style.cssText = 'background:#7c3aed;color:#fff'; b2.textContent = '🔎 Codificar por descrição'; b2.title = 'Acha EMOP, SINAPI e SCO parecidos com a descrição de itens sem código'; b2.onclick = function(){ window.abrirCodificar(); };
+    ref.parentNode.insertBefore(b2, ref.nextSibling); ref.parentNode.insertBefore(b1, ref.nextSibling);
+  }
+  setInterval(function(){ try { botoes(); } catch (e) {} }, 1500);
+
+  /* =====================================================================
+     🔎 CODIFICAR POR DESCRIÇÃO
+     ===================================================================== */
+  var STOP = {DE: 1, DA: 1, DO: 1, DAS: 1, DOS: 1, COM: 1, EM: 1, PARA: 1, E: 1, A: 1, O: 1, AS: 1, OS: 1, OU: 1, POR: 1, NA: 1, NO: 1, NAS: 1, NOS: 1, UM: 1, UMA: 1, TIPO: 1, ATE: 1, SEM: 1, INCLUSIVE: 1, INCLUINDO: 1, CONFORME: 1, AF: 1, PS: 1, UN: 1};
+  var SINON = {CONCRETO: 'CONCRETO', ALVENARIA: 'ALVENARIA', REBOCO: 'EMBOCO', EMBOCO: 'EMBOCO', CHAPISCO: 'CHAPISCO', LAJE: 'LAJE', ESCAVACAO: 'ESCAVACAO', ESCAV: 'ESCAVACAO', REATERRO: 'REATERRO', ARMACAO: 'ARMACAO', ACO: 'ACO', FORMA: 'FORMA', FORMAS: 'FORMA', PINTURA: 'PINTURA', TINTA: 'PINTURA', PISO: 'PISO', CERAMICA: 'CERAMICA', PORCELANATO: 'PORCELANATO', TELHA: 'TELHA', TELHADO: 'TELHADO', MEIOFIO: 'GUIA', 'MEIO-FIO': 'GUIA', GUIA: 'GUIA', SARJETA: 'SARJETA', TUBO: 'TUBO', PVC: 'PVC', CBUQ: 'ASFALTICO', 'ASFALTO': 'ASFALTICO'};
+  function normTxt(t){
+    return String(t == null ? '' : t).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/AF_\d{2}\/\d{4}/g, ' ').replace(/\bM²/g, ' M2 ').replace(/\bM³/g, ' M3 ').replace(/[²³]/g, function(c){ return c === '²' ? '2' : '3'; })
+      .replace(/(\d),(\d)/g, '$1.$2').replace(/[^A-Z0-9.]+/g, ' ');
+  }
+  function tokens(t){
+    var out = {}, a = normTxt(t).split(' ');
+    a.forEach(function(w){
+      w = w.replace(/^\.+|\.+$/g, ''); if (!w || STOP[w]) return;
+      if (w.length > 3 && /[^S]S$/.test(w)) w = w.slice(0, -1);
+      if (SINON[w]) w = SINON[w];
+      out[w] = 1;
+    });
+    return Object.keys(out);
+  }
+  function unNorm(u){ u = normTxt(u).replace(/\s+/g, ''); return {M2: 'M2', M3: 'M3', M: 'M', ML: 'M', KG: 'KG', UN: 'UN', UND: 'UN', UNID: 'UN', PC: 'UN', PECA: 'UN', VB: 'VB', T: 'T', TON: 'T', L: 'L', H: 'H', MES: 'MES', CJ: 'CJ', KM: 'KM', M3XKM: 'M3XKM', TXKM: 'TXKM'}[u] || u; }
+  var IDX = null;
+  function indice(){
+    var full = []; try { full = getFullCatalog(); } catch (e) {}
+    var key = full.length + ':' + (typeof catalog !== 'undefined' ? catalog.length : 0);
+    if (IDX && IDX.key === key) return IDX;
+    var emopSet = {}; try { catalog.forEach(function(x){ emopSet[x.CODIGO] = 1; }); } catch (e) {}
+    var itens = [], inv = {};
+    full.forEach(function(it){
+      if (!it || !it.DESCR1) return; var f = it.FONTE === 'SINAPI' || /^SC-|^SI-/.test(String(it.CODIGO)) ? 'SINAPI' : it.FONTE === 'SCO' || /^SCO-/.test(String(it.CODIGO)) ? 'SCO' : 'EMOP';
+      var tk = tokens(it.DESCR1); if (!tk.length) return;
+      var id = itens.length; itens.push({it: it, f: f, tk: tk, un: unNorm(it.UNID), w: 0});
+      tk.forEach(function(t){ (inv[t] = inv[t] || []).push(id); });
+    });
+    var N = itens.length || 1, idf = {};
+    Object.keys(inv).forEach(function(t){ idf[t] = Math.log(1 + N / inv[t].length) * (/^[0-9.]+$/.test(t) ? 1.4 : 1); });
+    itens.forEach(function(x){ x.w = x.tk.reduce(function(s, t){ return s + idf[t]; }, 0); });
+    var bancos = {}; itens.forEach(function(x){ bancos[x.f] = (bancos[x.f] || 0) + 1; });
+    IDX = {key: key, itens: itens, inv: inv, idf: idf, N: N, bancos: bancos};
+    return IDX;
+  }
+  function buscar(descr, un){
+    var I = indice(), q = tokens(descr), uq = un ? unNorm(un) : '';
+    if (!q.length) return {SINAPI: [], SCO: [], EMOP: []};
+    var wQ = q.reduce(function(s, t){ return s + (I.idf[t] || Math.log(1 + I.N)); }, 0), cand = {};
+    q.forEach(function(t){ var l = I.inv[t]; if (!l || l.length > I.N * 0.25) return; l.forEach(function(id){ cand[id] = (cand[id] || 0) + I.idf[t]; }); });
+    var por = {SINAPI: [], SCO: [], EMOP: []};
+    Object.keys(cand).forEach(function(k){
+      var x = I.itens[k], inter = cand[k], sc = 0.8 * (inter / wQ) + 0.2 * (inter / x.w);
+      if (uq && x.un) sc += x.un === uq ? 0.08 : -0.18;
+      if (sc <= 0.15) return;
+      por[x.f].push({x: x, s: Math.max(0, Math.min(1, sc))});
+    });
+    Object.keys(por).forEach(function(f){ por[f].sort(function(a, b){ return b.s - a.s; }); por[f] = por[f].slice(0, 4); });
+    return por;
+  }
+  function semCodigo(){
+    var I = indice(), mapa = {}; I.itens.forEach(function(x){ mapa[String(x.it.CODIGO).toUpperCase()] = 1; });
+    var out = []; orc.forEach(function(l, i){ if (l.tipo === 'ITEM' && (!String(l.codigo || '').trim() || !mapa[String(l.codigo).toUpperCase()])) out.push(i); });
+    return out;
+  }
+  var D = {pref: 'melhor', min: 40, descr: true, linhas: []};
+  window.abrirCodificar = function(){
+    var m = document.getElementById('tccCod');
+    if (!m) { m = document.createElement('div'); m.id = 'tccCod'; m.className = 'tcc-bg'; document.body.appendChild(m); }
+    m.classList.add('on'); m.innerHTML = '<div class="tcc-m"><h3>🔎 Codificar por descrição</h3><p>Carregando bancos…</p></div>';
+    setTimeout(function(){ try { calcular(); desenhar(); } catch (e) { m.querySelector('.tcc-m').innerHTML = '<h3>🔎 Codificar por descrição</h3><p>' + esc(e.message || e) + '</p><button class="tcc-b" id="tccX">Fechar</button>'; m.querySelector('#tccX').onclick = function(){ m.classList.remove('on'); }; } }, 30);
+  };
+  function calcular(){
+    var idx = semCodigo(); D.linhas = idx.map(function(i){
+      var l = orc[i], por = buscar(l.descr, l.unid); return {i: i, por: por, sel: null, on: false};
+    });
+    escolher();
+  }
+  function melhor(L){
+    var b = null, pf = D.pref;
+    ['SINAPI', 'SCO', 'EMOP'].forEach(function(f){
+      if (pf !== 'melhor' && pf !== f) return; var c = L.por[f][0]; if (c && (!b || c.s > b.s)) b = c;
+    });
+    return b;
+  }
+  function escolher(){ D.linhas.forEach(function(L){ var b = melhor(L); L.sel = b; L.on = !!b && b.s * 100 >= D.min && (!orc[L.i].unid || !b.x.un || unNorm(orc[L.i].unid) === b.x.un); }); }
+  function precoDe(it){ try { return typeof custoEfetivoItem === 'function' ? custoEfetivoItem(it) : Number(it.CUSTO); } catch (e) { return Number(it.CUSTO); } }
+  function desenhar(){
+    var m = document.getElementById('tccCod'), I = indice(), bk = I.bancos;
+    var optsB = [['melhor', 'Melhor entre todos'], ['SINAPI', 'SINAPI' + (bk.SINAPI ? '' : ' (sem banco)')], ['SCO', 'SCO' + (bk.SCO ? '' : ' (sem banco)')], ['EMOP', 'EMOP' + (bk.EMOP ? '' : ' (importe a EMOP no Orçamento)')]];
+    var h = '<div class="tcc-m"><h3>🔎 Codificar por descrição</h3><p style="font-size:12px;color:#475569;margin:0">Compara a descrição (e a unidade) de cada item sem código com os bancos carregados e propõe o código parecido. Confira antes de aplicar: a semelhança é uma sugestão. ' + (bk.EMOP ? '' : '<b>A EMOP não está carregada neste aparelho</b>: importe a EMOP (DBF) no Orçamento para ela entrar na busca.') + '</p>' +
+      '<div class="tcc-g"><label>Banco preferido <select id="tccPref">' + optsB.map(function(o){ return '<option value="' + o[0] + '"' + (D.pref === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') + '</select></label>' +
+      '<label>Semelhança mínima <input type="number" id="tccMin" min="10" max="95" step="5" value="' + D.min + '" style="width:60px"> %</label><label><input type="checkbox" id="tccDescr"' + (D.descr ? ' checked' : '') + '> Trocar a minha descrição pela do banco</label></div>' +
+      '<details style="margin:4px 0"><summary style="cursor:pointer;font-size:13px">➕ Colar uma lista de itens sem código</summary><p style="font-size:12px;margin:4px 0">Uma linha por item: <b>descrição ; unidade ; quantidade</b> (unidade e quantidade são opcionais; pode colar do Excel).</p><textarea id="tccLista" rows="5" style="width:100%;box-sizing:border-box"></textarea><button class="tcc-b" id="tccAddLista">Adicionar ao orçamento e procurar</button></details>';
+    if (!D.linhas.length) h += '<p><b>Nenhum item sem código</b> no orçamento aberto. Importe uma planilha sem códigos (📥 Importar) ou cole a lista acima.</p>';
+    else h += '<div style="max-height:56vh;overflow:auto"><table class="tcc-t"><thead><tr><th></th><th>Descrição do orçamento</th><th>Un</th><th>Qtd</th><th>Proposta (escolha o código)</th><th>Semelh.</th><th>Preço</th></tr></thead><tbody>' + D.linhas.map(function(L, k){
+      var l = orc[L.i], ops = [];
+      ['SINAPI', 'SCO', 'EMOP'].forEach(function(f){ L.por[f].forEach(function(c, j){ ops.push('<option value="' + f + ':' + j + '"' + (L.sel === c ? ' selected' : '') + '>' + f + ' ' + esc(c.x.it.CODIGO) + ' · ' + Math.round(c.s * 100) + '% · ' + esc(String(c.x.it.DESCR1).slice(0, 90)) + ' (' + esc(c.x.it.UNID || '') + ')</option>'); }); });
+      var s = L.sel, cls = !s ? 'tcc-bx' : s.s >= 0.6 ? 'tcc-ok' : s.s >= 0.4 ? 'tcc-md' : 'tcc-bx', un = s && s.x.un && l.unid && unNorm(l.unid) !== s.x.un ? ' ⚠ ' + esc(s.x.it.UNID) : '';
+      return '<tr><td><input type="checkbox" data-k="' + k + '"' + (L.on ? ' checked' : '') + (s ? '' : ' disabled') + '></td><td>' + esc(String(l.descr || '').slice(0, 160)) + '</td><td>' + esc(l.unid || '') + '<b style="color:#b45309">' + un + '</b></td><td>' + esc(l.qtd) + '</td><td><select data-s="' + k + '" style="max-width:420px">' + (ops.length ? ops.join('') : '<option>sem parecido</option>') + '<option value="nenhum">— não codificar —</option></select></td><td class="' + cls + '">' + (s ? Math.round(s.s * 100) + '%' : '—') + '</td><td>' + (s ? 'R$ ' + nf(precoDe(s.x.it), 2) : '') + '</td></tr>';
+    }).join('') + '</tbody></table></div>';
+    h += '<div style="margin-top:10px"><button class="tcc-b g" id="tccAplica"' + (D.linhas.length ? '' : ' disabled') + '>Codificar os marcados</button><button class="tcc-b" id="tccFechaC">Fechar</button> <span id="tccMsg" style="font-size:12px"></span></div></div>';
+    m.innerHTML = h;
+    m.querySelector('#tccFechaC').onclick = function(){ m.classList.remove('on'); };
+    m.querySelector('#tccPref').onchange = function(){ D.pref = this.value; escolher(); desenhar(); };
+    m.querySelector('#tccMin').onchange = function(){ D.min = Math.max(10, Math.min(95, +this.value || 40)); escolher(); desenhar(); };
+    m.querySelector('#tccDescr').onchange = function(){ D.descr = this.checked; };
+    m.querySelectorAll('input[data-k]').forEach(function(c){ c.onchange = function(){ D.linhas[+c.getAttribute('data-k')].on = c.checked; }; });
+    m.querySelectorAll('select[data-s]').forEach(function(s){
+      s.onchange = function(){ var L = D.linhas[+s.getAttribute('data-s')]; if (s.value === 'nenhum') { L.sel = null; L.on = false; } else { var p = s.value.split(':'); L.sel = L.por[p[0]][+p[1]]; L.on = true; } desenhar(); };
+    });
+    m.querySelector('#tccAddLista').onclick = function(){
+      var linhas = m.querySelector('#tccLista').value.split(/\r?\n/).map(function(x){ return x.trim(); }).filter(Boolean), n = 0;
+      linhas.forEach(function(ln){
+        var p = ln.split(/\t|;/).map(function(x){ return x.trim(); }); if (!p[0]) return;
+        var q = p.length > 2 ? num(p[2]) : 1, bdiP = (window.bdiConfig && window.bdiConfig.principal) || 0;
+        orc.push({id: Date.now() + Math.random(), tipo: 'ITEM', codigo: '', descr: p[0], unid: (p[1] || '').toUpperCase(), qtd: q, custo: 0, bdi: bdiP, bdiTipo: 'PRINCIPAL', data_base: ''}); n++;
+      });
+      if (!n) return; try { saveOrc(); renderOrc(); } catch (e) {}
+      calcular(); desenhar();
+    };
+    var ap = m.querySelector('#tccAplica');
+    if (ap) ap.onclick = function(){
+      var n = 0, sem = 0, db = (document.getElementById('dataBaseTodos') || {}).value || '';
+      D.linhas.forEach(function(L){
+        if (!L.on || !L.sel) return; var l = orc[L.i], it = L.sel.x.it, p = precoDe(it);
+        l.codigo = String(it.CODIGO); if (D.descr) l.descr = it.DESCR1; if (it.UNID) l.unid = it.UNID;
+        if (p > 0) { l.custo = p; l.custo_num = p; } else sem++;
+        if (db) l.data_base = db; l.codificadoPor = 'descrição ' + Math.round(L.sel.s * 100) + '%'; n++;
+      });
+      try { saveOrc(); renderOrc(); } catch (e) {}
+      calcular(); desenhar(); var msg = document.getElementById('tccMsg');
+      if (msg) msg.textContent = n + ' item(ns) codificado(s)' + (sem ? '; ' + sem + ' sem preço no banco (mantive o valor anterior)' : '') + '.';
+    };
+  }
+})();
+</script>
+<!-- FIM PATCH V1-02-56 -->
 </body>
 </html>
