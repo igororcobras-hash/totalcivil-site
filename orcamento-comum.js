@@ -443,6 +443,115 @@
     XLSX.writeFile(wb, 'orcamento-' + prog + '-' + o.sol.k + '-' + o.bank + '-' + slug(sc.projeto) + '-' + hoje() + '.xlsx');
     toast(cr.prazo ? 'Planilha gerada com orçamento, memória e cronograma.' : 'Planilha gerada. Escolha o prazo para incluir o cronograma.');
   }
+  /* ---------- planilha de apresentação: colunas à escolha, BDI e subtotais (Excel e PDF) ---------- */
+  var KEY_COL = 'tc_colunas_orc_v1';
+  var COLS = [['item', 'ITEM', 7], ['codigo', 'CÓDIGO', 22], ['descr', 'DESCRIÇÃO', 70], ['unid', 'UNID.', 8], ['qtd', 'QUANT.', 12], ['custo', 'VALOR UNITÁRIO', 16], ['bdi', 'BDI %', 9], ['unitbdi', 'VALOR UNIT. C/ BDI', 18], ['total', 'TOTAL', 16], ['totalbdi', 'TOTAL C/ BDI', 18], ['fonte', 'FONTE', 30]];
+  var COL_PAD = {item: 1, codigo: 1, descr: 1, unid: 1, qtd: 1, custo: 1, bdi: 1, unitbdi: 1, total: 1, totalbdi: 1, fonte: 1};
+  function colCfg(){
+    var s = lsGet(KEY_COL, {}) || {}, c = {};
+    COLS.forEach(function(x){ c[x[0]] = s.cols && s.cols[x[0]] != null ? !!s.cols[x[0]] : !!COL_PAD[x[0]]; });
+    c.descr = true;
+    return {cols: c, subtotais: s.subtotais !== false, numeracao: s.numeracao === 'seq' ? 'seq' : 'hier'};
+  }
+  function colSet(fn){ var s = lsGet(KEY_COL, {}) || {}; if (!s.cols) s.cols = {}; fn(s); lsSet(KEY_COL, s); }
+  function modeloApresentacao(secoes){
+    var cc = colCfg(), cols = COLS.filter(function(x){ return cc.cols[x[0]]; }), rows = [], gi = 0, seq = 0;
+    secoes.forEach(function(sc){
+      var bdi = +sc.bdi || 0, f = 1 + bdi / 100;
+      sc.grupos.forEach(function(gr){
+        gi++; var ini = rows.length + 1, soma = 0, somaB = 0;
+        rows.push({t: 'tit', c: {item: String(gi), descr: (secoes.length > 1 ? sc.nome.toUpperCase() + ' — ' : '') + gr.g}});
+        gr.linhas.forEach(function(x, j){
+          seq++;
+          var q = r2(x.q), p = x.preco != null ? r2(x.preco) : null, ub = p != null ? r2(p * f) : null, t = p != null ? r2(q * p) : null, tb = ub != null ? r2(q * ub) : null;
+          if (t != null) soma += t; if (tb != null) somaB += tb;
+          rows.push({t: 'item', bdi: bdi, c: {item: cc.numeracao === 'seq' ? String(seq) : gi + '.' + (j + 1), codigo: x.cod, descr: x.descr, unid: x.un, qtd: q, custo: p, bdi: bdi, unitbdi: ub, total: t, totalbdi: tb, fonte: x.fonte}});
+        });
+        if (cc.subtotais) rows.push({t: 'sub', ini: ini, fim: rows.length, c: {descr: 'SUBTOTAL — ' + gr.g, total: r2(soma), totalbdi: r2(somaB)}});
+      });
+    });
+    return {cols: cols, rows: rows, cc: cc};
+  }
+  function planilhaApresentacao(secoes, titulo){
+    var M = modeloApresentacao(secoes), s0 = secoes[0], cols = M.cols, L = {}, aoa = [];
+    cols.forEach(function(x, i){ L[x[0]] = XLSX.utils.encode_col(i); });
+    aoa.push([titulo]); aoa.push([secoes.length === 1 ? (s0.projeto + (s0.municipio ? ' — ' + s0.municipio : '')) : 'Programas: ' + secoes.map(function(s){ return s.nome; }).join(' · ')]);
+    aoa.push([secoes.length === 1 ? 'Banco ' + s0.banco + (s0.bancoRef ? ' ' + s0.bancoRef : '') + ' · ' + (s0.regime === 'D' ? 'desonerado' : 'não desonerado') + ' · BDI ' + nf(s0.bdi, 2) + ' % · ' + hoje() : 'Cada programa com o banco escolhido nele · ' + hoje()]);
+    aoa.push([]); aoa.push(cols.map(function(x){ return x[1]; }));
+    var h0 = aoa.length, rotulo = 'descr';
+    M.rows.forEach(function(r){ aoa.push(cols.map(function(x){ var v = r.c[x[0]]; return v == null ? '' : v; })); });
+    var totRow = null;
+    if (M.rows.length) { totRow = aoa.length; aoa.push(cols.map(function(x){ return x[0] === 'descr' ? 'TOTAL GERAL' : ''; })); }
+    var ws = XLSX.utils.aoa_to_sheet(aoa), somaT = 0, somaB = 0, refT = [], refB = [], estilo = {border: {top: {style: 'thin'}, bottom: {style: 'thin'}, left: {style: 'thin'}, right: {style: 'thin'}}, alignment: {wrapText: true, vertical: 'center'}};
+    function cel(r, id){ return ws[XLSX.utils.encode_cell({r: r, c: cols.findIndex(function(x){ return x[0] === id; })})]; }
+    M.rows.forEach(function(r, k){
+      var ri = h0 + k, n = ri + 1;
+      if (r.t === 'item') {
+        var a = cel(ri, 'unitbdi'), b = cel(ri, 'total'), c = cel(ri, 'totalbdi');
+        if (a && L.custo && L.bdi) a.f = 'ROUND(' + L.custo + n + '*(1+' + L.bdi + n + '/100),2)';
+        if (b && L.qtd && L.custo) b.f = 'ROUND(' + L.qtd + n + '*' + L.custo + n + ',2)';
+        if (c && L.qtd && L.unitbdi) c.f = 'ROUND(' + L.qtd + n + '*' + L.unitbdi + n + ',2)';
+        else if (c && L.total && L.bdi) c.f = 'ROUND(' + L.total + n + '*(1+' + L.bdi + n + '/100),2)';
+        if (r.c.total != null) somaT += r.c.total; if (r.c.totalbdi != null) somaB += r.c.totalbdi;
+      }
+      if (r.t === 'sub') {
+        ['total', 'totalbdi'].forEach(function(id){ var z = cel(ri, id); if (z && L[id]) z.f = 'SUM(' + L[id] + (h0 + r.ini + 1) + ':' + L[id] + (h0 + r.fim) + ')'; });
+        refT.push(L.total + n); refB.push(L.totalbdi + n);
+      }
+    });
+    if (totRow != null) {
+      var hasSub = M.rows.some(function(r){ return r.t === 'sub'; }), cT = L.total && cel(totRow, 'total'), cB = L.totalbdi && cel(totRow, 'totalbdi');
+      ['total', 'totalbdi'].forEach(function(id){
+        if (!L[id]) return; var addr = XLSX.utils.encode_cell({r: totRow, c: cols.findIndex(function(x){ return x[0] === id; })}), v = id === 'total' ? somaT : somaB;
+        var rs = M.rows.map(function(r, k){ return r.t === (hasSub ? 'sub' : 'item') ? L[id] + (h0 + k + 1) : null; }).filter(Boolean);
+        ws[addr] = {t: 'n', v: r2(v), f: rs.length ? 'SUM(' + rs.join(',') + ')' : undefined};
+      });
+    }
+    ws['!ref'] = XLSX.utils.encode_range({s: {r: 0, c: 0}, e: {r: aoa.length - 1, c: cols.length - 1}});
+    ws['!cols'] = cols.map(function(x){ return {wch: x[2]}; });
+    ws['!merges'] = [0, 1, 2].map(function(r){ return {s: {r: r, c: 0}, e: {r: r, c: Math.max(cols.length - 1, 1)}}; });
+    for (var R = 0; R < aoa.length; R++) for (var C = 0; C < cols.length; C++) {
+      var ad = XLSX.utils.encode_cell({r: R, c: C}), z = ws[ad]; if (!z) { if (R >= 4) { z = ws[ad] = {t: 's', v: ''}; } else continue; }
+      var id = cols[C][0], rr = R >= h0 ? M.rows[R - h0] : null;
+      z.s = JSON.parse(JSON.stringify(estilo));
+      if (R >= h0 && ['qtd', 'custo', 'unitbdi', 'total', 'totalbdi'].indexOf(id) >= 0 && z.t === 'n') z.z = '#,##0.00';
+      if (R >= h0 && id === 'bdi' && z.t === 'n') z.z = '0.00';
+      if (R === 0) z.s.font = {sz: 14, bold: true};
+      if (R === 4) { z.s.font = {bold: true, color: {rgb: 'FFFFFF'}}; z.s.fill = {fgColor: {rgb: '0F172A'}}; z.s.alignment = {horizontal: 'center', vertical: 'center', wrapText: true}; }
+      if (rr && rr.t === 'tit') { z.s.font = {bold: true}; z.s.fill = {fgColor: {rgb: 'E2E8F0'}}; }
+      if (rr && rr.t === 'sub') { z.s.font = {bold: true}; z.s.fill = {fgColor: {rgb: 'F1F5F9'}}; }
+      if (R === totRow) { z.s.font = {bold: true}; z.s.fill = {fgColor: {rgb: 'FEF3C7'}}; }
+    }
+    return {ws: ws, aoa: aoa, modelo: M};
+  }
+  async function exportarCompleto(prog){
+    var o = atual(prog); if (!o) return;
+    var P = PROGS[prog], sc = secao(prog, o), cr = cronoEstado(prog), et = etapasDe(o, prog), aba = null;
+    try { await carregarXlsx(); } catch (e) { toast('Sem internet para gerar o .xlsx. Conecte e tente de novo.'); return; }
+    if (cr.prazo && et.length && window.TC_CRONO) aba = TC_CRONO.planilha(XLSX, cr, et, ['CRONOGRAMA FÍSICO-FINANCEIRO — ' + P.nome.toUpperCase(), sc.projeto, 'Banco ' + sc.banco + ' · valores com BDI de ' + nf(sc.bdi, 2) + ' %']);
+    var titulo = 'ORÇAMENTO — ' + P.nome.toUpperCase() + ' — ' + o.sol.nome.toUpperCase(), wb = await wbDe([sc], titulo, aba);
+    wb.Sheets['Orçamento'] = planilhaApresentacao([sc], titulo).ws;
+    XLSX.writeFile(wb, 'orcamento-completo-' + prog + '-' + o.sol.k + '-' + o.bank + '-' + slug(sc.projeto) + '-' + hoje() + '.xlsx');
+    toast('Excel gerado com as colunas escolhidas, BDI e subtotais.');
+  }
+  async function exportarPdf(prog){
+    var o = atual(prog); if (!o) return;
+    var P = PROGS[prog], sc = secao(prog, o), M = modeloApresentacao([sc]), titulo = 'ORÇAMENTO — ' + P.nome.toUpperCase() + ' — ' + o.sol.nome.toUpperCase();
+    var num = function(id, v){ if (v == null || v === '') return ''; return typeof v === 'number' ? nf(v, 2) : esc(v); };
+    var th = M.cols.map(function(x){ return '<th>' + esc(x[1]) + '</th>'; }).join('');
+    var tb = M.rows.map(function(r){
+      return '<tr class="' + r.t + '">' + M.cols.map(function(x){ var v = r.c[x[0]], n = ['qtd', 'custo', 'bdi', 'unitbdi', 'total', 'totalbdi'].indexOf(x[0]) >= 0; return '<td' + (n ? ' class="n"' : '') + '>' + num(x[0], v) + '</td>'; }).join('') + '</tr>';
+    }).join('');
+    var soma = M.rows.filter(function(r){ return r.t === 'item'; }), tt = soma.reduce(function(a, r){ return a + (r.c.total || 0); }, 0), tbd = soma.reduce(function(a, r){ return a + (r.c.totalbdi || 0); }, 0);
+    var css = '@page{size:A4 landscape;margin:10mm}body{font-family:Arial,sans-serif;color:#0f172a;margin:0}h1{font-size:15px;margin:0 0 4px}p{margin:2px 0;font-size:11px}table{border-collapse:collapse;width:100%;margin-top:8px;font-size:9.5px}th{background:#0f172a;color:#fff;padding:4px;border:1px solid #0f172a}td{border:1px solid #94a3b8;padding:3px 4px;vertical-align:top}td.n{text-align:right;white-space:nowrap}tr.tit td{background:#e2e8f0;font-weight:700}tr.sub td{background:#f1f5f9;font-weight:700}tr.tot td{background:#fef3c7;font-weight:700}thead{display:table-header-group}tr{page-break-inside:avoid}';
+    var tot = '<tr class="tot">' + M.cols.map(function(x){ return '<td' + (['total', 'totalbdi'].indexOf(x[0]) >= 0 ? ' class="n"' : '') + '>' + (x[0] === 'descr' ? 'TOTAL GERAL' : x[0] === 'total' ? nf(tt, 2) : x[0] === 'totalbdi' ? nf(tbd, 2) : '') + '</td>'; }).join('') + '</tr>';
+    var html = '<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>' + esc(titulo) + '</title><style>' + css + '</style></head><body><h1>' + esc(titulo) + '</h1><p>' + esc(sc.projeto) + (sc.municipio ? ' — ' + esc(sc.municipio) : '') + '</p><p>Banco ' + esc(sc.banco) + (sc.bancoRef ? ' ' + esc(sc.bancoRef) : '') + ' · ' + (sc.regime === 'D' ? 'desonerado' : 'não desonerado') + ' · BDI ' + nf(sc.bdi, 2) + ' % · ' + hoje() + '</p><table><thead><tr>' + th + '</tr></thead><tbody>' + tb + tot + '</tbody></table></body></html>';
+    var w = window.open('', '_blank');
+    if (!w) { toast('O navegador bloqueou a janela do PDF. Permita janelas deste site e tente de novo.'); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+    setTimeout(function(){ try { w.focus(); w.print(); } catch (e) {} }, 400);
+    toast('Na janela que abriu, escolha “Salvar como PDF”.');
+  }
   async function exportarComparativo(prog){
     if (!ST.res) return;
     var P = PROGS[prog], bk = bancoAtual(), c = cfg();
@@ -513,7 +622,7 @@
     var m = document.getElementById('tco-modal'); if (m) return m;
     m = document.createElement('div'); m.id = 'tco-modal'; m.className = 'tco-bg';
     m.innerHTML = '<div class="tco-modal"><div class="tco-h"><h3 id="tco-tit"></h3><button type="button" class="tco-x" data-a="fechar">✕</button></div><div class="tco-b" id="tco-body"></div>' +
-      '<div class="tco-f"><button type="button" class="tco-btn" data-a="comp">📊 Comparativo das 3 soluções (.xlsx)</button><button type="button" class="tco-btn p" data-a="exp">📤 Exportar a solução escolhida</button>' +
+      '<div class="tco-f"><button type="button" class="tco-btn" data-a="comp">📊 Comparativo das 3 soluções (.xlsx)</button><button type="button" class="tco-btn p" data-a="xl2" title="Excel com as colunas escolhidas, BDI, valor unitário com BDI e subtotais">📊 Excel completo</button><button type="button" class="tco-btn p" data-a="pdf" title="Abre a impressão: escolha Salvar como PDF">📄 PDF</button><button type="button" class="tco-btn" data-a="exp" title="Planilha simples no formato do Importar Lista do Orçamento">📤 Planilha para importar</button>' +
       '<button type="button" class="tco-btn g" data-a="env" title="Abre o programa de Orçamento já com esta planilha (e o cronograma) para importar">🚀 Enviar direto ao Orçamento</button>' +
       '<button type="button" class="tco-btn g" data-a="pac" id="tco-pac" title="Reúne o último orçamento de cada programa deste aparelho numa planilha só">🧩 Juntar programas e enviar</button>' +
       '<button type="button" class="tco-btn" data-a="fechar">Fechar</button></div></div>';
@@ -525,13 +634,17 @@
       if (k === 'fechar') m.classList.remove('on');
       else if (k === 'comp') exportarComparativo(prog);
       else if (k === 'exp') exportar(prog);
+      else if (k === 'xl2') exportarCompleto(prog);
+      else if (k === 'pdf') exportarPdf(prog);
       else if (k === 'env') enviarAoOrcamento(prog);
       else if (k === 'pac') enviarPacote();
       else if (k === 'ver') { ST.ver = a.dataset.k; renderJanela(); var d = document.getElementById('tco-det'); if (d) d.scrollIntoView({behavior: 'smooth', block: 'start'}); }
       else if (k === 'rec') abrir(prog, true);
     });
     m.addEventListener('change', function(e){
-      var t = e.target, k = t.dataset && t.dataset.p; if (!k) return;
+      var t = e.target, kc = t.dataset && t.dataset.c;
+      if (kc) { colSet(function(sv){ if (kc === '_sub') sv.subtotais = t.checked; else if (kc === '_num') sv.numeracao = t.value; else sv.cols[kc] = t.checked; }); return; }
+      var k = t.dataset && t.dataset.p; if (!k) return;
       var prog = ST.prog;
       if (k === '_banco') cfgSet('banco', t.value);
       else if (k === '_regime') cfgSet('regime', t.value);
@@ -576,6 +689,8 @@
       '<div class="tco-fld"><label>Regime</label><select data-p="_regime"><option value="O"' + (c.regime === 'O' ? ' selected' : '') + '>Não desonerado (onerado)</option><option value="D"' + (c.regime === 'D' ? ' selected' : '') + '>Desonerado</option></select></div>' +
       fld('_bdi', 'BDI (%)', c.bdi, {step: '0.01'}) + (P.params || []).map(function(d){ return fld(d.k, d.label, pr[d.k], d); }).join('') +
       '</div><div style="margin-top:8px"><button type="button" class="tco-btn s" data-a="rec">⟳ Recarregar bancos</button></div></div>';
+    var cc = colCfg();
+    h += '<div class="tco-card"><h4>Colunas da planilha (Excel completo e PDF)</h4><div style="display:flex;flex-wrap:wrap;gap:6px 16px">' + COLS.map(function(x){ return '<label style="font-size:13px"><input type="checkbox" data-c="' + x[0] + '"' + (cc.cols[x[0]] ? ' checked' : '') + (x[0] === 'descr' ? ' disabled' : '') + '> ' + esc(x[1]) + '</label>'; }).join('') + '</div><div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center"><label style="font-size:13px"><input type="checkbox" data-c="_sub"' + (cc.subtotais ? ' checked' : '') + '> Subtotal por título (sem e com BDI)</label><label style="font-size:13px">Numeração <select data-c="_num"><option value="hier"' + (cc.numeracao === 'hier' ? ' selected' : '') + '>1, 1.1, 1.2 (por título)</option><option value="seq"' + (cc.numeracao === 'seq' ? ' selected' : '') + '>1, 2, 3 (sequencial)</option></select></label></div><p style="font-size:12px;color:var(--mut);margin:6px 0 0">A mesma escolha vale no programa de Orçamento. Valor unitário com BDI e totais com BDI são calculados na própria planilha.</p></div>';
     h += '<div class="tco-sol">' + P.solucoes.map(function(s, i){
       var o = rs[i], dif = base ? (o.total / base - 1) * 100 : 0, ok = o.total === menor && o.total > 0;
       return '<div class="tco-card' + (ST.ver === s.k ? ' on' : '') + '"><h4 style="margin:0">' + esc(s.nome) + (ok ? ' <span class="tco-bd ok">menor custo</span>' : '') + '</h4><div class="tco-tot">' + (o.total > 0 ? R$(o.total) : 'sem preços') + '</div>' +
