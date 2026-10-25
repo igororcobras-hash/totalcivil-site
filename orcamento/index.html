@@ -14042,11 +14042,27 @@ body.mode-mobile .pm-modal{padding:0}
     if(!ABA || !tipos.some(function(t){ return t.id === ABA; })) ABA = tipos.length ? tipos[0].id : null;
     var daAba = ABA === '_meus' ? usr : lista.filter(function(m){ return (m.tipo || m.id) === ABA; });
     var card = function(m){
-      var n = contar(m, b), nativo = b !== 'emop' || temEmopNativo(m);
-      return '<div class="tm-card"><h4>' + (m.proprio ? '⭐' : (ICONE[m.tipo || m.id] || '📋')) + ' ' + esc(m.nome) + '</h4>' + (m.porte ? '<div class="tm-n" style="font-weight:700;color:#334155">' + esc(m.porte) + '</div>' : '') + '<p>' + esc(m.descricao || '') + '</p>'
-        + '<div class="tm-n">' + etapasDe(m, b).length + ' etapas · ' + n + ' serviços' + (m.proprio ? '' : ' · ' + NOME_BANCO[b]) + (!nativo ? ' · <span style="color:#b45309">códigos SINAPI</span>' : '') + '</div>'
-        + '<div class="tm-acts"><button class="tm-b tm-p" data-usar="' + esc(m.id) + '">Usar este modelo</button><button class="tm-b" data-ver="' + esc(m.id) + '">Ver itens</button>'
-        + (m.proprio ? '<button class="tm-b" data-del="' + esc(m.id) + '" title="Excluir este modelo">🗑️</button>' : '') + '</div></div>';
+      var n = contar(m, b), nativo = b !== 'emop' || temEmopNativo(m), ets = etapasDe(m, b);
+      var secBtns = ets.length
+        ? '<div style="margin-top:8px;border-top:1px solid #e2e8f0;padding-top:7px">'
+          + '<div style="font-size:10px;font-weight:700;color:#64748b;margin-bottom:4px">Adicionar seção ao orçamento:</div>'
+          + ets.map(function(e, i){
+              var ni = (e.itens || []).length;
+              return '<button class="tm-b" style="display:flex;width:100%;text-align:left;margin:2px 0;padding:4px 8px;font-size:11px;gap:6px;align-items:center"'
+                + ' data-add-sec="' + esc(m.id) + ':' + i + '" title="Inserir: ' + esc(e.nome) + ' com ' + ni + ' item(ns)">'
+                + '<b style="color:#2563eb;font-size:14px;line-height:1">+</b>'
+                + '<span style="flex:1">' + esc(e.nome || 'Seção ' + (i+1)) + '</span>'
+                + '<span style="font-size:10px;color:#94a3b8;white-space:nowrap">' + ni + (ni===1?' item':' itens') + '</span>'
+                + '</button>';
+            }).join('')
+          + '</div>'
+        : '';
+      return '<div class="tm-card"><h4>' + (m.proprio ? '⭐' : (ICONE[m.tipo || m.id] || '📋')) + ' ' + esc(m.nome) + '</h4>'
+        + (m.porte ? '<div class="tm-n" style="font-weight:700;color:#334155">' + esc(m.porte) + '</div>' : '') + '<p>' + esc(m.descricao || '') + '</p>'
+        + '<div class="tm-n">' + ets.length + ' etapas · ' + n + ' serviços' + (m.proprio ? '' : ' · ' + NOME_BANCO[b]) + (!nativo ? ' · <span style="color:#b45309">códigos SINAPI</span>' : '') + '</div>'
+        + '<div class="tm-acts"><button class="tm-b tm-p" data-usar="' + esc(m.id) + '">Usar este modelo</button><button class="tm-b" data-ver="' + esc(m.id) + '">Ver itens individuais</button>'
+        + (m.proprio ? '<button class="tm-b" data-del="' + esc(m.id) + '" title="Excluir este modelo">🗑️</button>' : '') + '</div>'
+        + secBtns + '</div>';
     };
     var h = '<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center">'
       + '<label style="font-weight:700">Banco: <select id="tcModBanco" style="padding:3px;border:1px solid #cbd5e1;border-radius:4px">'
@@ -14059,13 +14075,13 @@ body.mode-mobile .pm-modal{padding:0}
     if(mv && bancosDe(mv).indexOf(b) >= 0){
       var r = matrizDoModelo(mv, b), etIdxVer = -1, nativoMv = b !== 'emop' || temEmopNativo(mv);
       h += '<div style="font-weight:800;margin-top:14px">Itens do modelo: ' + esc(mv.nome) + (mv.porte ? ' · ' + esc(mv.porte) : '') + ' · ' + (mv.proprio ? 'meu modelo' : NOME_BANCO[b])
-        + ' <span style="font-weight:400;font-size:10.5px;color:#64748b">— <b>+</b> insere o item, <b>+…</b> insere a seção inteira no orçamento aberto</span>'
-        + (!nativoMv ? '<div style="margin-top:6px;padding:7px 10px;background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;font-size:10.5px;font-weight:400;color:#92400e">⚠️ Este modelo ainda não tem códigos EMOP pré-configurados. Os códigos mostrados são do SINAPI. O preço virá do banco EMOP se o mesmo código existir na sua tabela. Use <b>+…</b> para inserir as etapas e ajuste os códigos pelo banco EMOP carregado.</div>' : '')
+        + ' <span style="font-weight:400;font-size:10.5px;color:#64748b">— <b>+</b> insere o item individual · <b>+ Toda seção</b> insere o título com todos os seus itens</span>'
+        + (!nativoMv ? '<div style="margin-top:6px;padding:7px 10px;background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;font-size:10.5px;font-weight:400;color:#92400e">⚠️ Este modelo ainda não tem códigos EMOP pré-configurados. Os códigos mostrados são do SINAPI. O preço virá do banco EMOP se o mesmo código existir na sua tabela. Use <b>+ Toda seção</b> (nos cards ou na listagem abaixo) para inserir as etapas e ajuste os códigos pelo banco EMOP carregado.</div>' : '')
         + '</div><div class="tm-ver"><table>'
         + r.aoa.slice(1).map(function(l){
             if(!l[1]){ etIdxVer++;
-              return '<tr class="tm-et"><td>' + esc(l[0]) + '</td><td colspan="3">' + esc(l[2]) + '</td>'
-                + '<td><button class="tm-b tm-badd" data-add-et="' + etIdxVer + '" title="Inserir esta seção no orçamento aberto">+…</button></td></tr>';
+              return '<tr class="tm-et" style="background:#f1f5f9"><td style="font-weight:700;font-size:12px;padding:6px 4px">' + esc(l[0]) + '</td><td colspan="3" style="font-weight:700;font-size:12px;padding:6px 4px;color:#1e40af">' + esc(l[2]) + '</td>'
+                + '<td style="padding:4px;white-space:nowrap"><button class="tm-b tm-badd" style="font-weight:700;padding:3px 8px" data-add-et="' + etIdxVer + '" title="Inserir este título com todos os seus itens no orçamento aberto">+ Toda seção</button></td></tr>';
             }
             return '<tr><td>' + esc(l[0]) + '</td><td style="white-space:nowrap">' + esc(l[1]) + '</td><td>' + esc(l[2] || '(descrição da EMOP carregada)') + '</td><td>' + esc(l[3]) + '</td>'
               + '<td><button class="tm-b tm-badd" data-add-cod="' + esc(l[1]) + '" data-add-descr="' + esc(l[2]||'') + '" data-add-unid="' + esc(l[3]||'') + '" title="Inserir este item no orçamento aberto">+</button></td></tr>';
@@ -14079,6 +14095,31 @@ body.mode-mobile .pm-modal{padding:0}
     bd.querySelectorAll('[data-usar]').forEach(function(x){ x.onclick = function(){ var m = achar(x.dataset.usar); if(m) abrirNoImportador(m, banco()); }; });
     bd.querySelectorAll('[data-ver]').forEach(function(x){ x.onclick = function(){ render(x.dataset.ver); var v = bd.querySelector('.tm-ver'); if(v) v.scrollIntoView({block: 'nearest'}); }; });
     bd.querySelectorAll('[data-del]').forEach(function(x){ x.onclick = function(){ excluirUsr(x.dataset.del); }; });
+    /* botões "+" de seção diretamente no card — inserir título + todos os itens da seção */
+    bd.querySelectorAll('[data-add-sec]').forEach(function(btn){
+      btn.onclick = function(){
+        var parts = btn.dataset.addSec.split(':'), mid = parts[0], etIdx = parseInt(parts[1], 10);
+        var mod = achar(mid); if(!mod) return;
+        var et = etapasDe(mod, b)[etIdx]; if(!et) return;
+        var cat = typeof getFullCatalog === 'function' ? getFullCatalog() : [];
+        inserirNoOrc({ id: Date.now()+Math.random(), tipo:'TITULO', titulo: String(et.nome||'ETAPA').toUpperCase() });
+        (et.itens || []).forEach(function(orig, j){
+          var cod, descr, unid;
+          if(orig.c){ var dc=(MODELOS&&MODELOS.dic&&MODELOS.dic[orig.c])||[]; cod=orig.c; descr=orig.d||dc[0]||''; unid=orig.u||dc[1]||''; }
+          else if(orig.codigo){ cod=orig.codigo; descr=orig.descr||''; unid=orig.unid||''; }
+          else if((b==='sco'||!orig.sinapi)&&orig.sco){ cod=orig.sco; descr=orig.scoDescr||''; unid=orig.scoUnid||''; }
+          else { cod=orig.sinapi||''; descr=orig.descr||''; unid=orig.unid||''; }
+          var it = cat.find(function(x){ return x.CODIGO === cod; });
+          var item = it
+            ? { id: Date.now()+Math.random()+j, tipo:'ITEM', codigo:it.CODIGO, descr:it.DESCR1, unid:it.UNID, qtd:1, custo:(typeof custoEfetivoItem==='function'?custoEfetivoItem(it):0), bdi:0 }
+            : { id: Date.now()+Math.random()+j, tipo:'ITEM', codigo:cod, descr:descr, unid:unid, qtd:1, custo:0, bdi:0 };
+          inserirNoOrc(item);
+        });
+        saveOrc(); renderOrc();
+        btn.innerHTML = '✓ Adicionado'; btn.disabled=true;
+        btn.style.cssText += 'background:#22c55e;color:#fff;border-color:#22c55e';
+      };
+    });
     /* botão "+" — inserir item único no orçamento aberto */
     bd.querySelectorAll('[data-add-cod]').forEach(function(btn){
       btn.onclick = function(){
