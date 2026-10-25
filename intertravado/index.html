@@ -2968,3 +2968,156 @@ function renderAdmin(lista){
   };
 }
 </script>
+<script>
+/* =====================================================================
+   PATCH V1-02-59 (25/10/2026) — Botão "📋 Auxílio Preenchimento" (intertravado)
+   Tour guiado pelo dimensionamento de pavimento intertravado (IP-06/2004 ABCP)
+===================================================================== */
+(function(){
+  'use strict';
+
+  var PASSOS = [
+    { sel: '#logradouro-inp',
+      evento: 'input',
+      titulo: '1 / 7 — Logradouro / Obra',
+      dica: 'Nome da via ou área de estacionamento. Ex.: "Rua das Flores — Área de Estacionamento Lote 5". Aparece no cabeçalho da memória exportada.',
+      norma: '' },
+    { sel: '#resp-inp',
+      evento: 'input',
+      titulo: '2 / 7 — Responsável Técnico',
+      dica: 'Nome do engenheiro(a) e registro CREA/CAU. Ex.: "Eng.º João Silva — CREA-RJ 54321/D". Vai para a assinatura da memória de cálculo.',
+      norma: '' },
+    { sel: '#n-sel',
+      evento: 'change',
+      titulo: '3 / 7 — Tráfego (Número N)',
+      dica: 'Classe de tráfego conforme Quadro 6.1 da IP-06/2004 (ABCP). Use "Leve" para vias locais residenciais e "Pesado" para vias estruturais com ônibus.',
+      norma: 'ABCP IP-06/2004 — Quadro 6.1: classificação do tráfego por N (eixos equivalentes).' },
+    { sel: '#base-mat',
+      evento: 'change',
+      titulo: '4 / 7 — Procedimento de Dimensionamento',
+      dica: 'Proc. A (ABCP ET-27): sub-base + base cimentada quando exigida. Proc. B (PCA): base granular única (BGS). Use Proc. A para N > 10⁶ ou tráfego misto.',
+      norma: 'ABCP IP-06/2004 §5: escolha do procedimento conforme N e materiais disponíveis.' },
+    { sel: '#cbr-sub',
+      evento: 'change',
+      titulo: '5 / 7 — CBR do Subleito (%)',
+      dica: 'Capacidade de suporte do subleito pelo ensaio CBR. Valores comuns: solos argilosos 2–5 %; arenosos 8–15 %. Reforço necessário quando CBR < 2 %.',
+      norma: 'DNIT 172/2016-ME — Ensaio CBR. ABCP IP-06/2004 §8.1 — subleito mínimo CBR 2 %.' },
+    { sel: '#cbr-ref',
+      evento: 'change',
+      titulo: '6 / 7 — CBR do Reforço (%)',
+      dica: 'Material de reforço ou substituição do subleito. Mínimo 6 % para camada de reforço. Se não houver reforço, deixe em branco ou igual ao subleito.',
+      norma: 'ABCP IP-06/2004 §8.1 — reforço quando CBR subleito < 2 % ou N exige.' },
+    { sel: '[onclick*="exportar"]',
+      titulo: '7 / 7 — Exportar Memória de Cálculo',
+      dica: 'Exporte em Excel, Word ou PDF para anexar ao processo ou laudo técnico. O Word permite editar logotipo e inserir assinatura digitalizada.',
+      norma: '' }
+  ];
+
+  var G = { passo: 0, ativo: false };
+
+  function injetarCSS(){
+    if(document.getElementById('gi-style-int')) return;
+    var s = document.createElement('style'); s.id = 'gi-style-int';
+    s.textContent = [
+      '#guiaInstrInt{position:fixed;bottom:16px;right:16px;z-index:99990;width:320px;background:#fff;border:2px solid #2563eb;border-radius:12px;box-shadow:0 8px 32px rgba(37,99,235,.25);font-family:sans-serif;font-size:13px}',
+      '@media(prefers-color-scheme:dark){#guiaInstrInt{background:#1e293b;color:#e2e8f0;border-color:#3b82f6}}',
+      '.gi-head-int{background:#2563eb;color:#fff;border-radius:10px 10px 0 0;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-weight:700}',
+      '.gi-close-int{background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0 4px}',
+      '.gi-body-int{padding:12px}',
+      '.gi-titulo-int{font-weight:700;color:#1e40af;margin-bottom:6px}',
+      '@media(prefers-color-scheme:dark){.gi-titulo-int{color:#93c5fd}}',
+      '.gi-dica-int{line-height:1.5;margin-bottom:6px}',
+      '.gi-norma-int{font-size:11px;color:#64748b;font-style:italic;border-left:3px solid #2563eb;padding-left:8px;margin-top:4px}',
+      '.gi-prog-int{height:4px;background:#e2e8f0}',
+      '.gi-prog-bar-int{height:4px;background:#2563eb;transition:width .4s}',
+      '.gi-nav-int{display:flex;gap:6px;padding:8px 12px;border-top:1px solid #e2e8f0}',
+      '.gi-nav-int button{flex:1;padding:6px;border-radius:6px;border:1px solid #2563eb;cursor:pointer;font-size:12px;font-weight:600}',
+      '.gi-prox-int{background:#2563eb;color:#fff}',
+      '.gi-ant-int{background:#fff;color:#2563eb}',
+      '@media(prefers-color-scheme:dark){.gi-nav-int{border-color:#334155}.gi-ant-int{background:#1e293b}}',
+      '@keyframes giPulseInt{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.6)}50%{box-shadow:0 0 0 6px rgba(37,99,235,0)}}',
+      '.gi-highlight-int{outline:2px solid #2563eb!important;outline-offset:3px!important;animation:giPulseInt 1.2s infinite!important}'
+    ].join('');
+    document.head.appendChild(s);
+  }
+
+  function criarPainel(){
+    if(document.getElementById('guiaInstrInt')) return;
+    var d = document.createElement('div'); d.id = 'guiaInstrInt';
+    d.innerHTML =
+      '<div class="gi-head-int"><span>📋 Auxílio Preenchimento</span><button class="gi-close-int" id="giCloseInt">✕</button></div>'
+      +'<div class="gi-body-int"><div class="gi-titulo-int" id="giTituloInt"></div><div class="gi-dica-int" id="giDicaInt"></div><div class="gi-norma-int" id="giNormaInt"></div></div>'
+      +'<div class="gi-prog-int"><div class="gi-prog-bar-int" id="giProgInt" style="width:0%"></div></div>'
+      +'<div class="gi-nav-int"><button class="gi-ant-int" id="giAntInt">← Anterior</button><button class="gi-prox-int" id="giProxInt">Próximo →</button></div>';
+    document.body.appendChild(d);
+    document.getElementById('giCloseInt').onclick = encerrar;
+    document.getElementById('giAntInt').onclick = function(){ irPasso(G.passo - 1); };
+    document.getElementById('giProxInt').onclick = function(){ irPasso(G.passo + 1); };
+  }
+
+  function removerDestaque(){
+    document.querySelectorAll('.gi-highlight-int').forEach(function(el){ el.classList.remove('gi-highlight-int'); });
+  }
+
+  function irPasso(i){
+    if(i < 0) i = 0;
+    if(i >= PASSOS.length){ encerrar(); return; }
+    G.passo = i;
+    var p = PASSOS[i];
+    var el = null;
+    try { el = document.querySelector(p.sel); } catch(e){}
+    removerDestaque();
+    if(el){ el.classList.add('gi-highlight-int'); el.scrollIntoView({behavior:'smooth',block:'center'}); }
+    document.getElementById('giTituloInt').textContent = p.titulo;
+    document.getElementById('giDicaInt').textContent = p.dica;
+    var nEl = document.getElementById('giNormaInt');
+    nEl.textContent = p.norma || '';
+    nEl.style.display = p.norma ? '' : 'none';
+    var pct = Math.round((i + 1) / PASSOS.length * 100);
+    document.getElementById('giProgInt').style.width = pct + '%';
+    document.getElementById('giAntInt').disabled = (i === 0);
+    document.getElementById('giProxInt').textContent = (i === PASSOS.length - 1) ? 'Concluir ✓' : 'Próximo →';
+    if(el && p.evento){
+      el.addEventListener(p.evento, function avanca(){
+        el.removeEventListener(p.evento, avanca);
+        setTimeout(function(){ irPasso(G.passo + 1); }, 500);
+      }, { once: true });
+    }
+  }
+
+  function iniciar(){
+    G.ativo = true; G.passo = 0;
+    injetarCSS(); criarPainel();
+    document.getElementById('guiaInstrInt').style.display = '';
+    irPasso(0);
+  }
+
+  function encerrar(){
+    G.ativo = false;
+    removerDestaque();
+    var d = document.getElementById('guiaInstrInt');
+    if(d) d.style.display = 'none';
+    var b = document.getElementById('btnAuxilioInt');
+    if(b) b.style.background = '#0ea5e9';
+  }
+
+  function garantirBtn(){
+    if(document.getElementById('btnAuxilioInt')) return;
+    var barra = document.getElementById('toolbar'); if(!barra) return;
+    var b = document.createElement('button');
+    b.type = 'button'; b.id = 'btnAuxilioInt'; b.className = 'tb-btn';
+    b.style.cssText = 'background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;font-weight:700;cursor:pointer';
+    b.title = 'Auxílio Preenchimento: guia pelos campos com dicas da norma ABCP IP-06/2004';
+    b.textContent = '📋 Auxílio Preenchimento';
+    b.onclick = function(){
+      if(G.ativo){ encerrar(); b.style.background = '#0ea5e9'; }
+      else { iniciar(); b.style.background = '#0369a1'; }
+    };
+    barra.appendChild(b);
+  }
+
+  var _iv = setInterval(function(){
+    if(document.getElementById('toolbar')){ garantirBtn(); clearInterval(_iv); }
+  }, 800);
+})();
+</script>

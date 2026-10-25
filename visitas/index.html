@@ -2018,5 +2018,175 @@ window.addEventListener('online',  () => document.getElementById('offline-bar').
   if (!navigator.onLine) document.getElementById('offline-bar').style.display = 'block';
 })();
 </script>
+<script>
+/* =====================================================================
+   PATCH V1-02-57 (25/10/2026) — Botão "📋 Auxílio Preenchimento" (visitas)
+   Tour guiado pelo formulário Nova Obra / Visitas Técnicas
+===================================================================== */
+(function(){
+  'use strict';
+
+  var PASSOS = [
+    { sel: '[onclick*="openModal(\'modal-obra\')"]',
+      titulo: '1 / 8 — Criar Nova Obra',
+      dica: 'Clique em "+ Nova Obra" para cadastrar uma obra. Cada obra agrupa vistorias, diário e fotos.',
+      norma: '',
+      evento: 'click' },
+    { sel: '#obra-tipo',
+      titulo: '2 / 8 — Tipo de Obra',
+      dica: 'Classifique a obra: predial, viária, saneamento, etc. Facilita filtros e relatórios.',
+      norma: '', evento: 'change',
+      modal: 'modal-obra' },
+    { sel: '#obra-nome',
+      titulo: '3 / 8 — Nome da Obra',
+      dica: 'Identificação clara e objetiva. Ex.: "Revitalização Praça Central — Etapa 2". Aparece em todos os relatórios.',
+      norma: '', evento: 'input',
+      modal: 'modal-obra' },
+    { sel: '#obra-cliente',
+      titulo: '4 / 8 — Cliente / Contratante',
+      dica: 'Nome da prefeitura, empresa ou pessoa que contratou o serviço. Ex.: "Prefeitura Municipal de Rio das Ostras".',
+      norma: '', evento: 'input',
+      modal: 'modal-obra' },
+    { sel: '#obra-cidade',
+      titulo: '5 / 8 — Cidade / UF',
+      dica: 'Município e Estado onde a obra está localizada. Ex.: "Rio das Ostras/RJ".',
+      norma: '', evento: 'input',
+      modal: 'modal-obra' },
+    { sel: '#obra-endereco',
+      titulo: '6 / 8 — Endereço / Localização',
+      dica: 'Rua, número, bairro ou referência do canteiro. Usado no cabeçalho das vistorias impressas.',
+      norma: '', evento: 'input',
+      modal: 'modal-obra' },
+    { sel: '#obra-rt',
+      titulo: '7 / 8 — Responsável Técnico',
+      dica: 'Nome do engenheiro(a) e registro profissional. Ex.: "Eng.ª Ana Lima — CREA-RJ 12345/D". Sai na assinatura da vistoria.',
+      norma: 'Lei 6.496/1977 — RT com ART obrigatório nas obras de engenharia.',
+      evento: 'input',
+      modal: 'modal-obra' },
+    { sel: '#obra-art',
+      titulo: '8 / 8 — ART / RRT',
+      dica: 'Número da Anotação de Responsabilidade Técnica (ART) ou Registro de Responsabilidade Técnica (RRT) desta obra.',
+      norma: 'Resolução CONFEA 1.025/2009 — ART obrigatória no início da obra.',
+      evento: 'input',
+      modal: 'modal-obra' }
+  ];
+
+  var G = { passo: 0, ativo: false };
+
+  function injetarCSS(){
+    if(document.getElementById('gi-style-vis')) return;
+    var s = document.createElement('style'); s.id = 'gi-style-vis';
+    s.textContent = [
+      '#guiaInstrVis{position:fixed;bottom:16px;right:16px;z-index:99990;width:320px;background:#fff;border:2px solid #2563eb;border-radius:12px;box-shadow:0 8px 32px rgba(37,99,235,.25);font-family:sans-serif;font-size:13px}',
+      '@media(prefers-color-scheme:dark){#guiaInstrVis{background:#1e293b;color:#e2e8f0;border-color:#3b82f6}}',
+      '.gi-head-vis{background:#2563eb;color:#fff;border-radius:10px 10px 0 0;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-weight:700}',
+      '.gi-close-vis{background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0 4px}',
+      '.gi-body-vis{padding:12px}',
+      '.gi-titulo-vis{font-weight:700;color:#1e40af;margin-bottom:6px}',
+      '@media(prefers-color-scheme:dark){.gi-titulo-vis{color:#93c5fd}}',
+      '.gi-dica-vis{line-height:1.5;margin-bottom:6px}',
+      '.gi-norma-vis{font-size:11px;color:#64748b;font-style:italic;border-left:3px solid #2563eb;padding-left:8px;margin-top:4px}',
+      '.gi-prog-vis{height:4px;background:#e2e8f0}',
+      '.gi-prog-bar-vis{height:4px;background:#2563eb;transition:width .4s}',
+      '.gi-nav-vis{display:flex;gap:6px;padding:8px 12px;border-top:1px solid #e2e8f0}',
+      '.gi-nav-vis button{flex:1;padding:6px;border-radius:6px;border:1px solid #2563eb;cursor:pointer;font-size:12px;font-weight:600}',
+      '.gi-prox-vis{background:#2563eb;color:#fff}',
+      '.gi-ant-vis{background:#fff;color:#2563eb}',
+      '@media(prefers-color-scheme:dark){.gi-nav-vis{border-color:#334155}.gi-ant-vis{background:#1e293b}}',
+      '@keyframes giPulseVis{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.6)}50%{box-shadow:0 0 0 6px rgba(37,99,235,0)}}',
+      '.gi-highlight-vis{outline:2px solid #2563eb!important;outline-offset:3px!important;animation:giPulseVis 1.2s infinite!important}'
+    ].join('');
+    document.head.appendChild(s);
+  }
+
+  function criarPainel(){
+    if(document.getElementById('guiaInstrVis')) return;
+    var d = document.createElement('div'); d.id = 'guiaInstrVis';
+    d.innerHTML =
+      '<div class="gi-head-vis"><span>📋 Auxílio Preenchimento</span><button class="gi-close-vis" id="giCloseVis">✕</button></div>'
+      +'<div class="gi-body-vis"><div class="gi-titulo-vis" id="giTituloVis"></div><div class="gi-dica-vis" id="giDicaVis"></div><div class="gi-norma-vis" id="giNormaVis"></div></div>'
+      +'<div class="gi-prog-vis"><div class="gi-prog-bar-vis" id="giProgVis" style="width:0%"></div></div>'
+      +'<div class="gi-nav-vis"><button class="gi-ant-vis" id="giAntVis">← Anterior</button><button class="gi-prox-vis" id="giProxVis">Próximo →</button></div>';
+    document.body.appendChild(d);
+    document.getElementById('giCloseVis').onclick = encerrar;
+    document.getElementById('giAntVis').onclick = function(){ irPasso(G.passo - 1); };
+    document.getElementById('giProxVis').onclick = function(){ irPasso(G.passo + 1); };
+  }
+
+  function removerDestaque(){
+    document.querySelectorAll('.gi-highlight-vis').forEach(function(el){ el.classList.remove('gi-highlight-vis'); });
+  }
+
+  function irPasso(i){
+    if(i < 0) i = 0;
+    if(i >= PASSOS.length){ encerrar(); return; }
+    G.passo = i;
+    var p = PASSOS[i];
+    /* abrir modal se necessário */
+    if(p.modal){
+      var modalEl = document.getElementById(p.modal);
+      if(modalEl && !modalEl.classList.contains('open')){
+        if(typeof openModal === 'function') openModal(p.modal);
+      }
+    }
+    setTimeout(function(){
+      var el = null;
+      try { el = document.querySelector(p.sel); } catch(e){}
+      removerDestaque();
+      if(el){ el.classList.add('gi-highlight-vis'); el.scrollIntoView({behavior:'smooth',block:'center'}); }
+      document.getElementById('giTituloVis').textContent = p.titulo;
+      document.getElementById('giDicaVis').textContent = p.dica;
+      var nEl = document.getElementById('giNormaVis');
+      nEl.textContent = p.norma || '';
+      nEl.style.display = p.norma ? '' : 'none';
+      var pct = Math.round((i + 1) / PASSOS.length * 100);
+      document.getElementById('giProgVis').style.width = pct + '%';
+      document.getElementById('giAntVis').disabled = (i === 0);
+      document.getElementById('giProxVis').textContent = (i === PASSOS.length - 1) ? 'Concluir ✓' : 'Próximo →';
+      if(el && p.evento){
+        el.addEventListener(p.evento, function avanca(){
+          el.removeEventListener(p.evento, avanca);
+          setTimeout(function(){ irPasso(G.passo + 1); }, 500);
+        }, { once: true });
+      }
+    }, p.modal ? 150 : 0);
+  }
+
+  function iniciar(){
+    G.ativo = true; G.passo = 0;
+    injetarCSS(); criarPainel();
+    document.getElementById('guiaInstrVis').style.display = '';
+    irPasso(0);
+  }
+
+  function encerrar(){
+    G.ativo = false;
+    removerDestaque();
+    var d = document.getElementById('guiaInstrVis');
+    if(d) d.style.display = 'none';
+    var b = document.getElementById('btnAuxilioVis');
+    if(b) b.style.background = '#0ea5e9';
+  }
+
+  function garantirBtn(){
+    if(document.getElementById('btnAuxilioVis')) return;
+    var cont = document.querySelector('.header-actions'); if(!cont) return;
+    var b = document.createElement('button');
+    b.type = 'button'; b.id = 'btnAuxilioVis'; b.className = 'btn-icon';
+    b.style.cssText = 'background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap';
+    b.title = 'Auxílio Preenchimento: guia pelo cadastro de obras e vistorias';
+    b.textContent = '📋 Auxílio Preenchimento';
+    b.onclick = function(){
+      if(G.ativo){ encerrar(); b.style.background = '#0ea5e9'; }
+      else { iniciar(); b.style.background = '#0369a1'; }
+    };
+    cont.insertBefore(b, cont.firstChild);
+  }
+
+  var _iv = setInterval(function(){
+    if(document.querySelector('.header-actions')){ garantirBtn(); clearInterval(_iv); }
+  }, 800);
+})();
+</script>
 </body>
 </html>

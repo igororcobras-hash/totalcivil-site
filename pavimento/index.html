@@ -5199,5 +5199,163 @@ function salvarUsuario(uid, acao) {
   catch((e) => corpoModal('<p class="val-bar warn">' + (e && e.message || e) + '</p>'));
 }
 </script>
+<script>
+/* =====================================================================
+   PATCH V1-02-58 (25/10/2026) — Botão "📋 Auxílio Preenchimento" (pavimento)
+   Tour guiado pelo dimensionamento de pavimento flexível DNIT
+===================================================================== */
+(function(){
+  'use strict';
+
+  var PASSOS = [
+    { sel: '#logradouro',
+      evento: 'input',
+      titulo: '1 / 8 — Logradouro / Rodovia',
+      dica: 'Nome da via ou rodovia. Ex.: "Av. Brasil" ou "Rodovia RJ-106, trecho km 10+000 a km 15+000". Aparece no cabeçalho da memória de cálculo.',
+      norma: '' },
+    { sel: '#trecho',
+      evento: 'input',
+      titulo: '2 / 8 — Trecho',
+      dica: 'Estacas ou km de início e fim do trecho a dimensionar. Ex.: "Est. 0+000 a Est. 200+000" ou "km 5+200 a km 9+800".',
+      norma: '' },
+    { sel: '#responsavel',
+      evento: 'input',
+      titulo: '3 / 8 — Responsável Técnico',
+      dica: 'Nome do engenheiro(a) e n.º do CREA/CAU. Vai para a assinatura da memória de cálculo exportada.',
+      norma: '' },
+    { sel: '#cbr_sub',
+      evento: 'change',
+      titulo: '4 / 8 — CBR do Subleito (%)',
+      dica: 'Capacidade de suporte do subleito obtida no ensaio CBR. Valores típicos: solo argiloso ≈ 2–5 %; arenoso ≈ 8–15 %. Valor crítico: use o menor do estudo geotécnico.',
+      norma: 'DNIT 172/2016-ME — Ensaio CBR. DNIT/IPR-719 — CBR mínimo 2 % para sub-base.' },
+    { sel: '#cbr_ref',
+      evento: 'change',
+      titulo: '5 / 8 — CBR do Reforço do Subleito (%)',
+      dica: 'Material de reforço/substituição. Se o CBR do subleito já satisfaz os critérios de cálculo, use o mesmo valor. Mínimo 6 % para camada de reforço.',
+      norma: 'DNIT/IPR-719 — Reforço quando CBR subleito < 2 % ou N > 5×10⁶.' },
+    { sel: '#cbr_sb',
+      evento: 'change',
+      titulo: '6 / 8 — CBR da Sub-base (%)',
+      dica: 'Material granular de sub-base. Mínimo 20 % pelo Manual de Pavimentação do DNIT (IPR-719). Materiais lateríticos podem enquadrar com 12 % (Método do Melhoramento de Subgrade).',
+      norma: 'DNIT/IPR-719 p. 143 — CBR ≥ 20 % para sub-base granular.' },
+    { sel: '#cbr_base',
+      evento: 'change',
+      titulo: '7 / 8 — CBR da Base (%)',
+      dica: 'Material de base granular britada ou tratada. Mínimo 80 % (DNIT 303/2008 — Brita Graduada Simples). Base de macadame ou BGS: 80 %. Base de solo-brita: 60 % mínimo.',
+      norma: 'DNIT 303/2008-ES — BGS: CBR ≥ 80 %; DNIT 141/2010-ES — Solo-brita CBR ≥ 60 %.' },
+    { sel: '[onclick*="exportar"]',
+      titulo: '8 / 8 — Exportar Memória de Cálculo',
+      dica: 'Exporte a memória nos formatos Excel, Word ou PDF para juntar ao processo. O Word é editável para inserir logotipo e assinatura digitalizada.',
+      norma: '' }
+  ];
+
+  var G = { passo: 0, ativo: false };
+
+  function injetarCSS(){
+    if(document.getElementById('gi-style-pav')) return;
+    var s = document.createElement('style'); s.id = 'gi-style-pav';
+    s.textContent = [
+      '#guiaInstrPav{position:fixed;bottom:16px;right:16px;z-index:99990;width:320px;background:#fff;border:2px solid #2563eb;border-radius:12px;box-shadow:0 8px 32px rgba(37,99,235,.25);font-family:sans-serif;font-size:13px}',
+      '@media(prefers-color-scheme:dark){#guiaInstrPav{background:#1e293b;color:#e2e8f0;border-color:#3b82f6}}',
+      '.gi-head-pav{background:#2563eb;color:#fff;border-radius:10px 10px 0 0;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-weight:700}',
+      '.gi-close-pav{background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0 4px}',
+      '.gi-body-pav{padding:12px}',
+      '.gi-titulo-pav{font-weight:700;color:#1e40af;margin-bottom:6px}',
+      '@media(prefers-color-scheme:dark){.gi-titulo-pav{color:#93c5fd}}',
+      '.gi-dica-pav{line-height:1.5;margin-bottom:6px}',
+      '.gi-norma-pav{font-size:11px;color:#64748b;font-style:italic;border-left:3px solid #2563eb;padding-left:8px;margin-top:4px}',
+      '.gi-prog-pav{height:4px;background:#e2e8f0}',
+      '.gi-prog-bar-pav{height:4px;background:#2563eb;transition:width .4s}',
+      '.gi-nav-pav{display:flex;gap:6px;padding:8px 12px;border-top:1px solid #e2e8f0}',
+      '.gi-nav-pav button{flex:1;padding:6px;border-radius:6px;border:1px solid #2563eb;cursor:pointer;font-size:12px;font-weight:600}',
+      '.gi-prox-pav{background:#2563eb;color:#fff}',
+      '.gi-ant-pav{background:#fff;color:#2563eb}',
+      '@media(prefers-color-scheme:dark){.gi-nav-pav{border-color:#334155}.gi-ant-pav{background:#1e293b}}',
+      '@keyframes giPulsePav{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.6)}50%{box-shadow:0 0 0 6px rgba(37,99,235,0)}}',
+      '.gi-highlight-pav{outline:2px solid #2563eb!important;outline-offset:3px!important;animation:giPulsePav 1.2s infinite!important}'
+    ].join('');
+    document.head.appendChild(s);
+  }
+
+  function criarPainel(){
+    if(document.getElementById('guiaInstrPav')) return;
+    var d = document.createElement('div'); d.id = 'guiaInstrPav';
+    d.innerHTML =
+      '<div class="gi-head-pav"><span>📋 Auxílio Preenchimento</span><button class="gi-close-pav" id="giClosePav">✕</button></div>'
+      +'<div class="gi-body-pav"><div class="gi-titulo-pav" id="giTituloPav"></div><div class="gi-dica-pav" id="giDicaPav"></div><div class="gi-norma-pav" id="giNormaPav"></div></div>'
+      +'<div class="gi-prog-pav"><div class="gi-prog-bar-pav" id="giProgPav" style="width:0%"></div></div>'
+      +'<div class="gi-nav-pav"><button class="gi-ant-pav" id="giAntPav">← Anterior</button><button class="gi-prox-pav" id="giProxPav">Próximo →</button></div>';
+    document.body.appendChild(d);
+    document.getElementById('giClosePav').onclick = encerrar;
+    document.getElementById('giAntPav').onclick = function(){ irPasso(G.passo - 1); };
+    document.getElementById('giProxPav').onclick = function(){ irPasso(G.passo + 1); };
+  }
+
+  function removerDestaque(){
+    document.querySelectorAll('.gi-highlight-pav').forEach(function(el){ el.classList.remove('gi-highlight-pav'); });
+  }
+
+  function irPasso(i){
+    if(i < 0) i = 0;
+    if(i >= PASSOS.length){ encerrar(); return; }
+    G.passo = i;
+    var p = PASSOS[i];
+    var el = null;
+    try { el = document.querySelector(p.sel); } catch(e){}
+    removerDestaque();
+    if(el){ el.classList.add('gi-highlight-pav'); el.scrollIntoView({behavior:'smooth',block:'center'}); }
+    document.getElementById('giTituloPav').textContent = p.titulo;
+    document.getElementById('giDicaPav').textContent = p.dica;
+    var nEl = document.getElementById('giNormaPav');
+    nEl.textContent = p.norma || '';
+    nEl.style.display = p.norma ? '' : 'none';
+    var pct = Math.round((i + 1) / PASSOS.length * 100);
+    document.getElementById('giProgPav').style.width = pct + '%';
+    document.getElementById('giAntPav').disabled = (i === 0);
+    document.getElementById('giProxPav').textContent = (i === PASSOS.length - 1) ? 'Concluir ✓' : 'Próximo →';
+    if(el && p.evento){
+      el.addEventListener(p.evento, function avanca(){
+        el.removeEventListener(p.evento, avanca);
+        setTimeout(function(){ irPasso(G.passo + 1); }, 500);
+      }, { once: true });
+    }
+  }
+
+  function iniciar(){
+    G.ativo = true; G.passo = 0;
+    injetarCSS(); criarPainel();
+    document.getElementById('guiaInstrPav').style.display = '';
+    irPasso(0);
+  }
+
+  function encerrar(){
+    G.ativo = false;
+    removerDestaque();
+    var d = document.getElementById('guiaInstrPav');
+    if(d) d.style.display = 'none';
+    var b = document.getElementById('btnAuxilioPav');
+    if(b) b.style.background = '#0ea5e9';
+  }
+
+  function garantirBtn(){
+    if(document.getElementById('btnAuxilioPav')) return;
+    var barra = document.querySelector('.toolbar'); if(!barra) return;
+    var b = document.createElement('button');
+    b.type = 'button'; b.id = 'btnAuxilioPav'; b.className = 'tb-btn';
+    b.style.cssText = 'background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;font-weight:700;cursor:pointer';
+    b.title = 'Auxílio Preenchimento: guia pelos campos com dicas de normas DNIT';
+    b.textContent = '📋 Auxílio Preenchimento';
+    b.onclick = function(){
+      if(G.ativo){ encerrar(); b.style.background = '#0ea5e9'; }
+      else { iniciar(); b.style.background = '#0369a1'; }
+    };
+    barra.appendChild(b);
+  }
+
+  var _iv = setInterval(function(){
+    if(document.querySelector('.toolbar')){ garantirBtn(); clearInterval(_iv); }
+  }, 800);
+})();
+</script>
 </body>
 </html>

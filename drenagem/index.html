@@ -6180,4 +6180,177 @@ async function enviarAoOrcamento(solK, bank) {
 }
 
 </script>
+<script>
+/* =====================================================================
+   PATCH V1-02-56 (25/10/2026) — Botão "📋 Auxílio Preenchimento" (drenagem)
+   Tour guiado pelos campos principais da drenagem pluvial
+===================================================================== */
+(function(){
+  'use strict';
+
+  /* ── Passos ────────────────────────────────────────────────────── */
+  var PASSOS = [
+    { sel: '#bar-nome',
+      evento: 'input',
+      titulo: '1 / 8 — Nome do Projeto',
+      dica: 'Identificação do projeto no memorial e nos arquivos exportados. Ex.: "Rede Pluvial Av. Brasil — Etapa 1".',
+      norma: '' },
+    { sel: '[data-p="proj.municipio"]',
+      evento: 'input', tab: 'projeto',
+      titulo: '2 / 8 — Município / UF',
+      dica: 'Município e Unidade Federativa da obra. Aparecem no cabeçalho do memorial. Ex.: "Rio das Ostras / RJ".',
+      norma: '' },
+    { sel: '[data-p="proj.local"]',
+      evento: 'input', tab: 'projeto',
+      titulo: '3 / 8 — Local / Bairro',
+      dica: 'Bairro, logradouros ou trecho atendido pela rede pluvial. Usado no memorial descritivo.',
+      norma: '' },
+    { sel: '[data-p="proj.resp"]',
+      evento: 'input', tab: 'projeto',
+      titulo: '4 / 8 — Responsável Técnico',
+      dica: 'Nome do engenheiro(a) responsável. Sai na assinatura do memorial e na prancha.',
+      norma: '' },
+    { sel: '[data-p="proj.crea"]',
+      evento: 'input', tab: 'projeto',
+      titulo: '5 / 8 — CREA / CAU',
+      dica: 'Registro profissional do responsável técnico. Formato: CREA-RJ 12345/D ou CAU A-123456.',
+      norma: '' },
+    { sel: '[data-p="proj.art"]',
+      evento: 'input', tab: 'projeto',
+      titulo: '6 / 8 — ART / RRT',
+      dica: 'Número da Anotação de Responsabilidade Técnica ou Registro de Responsabilidade Técnica. Obrigatório na execução (Lei 6.496/77).',
+      norma: 'Lei 6.496/1977 — ART obrigatória em projetos de engenharia.' },
+    { sel: '[data-p="crit.tr"]',
+      evento: 'change', tab: 'chuva',
+      titulo: '7 / 8 — Período de Retorno (TR)',
+      dica: 'Intervalo médio (em anos) entre chuvas de mesma intensidade. Use TR = 5 ou 10 anos para vias locais; 25 anos para coletoras e arteriais.',
+      norma: 'NBR 13133 / Manual de Drenagem Urbana DNIT — TR mínimo 5 anos p/ microdrenagem.' },
+    { sel: '[data-p="crit.idf_a"] , [data-p="crit.a"]',
+      evento: 'input', tab: 'chuva',
+      titulo: '8 / 8 — Equação IDF',
+      dica: 'Parâmetros da equação intensidade-duração-frequência da sua cidade (prefeitura ou estação pluviométrica do INMET / GEOHIDRO). Ex.: i = a·T^b / (t+c)^d.',
+      norma: 'Portaria MAPA ou Atlas de Chuvas DAEE/ANA — use IDF local. Não use coeficientes de outra cidade.' }
+  ];
+
+  /* ── Engine (mesmo padrão do orçamento) ─────────────────────────*/
+  var G = { passo: 0, ativo: false };
+
+  function injetarCSS(){
+    if(document.getElementById('gi-style-dr')) return;
+    var s = document.createElement('style'); s.id = 'gi-style-dr';
+    s.textContent = [
+      '#guiaInstrDr{position:fixed;bottom:16px;right:16px;z-index:99990;width:320px;background:#fff;border:2px solid #2563eb;border-radius:12px;box-shadow:0 8px 32px rgba(37,99,235,.25);font-family:sans-serif;font-size:13px}',
+      '@media(prefers-color-scheme:dark){#guiaInstrDr{background:#1e293b;color:#e2e8f0;border-color:#3b82f6}}',
+      '.gi-head-dr{background:#2563eb;color:#fff;border-radius:10px 10px 0 0;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-weight:700}',
+      '.gi-close-dr{background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0 4px;line-height:1}',
+      '.gi-body-dr{padding:12px}',
+      '.gi-titulo-dr{font-weight:700;color:#1e40af;margin-bottom:6px}',
+      '@media(prefers-color-scheme:dark){.gi-titulo-dr{color:#93c5fd}}',
+      '.gi-dica-dr{line-height:1.5;margin-bottom:6px}',
+      '.gi-norma-dr{font-size:11px;color:#64748b;font-style:italic;border-left:3px solid #2563eb;padding-left:8px;margin-top:4px}',
+      '.gi-prog-dr{height:4px;background:#e2e8f0;border-radius:0}',
+      '.gi-prog-bar-dr{height:4px;background:#2563eb;border-radius:0;transition:width .4s}',
+      '.gi-nav-dr{display:flex;gap:6px;padding:8px 12px;border-top:1px solid #e2e8f0}',
+      '.gi-nav-dr button{flex:1;padding:6px;border-radius:6px;border:1px solid #2563eb;cursor:pointer;font-size:12px;font-weight:600}',
+      '.gi-prox-dr{background:#2563eb;color:#fff}',
+      '.gi-ant-dr{background:#fff;color:#2563eb}',
+      '@media(prefers-color-scheme:dark){.gi-nav-dr{border-color:#334155}.gi-ant-dr{background:#1e293b}}',
+      '@keyframes giPulseDr{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.6)}50%{box-shadow:0 0 0 6px rgba(37,99,235,0)}}',
+      '.gi-highlight-dr{outline:2px solid #2563eb!important;outline-offset:3px!important;animation:giPulseDr 1.2s infinite!important}'
+    ].join('');
+    document.head.appendChild(s);
+  }
+
+  function criarPainel(){
+    if(document.getElementById('guiaInstrDr')) return;
+    var d = document.createElement('div'); d.id = 'guiaInstrDr';
+    d.innerHTML =
+      '<div class="gi-head-dr"><span>📋 Auxílio Preenchimento</span><button class="gi-close-dr" id="giCloseDr" title="Encerrar">✕</button></div>'
+      +'<div class="gi-body-dr"><div class="gi-titulo-dr" id="giTituloDr"></div><div class="gi-dica-dr" id="giDicaDr"></div><div class="gi-norma-dr" id="giNormaDr"></div></div>'
+      +'<div class="gi-prog-dr"><div class="gi-prog-bar-dr" id="giProgDr" style="width:0%"></div></div>'
+      +'<div class="gi-nav-dr"><button class="gi-ant-dr" id="giAntDr">← Anterior</button><button class="gi-prox-dr" id="giProxDr">Próximo →</button></div>';
+    document.body.appendChild(d);
+    document.getElementById('giCloseDr').onclick = encerrar;
+    document.getElementById('giAntDr').onclick = function(){ irPasso(G.passo - 1); };
+    document.getElementById('giProxDr').onclick = function(){ irPasso(G.passo + 1); };
+  }
+
+  function removerDestaque(){
+    document.querySelectorAll('.gi-highlight-dr').forEach(function(el){ el.classList.remove('gi-highlight-dr'); });
+  }
+
+  function irPasso(i){
+    if(i < 0) i = 0;
+    if(i >= PASSOS.length){ encerrar(); return; }
+    G.passo = i;
+    var p = PASSOS[i];
+    /* troca de aba se necessário */
+    if(p.tab && typeof showTab === 'function') showTab(p.tab);
+    var delay = p.tab ? 80 : 0;
+    setTimeout(function(){
+      /* tenta múltiplos seletores separados por vírgula */
+      var sels = p.sel.split(',').map(function(s){ return s.trim(); });
+      var el = null;
+      for(var k = 0; k < sels.length; k++){
+        try{ el = document.querySelector(sels[k]); } catch(e){ el = null; }
+        if(el) break;
+      }
+      removerDestaque();
+      if(el){ el.classList.add('gi-highlight-dr'); el.scrollIntoView({behavior:'smooth',block:'center'}); }
+      /* painel */
+      document.getElementById('giTituloDr').textContent = p.titulo;
+      document.getElementById('giDicaDr').textContent = p.dica;
+      var nEl = document.getElementById('giNormaDr');
+      nEl.textContent = p.norma || '';
+      nEl.style.display = p.norma ? '' : 'none';
+      var pct = Math.round((i + 1) / PASSOS.length * 100);
+      document.getElementById('giProgDr').style.width = pct + '%';
+      document.getElementById('giAntDr').disabled = (i === 0);
+      document.getElementById('giProxDr').textContent = (i === PASSOS.length - 1) ? 'Concluir ✓' : 'Próximo →';
+      /* auto-avanço */
+      if(el && p.evento){
+        el.addEventListener(p.evento, function avanca(){
+          el.removeEventListener(p.evento, avanca);
+          setTimeout(function(){ irPasso(G.passo + 1); }, 500);
+        }, { once: true });
+      }
+    }, delay);
+  }
+
+  function iniciar(){
+    G.ativo = true; G.passo = 0;
+    injetarCSS(); criarPainel();
+    document.getElementById('guiaInstrDr').style.display = '';
+    irPasso(0);
+  }
+
+  function encerrar(){
+    G.ativo = false;
+    removerDestaque();
+    var d = document.getElementById('guiaInstrDr');
+    if(d) d.style.display = 'none';
+    var b = document.getElementById('btnAuxilioDr');
+    if(b) b.style.background = '#0ea5e9';
+  }
+
+  function garantirBtn(){
+    if(document.getElementById('btnAuxilioDr')) return;
+    var barra = document.querySelector('.project-bar'); if(!barra) return;
+    var b = document.createElement('button');
+    b.type = 'button'; b.id = 'btnAuxilioDr'; b.className = 'proj-btn';
+    b.style.cssText = 'background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;margin-left:4px;cursor:pointer';
+    b.title = 'Auxílio Preenchimento: percorre os campos principais com dicas e referências de normas';
+    b.textContent = '📋 Auxílio Preenchimento';
+    b.onclick = function(){
+      if(G.ativo){ encerrar(); b.style.background = '#0ea5e9'; }
+      else { iniciar(); b.style.background = '#0369a1'; }
+    };
+    barra.appendChild(b);
+  }
+
+  var _iv = setInterval(function(){
+    if(document.querySelector('.project-bar')){ garantirBtn(); clearInterval(_iv); }
+  }, 800);
+})();
+</script>
 </body></html>
