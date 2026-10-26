@@ -1900,5 +1900,431 @@ setEstaca('helice');
   setTimeout(atualizar, 1500);
 })();
 </script>
+
+<script>
+/* =====================================================================
+   PATCH V1-02-60 (26/10/2026) — Botão "📋 Auxílio Preenchimento" (concreto)
+   Per-aba independente + modo contínuo ("Próxima aba ▶")
+   SEM event listeners { once: true } no DOM
+===================================================================== */
+(function(){
+  'use strict';
+
+  // Ordem das abas para modo contínuo
+  var ORDER_IDS = ['solo','paleta','pilares','sapatas','corrida','radier','estacas','vis3d','mem','ref'];
+
+  // ── CSS compartilhado ────────────────────────────────────────────────
+  function injetarCSS(){
+    if(document.getElementById('gi-style-conc')) return;
+    var s = document.createElement('style'); s.id = 'gi-style-conc';
+    s.textContent = [
+      '#guiaInstrConc{position:fixed;bottom:16px;right:16px;z-index:99990;width:330px;background:#fff;border:2px solid #2563eb;border-radius:12px;box-shadow:0 8px 32px rgba(37,99,235,.25);font-family:sans-serif;font-size:13px}',
+      '@media(prefers-color-scheme:dark){#guiaInstrConc{background:#1e293b;color:#e2e8f0;border-color:#3b82f6}}',
+      '.gi-head-conc{background:#2563eb;color:#fff;border-radius:10px 10px 0 0;padding:8px 12px;display:flex;align-items:center;font-weight:700;font-size:12px;gap:6px}',
+      '.gi-head-conc span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.gi-close-conc{background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0 4px;flex-shrink:0;line-height:1}',
+      '.gi-body-conc{padding:12px}',
+      '.gi-titulo-conc{font-weight:700;color:#1e40af;margin-bottom:6px}',
+      '@media(prefers-color-scheme:dark){.gi-titulo-conc{color:#93c5fd}}',
+      '.gi-dica-conc{line-height:1.5;margin-bottom:6px}',
+      '.gi-norma-conc{font-size:11px;color:#64748b;font-style:italic;border-left:3px solid #2563eb;padding-left:8px;margin-top:4px}',
+      '.gi-prog-conc{height:4px;background:#e2e8f0}',
+      '.gi-prog-bar-conc{height:4px;background:#2563eb;transition:width .4s}',
+      '.gi-nav-conc{display:flex;gap:5px;padding:8px 12px;border-top:1px solid #e2e8f0;flex-wrap:wrap}',
+      '.gi-nav-conc button{flex:1;min-width:74px;padding:5px 4px;border-radius:6px;border:1px solid #2563eb;cursor:pointer;font-size:11px;font-weight:700}',
+      '.gi-prox-conc{background:#2563eb;color:#fff}',
+      '.gi-ant-conc{background:#fff;color:#2563eb}',
+      '.gi-prox-aba-conc{background:#0ea5e9;color:#fff;border-color:#0ea5e9}',
+      '@media(prefers-color-scheme:dark){.gi-nav-conc{border-color:#334155}.gi-ant-conc{background:#1e293b}}',
+      '@keyframes giPulseConc{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.6)}50%{box-shadow:0 0 0 6px rgba(37,99,235,0)}}',
+      '.gi-highlight-conc{outline:2px solid #2563eb!important;outline-offset:3px!important;animation:giPulseConc 1.2s infinite!important}',
+      '.gi-aux-bar{padding:6px 12px 0;display:flex;flex-wrap:wrap;gap:6px}'
+    ].join('');
+    document.head.appendChild(s);
+  }
+
+  // ── Painel único reutilizável ─────────────────────────────────────────
+  function criarPainel(){
+    if(document.getElementById('guiaInstrConc')) return;
+    var d = document.createElement('div'); d.id = 'guiaInstrConc';
+    d.innerHTML =
+      '<div class="gi-head-conc"><span id="giTituloAbaConc">📋 Auxílio Preenchimento</span>'
+      +'<button class="gi-close-conc" id="giCloseConc">✕</button></div>'
+      +'<div class="gi-body-conc">'
+        +'<div class="gi-titulo-conc" id="giTituloConc"></div>'
+        +'<div class="gi-dica-conc" id="giDicaConc"></div>'
+        +'<div class="gi-norma-conc" id="giNormaConc"></div>'
+      +'</div>'
+      +'<div class="gi-prog-conc"><div class="gi-prog-bar-conc" id="giProgConc" style="width:0%"></div></div>'
+      +'<div class="gi-nav-conc">'
+        +'<button class="gi-ant-conc" id="giAntConc">← Anterior</button>'
+        +'<button class="gi-prox-conc" id="giProxConc">Próximo →</button>'
+        +'<button class="gi-prox-aba-conc" id="giProxAbaConc" style="display:none">Próxima aba ▶</button>'
+      +'</div>';
+    document.body.appendChild(d);
+  }
+
+  var _guiaAtivo = null;
+
+  // ── Fábrica: cria um guia independente para cada aba ──────────────────
+  function criarGuia(cfg){
+    var G = { passo: 0, ativo: false, btnId: 'btnAuxilioConc_' + cfg.id };
+
+    function removerDestaque(){
+      document.querySelectorAll('.gi-highlight-conc').forEach(function(el){ el.classList.remove('gi-highlight-conc'); });
+    }
+
+    function irPasso(i){
+      if(i < 0) i = 0;
+      if(i >= cfg.passos.length){ encerrar(); return; }
+      G.passo = i;
+      var p = cfg.passos[i];
+      var el = null;
+      try { el = p.sel ? document.querySelector(p.sel) : null; } catch(e){}
+      removerDestaque();
+      if(el){ el.classList.add('gi-highlight-conc'); el.scrollIntoView({behavior:'smooth',block:'center'}); }
+      document.getElementById('giTituloAbaConc').textContent = '📋 ' + cfg.nomeAba;
+      document.getElementById('giTituloConc').textContent = p.titulo;
+      document.getElementById('giDicaConc').textContent = p.dica;
+      var nEl = document.getElementById('giNormaConc');
+      nEl.textContent = p.norma || '';
+      nEl.style.display = p.norma ? '' : 'none';
+      var pct = Math.round((i + 1) / cfg.passos.length * 100);
+      document.getElementById('giProgConc').style.width = pct + '%';
+
+      var isLast = (i === cfg.passos.length - 1);
+      var idxAba = ORDER_IDS.indexOf(cfg.id);
+      var temProxAba = idxAba >= 0 && idxAba < ORDER_IDS.length - 1;
+
+      var antBtn = document.getElementById('giAntConc');
+      var proxBtn = document.getElementById('giProxConc');
+      var proxAbaBtn = document.getElementById('giProxAbaConc');
+
+      antBtn.disabled = (i === 0);
+      antBtn.onclick = function(){ irPasso(G.passo - 1); };
+      document.getElementById('giCloseConc').onclick = encerrar;
+
+      if(isLast){
+        proxBtn.textContent = 'Concluir ✓';
+        proxBtn.onclick = encerrar;
+        if(temProxAba){
+          proxAbaBtn.style.display = '';
+          proxAbaBtn.textContent = 'Próxima aba ▶';
+          var proxId = ORDER_IDS[idxAba + 1];
+          proxAbaBtn.onclick = function(){
+            var proxGuia = GUIAS_MAP[proxId];
+            if(proxGuia){ encerrar(); proxGuia.iniciar(); }
+          };
+        } else {
+          proxAbaBtn.style.display = 'none';
+        }
+      } else {
+        proxBtn.textContent = 'Próximo →';
+        proxBtn.onclick = function(){ irPasso(G.passo + 1); };
+        proxAbaBtn.style.display = 'none';
+      }
+    }
+
+    function iniciar(){
+      if(_guiaAtivo && _guiaAtivo !== G){ _guiaAtivo.encerrar(); }
+      _guiaAtivo = G;
+      G.ativo = true; G.passo = 0;
+      injetarCSS(); criarPainel();
+      document.getElementById('guiaInstrConc').style.display = '';
+      if(typeof aba === 'function') aba(cfg.id);
+      irPasso(0);
+      atualizarBtn();
+    }
+
+    function encerrar(){
+      G.ativo = false;
+      removerDestaque();
+      var d = document.getElementById('guiaInstrConc');
+      if(d) d.style.display = 'none';
+      if(_guiaAtivo === G) _guiaAtivo = null;
+      atualizarBtn();
+    }
+
+    function atualizarBtn(){
+      var b = document.getElementById(G.btnId); if(!b) return;
+      if(G.ativo){
+        b.textContent = '⏹ Parar Auxílio';
+        b.style.cssText = 'background:#dc2626;color:#fff;border:1px solid #dc2626;font-weight:700;cursor:pointer;border-radius:5px;padding:5px 10px;font-size:12px';
+      } else {
+        b.textContent = '📋 Auxílio Preenchimento';
+        b.style.cssText = 'background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;font-weight:700;cursor:pointer;border-radius:5px;padding:5px 10px;font-size:12px';
+      }
+    }
+
+    G.encerrar = encerrar;
+    G.iniciar = iniciar;
+
+    function garantirBtn(){
+      if(document.getElementById(G.btnId)) return;
+      var tab = document.getElementById('tab-' + cfg.id); if(!tab) return;
+      // Inject into existing export-bar or create auxiliary bar at top of tab
+      var bar = tab.querySelector('.export-bar');
+      if(!bar){
+        bar = document.createElement('div');
+        bar.className = 'gi-aux-bar';
+        tab.insertBefore(bar, tab.firstChild);
+      }
+      var b = document.createElement('button');
+      b.type = 'button'; b.id = G.btnId;
+      b.style.cssText = 'background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;font-weight:700;cursor:pointer;border-radius:5px;padding:5px 10px;font-size:12px';
+      b.title = 'Guia pelos campos desta aba com dicas e referências NBR. Clique "Próxima aba ▶" ao final para modo contínuo.';
+      b.textContent = '📋 Auxílio Preenchimento';
+      b.onclick = function(){ G.ativo ? encerrar() : iniciar(); };
+      bar.insertBefore(b, bar.firstChild);
+    }
+
+    return { garantirBtn: garantirBtn, iniciar: iniciar, encerrar: encerrar };
+  }
+
+  // ── Definição dos guias por aba ──────────────────────────────────────
+  var GUIAS_MAP = {};
+
+  function regGuia(cfg){
+    var g = criarGuia(cfg);
+    GUIAS_MAP[cfg.id] = g;
+    return g;
+  }
+
+  var GUIAS = [
+
+    regGuia({
+      id: 'solo', nomeAba: 'Solo e Materiais',
+      passos: [
+        { sel: '#endereco',
+          titulo: '1 / 9 — Endereço / Obra',
+          dica: 'Identifique o local da obra. Ex.: "Rua das Flores 100, Rio das Ostras/RJ — Edificação Residencial Unifamiliar". Aparece no cabeçalho da memória de cálculo exportada.',
+          norma: '' },
+        { sel: '#responsavel',
+          titulo: '2 / 9 — Responsável Técnico',
+          dica: 'Nome do engenheiro(a) responsável pelo projeto de fundações e número do CREA. Ex.: "Eng.ª Ana Lima — CREA-RJ 12345/D". Vai para a assinatura na memória exportada.',
+          norma: '' },
+        { sel: '#sigma_adm',
+          titulo: '3 / 9 — Tensão admissível σ_adm (kPa)',
+          dica: 'Capacidade de carga admissível do solo com Fator de Segurança ≥ 3 (NBR 6122). Derive do laudo de sondagem SPT ou do ensaio de placa. Valores típicos: argila rija 150–250 kPa; areia compacta 200–400 kPa; rocha 1000+ kPa. Se não houver sondagem, use 100 kPa e acompanhe a execução.',
+          norma: 'NBR 6122:2022 §7.1 — tensão admissível com FS ≥ 3 pelo método de Terzaghi e Peck ou SPT.' },
+        { sel: '#spt',
+          titulo: '4 / 9 — N_SPT médio (golpes/30 cm)',
+          dica: 'Número de golpes do SPT na camada de apoio das fundações. Obtido do laudo de sondagem. Valores: N < 5 solo fofo/mole (evitar fundação rasa); N 5–15 médio; N 15–30 compacto; N > 30 rígido/compacto. Use o N da camada onde a sapata assenta.',
+          norma: 'NBR 6484:2020 — Sondagem de simples reconhecimento pelo SPT.' },
+        { sel: '#D',
+          titulo: '5 / 9 — Profundidade de assentamento D (m)',
+          dica: 'Profundidade da base da fundação em relação à superfície. NBR 6122 impõe mínimo de 0,5 m abaixo do nível do terreno adjacente. Respeite o NA: quando D < NA, considere a pressão hidrostática ou rebaixe o lençol durante a execução.',
+          norma: 'NBR 6122:2022 §8.2.1 — profundidade mínima de assentamento 0,5 m.' },
+        { sel: '#NA',
+          titulo: '6 / 9 — Nível d\'água NA (m)',
+          dica: 'Profundidade do lençol freático em relação à superfície, medido nas sondagens. Quando D > NA, o solo sob a sapata está saturado e a tensão efetiva é reduzida: o programa aplica a correção automática (peso submerso γ\' = γ − 10). Em obra, rebaixe o lençol antes de assentar a fundação.',
+          norma: 'NBR 6122:2022 §4 — nível d\'água influencia tensão efetiva e execução da fundação.' },
+        { sel: '#fck',
+          titulo: '7 / 9 — fck do concreto (MPa)',
+          dica: 'Resistência característica à compressão do concreto aos 28 dias. NBR 6118 exige mínimo de 25 MPa para estruturas em contato com solo. Use 30–35 MPa em sapatas executadas com agressividade moderada a alta.',
+          norma: 'NBR 6118:2023 §7.4 — fck mínimo 25 MPa em estruturas comuns; ABNT NBR 12655 — controle de qualidade do concreto.' },
+        { sel: '#fyk',
+          titulo: '8 / 9 — Aço (CA-50 ou CA-60)',
+          dica: 'CA-50 (fyk = 500 MPa) é o padrão para barras de diâmetro ≥ 10 mm — o mais comum em armaduras de sapatas. CA-60 é usado em telas soldadas e barras finas (≤ 8 mm). Sapatas de grande porte: sempre CA-50.',
+          norma: 'NBR 7480:2022 — aços para concreto armado. NBR 6118:2023 §8.3 — propriedades mecânicas do aço.' },
+        { sel: '#cl_agr',
+          titulo: '9 / 9 — Classe de agressividade',
+          dica: 'Classe II (urbana) é o padrão para fundações em cidades. Classe III (marinha ou industrial) exige cobrimento maior e fck mínimo de 30 MPa. Classe IV (muito agressiva) para fundações em solo contaminado ou em contato com água do mar.',
+          norma: 'NBR 6118:2023 Tabela 6.1 — classes de agressividade e requisitos de cobrimento.' }
+      ]
+    }),
+
+    regGuia({
+      id: 'paleta', nomeAba: 'Tipo de Fundação',
+      passos: [
+        { sel: null,
+          titulo: '1 / 2 — Recomendação automática',
+          dica: 'Com base no σ_adm, N_SPT e profundidade informados na aba Solo, o programa indica os tipos de fundação mais adequados. Cada card mostra o tipo, a justificativa técnica e o custo relativo. Clique no tipo desejado para ir direto ao dimensionamento.',
+          norma: 'NBR 6122:2022 §3 — definições e critérios de escolha entre fundação rasa e profunda.' },
+        { sel: '#paleta-cards',
+          titulo: '2 / 2 — Selecione o tipo de fundação',
+          dica: 'Clique no card do tipo de fundação escolhido para ir para a aba de dimensionamento correspondente. Se mais de um tipo for viável, compare as áreas, consumo de concreto e armadura nos resultados. Fundações rasas (sapatas, radier) são preferíveis quando o solo resistente está a menos de 3–4 m.',
+          norma: 'NBR 6122:2022 §4.1 — critérios de escolha: capacidade de carga, recalques, custo, prazo.' }
+      ]
+    }),
+
+    regGuia({
+      id: 'pilares', nomeAba: 'Cargas e Pilares',
+      passos: [
+        { sel: null,
+          titulo: '1 / 4 — Separação das cargas Gk e Qk',
+          dica: 'Informe Gk (carga permanente: peso próprio, alvenaria, revestimentos) e Qk (carga variável: uso, vento, sobrecarga de piso) separados. O programa aplica os coeficientes γf definidos na aba Solo. Nunca some Gk + Qk antes de inserir: os fatores de ponderação são diferentes.',
+          norma: 'NBR 6118:2023 §11 — combinações de ações: Fd = γfg·Gk + γfq·Qk.' },
+        { sel: '.btn-add',
+          titulo: '2 / 4 — Adicionar pilares',
+          dica: 'Clique "+ Adicionar pilar" para inserir cada pilar. Preencha: Gk e Qk em kN; Mkx e Mky (momentos) se o pilar transmite esforços horizontais; dimensões bp × hp do pilar em m (mínimo 14×14 cm — NBR 6118); posição X, Y em planta a partir do pilar S1.',
+          norma: 'NBR 6118:2023 §13.2 — dimensões mínimas de pilares: largura ≥ 14 cm.' },
+        { sel: null,
+          titulo: '3 / 4 — Momentos de 2ª ordem (opcional)',
+          dica: 'Preencha Mkx e Mky somente quando o pilar transmite momentos à fundação (pórtico arriado, pilar engastado, edificação com pilares em balanço). Para pilares de edifícios com contraventamento, use Mkx = Mky = 0 — a NBR 6118 §11.3 permite desconsiderar momentos de 2ª ordem em fundações de estruturas regularmente contraventadas.',
+          norma: 'NBR 6118:2023 §11.3 — momentos de 2ª ordem em pilares com contraventamento.' },
+        { sel: '#tb-pilares',
+          titulo: '4 / 4 — Conferir e calcular',
+          dica: 'Verifique a tabela de pilares: Nk = Gk + Qk (soma sem γf) e Fd = γfg×Gk + γfq×Qk (carga fatorada). Clique "⚡ Otimizar" para que o programa calcule automaticamente as dimensões ótimas B × L × h de cada sapata, ou ajuste manualmente nas abas Sapatas, Corrida, Radier ou Blocos.',
+          norma: 'NBR 6122:2022 §8.2 — verificação das sapatas pelo σ biaxial nos 4 cantos.' }
+      ]
+    }),
+
+    regGuia({
+      id: 'sapatas', nomeAba: 'Sapatas Isoladas',
+      passos: [
+        { sel: '#subtipo-sap',
+          titulo: '1 / 5 — Subtipo de sapata isolada',
+          dica: 'Escolha o subtipo antes de dimensionar. "Isolada Rígida": pilar interior sem restrições. "De Divisa": pilar no limite do terreno — o momento é equilibrado com viga alavanca. "Associada": dois pilares próximos no mesmo bloco. "Com Colarinho": pilar pré-moldado encaixado em colarinho monolítico.',
+          norma: 'NBR 6118:2023 §22.7 — sapatas rígidas e flexíveis; NBR 9062 — colarinho para pré-moldados.' },
+        { sel: '.btn-calc',
+          titulo: '2 / 5 — Otimização automática',
+          dica: 'Clique "⚡ Otimizar B×L×h" para que o programa encontre as dimensões mínimas que satisfaçam σ biaxial ≤ σ_adm com σ mín ≥ 0 (sem levantamento) e τ punção ≤ τ_Rd2. A otimização respeita a proporção máxima L/B = 2 (sapata esbelta demais é ineficiente).',
+          norma: 'NBR 6122:2022 §8.4 — dimensões mínimas; NBR 6118:2023 §22.7.3 — verificação de punção.' },
+        { sel: '#sapatas-cards',
+          titulo: '3 / 5 — Cards de sapata',
+          dica: 'Cada card exibe: tensão máxima no canto e utilização em % do σ_adm (cores: verde = OK, azul = subutilizada, laranja = próxima ao limite, vermelho = subdimensionada). Clique no card para editar B, L e h individualmente. A altura mínima é h ≥ max(25 cm; d/2) da punção.',
+          norma: 'NBR 6118:2023 §22.7.2 — altura mínima da sapata rígida.' },
+        { sel: '#svg-planta',
+          titulo: '4 / 5 — Planta interativa',
+          dica: 'Use a planta para verificar se há sobreposição entre sapatas vizinhas (distância mínima entre faces ≥ 20 cm). Arraste para mover, scroll para zoom. Clique em uma sapata para editá-la no card abaixo. Sapatas que se tocam devem ser unificadas em "Associada".',
+          norma: 'NBR 6122:2022 §8.4.4 — distância mínima entre sapatas.' },
+        { sel: '#sap-resumo',
+          titulo: '5 / 5 — Resumo global e exportação',
+          dica: 'O resumo global mostra volume total de concreto, área de formas e armadura total de todas as sapatas — use para orçamento. Exporte em Excel (quantitativos), Word (memória editável com logotipo) ou PDF (arquivo definitivo).',
+          norma: '' }
+      ]
+    }),
+
+    regGuia({
+      id: 'corrida', nomeAba: 'Sapata Corrida',
+      passos: [
+        { sel: '#cor_qk',
+          titulo: '1 / 4 — Carga linear qk (kN/m)',
+          dica: 'Carga distribuída por metro linear transmitida pela parede ou fileira de pilares. Para alvenaria estrutural: 100–250 kN/m dependendo do número de pavimentos. Divida a carga total da parede pelo comprimento para obter qk. O programa aplica γf automaticamente.',
+          norma: 'NBR 6122:2022 §8.3 — sapata corrida: σ = Fd / B ≤ σ_adm.' },
+        { sel: '#cor_B',
+          titulo: '2 / 4 — Largura B (m)',
+          dica: 'Largura da base da sapata corrida. O mínimo estrutural é a largura da parede + 2×10 cm de balanço (≥ 30 cm total). O programa calcula a largura necessária para σ ≤ σ_adm e indica se o valor inserido é suficiente.',
+          norma: 'NBR 6122:2022 §8.3 — largura mínima: B ≥ Fd / (L × σ_adm).' },
+        { sel: '#cor_h',
+          titulo: '3 / 4 — Altura h (m)',
+          dica: 'Altura da sapata corrida. Para fundações rasas NBR 6118 exige h ≥ 20 cm (mínimo estrutural). Valores usuais: 30–50 cm. Sapatas mais altas são mais rígidas e distribuem melhor as cargas em solos heterogêneos.',
+          norma: 'NBR 6118:2023 §22.7.1 — altura mínima de peças de fundação: 20 cm.' },
+        { sel: '#cor_L',
+          titulo: '4 / 4 — Comprimento total L (m)',
+          dica: 'Extensão total da parede ou alinhamento de pilares. Use o comprimento real da parede, sem descontar aberturas (a sapata é contínua por baixo). Os resultados mostram o volume total de concreto e armadura para o comprimento informado.',
+          norma: '' }
+      ]
+    }),
+
+    regGuia({
+      id: 'radier', nomeAba: 'Radier',
+      passos: [
+        { sel: '#rad_N',
+          titulo: '1 / 4 — Carga total ΣNk (kN)',
+          dica: 'Soma das cargas verticais de todos os pilares (Nk = Gk + Qk sem γf). O programa preenche automaticamente a soma dos pilares da aba Cargas. Verifique se o valor está correto antes de dimensionar. Para edificações com muitas cargas variáveis, considere a combinação mais desfavorável.',
+          norma: 'NBR 6122:2022 §8.5 — radier: σ = Fd / A_radier ≤ σ_adm.' },
+        { sel: '#rad_A',
+          titulo: '2 / 4 — Área da planta (m²)',
+          dica: 'Área total da laje de radier (normalmente igual à projeção da edificação em planta). O radier é indicado quando ΣA_sapatas > 50% da área total da planta — nesse caso é mais econômico e evita recalques diferenciais. Use planta real, incluindo paredes externas.',
+          norma: 'NBR 6122:2022 §8.5.1 — critério de escolha: ΣA_sapatas > 50% da planta → radier.' },
+        { sel: '#rad_h',
+          titulo: '3 / 4 — Espessura h (m)',
+          dica: 'Espessura da laje de radier. Mínimo estrutural: L_vão/20 entre pilares (ex.: vão de 5 m → h ≥ 25 cm). Para solos fracos (N < 5) use h maior. Radiers de edificações de até 2 pavimentos: 25–35 cm. Edificações maiores: 35–50 cm.',
+          norma: 'NBR 6118:2023 §14.7 — espessura mínima de laje: L/20 do vão maior.' },
+        { sel: '#rad_kv',
+          titulo: '4 / 4 — kv Winkler (kN/m³)',
+          dica: 'Coeficiente de recalque vertical do solo (módulo de Winkler). Obtido de ensaio de placa ou correlação com SPT: kv ≈ 1.000×N_SPT kN/m³ (orientativo). Valores típicos: argila mole 5.000–15.000 kN/m³; areia média 20.000–50.000 kN/m³; rocha > 100.000 kN/m³.',
+          norma: 'NBR 6122:2022 §8.5 — coeficiente de recalque vertical; correlação com SPT por Terzaghi.' }
+      ]
+    }),
+
+    regGuia({
+      id: 'estacas', nomeAba: 'Blocos e Estacas',
+      passos: [
+        { sel: '#tipo-estaca-btns',
+          titulo: '1 / 6 — Tipo de estaca',
+          dica: 'Escolha o tipo conforme o solo e a construtividade local. Hélice Contínua: rápida, sem vibração, solo coesivo (argilas). Franki: solo granular, permite inspeção. Strauss: manual, pequenas obras. Escavada: grande diâmetro. Pré-moldada: solo sem matacões. Estaca Raiz: reforço de fundações existentes. Tubulão: solo firme raso.',
+          norma: 'NBR 6122:2022 §7 — fundações profundas: capacidade de carga pelo método SPT.' },
+        { sel: '#est_D',
+          titulo: '2 / 6 — Diâmetro / lado D (m)',
+          dica: 'Diâmetro da estaca circular ou lado da estaca quadrada pré-moldada. Mínimos usuais: Hélice Contínua 25 cm; Franki 30 cm; Pré-moldada 20 cm. Capacidade de carga cresce com D² (ponta) e D×L (lateral): aumento de D pode ser mais eficiente que aumento de L.',
+          norma: 'NBR 6122:2022 — diâmetros mínimos por tipo de estaca conforme Tabela 9.' },
+        { sel: '#est_L',
+          titulo: '3 / 6 — Comprimento L (m)',
+          dica: 'Comprimento total da estaca desde o topo até a ponta. Para método Aoki-Velloso, corresponde à profundidade de penetração nas camadas registradas no SPT. Mínimo 8–10 m para estacas profundas. Verifique o perfil de sondagem: L deve atingir camada com N ≥ 30.',
+          norma: 'NBR 6122:2022 §7.2 — comprimento mínimo e critério de paralisação do cravo.' },
+        { sel: '#est_Nk',
+          titulo: '4 / 6 — Carga por estaca Nk (kN)',
+          dica: 'Carga vertical característica de cada pilar que será suportada pelo bloco de coroamento. Para blocos com várias estacas, esta é a carga total por pilar — o programa divide pela quantidade de estacas. Verifique se Nk ≤ Admissível (mostrado no resultado após cálculo).',
+          norma: 'NBR 6122:2022 §7.5 — capacidade admissível = R_total / FS, com FS ≥ 2.' },
+        { sel: '#est_n',
+          titulo: '5 / 6 — Número de estacas por bloco',
+          dica: 'Número de estacas no bloco de coroamento de cada pilar. 1 estaca (unipé): só para pilares leves. 2: cargas moderadas, bloco estreito. 3 (triangular): mais eficiente estruturalmente. 4 (quadrangular): pilares com momento biaxial. O programa dimensiona o bloco para cada configuração.',
+          norma: 'NBR 6118:2023 §22.5 — blocos sobre estacas: verificação à punção e ao cisalhamento.' },
+        { sel: '#est_esp',
+          titulo: '6 / 6 — Espaçamento (× D)',
+          dica: 'Distância entre eixos das estacas dividida pelo diâmetro. NBR 6122 exige mínimo 2,5D entre eixos. Valores usuais: hélice e escavada 3D; franki 3–4D; pré-moldada 2,5–3D. Aumentar o espaçamento reduz o efeito de grupo e melhora a capacidade individual, mas aumenta o bloco.',
+          norma: 'NBR 6122:2022 §7.6 — espaçamento mínimo entre estacas: 2,5×D entre eixos.' }
+      ]
+    }),
+
+    regGuia({
+      id: 'vis3d', nomeAba: 'Visualização 3D',
+      passos: [
+        { sel: '#vb-topo',
+          titulo: '1 / 2 — Vistas disponíveis',
+          dica: 'Use os botões de vista para conferir o projeto: Topo (planta) mostra distribuição em planta das sapatas e pilares; Frente e Lateral mostram cotas verticais; Isométrica permite verificar possíveis sobreposições em 3D. As cores indicam o estado de cada sapata: verde = OK, azul = subutilizada, laranja = próxima ao limite, vermelho = subdimensionada.',
+          norma: '' },
+        { sel: '#canvas3d',
+          titulo: '2 / 2 — Interpretação do modelo 3D',
+          dica: 'No modo Isométrica, arraste para girar e use o scroll para zoom. Verifique: sapatas estão dentro do perímetro da construção? Há sobreposição entre sapatas? As dimensões Z (altura) estão proporcionais? Se alguma sapata ficar vermelha, volte à aba Sapatas e aumente as dimensões ou reduza a carga.',
+          norma: '' }
+      ]
+    }),
+
+    regGuia({
+      id: 'mem', nomeAba: 'Memória de Cálculo',
+      passos: [
+        { sel: null,
+          titulo: '1 / 3 — O que é a memória de cálculo',
+          dica: 'A memória é gerada automaticamente com todos os resultados: dados do solo, materiais adotados, cargas por pilar, dimensões e verificações de cada sapata (ou corrida/radier/estacas). Ela aparece aqui ao retornar das abas de dimensionamento. Não há campos para editar diretamente.',
+          norma: '' },
+        { sel: null,
+          titulo: '2 / 3 — Conferência antes de exportar',
+          dica: 'Confira na memória: ① todos os pilares aparecem com suas cargas e dimensões; ② cada sapata mostra σmax ≤ σ_adm (sem campos em vermelho); ③ armaduras As_x e As_y são positivas; ④ punção τSd ≤ τRd2; ⑤ não há mensagens de "subdimensionada". Se houver alertas, corrija na aba correspondente antes de exportar.',
+          norma: 'NBR 6122:2022 e NBR 6118:2023 — verificações obrigatórias na memória de fundações.' },
+        { sel: '#mem-content',
+          titulo: '3 / 3 — Exportar a memória',
+          dica: 'Exporte em Word para inserir logotipo, assinatura digitalizada e informações adicionais; em Excel para quantitativos e controle interno; em PDF para arquivamento definitivo e entrega ao cliente ou ao órgão de aprovação. O Word é o formato recomendado para laudos técnicos com carimbo.',
+          norma: '' }
+      ]
+    }),
+
+    regGuia({
+      id: 'ref', nomeAba: 'Referências NBR',
+      passos: [
+        { sel: null,
+          titulo: '1 / 2 — Equações utilizadas no programa',
+          dica: 'Esta aba mostra as equações, referências normativas e limites usados em cada verificação: σ biaxial, punção, armadura mínima, capacidade de carga por Aoki-Velloso, recalque pelo método de Winkler e linha neutra de vigas. Use para auditoria dos resultados ou para justificar a metodologia em laudos.',
+          norma: 'NBR 6118:2023; NBR 6122:2022; NBR 6484:2020; NBR 7480:2022.' },
+        { sel: null,
+          titulo: '2 / 2 — Fontes normativas completas',
+          dica: 'A tabela de fontes normativas lista todas as normas que embasam os cálculos. Mantenha sempre as versões atualizadas das normas referenciadas. NBR 6118:2023 é a versão vigente (substituiu NBR 6118:2014). NBR 6122:2022 é a versão vigente de fundações (substituiu NBR 6122:2010).',
+          norma: '' }
+      ]
+    })
+
+  ];
+
+  // ── Injetar botões em todas as abas ──────────────────────────────────
+  var _iv = setInterval(function(){
+    var ok = document.getElementById('tab-solo') && document.getElementById('tab-mem');
+    if(ok){ GUIAS.forEach(function(g){ g.garantirBtn(); }); clearInterval(_iv); }
+  }, 800);
+
+})();
+</script>
 </body>
 </html>

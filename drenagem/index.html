@@ -1551,14 +1551,14 @@ const FB = {
   'proj.resp': v => v ? null : mk('info', 'Preencha para sair na assinatura do memorial.'),
   'crit.tr': v => +v < 5 ? mk('warn', 'TR baixo para vias urbanas. O usual em microdrenagem é 10 anos.', 10, 'Usar 10 anos') : +v > 25 ? mk('info', 'TR alto: típico de macrodrenagem. Para microdrenagem o usual é 10 anos.', 10, 'Usar 10 anos') : mk('ok', 'i (10 min) = ' + f2(idf(10, +v), 1) + ' mm/h com este TR.'),
   'idf.a': () => { const i = idf(10); return !isNum(i) || i <= 0 ? mk('err', 'Equação inválida — revise a, b, c, d.') : (i < 60 || i > 300) ? mk('warn', 'i(10 min, TR ' + P.crit.tr + ') = ' + f2(i, 1) + ' mm/h está fora do usual no Brasil (≈ 90 a 250 mm/h). Confira os coeficientes.') : mk('ok', 'i(10 min, TR ' + P.crit.tr + ') = ' + f2(i, 1) + ' mm/h.'); },
-  'idf.b': v => (v < 0.05 || v > 0.4) ? mk('warn', 'Valor incomum para b (usual 0,10 a 0,25).') : null,
-  'idf.c': v => (v < 0 || v > 60) ? mk('warn', 'Valor incomum para c (usual 5 a 30 min).') : null,
-  'idf.d': v => (v < 0.5 || v > 1.3) ? mk('warn', 'Valor incomum para d (usual 0,60 a 1,10).') : null,
+  'idf.b': v => (v < 0.05 || v > 0.4) ? mk('warn', 'Valor incomum para b (usual 0,10 a 0,25). Confira os parâmetros IDF da prefeitura ou estação INMET/ANA da cidade.') : null,
+  'idf.c': v => (v < 0 || v > 60) ? mk('warn', 'Valor incomum para c (usual 5 a 30 min). Verifique se os coeficientes são da IDF local e se as unidades estão corretas (t em minutos).') : null,
+  'idf.d': v => (v < 0.5 || v > 1.3) ? mk('warn', 'Valor incomum para d (usual 0,60 a 1,10). Revise a fonte dos coeficientes IDF — use somente a IDF da cidade do projeto.') : null,
   'idf.kH': (v) => { const t = kirpich(num(P.idf.kL), num(v)); return isNum(t) ? mk('info', 'tc Kirpich = ' + f2(t, 1) + ' min' + (t < P.crit.tcMin ? ' (será adotado o mínimo de ' + P.crit.tcMin + ' min)' : '') + '.') : null; },
   'ruas.it': v => !(v > 0) ? mk('err', 'Informe a inclinação transversal.', 3, 'Usar 3 %') : (v < 1.5 || v > 5) ? mk('warn', 'Fora do usual (2 a 3 %). z resultante = ' + f2(100 / v, 1) + '.', 3, 'Usar 3 %') : mk('ok', 'z = ' + f2(100 / v, 1) + ' (largura alagada = z × lâmina).'),
   'ruas.mfH': v => !(v > 0) ? mk('err', 'Informe o espelho do meio-fio.', 0.15, 'Usar 0,15 m') : mk('info', 'Lâmina máxima junto à guia: ' + fmt(Math.min(P.crit.ymax, v - 0.02) * 100, 1) + ' cm.'),
   'ruas.sjI': (v, o) => (num(o.sjW) || 0) > 0 && !(v > (num(o.it) || 0)) ? mk('warn', 'A sarjeta deve ser mais inclinada que a pista (' + fmt(num(o.it), 1) + ' %); senão é calculada como seção simples.', 8, 'Usar 8 %') : null,
-  'ruas.larg': v => !(v > 0) ? mk('err', 'Informe a largura da pista.') : null,
+  'ruas.larg': v => !(v > 0) ? mk('err', 'Informe a largura da pista em metros (ex.: 7 m para via local de mão dupla; 3,5 m por faixa é o padrão DNIT).') : null,
   'bacias.A': (v, o) => !(v > 0) ? mk('err', 'Informe a área em hectares (ex.: 2.500 m² = 0,25 ha).') : v > 300 ? mk('err', 'Acima de ~3 km² o Método Racional não é recomendado; use hidrograma unitário.') : v > 2 ? mk('warn', 'Área grande para descarregar num único ponto de microdrenagem. Divida em sub-bacias por boca-de-lobo.') : mk('ok', '= ' + f2(v * 10000, 0) + ' m² · Q = ' + fL(R.bac[o.id] && R.bac[o.id].Q) + ' L/s'),
   'bacias.C': v => !(v > 0 && v <= 1) ? mk('err', 'C deve estar entre 0 e 1.', 0.7, 'Usar 0,70') : v >= 0.85 ? mk('info', 'Faixa de superfícies quase impermeáveis (telhados, asfalto, concreto).') : v >= 0.6 ? mk('info', 'Faixa de área urbana densa / residencial com lotes pequenos.') : v >= 0.35 ? mk('info', 'Faixa residencial com lotes grandes / misto.') : mk('info', 'Faixa de áreas verdes, praças, gramados.'),
   'bacias.dest': v => v ? null : mk('err', 'Escolha a BL ou o PV que recebe esta água; sem destino, a vazão não entra na rede.'),
@@ -1571,7 +1571,7 @@ const FB = {
     if (num(v) == null) return isNum(r.Sauto) ? mk(r.Sauto >= P.crit.imin ? 'ok' : 'warn', '(automático: ' + f2(r.Sauto, 2) + ' % pelo greide)' + (r.Sauto < P.crit.imin ? ' — abaixo da mínima; sarjeta pode empoçar.' : '')) : mk('err', 'Sem greide nesta rua: informe a declividade da sarjeta.', 0.5, 'Usar 0,5 %');
     return v < P.crit.imin ? mk('warn', 'Abaixo da mínima de ' + f2(P.crit.imin) + ' %: a sarjeta pode empoçar.', P.crit.imin, 'Usar ' + f2(P.crit.imin) + ' %') : v > 10 ? mk('warn', 'Sarjeta muito íngreme: a capacidade é reduzida (F = ' + f2(fatorSarjeta(v)) + ').') : mk('ok', 'Fator de redução da sarjeta F = ' + f2(fatorSarjeta(v)) + '.');
   },
-  'bls.z': (v, o) => num(v) == null ? mk('info', '(automático: z = ' + f2(R.bl[o.id] && R.bl[o.id].z, 1) + ' pela rua)') : (v < 8 || v > 60) ? mk('warn', 'z fora do usual (12 a 50).') : null,
+  'bls.z': (v, o) => num(v) == null ? mk('info', '(automático: z = ' + f2(R.bl[o.id] && R.bl[o.id].z, 1) + ' pela rua)') : (v < 8 || v > 60) ? mk('warn', 'z fora do usual (12 a 50). z = 100 / i transversal; vias com i = 2% → z = 50; i = 3% → z = 33. Deixe em branco para usar o z da rua automaticamente.') : null,
   'bls.L': (v, o) => {
     const r = R.bl[o.id]; if (!r) return null; const c = P.crit;
     if (!(v > 0) && o.tipo !== 'gr') return mk('err', 'Informe o comprimento da abertura.', 1, 'Usar 1,00 m');
@@ -1855,7 +1855,7 @@ function nextId(list, pre, dig = 2) {
 function addItem(kind) {
   const L = P[kind], last = L[L.length - 1];
   let o;
-  if (kind === 'ruas') o = {id: nextId(L, 'R', 1), nome: 'Rua ' + (L.length + 1), larg: 7, passeio: 2, it: 3};
+  if (kind === 'ruas') o = {id: nextId(L, 'R', 1), nome: 'Rua ' + (L.length + 1), larg: 7, passeio: 2, it: 3, mf: 'mfs30', mfH: 0.15, sjW: 0.30, sjI: 8};
   if (kind === 'bacias') o = {id: nextId(L, 'B', 1), nome: '', A: 0.2, C: 0.7, dest: last ? last.dest : '', tcMode: 'man', tc: 10, kL: '', kH: ''};
   if (kind === 'bls') o = Object.assign({rua: (P.ruas[0] || {}).id || '', dist: 0, lado: 'E', tipo: 'gs', L: 1, a: 0.05, gL: 0.9, gB: 0.4, ga: 60, fr: 0.8, S: '', z: '', pv: (P.pvs[0] || {}).id || '', rL: 6, rD: 400, rI: 2, constr: 'Pré-moldada'}, last ? JSON.parse(JSON.stringify(last)) : {}, {id: idCapt(), prox: ''});
   if (kind === 'pvs') o = {id: idCapt(), rua: last ? last.rua : ((P.ruas[0] || {}).id || ''), dist: last ? (num(last.dist) || 0) + 40 : 0, tipo: PVTIPOS[0], dpv: 1000, tampaCl: TAMPAS[0], tampa: '', defl: last ? 'reta' : 'ini', na: '', obs: ''};
@@ -4687,7 +4687,7 @@ applyFix = function (path, val) {
 addItem = function (kind) {
   const L = P[kind], last = L[L.length - 1];
   let o;
-  if (kind === 'ruas') o = {id: nextId(L, 'R', 1), nome: 'Rua ' + (L.length + 1), larg: 7, passeio: 2, it: 3};
+  if (kind === 'ruas') o = {id: nextId(L, 'R', 1), nome: 'Rua ' + (L.length + 1), larg: 7, passeio: 2, it: 3, mf: 'mfs30', mfH: 0.15, sjW: 0.30, sjI: 8};
   if (kind === 'bacias') o = {id: nextId(L, 'B', 1), nome: '', A: 0.2, C: 0.7, dest: last ? last.dest : '', tcMode: 'man', tc: 10, kL: '', kH: ''};
   if (kind === 'bls') o = Object.assign({rua: (P.ruas[0] || {}).id || '', dist: 0, lado: 'E', tipo: 'gs', L: 1, a: 0.05, gL: 0.9, gB: 0.4, ga: 60, fr: 0.8, S: '', z: '', pv: (P.pvs[0] || {}).id || '', rL: 6, rD: 400, rI: 2, constr: 'Pré-moldada'}, last ? JSON.parse(JSON.stringify(last)) : {}, {id: idCapt(), prox: ''});
   if (kind === 'pvs') o = {id: idCapt(), rua: last ? last.rua : ((P.ruas[0] || {}).id || ''), dist: last ? (num(last.dist) || 0) + 40 : 0, modelo: 'emop', tipo: EMOP_TIPO, pvL: '', pvHi: '', dpv: 1000, tampaCl: TAMPAS[0], tampa: '', defl: last ? 'reta' : 'ini', na: '', obs: ''};
@@ -6542,168 +6542,474 @@ async function enviarAoOrcamento(solK, bank) {
 </script>
 <script>
 /* =====================================================================
-   PATCH V1-02-56 (25/10/2026) — Botão "📋 Auxílio Preenchimento" (drenagem)
-   Tour guiado pelos campos principais da drenagem pluvial
+   PATCH V1-02-57 (26/10/2026) — Botão "📋 Auxílio Preenchimento" (drenagem)
+   Per-aba independente + modo contínuo ("Próxima aba ▶")
+   SEM event listeners no DOM renderizado (corrige loop aba 3 → aba 1)
 ===================================================================== */
 (function(){
   'use strict';
 
-  /* ── Passos ────────────────────────────────────────────────────── */
-  var PASSOS = [
-    { sel: '#bar-nome',
-      evento: 'input',
-      titulo: '1 / 8 — Nome do Projeto',
-      dica: 'Identificação do projeto no memorial e nos arquivos exportados. Ex.: "Rede Pluvial Av. Brasil — Etapa 1".',
-      norma: '' },
-    { sel: '[data-p="proj.municipio"]',
-      evento: 'input', tab: 'projeto',
-      titulo: '2 / 8 — Município / UF',
-      dica: 'Município e Unidade Federativa da obra. Aparecem no cabeçalho do memorial. Ex.: "Rio das Ostras / RJ".',
-      norma: '' },
-    { sel: '[data-p="proj.local"]',
-      evento: 'input', tab: 'projeto',
-      titulo: '3 / 8 — Local / Bairro',
-      dica: 'Bairro, logradouros ou trecho atendido pela rede pluvial. Usado no memorial descritivo.',
-      norma: '' },
-    { sel: '[data-p="proj.resp"]',
-      evento: 'input', tab: 'projeto',
-      titulo: '4 / 8 — Responsável Técnico',
-      dica: 'Nome do engenheiro(a) responsável. Sai na assinatura do memorial e na prancha.',
-      norma: '' },
-    { sel: '[data-p="proj.crea"]',
-      evento: 'input', tab: 'projeto',
-      titulo: '5 / 8 — CREA / CAU',
-      dica: 'Registro profissional do responsável técnico. Formato: CREA-RJ 12345/D ou CAU A-123456.',
-      norma: '' },
-    { sel: '[data-p="proj.art"]',
-      evento: 'input', tab: 'projeto',
-      titulo: '6 / 8 — ART / RRT',
-      dica: 'Número da Anotação de Responsabilidade Técnica ou Registro de Responsabilidade Técnica. Obrigatório na execução (Lei 6.496/77).',
-      norma: 'Lei 6.496/1977 — ART obrigatória em projetos de engenharia.' },
-    { sel: '[data-p="crit.tr"]',
-      evento: 'change', tab: 'chuva',
-      titulo: '7 / 8 — Período de Retorno (TR)',
-      dica: 'Intervalo médio (em anos) entre chuvas de mesma intensidade. Use TR = 5 ou 10 anos para vias locais; 25 anos para coletoras e arteriais.',
-      norma: 'NBR 13133 / Manual de Drenagem Urbana DNIT — TR mínimo 5 anos p/ microdrenagem.' },
-    { sel: '[data-p="crit.idf_a"] , [data-p="crit.a"]',
-      evento: 'input', tab: 'chuva',
-      titulo: '8 / 8 — Equação IDF',
-      dica: 'Parâmetros da equação intensidade-duração-frequência da sua cidade (prefeitura ou estação pluviométrica do INMET / GEOHIDRO). Ex.: i = a·T^b / (t+c)^d.',
-      norma: 'Portaria MAPA ou Atlas de Chuvas DAEE/ANA — use IDF local. Não use coeficientes de outra cidade.' }
-  ];
+  var ORDER = ['projeto','chuva','ruas','bacias','bls','pvs','rede','planta','perfil','secao','custos','verif','memorial'];
+  var TAB_NAMES = {
+    projeto:'1. Projeto', chuva:'2. Chuva (IDF · tc)', ruas:'3. Ruas e greide',
+    bacias:'4. Bacias', bls:'5. Sarjetas e bocas-de-lobo', pvs:'6. Poços de visita',
+    rede:'7. Rede tronco', planta:'8. Planta baixa', perfil:'9. Perfil e piezométrica',
+    secao:'10. Seção transversal', custos:'11. Custos (SINAPI/SCO)',
+    verif:'12. Verificação', memorial:'13. Memorial e impressão'
+  };
 
-  /* ── Engine (mesmo padrão do orçamento) ─────────────────────────*/
-  var G = { passo: 0, ativo: false };
+  var GUIAS = {
+    projeto:{ passos:[
+      { sel:'[data-p="proj.nome"]',
+        titulo:'1 / 8 — Nome do Projeto',
+        dica:'Identificação do projeto no memorial e nos arquivos exportados. Ex.: "Rede Pluvial Av. Brasil — Etapa 1".',
+        norma:'' },
+      { sel:'[data-p="proj.municipio"]',
+        titulo:'2 / 8 — Município / UF',
+        dica:'Município e Unidade Federativa da obra. Aparecem no cabeçalho do memorial. Ex.: "Rio das Ostras / RJ".',
+        norma:'' },
+      { sel:'[data-p="proj.local"]',
+        titulo:'3 / 8 — Local / Bairro',
+        dica:'Bairro, logradouros ou trecho atendido pela rede pluvial. Usado no memorial descritivo.',
+        norma:'' },
+      { sel:'[data-p="proj.resp"]',
+        titulo:'4 / 8 — Responsável Técnico',
+        dica:'Nome do engenheiro(a) responsável. Sai na assinatura do memorial e na prancha.',
+        norma:'' },
+      { sel:'[data-p="proj.crea"]',
+        titulo:'5 / 8 — CREA / CAU',
+        dica:'Registro profissional do responsável técnico. Formato: CREA-RJ 12345/D ou CAU A-123456.',
+        norma:'' },
+      { sel:'[data-p="proj.art"]',
+        titulo:'6 / 8 — ART / RRT',
+        dica:'Número da ART ou RRT. Obrigatório em projetos de engenharia (Lei 6.496/77). Emita pelo portal CONFEA/CREA ou IAB/CAU antes de assinar o projeto.',
+        norma:'Lei 6.496/1977 — ART obrigatória em projetos e obras de engenharia.' },
+      { sel:'[data-p="crit.tr"]',
+        titulo:'7 / 8 — Período de Retorno (TR)',
+        dica:'Intervalo médio em anos entre chuvas de mesma intensidade. Use TR = 5 ou 10 anos para vias locais; 25 anos para coletoras e arteriais; 50–100 anos para galerias de fundo de vale e obras de macrodrenagem.',
+        norma:'NBR 13133 / Manual de Drenagem Urbana DNIT — TR mínimo 5 anos para microdrenagem.' },
+      { sel:null,
+        titulo:'8 / 8 — Critérios de verificação',
+        dica:'Os critérios (velocidades mínima e máxima, y/D máximo, recobrimento mínimo…) já estão com os valores padrão DNIT/DAEE. Altere somente se a prefeitura do município exigir valores diferentes. Na maioria dos projetos os padrões estão corretos.',
+        norma:'' }
+    ]},
+    chuva:{ passos:[
+      { sel:'[data-p="idf.fonte"]',
+        titulo:'1 / 7 — Fonte / Posto pluviométrico',
+        dica:'Identifique a origem dos coeficientes IDF: prefeitura, plataforma Plúvio (UFV/ANA) ou estudo hidrológico específico. Sempre use a IDF da cidade do projeto — coeficientes de cidades vizinhas não são válidos.',
+        norma:'' },
+      { sel:'[data-p="idf.a"]',
+        titulo:'2 / 7 — Coeficiente a da IDF',
+        dica:'Coeficiente a da equação i = a·TR^b / (t+c)^d (intensidade em mm/h, t em min). Valores típicos para cidades brasileiras: 500 a 4000. Padrão (Rio de Janeiro): a = 1239.',
+        norma:'Plúvio (UFV/ANA) ou Atlas de Chuvas — consulte a IDF da cidade do projeto.' },
+      { sel:'[data-p="idf.b"]',
+        titulo:'3 / 7 — Coeficiente b (expoente do TR)',
+        dica:'Expoente do período de retorno na equação IDF. Valores típicos: 0,10 a 0,25. Padrão RJ: b = 0,15. Valores fora desse intervalo merecem conferência da fonte.',
+        norma:'' },
+      { sel:'[data-p="idf.c"]',
+        titulo:'4 / 7 — Coeficiente c (minutos, adicionado à duração)',
+        dica:'Coeficiente c da equação IDF, somado à duração t em minutos. Valores típicos: 5 a 30 min. Padrão RJ: c = 20. Confira a unidade: este campo está em minutos.',
+        norma:'' },
+      { sel:'[data-p="idf.d"]',
+        titulo:'5 / 7 — Coeficiente d (expoente de (t+c))',
+        dica:'Expoente de (t+c) na equação IDF. Valores típicos: 0,60 a 1,10. Padrão RJ: d = 0,74. Valores acima de 1,3 ou abaixo de 0,5 indicam possível erro na equação.',
+        norma:'' },
+      { sel:'[data-p="idf.kL"]',
+        titulo:'6 / 7 — Comprimento L do talvegue (m)',
+        dica:'Comprimento do talvegue principal da bacia de contribuição, em metros. Usado na fórmula de Kirpich para calcular o tc. Para bacias urbanas muito pequenas, adote tc mínimo de 5 min independentemente do resultado.',
+        norma:'Kirpich (1940): tc = 57 × (L³/H)^0,385 — tc em min, L em km, H em m.' },
+      { sel:'[data-p="idf.kH"]',
+        titulo:'7 / 7 — Desnível H do talvegue (m)',
+        dica:'Diferença de cota entre a cabeceira e a saída da bacia, em metros. Quanto maior o desnível e menor o comprimento, menor o tc e maior a intensidade de projeto.',
+        norma:'' }
+    ]},
+    ruas:{ passos:[
+      { sel:'.btn-add',
+        titulo:'1 / 7 — Adicionar rua',
+        dica:'Clique em "+ Adicionar" para inserir a primeira via. Cada rua representa um logradouro ou segmento de via que recebe a drenagem pluvial do projeto.',
+        norma:'' },
+      { sel:'[data-p^="ruas."][data-p$=".nome"]',
+        titulo:'2 / 7 — Nome da rua',
+        dica:'Identificação do logradouro. Ex.: "Rua A", "Av. Brasil". Aparece nas tabelas de bacias, bocas-de-lobo, perfis e no memorial.',
+        norma:'' },
+      { sel:'[data-p^="ruas."][data-p$=".larg"]',
+        titulo:'3 / 7 — Largura da pista (m)',
+        dica:'Largura total da pista de rolamento em metros, sem contar as calçadas. Padrão: 7 m para via local de mão dupla; 3,5 m por faixa é o mínimo do DNIT.',
+        norma:'DNIT 099/2009-EM — largura mínima de faixa 3,5 m.' },
+      { sel:'[data-p^="ruas."][data-p$=".passeio"]',
+        titulo:'4 / 7 — Largura do passeio/calçada (m)',
+        dica:'Largura da calçada de cada lado, em metros. Influencia a área impermeável total da via e o cálculo do coeficiente de escoamento. Padrão: 2 a 3 m por lado.',
+        norma:'' },
+      { sel:'[data-p^="ruas."][data-p$=".mf"]',
+        titulo:'5 / 7 — Meio-fio e sarjeta',
+        dica:'Tipo de guia de meio-fio. "Meio-fio com sarjeta conjugada 30 cm (espelho 15 cm)" é o padrão mfs30, pré-selecionado por ser o mais usado. As dimensões afetam a capacidade da sarjeta calculada na aba 5.',
+        norma:'ABNT NBR 9050 — rebaixo de meio-fio obrigatório nas travessias de pedestres.' },
+      { sel:'[data-p^="ruas."][data-p$=".it"]',
+        titulo:'6 / 7 — Declividade transversal da pista (%)',
+        dica:'Inclinação da pista em direção à guia, em percentual. Padrão: 2 % para asfalto; 3 % para paralelepípedo. Necessária para o escoamento atingir o meio-fio e as bocas-de-lobo.',
+        norma:'DNIT IPR-719 — caimento transversal mínimo 2 % para CBUQ.' },
+      { sel:'[data-p^="ruas."][data-p$=".iz"]',
+        titulo:'7 / 7 — Declividade longitudinal (%)',
+        dica:'Inclinação do greide da via ao longo do eixo, em percentual. Obtida do levantamento topográfico. Influencia a velocidade na sarjeta e a eficiência das bocas-de-lobo. Declividades abaixo de 0,5 % exigem atenção especial no dimensionamento.',
+        norma:'' }
+    ]},
+    bacias:{ passos:[
+      { sel:'.btn-add',
+        titulo:'1 / 5 — Adicionar bacia',
+        dica:'Clique em "+ Adicionar" para cadastrar uma bacia de contribuição. Cada bacia representa uma área que drena para um ponto específico da rede (geralmente uma boca-de-lobo).',
+        norma:'' },
+      { sel:'[data-p^="bacias."][data-p$=".rua"]',
+        titulo:'2 / 5 — Rua de contribuição',
+        dica:'Via da qual a bacia capta as águas pluviais. Vincula a bacia ao greide e às características topográficas da rua cadastrada na aba anterior.',
+        norma:'' },
+      { sel:'[data-p^="bacias."][data-p$=".c"]',
+        titulo:'3 / 5 — Coeficiente de escoamento C',
+        dica:'Fração da precipitação que escoa superficialmente (0 a 1). Valores típicos: asfalto/concreto = 0,85–0,95; paralelepípedo = 0,70–0,85; gramado/área verde = 0,10–0,35; área residencial mista = 0,40–0,70.',
+        norma:'DAEE / NBR 13133 — método racional: Q = C·i·A; verifique o C composto da bacia.' },
+      { sel:'[data-p^="bacias."][data-p$=".A"]',
+        titulo:'4 / 5 — Área da bacia (ha)',
+        dica:'Área de contribuição em hectares. Inclua toda a área que drena para a boca-de-lobo ou ponto de captação. Pode ser medida em planta ou obtida por SIG/Google Earth. 1 ha = 10.000 m².',
+        norma:'NBR 13133 — método racional válido para bacias até ~2 km².' },
+      { sel:'[data-p^="bacias."][data-p$=".tc"]',
+        titulo:'5 / 5 — Tempo de concentração (min)',
+        dica:'Tempo para a água percorrer o ponto mais distante da bacia até o ponto de captação. Mínimo: 5 min para bacias urbanas pequenas. Use a calculadora de Kirpich na aba Chuva para obter o tc.',
+        norma:'DAEE — tc mínimo recomendado: 5 min para micro-bacias urbanas.' }
+    ]},
+    bls:{ passos:[
+      { sel:'.btn-add',
+        titulo:'1 / 5 — Adicionar boca-de-lobo',
+        dica:'Cadastre as bocas-de-lobo ou caixas de ralo do projeto. Cada dispositivo capta as águas da sarjeta e encaminha para a rede tronco via ramal. Use "+ Adicionar" para inserir a primeira.',
+        norma:'' },
+      { sel:'[data-p^="bls."][data-p$=".rua"]',
+        titulo:'2 / 5 — Rua / sarjeta de captação',
+        dica:'Via da qual a boca-de-lobo capta a água da sarjeta. Vincula o dispositivo ao greide e à declividade transversal da rua — necessários para calcular a capacidade de captação.',
+        norma:'' },
+      { sel:'[data-p^="bls."][data-p$=".est"]',
+        titulo:'3 / 5 — Estaca / posição ao longo da via',
+        dica:'Posição longitudinal da boca-de-lobo no estaqueamento da rede. Use o mesmo sistema de estacas adotado nos PVs e nos trechos. Ex.: "0+000", "25", "50.5".',
+        norma:'' },
+      { sel:'[data-p^="bls."][data-p$=".z"]',
+        titulo:'4 / 5 — z = 1/i transversal (opcional)',
+        dica:'Recíproco da declividade transversal: z = 100 / i (%). Se deixado em branco, o programa usa automaticamente o z da rua. Informe somente para sobrepor o valor em pontos com declividade diferente da rua. z = 50 equivale a i = 2 %; z = 33 equivale a i = 3 %.',
+        norma:'' },
+      { sel:'[data-p^="bls."][data-p$=".pvId"]',
+        titulo:'5 / 5 — PV de destino do ramal',
+        dica:'Poço de visita para onde o ramal da boca-de-lobo descarrega. Deve estar cadastrado na aba Poços de Visita. O programa calcula o ramal automaticamente com o diâmetro mínimo (300 mm) e a declividade disponível entre a boca-de-lobo e o PV.',
+        norma:'' }
+    ]},
+    pvs:{ passos:[
+      { sel:'.btn-add',
+        titulo:'1 / 6 — Adicionar Poço de Visita',
+        dica:'Cadastre os PVs da rede. Cada PV é um nó: recebe ramais de bocas-de-lobo e conecta trechos da rede tronco. Use "+ Adicionar" para inserir o primeiro PV.',
+        norma:'ABNT NBR 9649 — requisitos de poços de visita em redes de drenagem.' },
+      { sel:'[data-p^="pvs."][data-p$=".nome"]',
+        titulo:'2 / 6 — Nome / identificação do PV',
+        dica:'Identificação do poço de visita. Ex.: "PV-01", "PV-A". O nome aparece nas tabelas de rede, nos perfis longitudinais e na planta baixa.',
+        norma:'' },
+      { sel:'[data-p^="pvs."][data-p$=".est"]',
+        titulo:'3 / 6 — Estaca / posição',
+        dica:'Posição do PV no estaqueamento da rede. Use a mesma referência das bocas-de-lobo e trechos para manter consistência nas tabelas e perfis.',
+        norma:'' },
+      { sel:'[data-p^="pvs."][data-p$=".rua"]',
+        titulo:'4 / 6 — Rua onde está o PV',
+        dica:'Logradouro sobre o qual está o PV. Usado para calcular a cota do greide do tubo de saída e o recobrimento. Selecione a rua cadastrada na aba 3.',
+        norma:'' },
+      { sel:'[data-p^="pvs."][data-p$=".ztampa"]',
+        titulo:'5 / 6 — Cota da tampa (m)',
+        dica:'Cota topográfica da tampa do PV em metros, obtida do levantamento planialtimétrico. Junto com a profundidade e o desnível, determina o recobrimento dos tubos. Pode ser deixada em branco se o cálculo automático de cotas for suficiente.',
+        norma:'' },
+      { sel:'[data-p^="pvs."][data-p$=".profMax"]',
+        titulo:'6 / 6 — Profundidade máxima do PV (m)',
+        dica:'Limita a profundidade de escavação no local do PV. Padrão: 3,5–4,5 m. Reduza em áreas com nível d\'água elevado ou interferências com fundações. O programa alerta quando a rede ultrapassa este limite.',
+        norma:'DNIT — profundidade econômica máxima ~5 m; acima disso considerar rebombamento ou tunelamento.' }
+    ]},
+    rede:{ passos:[
+      { sel:'[data-p^="trechos."][data-p$=".pvI"]',
+        titulo:'1 / 6 — PV inicial do trecho (montante)',
+        dica:'Poço de visita de onde o escoamento parte. O fluxo vai de PV inicial → PV final. Certifique-se de que os PVs foram cadastrados na aba anterior antes de montar os trechos.',
+        norma:'' },
+      { sel:'[data-p^="trechos."][data-p$=".pvF"]',
+        titulo:'2 / 6 — PV final do trecho (jusante)',
+        dica:'Poço de visita onde o escoamento chega. A cota do PV final deve ser menor que a do PV inicial para garantir escoamento por gravidade. Verifique no perfil após preencher as cotas.',
+        norma:'' },
+      { sel:'[data-p^="trechos."][data-p$=".D"]',
+        titulo:'3 / 6 — Diâmetro do tubo (mm)',
+        dica:'Diâmetro interno em mm. Diâmetros comerciais: 300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1500 mm. Mínimo recomendado: 300 mm. Deixe em branco e use "⚙ Dimensionar rede" para o programa escolher automaticamente.',
+        norma:'ABNT NBR 8890 — tubos de concreto armado para esgotos pluviais.' },
+      { sel:'[data-p^="trechos."][data-p$=".S"]',
+        titulo:'4 / 6 — Declividade do tubo (%)',
+        dica:'Inclinação do tubo em percentual. Mínimo: 0,5–1,0 % para evitar deposição de sólidos. Declividades muito altas (>5–10 %) exigem proteção anti-erosiva na saída.',
+        norma:'ABNT NBR 9649 — velocidade mínima 0,6 m/s; DAEE — 0,5 m/s para drenagem pluvial.' },
+      { sel:'[data-p^="trechos."][data-p$=".L"]',
+        titulo:'5 / 6 — Comprimento do trecho (m)',
+        dica:'Comprimento entre os dois PVs em metros, obtido do levantamento. Afeta o volume de escavação, o custo e a linha piezométrica.',
+        norma:'' },
+      { sel:'button[onclick*="autoDimensionar"], .btn[onclick*="autoDimensionar"]',
+        titulo:'6 / 6 — Dimensionar rede automaticamente',
+        dica:'Use "⚙ Dimensionar rede" para o programa escolher o menor diâmetro comercial que atende cada trecho e lançar as cotas dos tubos a partir das tampas. Após o dimensionamento, confira os alertas na aba Verificação.',
+        norma:'' }
+    ]},
+    planta:{ passos:[
+      { sel:null,
+        titulo:'1 / 3 — Planta baixa da rede',
+        dica:'A planta é gerada automaticamente a partir das ruas, bacias, bocas-de-lobo, PVs e trechos cadastrados. Se aparecer vazia, certifique-se de que a rede está montada (abas 3 a 7) antes de abrir esta aba.',
+        norma:'' },
+      { sel:null,
+        titulo:'2 / 3 — Exportar DXF',
+        dica:'Use "⬇ DXF" para exportar a planta em formato CAD (DXF R12). O arquivo pode ser aberto em AutoCAD, QGIS, LibreCAD e outros CADs. Cada elemento (meio-fio, boca-de-lobo, PV, tubulação, cota…) fica em uma layer separada.',
+        norma:'' },
+      { sel:null,
+        titulo:'3 / 3 — Imprimir a planta',
+        dica:'Use "🖨 Imprimir" para incluir a planta no memorial. O DXF exportado usa cotas reais em metros; no CAD ajuste a escala conforme o formato de papel do projeto (ex.: 1:500 para A1, 1:1000 para A3).',
+        norma:'' }
+    ]},
+    perfil:{ passos:[
+      { sel:null,
+        titulo:'1 / 3 — Perfil longitudinal',
+        dica:'O perfil é gerado automaticamente para cada rua. Mostra: greide do terreno, linha do greide dos tubos, tampas dos PVs, recobrimento e linha piezométrica. Selecione a rua no menu acima do desenho.',
+        norma:'' },
+      { sel:null,
+        titulo:'2 / 3 — Verificar recobrimento',
+        dica:'A linha vermelha no perfil indica recobrimento insuficiente. Corrija aumentando a cota do greide no PV inicial, adotando tubo PA-2 ou proteção mecânica (laje ou envelopamento de concreto). Os alertas aparecem na aba Verificação.',
+        norma:'DNIT/DAEE — recobrimento mínimo 0,80 m sem proteção; 0,30 m com laje de concreto.' },
+      { sel:null,
+        titulo:'3 / 3 — Exportar perfil em DXF',
+        dica:'Use "⬇ DXF" para exportar o perfil em CAD com greide do terreno, tubos, PVs e cotas. Selecione a rua desejada antes de exportar para obter o perfil da via correta.',
+        norma:'' }
+    ]},
+    secao:{ passos:[
+      { sel:null,
+        titulo:'1 / 3 — Seção transversal tipo',
+        dica:'A seção tipo mostra largura da pista, passeios, meio-fio e posição do tubo. É gerada automaticamente com as dimensões informadas nas abas Ruas e Rede. Selecione a rua no menu acima.',
+        norma:'' },
+      { sel:null,
+        titulo:'2 / 3 — Conferir posição do tubo',
+        dica:'Verifique se o tubo está posicionado sob a pista ou calçada com o recobrimento mínimo. O programa marca em vermelho se houver conflito ou recobrimento insuficiente.',
+        norma:'' },
+      { sel:null,
+        titulo:'3 / 3 — Exportar seção em DXF',
+        dica:'Use "⬇ DXF" para exportar a seção em CAD. Cada elemento (asfalto, meio-fio, tubo, vala, cota) fica em layer separada para facilitar a edição no programa CAD.',
+        norma:'' }
+    ]},
+    custos:{ passos:[
+      { sel:null,
+        titulo:'1 / 4 — Orçamento automático (SINAPI/SCO)',
+        dica:'O orçamento é gerado automaticamente a partir das quantidades calculadas: comprimentos de tubos por diâmetro, número de PVs, bocas-de-lobo etc. As tabelas de preços usadas são SINAPI e SCO (Rio de Janeiro).',
+        norma:'' },
+      { sel:null,
+        titulo:'2 / 4 — Conferir quantitativos',
+        dica:'Verifique os quantitativos gerados: comprimento por diâmetro de tubo, número de PVs por profundidade, quantidade de bocas-de-lobo. Corrija eventuais inconsistências nas abas de cadastro (3 a 7).',
+        norma:'' },
+      { sel:null,
+        titulo:'3 / 4 — Exportar planilha de custos',
+        dica:'Use os botões de exportação para gerar a planilha de custos em Excel, Word ou PDF. O Excel é editável para ajustar preços unitários conforme a tabela vigente no estado e município do projeto.',
+        norma:'' },
+      { sel:null,
+        titulo:'4 / 4 — Conferir preços unitários',
+        dica:'Para licitação pública, confira os preços na tabela SINAPI do mês vigente (Portal Transparência CEF). Os preços já incluem BDI de 25 %. Para obras privadas, solicite cotações aos fornecedores locais.',
+        norma:'Lei 12.462/2011 (RDC) — obras públicas devem usar tabelas referenciais SINAPI/SICRO.' }
+    ]},
+    verif:{ passos:[
+      { sel:null,
+        titulo:'1 / 4 — Painel de verificação do projeto',
+        dica:'A aba Verificação consolida todos os alertas e erros. Verifique os itens marcados em vermelho (✕ erro grave) e laranja (⚠ atenção). O projeto só está completo quando todos os erros estiverem resolvidos.',
+        norma:'' },
+      { sel:'.seg button',
+        titulo:'2 / 4 — Usar os filtros',
+        dica:'Use os filtros "Pendências", "Erros", "Alertas", "Atendidos" e "Todos" para navegar entre os tipos de verificação. Clique em uma linha da tabela para ir diretamente ao campo que precisa ser corrigido.',
+        norma:'' },
+      { sel:null,
+        titulo:'3 / 4 — Erros críticos',
+        dica:'Erros (✕ vermelho) impedem a aprovação do projeto: recobrimento insuficiente, velocidade abaixo do mínimo, diâmetro abaixo do permitido, rede fora do traçado. Corrija antes de emitir o memorial.',
+        norma:'ABNT NBR 9649 / DAEE — critérios de aceitação de projetos de drenagem pluvial.' },
+      { sel:null,
+        titulo:'4 / 4 — Alertas de atenção',
+        dica:'Alertas (⚠ laranja) não impedem aprovação, mas devem ser justificados no memorial. Ex.: velocidade acima do máximo (verificar proteção anti-erosiva), y/D elevado (verificar linha piezométrica), tc abaixo do mínimo (justificar no memorial).',
+        norma:'' }
+    ]},
+    memorial:{ passos:[
+      { sel:null,
+        titulo:'1 / 4 — Memorial descritivo e de cálculo',
+        dica:'O memorial é gerado automaticamente consolidando todos os dados: identificação, critérios, bacias, bocas-de-lobo, PVs, rede, perfis, verificação e custos. Não há campos para digitar aqui.',
+        norma:'' },
+      { sel:'[data-impr]',
+        titulo:'2 / 4 — Selecionar itens para impressão',
+        dica:'Marque os itens que devem constar no memorial impresso: memória de cálculo, tabelas de rede, planta baixa, perfis, seções, orçamento. Use "Selecionar todos" para incluir tudo.',
+        norma:'' },
+      { sel:null,
+        titulo:'3 / 4 — Conferir antes de exportar',
+        dica:'Revise o memorial na tela antes de imprimir. Certifique-se de que responsável técnico, ART/RRT e data estão corretos. Verifique se não há campos "—" (não informado) no cabeçalho do memorial.',
+        norma:'' },
+      { sel:'button[onclick*="imprimir"]',
+        titulo:'4 / 4 — Imprimir ou exportar PDF',
+        dica:'Use "🖨 Imprimir" para gerar o PDF pelo navegador (Ctrl+P → Salvar como PDF) ou enviar para uma impressora. Papel A4, orientação retrato. O memorial inclui todas as tabelas, plantas e gráficos selecionados.',
+        norma:'' }
+    ]}
+  };
 
+  /* ── Estado global ───────────────────────────────────────────── */
+  var G = { ativo: false, tab: null, passo: 0 };
+
+  /* ── CSS ─────────────────────────────────────────────────────── */
   function injetarCSS(){
     if(document.getElementById('gi-style-dr')) return;
     var s = document.createElement('style'); s.id = 'gi-style-dr';
     s.textContent = [
-      '#guiaInstrDr{position:fixed;bottom:16px;right:16px;z-index:99990;width:320px;background:#fff;border:2px solid #2563eb;border-radius:12px;box-shadow:0 8px 32px rgba(37,99,235,.25);font-family:sans-serif;font-size:13px}',
-      '@media(prefers-color-scheme:dark){#guiaInstrDr{background:#1e293b;color:#e2e8f0;border-color:#3b82f6}}',
-      '.gi-head-dr{background:#2563eb;color:#fff;border-radius:10px 10px 0 0;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-weight:700}',
-      '.gi-close-dr{background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0 4px;line-height:1}',
+      '#guiaInstrDr{position:fixed;bottom:16px;right:16px;z-index:99990;width:330px;background:#fff;border:2px solid #0369a1;border-radius:12px;box-shadow:0 8px 32px rgba(3,105,161,.22);font-family:sans-serif;font-size:13px}',
+      '@media(prefers-color-scheme:dark){#guiaInstrDr{background:#1e293b;color:#e2e8f0;border-color:#38bdf8}}',
+      '.gi-head-dr{background:#0369a1;color:#fff;border-radius:10px 10px 0 0;padding:8px 12px;display:flex;align-items:center;font-weight:700;font-size:12px;gap:6px}',
+      '.gi-head-dr span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.gi-close-dr{background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0 4px;flex-shrink:0;line-height:1}',
       '.gi-body-dr{padding:12px}',
-      '.gi-titulo-dr{font-weight:700;color:#1e40af;margin-bottom:6px}',
-      '@media(prefers-color-scheme:dark){.gi-titulo-dr{color:#93c5fd}}',
+      '.gi-titulo-dr{font-weight:700;color:#0369a1;margin-bottom:6px}',
+      '@media(prefers-color-scheme:dark){.gi-titulo-dr{color:#38bdf8}}',
       '.gi-dica-dr{line-height:1.5;margin-bottom:6px}',
-      '.gi-norma-dr{font-size:11px;color:#64748b;font-style:italic;border-left:3px solid #2563eb;padding-left:8px;margin-top:4px}',
-      '.gi-prog-dr{height:4px;background:#e2e8f0;border-radius:0}',
-      '.gi-prog-bar-dr{height:4px;background:#2563eb;border-radius:0;transition:width .4s}',
-      '.gi-nav-dr{display:flex;gap:6px;padding:8px 12px;border-top:1px solid #e2e8f0}',
-      '.gi-nav-dr button{flex:1;padding:6px;border-radius:6px;border:1px solid #2563eb;cursor:pointer;font-size:12px;font-weight:600}',
-      '.gi-prox-dr{background:#2563eb;color:#fff}',
-      '.gi-ant-dr{background:#fff;color:#2563eb}',
+      '.gi-norma-dr{font-size:11px;color:#64748b;font-style:italic;border-left:3px solid #0ea5e9;padding-left:8px;margin-top:4px}',
+      '.gi-prog-dr{height:4px;background:#e2e8f0}',
+      '.gi-prog-bar-dr{height:4px;background:#0ea5e9;transition:width .4s}',
+      '.gi-nav-dr{display:flex;gap:5px;padding:8px 12px;border-top:1px solid #e2e8f0;flex-wrap:wrap}',
+      '.gi-nav-dr button{flex:1;min-width:74px;padding:5px 4px;border-radius:6px;border:1px solid #0369a1;cursor:pointer;font-size:11px;font-weight:700}',
+      '.gi-prox-dr{background:#0369a1;color:#fff}',
+      '.gi-ant-dr{background:#fff;color:#0369a1}',
+      '.gi-prox-aba-dr{background:#0ea5e9;color:#fff;border-color:#0ea5e9}',
       '@media(prefers-color-scheme:dark){.gi-nav-dr{border-color:#334155}.gi-ant-dr{background:#1e293b}}',
-      '@keyframes giPulseDr{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.6)}50%{box-shadow:0 0 0 6px rgba(37,99,235,0)}}',
-      '.gi-highlight-dr{outline:2px solid #2563eb!important;outline-offset:3px!important;animation:giPulseDr 1.2s infinite!important}'
+      '@keyframes giPulseDr{0%,100%{box-shadow:0 0 0 0 rgba(3,105,161,.6)}50%{box-shadow:0 0 0 6px rgba(3,105,161,0)}}',
+      '.gi-highlight-dr{outline:2px solid #0ea5e9!important;outline-offset:3px!important;animation:giPulseDr 1.2s infinite!important}'
     ].join('');
     document.head.appendChild(s);
   }
 
+  /* ── Painel ──────────────────────────────────────────────────── */
   function criarPainel(){
     if(document.getElementById('guiaInstrDr')) return;
     var d = document.createElement('div'); d.id = 'guiaInstrDr';
     d.innerHTML =
-      '<div class="gi-head-dr"><span>📋 Auxílio Preenchimento</span><button class="gi-close-dr" id="giCloseDr" title="Encerrar">✕</button></div>'
-      +'<div class="gi-body-dr"><div class="gi-titulo-dr" id="giTituloDr"></div><div class="gi-dica-dr" id="giDicaDr"></div><div class="gi-norma-dr" id="giNormaDr"></div></div>'
+      '<div class="gi-head-dr"><span id="giTituloAbaDr">📋 Auxílio Preenchimento</span>'
+      +'<button class="gi-close-dr" id="giCloseDr" title="Encerrar">✕</button></div>'
+      +'<div class="gi-body-dr">'
+        +'<div class="gi-titulo-dr" id="giTituloDr"></div>'
+        +'<div class="gi-dica-dr" id="giDicaDr"></div>'
+        +'<div class="gi-norma-dr" id="giNormaDr"></div>'
+      +'</div>'
       +'<div class="gi-prog-dr"><div class="gi-prog-bar-dr" id="giProgDr" style="width:0%"></div></div>'
-      +'<div class="gi-nav-dr"><button class="gi-ant-dr" id="giAntDr">← Anterior</button><button class="gi-prox-dr" id="giProxDr">Próximo →</button></div>';
+      +'<div class="gi-nav-dr">'
+        +'<button class="gi-ant-dr" id="giAntDr">← Anterior</button>'
+        +'<button class="gi-prox-dr" id="giProxDr">Próximo →</button>'
+        +'<button class="gi-prox-aba-dr" id="giProxAbaDr" style="display:none">Próxima aba ▶</button>'
+      +'</div>';
     document.body.appendChild(d);
     document.getElementById('giCloseDr').onclick = encerrar;
-    document.getElementById('giAntDr').onclick = function(){ irPasso(G.passo - 1); };
-    document.getElementById('giProxDr').onclick = function(){ irPasso(G.passo + 1); };
   }
 
   function removerDestaque(){
     document.querySelectorAll('.gi-highlight-dr').forEach(function(el){ el.classList.remove('gi-highlight-dr'); });
   }
 
+  /* ── Navegar dentro de uma aba (sem event listeners no DOM!) ─── */
   function irPasso(i){
+    var tabGuia = GUIAS[G.tab]; if(!tabGuia) return;
+    var passos = tabGuia.passos;
     if(i < 0) i = 0;
-    if(i >= PASSOS.length){ encerrar(); return; }
+    if(i >= passos.length){ encerrar(); return; }
     G.passo = i;
-    var p = PASSOS[i];
-    /* troca de aba se necessário */
-    if(p.tab && typeof showTab === 'function') showTab(p.tab);
-    var delay = p.tab ? 80 : 0;
-    setTimeout(function(){
-      /* tenta múltiplos seletores separados por vírgula */
-      var sels = p.sel.split(',').map(function(s){ return s.trim(); });
-      var el = null;
-      for(var k = 0; k < sels.length; k++){
-        try{ el = document.querySelector(sels[k]); } catch(e){ el = null; }
-        if(el) break;
+    var p = passos[i];
+
+    // Destaque do campo (sem adicionar listeners)
+    var el = null;
+    try { el = p.sel ? document.querySelector(p.sel) : null; } catch(e){}
+    removerDestaque();
+    if(el){ el.classList.add('gi-highlight-dr'); el.scrollIntoView({behavior:'smooth',block:'center'}); }
+
+    // Conteúdo
+    document.getElementById('giTituloAbaDr').textContent = '📋 ' + (TAB_NAMES[G.tab] || G.tab);
+    document.getElementById('giTituloDr').textContent = p.titulo;
+    document.getElementById('giDicaDr').textContent = p.dica;
+    var nEl = document.getElementById('giNormaDr');
+    nEl.textContent = p.norma || '';
+    nEl.style.display = p.norma ? '' : 'none';
+    document.getElementById('giProgDr').style.width = Math.round((i + 1) / passos.length * 100) + '%';
+
+    // Botões de navegação
+    var isLast = (i === passos.length - 1);
+    var idxAba = ORDER.indexOf(G.tab);
+    var temProxAba = idxAba >= 0 && idxAba < ORDER.length - 1;
+    var antBtn = document.getElementById('giAntDr');
+    var proxBtn = document.getElementById('giProxDr');
+    var proxAbaBtn = document.getElementById('giProxAbaDr');
+
+    antBtn.disabled = (i === 0);
+    antBtn.onclick = function(){ irPasso(G.passo - 1); };
+
+    if(isLast){
+      proxBtn.textContent = 'Concluir ✓';
+      proxBtn.onclick = encerrar;
+      if(temProxAba){
+        proxAbaBtn.style.display = '';
+        proxAbaBtn.textContent = 'Próxima aba ▶';
+        proxAbaBtn.onclick = function(){ iniciarAba(ORDER[idxAba + 1]); };
+      } else {
+        proxAbaBtn.style.display = 'none';
       }
-      removerDestaque();
-      if(el){ el.classList.add('gi-highlight-dr'); el.scrollIntoView({behavior:'smooth',block:'center'}); }
-      /* painel */
-      document.getElementById('giTituloDr').textContent = p.titulo;
-      document.getElementById('giDicaDr').textContent = p.dica;
-      var nEl = document.getElementById('giNormaDr');
-      nEl.textContent = p.norma || '';
-      nEl.style.display = p.norma ? '' : 'none';
-      var pct = Math.round((i + 1) / PASSOS.length * 100);
-      document.getElementById('giProgDr').style.width = pct + '%';
-      document.getElementById('giAntDr').disabled = (i === 0);
-      document.getElementById('giProxDr').textContent = (i === PASSOS.length - 1) ? 'Concluir ✓' : 'Próximo →';
-      /* auto-avanço */
-      if(el && p.evento){
-        el.addEventListener(p.evento, function avanca(){
-          el.removeEventListener(p.evento, avanca);
-          setTimeout(function(){ irPasso(G.passo + 1); }, 500);
-        }, { once: true });
-      }
-    }, delay);
+    } else {
+      proxBtn.textContent = 'Próximo →';
+      proxBtn.onclick = function(){ irPasso(G.passo + 1); };
+      proxAbaBtn.style.display = 'none';
+    }
   }
 
-  function iniciar(){
-    G.ativo = true; G.passo = 0;
+  /* ── Iniciar guia de uma aba específica ──────────────────────── */
+  function iniciarAba(tab){
+    G.ativo = true; G.tab = tab; G.passo = 0;
     injetarCSS(); criarPainel();
     document.getElementById('guiaInstrDr').style.display = '';
-    irPasso(0);
+    atualizarBtn();
+    // Troca de aba se necessário; aguarda renderTab() terminar antes de irPasso
+    var tabAtual; try { tabAtual = TAB; } catch(e){ tabAtual = null; }
+    if(typeof showTab === 'function' && tabAtual !== tab){
+      showTab(tab);
+      setTimeout(function(){ irPasso(0); }, 150);
+    } else {
+      irPasso(0);
+    }
   }
 
+  /* ── Encerrar ────────────────────────────────────────────────── */
   function encerrar(){
-    G.ativo = false;
+    G.ativo = false; G.tab = null;
     removerDestaque();
     var d = document.getElementById('guiaInstrDr');
     if(d) d.style.display = 'none';
-    var b = document.getElementById('btnAuxilioDr');
-    if(b) b.style.background = '#0ea5e9';
+    atualizarBtn();
   }
 
+  /* ── Atualizar visual do botão principal ─────────────────────── */
+  function atualizarBtn(){
+    var b = document.getElementById('btnAuxilioDr'); if(!b) return;
+    if(G.ativo){
+      b.textContent = '⏹ Parar Auxílio';
+      b.style.cssText = 'background:#dc2626;color:#fff;border:1px solid #dc2626;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;margin-left:4px;cursor:pointer';
+    } else {
+      b.textContent = '📋 Auxílio Preenchimento';
+      b.style.cssText = 'background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;margin-left:4px;cursor:pointer';
+    }
+  }
+
+  /* ── Botão na barra do projeto ───────────────────────────────── */
   function garantirBtn(){
     if(document.getElementById('btnAuxilioDr')) return;
     var barra = document.querySelector('.project-bar'); if(!barra) return;
     var b = document.createElement('button');
     b.type = 'button'; b.id = 'btnAuxilioDr'; b.className = 'proj-btn';
     b.style.cssText = 'background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;margin-left:4px;cursor:pointer';
-    b.title = 'Auxílio Preenchimento: percorre os campos principais com dicas e referências de normas';
+    b.title = 'Guia pelos campos de cada aba com dicas e referências de norma. Clique "Próxima aba ▶" ao final de cada aba para percorrer todas em sequência (modo contínuo).';
     b.textContent = '📋 Auxílio Preenchimento';
     b.onclick = function(){
-      if(G.ativo){ encerrar(); b.style.background = '#0ea5e9'; }
-      else { iniciar(); b.style.background = '#0369a1'; }
+      if(G.ativo){ encerrar(); }
+      else {
+        var tabAtual; try { tabAtual = TAB; } catch(e){ tabAtual = null; }
+        if(!tabAtual || !GUIAS[tabAtual]) tabAtual = 'projeto';
+        iniciarAba(tabAtual);
+      }
     };
     barra.appendChild(b);
   }
@@ -6711,6 +7017,7 @@ async function enviarAoOrcamento(solK, bank) {
   var _iv = setInterval(function(){
     if(document.querySelector('.project-bar')){ garantirBtn(); clearInterval(_iv); }
   }, 800);
+
 })();
 </script>
 </body></html>

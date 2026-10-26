@@ -2051,10 +2051,10 @@ function calcAlti() {
 
   let situacao, classe;
   if (faltam) {situacao = 'INFORME RN, DESNÍVEIS E PROFUNDIDADE DO N.A.';classe = 'badge-info';} else
-  if (prof_na < 0) {situacao = 'ERRO: PROFUNDIDADE DO N.A. NEGATIVA';classe = 'badge-warn';} else
+  if (prof_na < 0) {situacao = 'ERRO: PROFUNDIDADE DO N.A. NEGATIVA — verifique se a cota do lençol (R.N.) está abaixo da cota do greide; o campo aceita profundidade a partir do greide ou cota absoluta.';classe = 'badge-warn';} else
   if (!isFinite(afast_min) || afast_min <= 0) {situacao = 'INFORME O AFASTAMENTO MÍNIMO';classe = 'badge-info';} else
-  if (afastamento <= 0) {situacao = 'CRÍTICO: LENÇOL NO OU ACIMA DO SUBLEITO';classe = 'badge-warn';} else
-  if (afastamento < afast_min) {situacao = 'REVISAR: AFASTAMENTO INFERIOR AO MÍNIMO';classe = 'badge-warn';} else
+  if (afastamento <= 0) {situacao = 'CRÍTICO: LENÇOL NO OU ACIMA DO SUBLEITO — risco de bombeamento e perda de capacidade de suporte. Ação imediata: rebaixar o lençol por drenos profundos ou elevar o greide de terraplenagem (DNIT IPR-719, §5.4).';classe = 'badge-warn';} else
+  if (afastamento < afast_min) {situacao = 'REVISAR: AFASTAMENTO INFERIOR AO MÍNIMO — o lençol está muito próximo do subleito. Solução: prever drenos de rebaixamento, elevar o aterro ou aumentar a espessura de reforço até atingir o afastamento mínimo adotado.';classe = 'badge-warn';} else
   {situacao = 'ATENDE AO AFASTAMENTO ADOTADO';classe = 'badge-ok';}
 
   const el_sit = document.getElementById('a_situacao');
@@ -2072,17 +2072,17 @@ function atualizarValidacoes() {
   if (!el) return;
   const R = _R,A = _R._alti || {};
   const msgs = [];
-  if (!R.N || R.N <= 0) msgs.push('ERRO: informe um Número N positivo.');
-  if (R.cbr_sub < 2) msgs.push('ALERTA: CBR do subleito inferior a 2% — prever substituição ou tratamento do material.');
-  if ((R.e_r || 0) > 0 && R.cbr_ref <= R.cbr_sub) msgs.push('REVISAR: o CBR do reforço deve superar o CBR do subleito.');
-  if (R.cbr_sb > 20) msgs.push('NOTA: CBR da sub-base acima de 20% — H₂₀ calculado com CBR limitado a 20%, conforme o método.');
+  if (!R.N || R.N <= 0) msgs.push('ERRO: informe um Número N positivo (eixos equivalentes de projeto). Preenche a aba "Número N" com tráfego, período e fatores de equivalência.');
+  if (R.cbr_sub < 2) msgs.push('ALERTA: CBR do subleito inferior a 2% — solo mole, fora dos gráficos do método. Prever substituição ou tratamento; preencha o CBR do material de reforço/substituição e a espessura dada pelo estudo geotécnico (IP-01).');
+  if ((R.e_r || 0) > 0 && R.cbr_ref <= R.cbr_sub) msgs.push('REVISAR: o CBR do reforço deve ser maior que o CBR do subleito; caso contrário, a camada não melhora a capacidade de suporte e é ignorada no cálculo. Corrija o valor ou remova a espessura de reforço.');
+  if (R.cbr_sb > 20) msgs.push('NOTA: CBR da sub-base acima de 20% — H₂₀ calculado com CBR limitado a 20%, conforme o método (DNIT IPR-719). O dimensionamento está correto; apenas um aviso informativo.');
   const tSel = s('tipo_rev') || 'auto';
-  if (R.tipo_rev === 'TS' && R.N > 1e6) msgs.push('REVISAR: tratamento superficial só para N ≤ 10⁶ (DNIT IPR-719, Tabela 32).');
-  if (['PMQ', 'PMF', 'PEN'].includes(R.tipo_rev) && R.N > 5e6) msgs.push('REVISAR: para N > 5×10⁶ a Tabela 32 do DNIT IPR-719 pede concreto betuminoso.');
-  if (R.tipo_rev === 'TS') msgs.push('NOTA: tratamento superficial (Tabela 32) — R·KR = 0 nas inequações; as bases granulares devem ter alguma coesão, ao menos aparente (IPR-719, p. 147).');
+  if (R.tipo_rev === 'TS' && R.N > 1e6) msgs.push('REVISAR: tratamento superficial não é recomendado para N > 10⁶ (DNIT IPR-719, Tabela 32). Substitua por concreto betuminoso usinado a quente (CBUQ) ou pré-misturado a frio (PMF).');
+  if (['PMQ', 'PMF', 'PEN'].includes(R.tipo_rev) && R.N > 5e6) msgs.push('REVISAR: para N > 5×10⁶ a Tabela 32 do DNIT IPR-719 exige concreto betuminoso (CBUQ). Altere o revestimento para CBUQ na aba Dimensionamento.');
+  if (R.tipo_rev === 'TS') msgs.push('NOTA: tratamento superficial (Tabela 32) — R·KR = 0 nas inequações; as bases granulares devem ter alguma coesão, ao menos aparente (IPR-719, p. 147). O uso de base puramente granular sem coesão exige revestimento mais nobre.');
   if (tSel !== 'auto' && R.tipo_rev !== 'TS' && R.N > 0 && R.N <= 1e6) msgs.push('NOTA: para N ≤ 10⁶ a Tabela 32 admite tratamento superficial; o ' + nomeRev() + ' adotado fica a favor da segurança.');
-  if (R.tipo_rev !== 'TS' && REV_TIPOS[R.tipo_rev] && Math.abs((R.k_ref || 0) - REV_TIPOS[R.tipo_rev].k) > 0.001) msgs.push('NOTA: K do revestimento (' + fmt(R.k_ref, 2) + ') diferente da Tabela 31 para ' + nomeRev() + ' (' + fmt(REV_TIPOS[R.tipo_rev].k, 2) + ').');
-  if (R.subcamada_fracionada) msgs.push('REVISAR: há camada que não fecha um número inteiro de camadas compactadas — ajustar o incremento ou a espessura máxima por camada.');
+  if (R.tipo_rev !== 'TS' && REV_TIPOS[R.tipo_rev] && Math.abs((R.k_ref || 0) - REV_TIPOS[R.tipo_rev].k) > 0.001) msgs.push('NOTA: K do revestimento (' + fmt(R.k_ref, 2) + ') diferente da Tabela 31 para ' + nomeRev() + ' (' + fmt(REV_TIPOS[R.tipo_rev].k, 2) + '). Verifique se o K personalizado está correto ou use o valor padrão da tabela.');
+  if (R.subcamada_fracionada) msgs.push('REVISAR: há camada cuja espessura não é múltipla da espessura de compactação — não fecha um número inteiro de passadas. Ajuste a espessura máxima por camada compactada ou altere a espessura total da camada para um múltiplo do incremento.');
   if (A.situacao && !A.atende) msgs.push(A.situacao);
   el.textContent = msgs.length ? msgs.join('  •  ') : 'Entradas válidas para o cálculo.';
   el.className = 'val-bar ' + (msgs.some((t) => /^ERRO|^CRÍTICO|^REVISAR/.test(t)) ? 'warn' : msgs.length ? 'info' : 'ok');
@@ -5202,21 +5202,26 @@ function salvarUsuario(uid, acao) {
 </script>
 <script>
 /* =====================================================================
-   PATCH V1-02-59 (26/10/2026) — Botão "📋 Auxílio Preenchimento" por aba
-   Tour guiado independente para cada aba do dimensionamento (DNIT IPR-719)
+   PATCH V1-02-60 (26/10/2026) — Botão "📋 Auxílio Preenchimento" por aba
+   Per-aba independente + modo contínuo ("Próxima aba ▶")
+   SEM event listeners { once: true } no DOM
 ===================================================================== */
 (function(){
   'use strict';
+
+  // Ordem das abas para modo contínuo
+  var ORDER_IDS = ['dim','numN','mem','corte','topo','relatorio','mat'];
 
   // ── CSS compartilhado ───────────────────────────────────────────────
   function injetarCSS(){
     if(document.getElementById('gi-style-pav')) return;
     var s = document.createElement('style'); s.id = 'gi-style-pav';
     s.textContent = [
-      '#guiaInstrPav{position:fixed;bottom:16px;right:16px;z-index:99990;width:320px;background:#fff;border:2px solid #2563eb;border-radius:12px;box-shadow:0 8px 32px rgba(37,99,235,.25);font-family:sans-serif;font-size:13px}',
+      '#guiaInstrPav{position:fixed;bottom:16px;right:16px;z-index:99990;width:330px;background:#fff;border:2px solid #2563eb;border-radius:12px;box-shadow:0 8px 32px rgba(37,99,235,.25);font-family:sans-serif;font-size:13px}',
       '@media(prefers-color-scheme:dark){#guiaInstrPav{background:#1e293b;color:#e2e8f0;border-color:#3b82f6}}',
-      '.gi-head-pav{background:#2563eb;color:#fff;border-radius:10px 10px 0 0;padding:8px 12px;display:flex;justify-content:space-between;align-items:center;font-weight:700}',
-      '.gi-close-pav{background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0 4px}',
+      '.gi-head-pav{background:#2563eb;color:#fff;border-radius:10px 10px 0 0;padding:8px 12px;display:flex;align-items:center;font-weight:700;font-size:12px;gap:6px}',
+      '.gi-head-pav span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+      '.gi-close-pav{background:none;border:none;color:#fff;font-size:16px;cursor:pointer;padding:0 4px;flex-shrink:0;line-height:1}',
       '.gi-body-pav{padding:12px}',
       '.gi-titulo-pav{font-weight:700;color:#1e40af;margin-bottom:6px}',
       '@media(prefers-color-scheme:dark){.gi-titulo-pav{color:#93c5fd}}',
@@ -5224,10 +5229,11 @@ function salvarUsuario(uid, acao) {
       '.gi-norma-pav{font-size:11px;color:#64748b;font-style:italic;border-left:3px solid #2563eb;padding-left:8px;margin-top:4px}',
       '.gi-prog-pav{height:4px;background:#e2e8f0}',
       '.gi-prog-bar-pav{height:4px;background:#2563eb;transition:width .4s}',
-      '.gi-nav-pav{display:flex;gap:6px;padding:8px 12px;border-top:1px solid #e2e8f0}',
-      '.gi-nav-pav button{flex:1;padding:6px;border-radius:6px;border:1px solid #2563eb;cursor:pointer;font-size:12px;font-weight:600}',
+      '.gi-nav-pav{display:flex;gap:5px;padding:8px 12px;border-top:1px solid #e2e8f0;flex-wrap:wrap}',
+      '.gi-nav-pav button{flex:1;min-width:74px;padding:5px 4px;border-radius:6px;border:1px solid #2563eb;cursor:pointer;font-size:11px;font-weight:700}',
       '.gi-prox-pav{background:#2563eb;color:#fff}',
       '.gi-ant-pav{background:#fff;color:#2563eb}',
+      '.gi-prox-aba-pav{background:#0ea5e9;color:#fff;border-color:#0ea5e9}',
       '@media(prefers-color-scheme:dark){.gi-nav-pav{border-color:#334155}.gi-ant-pav{background:#1e293b}}',
       '@keyframes giPulsePav{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.6)}50%{box-shadow:0 0 0 6px rgba(37,99,235,0)}}',
       '.gi-highlight-pav{outline:2px solid #2563eb!important;outline-offset:3px!important;animation:giPulsePav 1.2s infinite!important}'
@@ -5240,10 +5246,19 @@ function salvarUsuario(uid, acao) {
     if(document.getElementById('guiaInstrPav')) return;
     var d = document.createElement('div'); d.id = 'guiaInstrPav';
     d.innerHTML =
-      '<div class="gi-head-pav"><span id="giTituloAbaPav">📋 Auxílio Preenchimento</span><button class="gi-close-pav" id="giClosePav">✕</button></div>'
-      +'<div class="gi-body-pav"><div class="gi-titulo-pav" id="giTituloPav"></div><div class="gi-dica-pav" id="giDicaPav"></div><div class="gi-norma-pav" id="giNormaPav"></div></div>'
+      '<div class="gi-head-pav"><span id="giTituloAbaPav">📋 Auxílio Preenchimento</span>'
+      +'<button class="gi-close-pav" id="giClosePav">✕</button></div>'
+      +'<div class="gi-body-pav">'
+        +'<div class="gi-titulo-pav" id="giTituloPav"></div>'
+        +'<div class="gi-dica-pav" id="giDicaPav"></div>'
+        +'<div class="gi-norma-pav" id="giNormaPav"></div>'
+      +'</div>'
       +'<div class="gi-prog-pav"><div class="gi-prog-bar-pav" id="giProgPav" style="width:0%"></div></div>'
-      +'<div class="gi-nav-pav"><button class="gi-ant-pav" id="giAntPav">← Anterior</button><button class="gi-prox-pav" id="giProxPav">Próximo →</button></div>';
+      +'<div class="gi-nav-pav">'
+        +'<button class="gi-ant-pav" id="giAntPav">← Anterior</button>'
+        +'<button class="gi-prox-pav" id="giProxPav">Próximo →</button>'
+        +'<button class="gi-prox-aba-pav" id="giProxAbaPav" style="display:none">Próxima aba ▶</button>'
+      +'</div>';
     document.body.appendChild(d);
   }
 
@@ -5274,25 +5289,37 @@ function salvarUsuario(uid, acao) {
       nEl.style.display = p.norma ? '' : 'none';
       var pct = Math.round((i + 1) / cfg.passos.length * 100);
       document.getElementById('giProgPav').style.width = pct + '%';
-      document.getElementById('giAntPav').disabled = (i === 0);
-      document.getElementById('giProxPav').textContent = (i === cfg.passos.length - 1) ? 'Concluir ✓' : 'Próximo →';
-      document.getElementById('giAntPav').onclick = function(){ irPasso(G.passo - 1); };
-      document.getElementById('giProxPav').onclick = function(){ irPasso(G.passo + 1); };
+
+      var isLast = (i === cfg.passos.length - 1);
+      var idxAba = ORDER_IDS.indexOf(cfg.id);
+      var temProxAba = idxAba >= 0 && idxAba < ORDER_IDS.length - 1;
+
+      var antBtn = document.getElementById('giAntPav');
+      var proxBtn = document.getElementById('giProxPav');
+      var proxAbaBtn = document.getElementById('giProxAbaPav');
+
+      antBtn.disabled = (i === 0);
+      antBtn.onclick = function(){ irPasso(G.passo - 1); };
       document.getElementById('giClosePav').onclick = encerrar;
-      if(el){
-        if(p.evento){
-          el.addEventListener(p.evento, function avanca(){
-            el.removeEventListener(p.evento, avanca);
-            setTimeout(function(){ irPasso(G.passo + 1); }, 300);
-          }, { once: true });
+
+      if(isLast){
+        proxBtn.textContent = 'Concluir ✓';
+        proxBtn.onclick = encerrar;
+        if(temProxAba){
+          proxAbaBtn.style.display = '';
+          proxAbaBtn.textContent = 'Próxima aba ▶';
+          var proxId = ORDER_IDS[idxAba + 1];
+          proxAbaBtn.onclick = function(){
+            var proxGuia = GUIAS_MAP[proxId];
+            if(proxGuia){ encerrar(); proxGuia.iniciar(); }
+          };
+        } else {
+          proxAbaBtn.style.display = 'none';
         }
-        el.addEventListener('keydown', function tecla(e){
-          if(e.key === 'Enter' || e.key === 'Tab'){
-            el.removeEventListener('keydown', tecla);
-            if(e.key === 'Tab') e.preventDefault();
-            setTimeout(function(){ irPasso(G.passo + 1); }, 150);
-          }
-        }, { once: true });
+      } else {
+        proxBtn.textContent = 'Próximo →';
+        proxBtn.onclick = function(){ irPasso(G.passo + 1); };
+        proxAbaBtn.style.display = 'none';
       }
     }
 
@@ -5303,8 +5330,9 @@ function salvarUsuario(uid, acao) {
       injetarCSS(); criarPainel();
       document.getElementById('guiaInstrPav').style.display = '';
       irPasso(0);
-      var b = document.getElementById(G.btnId);
-      if(b) b.style.background = '#0369a1';
+      atualizarBtn();
+      // Troca de aba se necessário (pavimento usa CSS show/hide: sempre seguro)
+      if(typeof showTab === 'function') showTab(cfg.id);
     }
 
     function encerrar(){
@@ -5312,12 +5340,23 @@ function salvarUsuario(uid, acao) {
       removerDestaque();
       var d = document.getElementById('guiaInstrPav');
       if(d) d.style.display = 'none';
-      var b = document.getElementById(G.btnId);
-      if(b) b.style.background = '#0ea5e9';
       if(_guiaAtivo === G) _guiaAtivo = null;
+      atualizarBtn();
+    }
+
+    function atualizarBtn(){
+      var b = document.getElementById(G.btnId); if(!b) return;
+      if(G.ativo){
+        b.textContent = '⏹ Parar Auxílio';
+        b.style.cssText = 'background:#dc2626;color:#fff;border:1px solid #dc2626;font-weight:700;cursor:pointer';
+      } else {
+        b.textContent = '📋 Auxílio Preenchimento';
+        b.style.cssText = 'background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;font-weight:700;cursor:pointer';
+      }
     }
 
     G.encerrar = encerrar;
+    G.iniciar = iniciar;
 
     function garantirBtn(){
       if(document.getElementById(G.btnId)) return;
@@ -5326,88 +5365,96 @@ function salvarUsuario(uid, acao) {
       var b = document.createElement('button');
       b.type = 'button'; b.id = G.btnId; b.className = 'tb-btn';
       b.style.cssText = 'background:#0ea5e9;color:#fff;border:1px solid #0ea5e9;font-weight:700;cursor:pointer';
-      b.title = 'Auxílio Preenchimento: guia pelos campos desta aba com dicas de normas DNIT';
+      b.title = 'Guia pelos campos desta aba com dicas e referências DNIT. Clique "Próxima aba ▶" ao final para modo contínuo.';
       b.textContent = '📋 Auxílio Preenchimento';
       b.onclick = function(){ G.ativo ? encerrar() : iniciar(); };
       barra.appendChild(b);
     }
 
-    return { garantirBtn: garantirBtn };
+    return { garantirBtn: garantirBtn, iniciar: iniciar, encerrar: encerrar };
   }
 
   // ── Definição dos guias por aba ────────────────────────────────────
 
+  var GUIAS_MAP = {};
+
+  function regGuia(cfg){
+    var g = criarGuia(cfg);
+    GUIAS_MAP[cfg.id] = g;
+    return g;
+  }
+
   var GUIAS = [
 
-    criarGuia({
+    regGuia({
       id: 'dim', nomeAba: 'Dimensionamento',
       passos: [
-        { sel: '#logradouro', evento: 'input',
+        { sel: '#logradouro',
           titulo: '1 / 8 — Logradouro / Rodovia',
           dica: 'Nome da via ou rodovia. Ex.: "Av. Brasil" ou "Rodovia RJ-106, trecho km 10+000 a km 15+000". Aparece no cabeçalho da memória de cálculo.',
           norma: '' },
-        { sel: '#trecho', evento: 'input',
+        { sel: '#trecho',
           titulo: '2 / 8 — Trecho',
           dica: 'Estacas ou km de início e fim do trecho a dimensionar. Ex.: "Est. 0+000 a Est. 200+000" ou "km 5+200 a km 9+800".',
           norma: '' },
-        { sel: '#responsavel', evento: 'input',
+        { sel: '#responsavel',
           titulo: '3 / 8 — Responsável Técnico',
           dica: 'Nome do engenheiro(a) e n.º do CREA/CAU. Vai para a assinatura da memória de cálculo exportada.',
           norma: '' },
-        { sel: '#cbr_sub', evento: 'change',
+        { sel: '#cbr_sub',
           titulo: '4 / 8 — CBR do Subleito (%)',
           dica: 'Capacidade de suporte do subleito obtida no ensaio CBR. Valores típicos: solo argiloso ≈ 2–5 %; arenoso ≈ 8–15 %. Valor crítico: use o menor do estudo geotécnico.',
           norma: 'DNIT 172/2016-ME — Ensaio CBR. DNIT/IPR-719 — CBR mínimo 2 % para subleito.' },
-        { sel: '#cbr_ref', evento: 'change',
+        { sel: '#cbr_ref',
           titulo: '5 / 8 — CBR do Reforço do Subleito (%)',
           dica: 'Material de reforço/substituição do subleito fraco. Se o CBR do subleito já satisfaz os critérios de cálculo, use o mesmo valor. Mínimo 6 % para camada de reforço.',
           norma: 'DNIT/IPR-719 — Reforço quando CBR subleito < 2 % ou N > 5×10⁶.' },
-        { sel: '#cbr_sb', evento: 'change',
+        { sel: '#cbr_sb',
           titulo: '6 / 8 — CBR da Sub-base (%)',
           dica: 'Material granular de sub-base. Mínimo 20 % pelo Manual de Pavimentação do DNIT (IPR-719). Materiais lateríticos podem enquadrar com 12 % (Método do Melhoramento de Subgrade).',
           norma: 'DNIT/IPR-719 p. 143 — CBR ≥ 20 % para sub-base granular.' },
-        { sel: '#cbr_base', evento: 'change',
+        { sel: '#cbr_base',
           titulo: '7 / 8 — CBR da Base (%)',
           dica: 'Material de base granular britada ou tratada. Mínimo 80 % (DNIT 303/2008 — Brita Graduada Simples). Base de macadame ou BGS: 80 %. Base de solo-brita: 60 % mínimo.',
           norma: 'DNIT 303/2008-ES — BGS: CBR ≥ 80 %; DNIT 141/2010-ES — Solo-brita CBR ≥ 60 %.' },
-        { sel: '#tab-dim .tb-btn-excel', evento: null,
+        { sel: '#tab-dim .tb-btn-excel',
           titulo: '8 / 8 — Exportar Dimensionamento',
           dica: 'Exporte a memória nos formatos Excel, Word ou PDF para juntar ao processo. O Word é editável para inserir logotipo e assinatura digitalizada.',
           norma: '' }
       ]
     }),
 
-    criarGuia({
+    regGuia({
       id: 'numN', nomeAba: 'Número N',
       passos: [
-        { sel: '#sc_0', evento: 'click',
+        { sel: '#sc_0',
           titulo: '1 / 6 — Método de cálculo do N',
           dica: 'Escolha "Calcular pelo método do DNIT" para informar os dados de tráfego e o programa calcular o N automaticamente. Escolha "Informar o N" se você já tem o resultado do estudo de tráfego do projeto.',
           norma: 'DNIT IPR-719, p. 143–144 — Método do DNIT para cálculo do N de projeto.' },
-        { sel: '#n_v1', evento: 'change',
+        { sel: '#n_v1',
           titulo: '2 / 6 — V1: Volume médio diário no ano de abertura',
           dica: 'Número de veículos por dia num sentido, contado no ano de abertura do trecho. Obtido no estudo de tráfego (contagem volumétrica e classificação). Ex.: 300 veículos/dia.',
           norma: 'DNIT IPR-723 — Manual de Estudos de Tráfego. A contagem deve separar veículos por categoria (leves, ônibus, caminhões).' },
-        { sel: '#n_t', evento: 'change',
+        { sel: '#n_t',
           titulo: '3 / 6 — t: Taxa de crescimento anual (%)',
           dica: 'Taxa anual de crescimento do tráfego em %. Use dados históricos do trecho ou da região. Em rodovias urbanas, 3 % é um valor conservador usual. Em áreas de expansão, pode chegar a 5–8 %.',
           norma: 'DNIT IPR-719, p. 143 — taxa de crescimento estimada em estudo de tráfego.' },
-        { sel: '#n_p', evento: 'change',
+        { sel: '#n_p',
           titulo: '4 / 6 — P: Período de projeto (anos)',
           dica: 'Vida útil esperada para o pavimento, em anos. O manual DNIT IPR-719 recomenda 10 anos para pavimentos novos. Rodovias de maior hierarquia podem adotar 15 ou 20 anos.',
           norma: 'DNIT IPR-719, p. 143 — período de projeto normalmente adotado: 10 anos.' },
-        { sel: '#n_fv', evento: 'change',
+        { sel: '#n_fv',
           titulo: '5 / 6 — FV: Fator de veículo (FE × FC)',
-          dica: 'Produto do Fator de Eixo (FE — número médio de eixos equivalentes por veículo) pelo Fator de Carga (FC — fator de pesagem dos eixos). Obtido na contagem e pesagem do tráfego. Orientativos: veículos leves ≈ 0,01; ônibus ≈ 1,5–3; caminhão 2 eixos ≈ 1,5–4.',
+          dica: 'Produto do Fator de Eixo (FE) pelo Fator de Carga (FC). Obtido na contagem e pesagem do tráfego. Orientativos: veículos leves ≈ 0,01; ônibus ≈ 1,5–3; caminhão 2 eixos ≈ 1,5–4.',
           norma: 'DNIT IPR-719, p. 143–144 — N = Vt × FV; DNIT IPR-723 — método de pesagem de tráfego.' },
-        { sel: '#tab-numN .tb-btn-excel', evento: null,
+        { sel: '#tab-numN .tb-btn-excel',
           titulo: '6 / 6 — Exportar Número N',
           dica: 'Exporte os dados do Número N em Excel, Word ou PDF. O documento gerado traz a memória de cálculo do N com as fórmulas usadas, para compor o processo técnico.',
           norma: '' }
       ]
     }),
 
-    criarGuia({
+    regGuia({
       id: 'mem', nomeAba: 'Memória de Cálculo',
       passos: [
         { sel: null,
@@ -5418,74 +5465,74 @@ function salvarUsuario(uid, acao) {
           titulo: '2 / 3 — Como conferir a memória',
           dica: 'Verifique se todas as camadas estão calculadas (revestimento, base, sub-base, reforço) e se as três inequações do método CBR estão satisfeitas (H₂₀, H₁₅ e H₁₀). Confira também o N adotado e a espessura mínima de revestimento.',
           norma: 'DNIT IPR-719, p. 141–143 — inequações de dimensionamento pelo método CBR.' },
-        { sel: '#tab-mem .tb-btn-word', evento: null,
+        { sel: '#tab-mem .tb-btn-word',
           titulo: '3 / 3 — Exportar a Memória',
           dica: 'Exporte em Word para editar (inserir logotipo, assinatura digitalizada ou dados adicionais do projeto), em Excel para planilha de controle ou em PDF para anexar diretamente ao processo.',
           norma: '' }
       ]
     }),
 
-    criarGuia({
+    regGuia({
       id: 'corte', nomeAba: 'Seção Transversal',
       passos: [
-        { sel: '#c_talcorte', evento: 'change',
+        { sel: '#c_talcorte',
           titulo: '1 / 6 — Inclinação do Talude de Corte',
-          dica: 'Define a inclinação do talude quando o terreno precisa ser cortado (greide abaixo do terreno natural). O padrão "Vertical, sem talude" é o correto para vias urbanas: o corte é reto e as camadas do pavimento ocupam toda a largura. Use talude somente em terrenos instáveis ou com risco de cisalhamento.',
+          dica: 'Define a inclinação do talude quando o terreno precisa ser cortado. "Vertical, sem talude" é o correto para vias urbanas. Use talude somente em terrenos instáveis.',
           norma: 'DNIT IPR-719 — taludes de corte dependem da geotecnia local. Corte vertical é padrão em vias urbanas.' },
-        { sel: '#c_talaterro', evento: 'change',
+        { sel: '#c_talaterro',
           titulo: '2 / 6 — Inclinação do Talude de Aterro',
-          dica: 'Define a inclinação do talude de aterro (greide acima do terreno natural). O valor padrão 1,5:1 (H:V) é adequado para solos compactados comuns. Reduza para 1:1 em aterros muito compactos; aumente para 2:1 em solos arenosos ou saturados.',
+          dica: 'Inclinação do talude de aterro. O valor padrão 1,5:1 (H:V) é adequado para solos compactados comuns. Reduza para 1:1 em aterros compactos; aumente para 2:1 em solos arenosos ou saturados.',
           norma: 'DNIT IPR-719 — inclinação típica 1,5:1. Verificar com ensaios de estabilidade em aterros altos.' },
-        { sel: '#c_berma', evento: 'change',
+        { sel: '#c_berma',
           titulo: '3 / 6 — Largura da Berma / Acostamento (m)',
-          dica: 'Faixa lateral revestida ou estabilizada ao lado da pista de rolamento, dentro da largura total da plataforma. Mínimos usuais: 0,5 m (vias locais); 1,0–2,5 m (coletoras/arteriais); 3,0 m (rodovias federais).',
+          dica: 'Faixa lateral ao lado da pista. Mínimos usuais: 0,5 m (vias locais); 1,0–2,5 m (coletoras/arteriais); 3,0 m (rodovias federais).',
           norma: 'DNIT IPR-719 — bermas incluídas na largura da plataforma para cálculo de volumes e seções.' },
-        { sel: '#c_de', evento: 'change',
+        { sel: '#c_de',
           titulo: '4 / 6 — Filtro: Da estaca…',
           dica: 'Selecione a estaca inicial do trecho que deseja visualizar. Por padrão são exibidas todas as estacas cadastradas na aba Topografia.',
           norma: '' },
-        { sel: '#c_ate', evento: 'change',
+        { sel: '#c_ate',
           titulo: '5 / 6 — Filtro: …Até a estaca',
           dica: 'Selecione a estaca final do trecho a exibir. Reduzir o intervalo agiliza a renderização em projetos com muitas estacas.',
           norma: '' },
-        { sel: '#c_ev', evento: 'change',
+        { sel: '#c_ev',
           titulo: '6 / 6 — Escala vertical',
-          dica: 'Fator de ampliação vertical dos desenhos das seções. "1× (real)" mostra a proporção verdadeira. Use 2× ou 3× em terrenos com relevo suave onde as diferenças de cota são pequenas e difíceis de visualizar.',
+          dica: 'Fator de ampliação vertical dos desenhos das seções. Use 2× ou 3× em terrenos com relevo suave onde as diferenças de cota são pequenas.',
           norma: '' }
       ]
     }),
 
-    criarGuia({
+    regGuia({
       id: 'topo', nomeAba: 'Topografia',
       passos: [
-        { sel: '#topo_caim_esq', evento: 'change',
+        { sel: '#topo_caim_esq',
           titulo: '1 / 6 — Caimento transversal esquerdo (%)',
-          dica: 'Inclinação transversal da pista no lado esquerdo, em %. O caimento garante a drenagem superficial da pista. Valor normal: 2 % para CBUQ. Em curvas com superelevação este valor pode ser diferente do lado direito.',
+          dica: 'Inclinação transversal da pista no lado esquerdo em %. Valor normal: 2 % para CBUQ. Em curvas com superelevação este valor pode ser diferente do lado direito.',
           norma: 'DNIT IPR-719 — caimento transversal mínimo de 2 % para revestimentos betuminosos.' },
-        { sel: '#topo_caim_dir', evento: 'change',
+        { sel: '#topo_caim_dir',
           titulo: '2 / 6 — Caimento transversal direito (%)',
-          dica: 'Inclinação transversal do lado direito, em %. Em pista simples bidirecional, normalmente igual ao lado esquerdo (2 %), formando perfil em telhado. Em pista dupla ou em curva com superelevação os dois lados podem ser diferentes.',
+          dica: 'Inclinação transversal do lado direito em %. Em pista simples bidirecional, normalmente igual ao lado esquerdo (2 %), formando perfil em telhado.',
           norma: 'DNIT IPR-719 — perfil transversal com inclinação bidirecional a partir do eixo.' },
-        { sel: '#btn-meiofio', evento: 'click',
+        { sel: '#btn-meiofio',
           titulo: '3 / 6 — Meio-fio',
-          dica: 'Clique para configurar o meio-fio: tipo (simples ou com sarjeta conjugada), dimensões em cm e posição. O meio-fio é representado nas seções transversais e influencia os volumes de terraplenagem lateral.',
+          dica: 'Clique para configurar o meio-fio: tipo (simples ou com sarjeta conjugada), dimensões em cm e posição. Influencia os volumes de terraplenagem lateral.',
           norma: '' },
-        { sel: '.btn-add', evento: 'click',
+        { sel: '.btn-add',
           titulo: '4 / 6 — Adicionar estacas',
-          dica: 'Clique em "+ Adicionar Estaca" para inserir uma linha. Preencha para cada estaca: distância acumulada (m), cotas do terreno à esquerda, no eixo e à direita (m), cota do greide no eixo (m), largura total da plataforma (m) e cota do nível d\'água (opcional). O programa calcula corte, aterro e volumes automaticamente.',
+          dica: 'Clique em "+ Adicionar Estaca" para inserir uma linha. Preencha para cada estaca: distância acumulada (m), cotas do terreno (m), cota do greide (m) e largura da plataforma (m). O programa calcula corte, aterro e volumes automaticamente.',
           norma: 'A cota de formação = greide no eixo − espessura estrutural total das camadas do pavimento.' },
-        { sel: '#topo_btn_recalc', evento: 'click',
+        { sel: '#topo_btn_recalc',
           titulo: '5 / 6 — Recalcular',
-          dica: 'Use "⟳ Recalcular" após alterar o Dimensionamento (novos CBRs ou espessuras) para atualizar os volumes das camadas na topografia. A digitação direta nas células já recalcula automaticamente.',
+          dica: 'Use "⟳ Recalcular" após alterar o Dimensionamento (novos CBRs ou espessuras) para atualizar os volumes das camadas na topografia.',
           norma: '' },
-        { sel: '#tab-topo .tb-btn-excel', evento: null,
+        { sel: '#tab-topo .tb-btn-excel',
           titulo: '6 / 6 — Exportar Topografia',
-          dica: 'Exporte a tabela de estacas, áreas e volumes em Excel (planilha), Word (memória editável) ou PDF. Os volumes das camadas são calculados com e sem caimento transversal e aparecem na exportação.',
+          dica: 'Exporte a tabela de estacas, áreas e volumes em Excel (planilha), Word (memória editável) ou PDF.',
           norma: '' }
       ]
     }),
 
-    criarGuia({
+    regGuia({
       id: 'relatorio', nomeAba: 'Relatório Técnico',
       passos: [
         { sel: null,
@@ -5496,29 +5543,29 @@ function salvarUsuario(uid, acao) {
           titulo: '2 / 3 — Pré-requisitos para gerar o relatório',
           dica: 'Para o relatório ficar completo certifique-se de que estão preenchidos: Logradouro e Responsável Técnico (aba Dimensionamento), CBRs de todas as camadas, Número N e pelo menos uma estaca na aba Topografia.',
           norma: '' },
-        { sel: '#tab-relatorio .tb-btn-word', evento: null,
+        { sel: '#tab-relatorio .tb-btn-word',
           titulo: '3 / 3 — Exportar o Relatório',
-          dica: 'Exporte em Word para inserir logotipo e assinatura digitalizada ou complementar com informações do projeto; em PDF para arquivamento definitivo; em Excel para controle interno.',
+          dica: 'Exporte em Word para inserir logotipo e assinatura digitalizada; em PDF para arquivamento definitivo; em Excel para controle interno.',
           norma: '' }
       ]
     }),
 
-    criarGuia({
+    regGuia({
       id: 'mat', nomeAba: 'Materiais',
       passos: [
-        { sel: '#crit_mat', evento: 'change',
+        { sel: '#crit_mat',
           titulo: '1 / 4 — Critério de expansão dos materiais',
-          dica: 'Escolha a versão da norma para os limites de expansão. "DNIT IPR-719 (mais atual)" usa sub-base ≤ 1 % e base ≤ 0,5 %, conforme errata corrigida — é a referência recomendada. O critério "Anterior, mais rígido" usa sub-base ≤ 0,5 % e base ≤ 0,3 %, mais exigente, adotado em projetos de alta hierarquia.',
+          dica: '"DNIT IPR-719 (mais atual)" usa sub-base ≤ 1 % e base ≤ 0,5 %, conforme errata corrigida — referência recomendada. "Anterior, mais rígido" usa sub-base ≤ 0,5 % e base ≤ 0,3 %, adotado em projetos de alta hierarquia.',
           norma: 'DNIT IPR-719, p. 142 — versão com errata; DNIT 141/2010-ES — especificação de base granular.' },
         { sel: null,
           titulo: '2 / 4 — Tabela de requisitos dos materiais',
-          dica: 'A tabela mostra os CBRs mínimos, limites de expansão, Limite de Liquidez (LL), Índice de Plasticidade (IP) e normas de controle para cada camada. Use-a para especificar os materiais no memorial descritivo e nas especificações técnicas da licitação.',
+          dica: 'A tabela mostra CBRs mínimos, limites de expansão, Limite de Liquidez (LL), Índice de Plasticidade (IP) e normas de controle para cada camada. Use-a nas especificações técnicas da licitação.',
           norma: 'DNIT IPR-719 — Tabela de materiais das camadas do pavimento flexível.' },
         { sel: null,
           titulo: '3 / 4 — Tabela de ensaios de controle de qualidade',
-          dica: 'Mostra a frequência mínima dos ensaios de campo (CBR, Proctor, granulometria, Atterberg) por camada, exigida pelas normas DNIT. Essas frequências devem constar no projeto executivo e nas especificações técnicas da licitação.',
+          dica: 'Mostra a frequência mínima dos ensaios de campo (CBR, Proctor, granulometria, Atterberg) por camada. Essas frequências devem constar no projeto executivo e nas especificações técnicas da licitação.',
           norma: 'DNIT 172/2016-ME; DNIT 031/2006-ES; NBR 7181; NBR 6459/7180.' },
-        { sel: '#tab-mat .tb-btn-excel', evento: null,
+        { sel: '#tab-mat .tb-btn-excel',
           titulo: '4 / 4 — Exportar Materiais',
           dica: 'Exporte a tabela de materiais e ensaios em Excel, Word ou PDF para incluir no processo licitatório ou no projeto executivo como especificação técnica de materiais.',
           norma: '' }
