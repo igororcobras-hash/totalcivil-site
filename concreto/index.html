@@ -285,6 +285,7 @@ body.ios .field input,.ios .field select{font-size:16px;}
   <button class="tb-btn tb-excel" onclick="expExcel()">Excel</button>
   <button class="tb-btn tb-word" onclick="expWord()">Word</button>
   <button class="tb-btn tb-pdf" onclick="expPDF()">PDF</button>
+  <button class="tb-btn" onclick="exportDXFPlantaConc()">📐 Planta (DXF)</button>
 </div>
 
 <!-- ABAS -->
@@ -1708,6 +1709,32 @@ function expWord(){
 ═══════════════════════════════════════════════════════════ */
 setSubtipo('iso');
 setEstaca('helice');
+</script>
+<script>
+/* =====================================================================
+   DXF Export — Planta Baixa (Estrutura em Concreto Armado)
+   ===================================================================== */
+(function(){
+  var f=function(v){return(typeof v==='number'&&isFinite(v)?v:0).toFixed(4);};
+  function dTx(lay,x,y,h,txt){var s=String(txt==null?'':txt).replace(/[\r\n]/g,' ');return '0\nTEXT\n8\n'+lay+'\n10\n'+f(x)+'\n20\n'+f(y)+'\n30\n0.0\n40\n'+f(h)+'\n1\n'+s+'\n72\n1\n11\n'+f(x)+'\n21\n'+f(y)+'\n31\n0.0\n';}
+  function dPl(lay,pts,fechado){var s='0\nPOLYLINE\n8\n'+lay+'\n66\n1\n70\n'+(fechado?1:0)+'\n';pts.forEach(function(p){s+='0\nVERTEX\n8\n'+lay+'\n10\n'+f(p[0])+'\n20\n'+f(p[1])+'\n30\n0.0\n';});return s+'0\nSEQEND\n';}
+  function dBuild(layers,ents){var s='0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1009\n9\n$INSUNITS\n70\n6\n0\nENDSEC\n0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLAYER\n70\n'+layers.length+'\n';layers.forEach(function(lr){s+='0\nLAYER\n2\n'+lr[0]+'\n70\n0\n62\n'+lr[1]+'\n6\nCONTINUOUS\n';});return s+'0\nENDTABLE\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n'+ents+'0\nENDSEC\n0\nEOF\n';}
+  function dSave(nome,txt){var b=new Blob([txt],{type:'application/dxf'});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=nome;a.click();setTimeout(function(){URL.revokeObjectURL(a.href);},2000);}
+
+  window.exportDXFPlantaConc=function(){
+    if(!window._sapatas||!_sapatas.length){alert('Calcule as sapatas antes de exportar.');return;}
+    var layers=[['SAPATAS',4],['PILARES',1],['TEXTO',7]];
+    var e='';
+    _sapatas.forEach(function(s){
+      var cx=s.x||0,cy=s.y||0,B=s.B,L=s.L,bp=s.bp,hp=s.hp;
+      var hB=B/2,hL=L/2,hbp=bp/2,hhp=hp/2;
+      e+=dPl('SAPATAS',[[cx-hB,cy-hL],[cx+hB,cy-hL],[cx+hB,cy+hL],[cx-hB,cy+hL]],true);
+      e+=dPl('PILARES',[[cx-hbp,cy-hhp],[cx+hbp,cy-hhp],[cx+hbp,cy+hhp],[cx-hbp,cy+hhp]],true);
+      e+=dTx('TEXTO',cx,cy+hL+0.05,0.12,s.id+' '+B.toFixed(2)+'x'+L.toFixed(2));
+    });
+    dSave('concreto_planta.dxf',dBuild(layers,e));
+  };
+})();
 </script>
 <script src="/orcamento-comum.js"></script>
 <script>

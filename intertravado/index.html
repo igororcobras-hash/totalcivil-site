@@ -721,6 +721,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
     <button class="tb-btn tb-btn-excel" onclick="exportarTabExcel('corte')">Excel</button>
     <button class="tb-btn tb-btn-word" onclick="exportarTabWord('corte')">Word</button>
     <button class="tb-btn tb-btn-pdf" onclick="exportarTabPDF('corte')">PDF</button>
+    <button class="tb-btn" onclick="exportDXFSecoesInt()">📐 Seções (DXF)</button>
     <label style="font-size:11px;display:flex;align-items:center;gap:4px;color:var(--fg2)" title="Inclui o desenho de cada estaca no Word e no PDF"><input type="checkbox" id="exp_perfis" checked> Exportar perfis</label>
   </div>
 </div>
@@ -3201,5 +3202,49 @@ function renderAdmin(lista){
   var _calc = calcular; calcular = function(){ var r = _calc.apply(this, arguments); atualizar(); return r; };
   var _ct = calcTopo; calcTopo = function(){ var r = _ct.apply(this, arguments); atualizar(); return r; };
   setTimeout(atualizar, 1500);
+})();
+</script>
+<script>
+/* =====================================================================
+   DXF Export — Seções Transversais (Pavimento Intertravado)
+   ===================================================================== */
+(function(){
+  var f=function(v){return(typeof v==='number'&&isFinite(v)?v:0).toFixed(4);};
+  function dLn(lay,x1,y1,x2,y2){return '0\nLINE\n8\n'+lay+'\n10\n'+f(x1)+'\n20\n'+f(y1)+'\n30\n0.0\n11\n'+f(x2)+'\n21\n'+f(y2)+'\n31\n0.0\n';}
+  function dTx(lay,x,y,h,txt){var s=String(txt==null?'':txt).replace(/[\r\n]/g,' ');return '0\nTEXT\n8\n'+lay+'\n10\n'+f(x)+'\n20\n'+f(y)+'\n30\n0.0\n40\n'+f(h)+'\n1\n'+s+'\n72\n1\n11\n'+f(x)+'\n21\n'+f(y)+'\n31\n0.0\n';}
+  function dPl(lay,pts,fechado){var s='0\nPOLYLINE\n8\n'+lay+'\n66\n1\n70\n'+(fechado?1:0)+'\n';pts.forEach(function(p){s+='0\nVERTEX\n8\n'+lay+'\n10\n'+f(p[0])+'\n20\n'+f(p[1])+'\n30\n0.0\n';});return s+'0\nSEQEND\n';}
+  function dBuild(layers,ents){var s='0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1009\n9\n$INSUNITS\n70\n6\n0\nENDSEC\n0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLAYER\n70\n'+layers.length+'\n';layers.forEach(function(lr){s+='0\nLAYER\n2\n'+lr[0]+'\n70\n0\n62\n'+lr[1]+'\n6\nCONTINUOUS\n';});return s+'0\nENDTABLE\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n'+ents+'0\nENDSEC\n0\nEOF\n';}
+  function dSave(nome,txt){var b=new Blob([txt],{type:'application/dxf'});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=nome;a.click();setTimeout(function(){URL.revokeObjectURL(a.href);},2000);}
+
+  window.exportDXFSecoesInt=function(){
+    var sels=(typeof secaoSelecionadas==='function'?secaoSelecionadas():[]).filter(function(o){return o&&o.G;});
+    if(!sels.length){alert('Nenhuma seção transversal calculada.');return;}
+    var P=secaoParams();
+    var layers=[['TERRENO',3],['PAVIMENTO',4],['FORMACAO',2],['TALUDE',6],['EIXO',7],['TEXTO',7]];
+    var e='',ox=0;
+    sels.forEach(function(o){
+      var L=o.L,G=o.G;
+      var b=G.b,xl=-(b+G.E.d),xr=b+G.D.d;
+      e+=dPl('TERRENO',[[xl+ox,G.E.tInt],[-b+ox,G.tE],[ox,G.tC],[b+ox,G.tD],[xr+ox,G.D.tInt]],false);
+      var yB=G.form;
+      for(var i=P.camadas.length-1;i>=0;i--){
+        var cam=P.camadas[i],esp=cam[1];
+        if(!(esp>0))continue;
+        var yT=yB+esp;
+        e+=dPl('PAVIMENTO',[[-b+ox,yB],[b+ox,yB],[b+ox,yT],[-b+ox,yT]],true);
+        e+=dTx('TEXTO',-b+ox+0.05,(yB+yT)/2,0.07,cam[0]+' '+esp.toFixed(3)+'m');
+        yB=yT;
+      }
+      e+=dPl('FORMACAO',[[-b+ox,G.form],[b+ox,G.form]],false);
+      if(G.E.d>0)e+=dPl('TALUDE',[[xl+ox,G.E.tInt],[-b+ox,G.tE]],false);
+      if(G.D.d>0)e+=dPl('TALUDE',[[b+ox,G.tD],[xr+ox,G.D.tInt]],false);
+      e+=dLn('EIXO',ox,G.form-0.2,ox,G.tC+0.3);
+      var yLab=Math.min(G.E.tInt,G.tE,G.tC,G.tD,G.D.tInt,G.form)-0.8;
+      e+=dTx('TEXTO',ox,yLab,0.18,'Est. '+L.est.toFixed(3)+'m');
+      e+=dTx('TEXTO',ox,yLab-0.30,0.12,'('+L.sit+')');
+      ox+=(xr-xl)+6;
+    });
+    dSave('intertravado_secoes.dxf',dBuild(layers,e));
+  };
 })();
 </script>
