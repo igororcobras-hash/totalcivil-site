@@ -605,7 +605,9 @@ body.cel table.t-cel td[data-l]::before{content:attr(data-l);font-size:.8rem;fon
         <div style="font-size:.8rem;font-weight:600;color:var(--muted);margin-bottom:.2rem">CAD — formato DXF (AutoCAD, QCAD, LibreCAD, BricsCAD…)</div>
         <button class="btn btn-secondary" onclick="exportDXFPlanta()">📐 Planta baixa (DXF)</button>
         <button class="btn btn-secondary" onclick="exportDXFPerfil()">📐 Perfil longitudinal (DXF)</button>
+        <button class="btn btn-secondary" onclick="exportDXFTodosPerfis()">📐 Todos os perfis (DXF)</button>
         <button class="btn btn-secondary" onclick="exportDXFSecao()">📐 Seção transversal (DXF)</button>
+        <button class="btn btn-secondary" onclick="exportDXFTodasSecoes()">📐 Todas as seções (DXF)</button>
       </div>
     </div>
   </div>
@@ -2929,6 +2931,77 @@ function baixarBlob(nome, b) {
     toast('Perfil longitudinal exportado em DXF');
   };
 
+  /* ---------- TODOS OS PERFIS (um arquivo por ramal) ---------- */
+  window.exportDXFTodosPerfis = function () {
+    if (!R || !R.ordem || !R.ordem.length) { toast('Calcule a rede antes de exportar.'); return; }
+    const jusantes = new Set(R.ordem.map(t => t.j));
+    const cabeceiras = [...new Set(R.ordem.map(t => t.m))].filter(id => !jusantes.has(id));
+    if (!cabeceiras.length) { toast('Nenhum PV cabeceira encontrado.'); return; }
+    let count = 0;
+    cabeceiras.forEach((pvIni, idx) => {
+      const path = caminho(pvIni); if (!path.length) return;
+      const layers = [['TERRENO', 3], ['TUBO', 5], ['PV-PERFIL', 7], ['PIEZOMETRICA', 4], ['GUITARRA', 8], ['TEXTOS', 7]];
+      let e = '', X = 0;
+      const pts = [];
+      path.forEach((t, k) => {
+        if (k === 0) pts.push({ id: t.m, x: 0, pv: R.pv[t.m] || {}, p: pvById(t.m) });
+        X += (R.tr[t.id].L || 0);
+        pts.push({ id: t.j, x: X, pv: R.pv[t.j] || {}, p: pvById(t.j) });
+      });
+      const terr = pts.filter(p => isNum(p.pv.tp));
+      if (terr.length > 1) e += dPl('TERRENO', terr.map(p => [p.x, p.pv.tp]));
+      path.forEach((t, k) => {
+        const r = R.tr[t.id]; if (!isNum(r.cm) || !isNum(r.cj)) return;
+        const g = galOf(t), D = g ? g.H : (num(t.D) || 400) / 1000, esp = espTr(t);
+        const x0 = pts[k].x, x1 = pts[k + 1].x;
+        e += dLn('TUBO', x0, r.cm, x1, r.cj);
+        e += dLn('TUBO', x0, r.cm + D, x1, r.cj + D);
+        e += dLn('TUBO', x0, r.cm - esp, x1, r.cj - esp);
+        e += dLn('TUBO', x0, r.cm + D + esp, x1, r.cj + D + esp);
+        e += dTx('TEXTOS', (x0 + x1) / 2, (r.cm + r.cj) / 2 + D + esp + 0.8, 1.5,
+          t.id + ' ' + secLbl(t) + (isNum(r.S) ? ' i=' + (r.S * 100).toFixed(3) + '%' : ''));
+      });
+      pts.forEach(p => {
+        if (!isNum(p.pv.tp) || !isNum(p.pv.fundo)) return;
+        const hw = ((num(p.p && p.p.dpv) || 1000) / 1000 + 0.3) / 2;
+        const tp = p.pv.tp, fd = p.pv.fundo - 0.15;
+        e += dLn('PV-PERFIL', p.x - hw, tp, p.x + hw, tp);
+        e += dLn('PV-PERFIL', p.x - hw, fd, p.x + hw, fd);
+        e += dLn('PV-PERFIL', p.x - hw, tp, p.x - hw, fd);
+        e += dLn('PV-PERFIL', p.x + hw, tp, p.x + hw, fd);
+        e += dTx('TEXTOS', p.x, tp + 1.5, 2, p.id);
+        e += dTx('TEXTOS', p.x, tp + 0.3, 1.2, 'CT ' + p.pv.tp.toFixed(3));
+        e += dTx('TEXTOS', p.x, fd - 1.0, 1.2, 'CF ' + p.pv.fundo.toFixed(3));
+      });
+      const pz = [];
+      path.forEach((t, k) => { const z = R.tr[t.id].piez; if (!z) return; pz.push([pts[k].x, z.Hpm], [pts[k].x, z.Hm], [pts[k + 1].x, z.Hj]); });
+      if (pz.length) e += dPl('PIEZOMETRICA', pz);
+      const vals = [...pts.map(p => p.pv.tp), ...pts.map(p => p.pv.fundo)].filter(v => isNum(v));
+      const ybot = (vals.length ? Math.min(...vals) : 0) - 3;
+      const rowH = 3, labelX = pts[0].x - 45;
+      const rowsPV = [['Estaca', p => estLabel(num(p.p && p.p.dist))], ['Dist. acum. (m)', p => isNum(p.x) ? p.x.toFixed(2) : '-'], ['Cota tampa (m)', p => isNum(p.pv.tp) ? p.pv.tp.toFixed(3) : '-'], ['Cota fundo PV (m)', p => isNum(p.pv.fundo) ? p.pv.fundo.toFixed(3) : '-'], ['Profundidade PV (m)', p => isNum(p.pv.prof) ? p.pv.prof.toFixed(2) : '-']];
+      const rowsTr = [['Trecho', (t, r) => t.id], ['Diametro', t => secLbl(t)], ['Extensao (m)', (t, r) => isNum(r.L) ? r.L.toFixed(2) : '-'], ['Declividade (%)', (t, r) => isNum(r.S) ? (r.S * 100).toFixed(3) : '-'], ['CI mont. -> just. (m)', (t, r) => (isNum(r.cm) ? r.cm.toFixed(3) : '-') + ' -> ' + (isNum(r.cj) ? r.cj.toFixed(3) : '-')]];
+      let gy = ybot - (rowsPV.length + rowsTr.length) * rowH;
+      const gyTop = gy;
+      rowsPV.forEach(([lbl, fn]) => {
+        e += dLn('GUITARRA', pts[0].x, gy, X, gy);
+        e += dTx('GUITARRA', labelX, gy + rowH * 0.3, 1.5, lbl);
+        pts.forEach(p => e += dTx('GUITARRA', p.x, gy + rowH * 0.3, 1.5, fn(p)));
+        gy += rowH;
+      });
+      rowsTr.forEach(([lbl, fn]) => {
+        e += dLn('GUITARRA', pts[0].x, gy, X, gy);
+        e += dTx('GUITARRA', labelX, gy + rowH * 0.3, 1.5, lbl);
+        path.forEach((t, k) => { const r = R.tr[t.id], mx = (pts[k].x + pts[k + 1].x) / 2; e += dTx('GUITARRA', mx, gy + rowH * 0.3, 1.5, fn(t, r)); });
+        gy += rowH;
+      });
+      pts.forEach(p => e += dLn('GUITARRA', p.x, gyTop, p.x, ybot));
+      count++;
+      setTimeout(() => dSave(dNome() + '_perfil_' + pvIni + '.dxf', dBuild(layers, e)), idx * 350);
+    });
+    setTimeout(() => toast(count + ' perfil(is) exportado(s) em DXF'), 100);
+  };
+
   /* ---------- SEÇÃO TRANSVERSAL ---------- */
   window.exportDXFSecao = function () {
     if (!SEC_PV) { toast('Selecione um PV para exportar a secao.'); return; }
@@ -2979,6 +3052,66 @@ function baixarBlob(nome, b) {
     e += dTx('TEXTOS', 0, tp + 0.3, 1.2, 'CT = ' + tp.toFixed(3) + 'm');
     dSave(dNome() + '_secao_' + SEC_PV.replace(/[^a-zA-Z0-9_]/g, '_') + '.dxf', dBuild(layers, e));
     toast('Secao transversal exportada em DXF');
+  };
+
+  /* ---------- TODAS AS SEÇÕES (um único arquivo, lado a lado) ---------- */
+  window.exportDXFTodasSecoes = function () {
+    if (!R || !R.ordem || !R.ordem.length) { toast('Calcule a rede antes de exportar.'); return; }
+    const layers = [['TERRENO', 3], ['VALA', 2], ['TUBO', 5], ['BL-CAIXA', 4], ['RAMAL-BL', 4], ['TEXTOS', 7]];
+    let e = '', offsetX = 0, count = 0;
+    const pvIds = [...new Set([...R.ordem.map(t => t.m), ...R.ordem.map(t => t.j)])];
+    pvIds.forEach(pvId => {
+      const d = dadosSecao(pvId); if (!d) return;
+      const { D, De, gal, ci, B, fundoVala, larg, pas, bls, tp, zSup, mfH } = d;
+      const xmax = larg / 2 + pas + 2;
+      const ox = offsetX;
+      // superfície
+      const terrPts = [];
+      for (let x = -xmax; x <= xmax + 1e-9; x += 0.2) terrPts.push([+(( ox + x).toFixed(4)), zSup(x)]);
+      e += dPl('TERRENO', terrPts);
+      const mf = mfH || 0.15;
+      [-larg / 2, larg / 2].forEach(bx => e += dLn('TERRENO', ox + bx, zSup(Math.abs(bx)), ox + bx, zSup(Math.abs(bx)) - mf));
+      // vala
+      const bv = B / 2;
+      e += dLn('VALA', ox - bv, fundoVala, ox + bv, fundoVala);
+      e += dLn('VALA', ox - bv, fundoVala, ox - bv, zSup(0));
+      e += dLn('VALA', ox + bv, fundoVala, ox + bv, zSup(0));
+      // tubo / galeria
+      if (gal) {
+        const ge = gal.e;
+        e += dPl('TUBO', [[ox - gal.W / 2, ci - ge], [ox + gal.W / 2, ci - ge], [ox + gal.W / 2, ci + gal.H + ge], [ox - gal.W / 2, ci + gal.H + ge]], true);
+        for (let k = 0; k < gal.N; k++) {
+          const cx0 = ox - gal.W / 2 + ge + k * (gal.B + ge);
+          e += dPl('TUBO', [[cx0, ci], [cx0 + gal.B, ci], [cx0 + gal.B, ci + gal.H], [cx0, ci + gal.H]], true);
+        }
+      } else {
+        e += dCi('TUBO', ox, ci + D / 2, De / 2);
+        e += dCi('TUBO', ox, ci + D / 2, D / 2);
+      }
+      // bocas-de-lobo
+      bls.forEach(bl => {
+        const bx = ox + bl.side * (larg / 2 + bl.larg / 2 + 0.1), bw = bl.larg;
+        e += dPl('BL-CAIXA', [[bx - bw / 2, bl.fundo], [bx + bw / 2, bl.fundo], [bx + bw / 2, bl.topo], [bx - bw / 2, bl.topo]], true);
+        e += dTx('TEXTOS', bx, bl.topo + 0.3, 1.2, bl.b.id);
+        if (isNum(bl.ciPV)) {
+          const pvSide = bl.side > 0 ? (ox + bv) : (ox - bv);
+          e += dLn('RAMAL-BL', bx + bl.side * bw / 2, bl.ciBL, pvSide, bl.ciPV);
+        }
+      });
+      // rótulos
+      const secNome = gal ? ('Galeria ' + galNome(gal)) : ('Tubo O' + d.t.D + 'mm');
+      e += dTx('TEXTOS', ox, tp + 1.8, 2.0, pvId + ' — ' + secNome);
+      e += dTx('TEXTOS', ox + bv + 1.0, ci, 1.2, 'CI=' + ci.toFixed(3) + 'm');
+      e += dTx('TEXTOS', ox + bv + 1.0, fundoVala - 0.3, 1.2, 'FV=' + fundoVala.toFixed(3) + 'm');
+      e += dTx('TEXTOS', ox, tp + 0.4, 1.2, 'CT=' + tp.toFixed(3) + 'm');
+      // separador entre seções
+      e += dLn('TEXTOS', ox + xmax + 2, tp - 6, ox + xmax + 2, tp + 4);
+      offsetX += xmax * 2 + 8;
+      count++;
+    });
+    if (!count) { toast('Nenhuma seção disponível (verifique se há cotas nos PVs).'); return; }
+    dSave(dNome() + '_secoes_todas.dxf', dBuild(layers, e));
+    toast(count + ' seção(ões) exportada(s) em um único DXF');
   };
 })();
 
