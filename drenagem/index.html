@@ -601,6 +601,11 @@ body.cel table.t-cel td[data-l]::before{content:attr(data-l);font-size:.8rem;fon
         <button class="btn btn-secondary" onclick="exportXLSX()">📊 Memória de cálculo (Excel .xlsx)</button>
         <button class="btn btn-secondary" onclick="exportDOCX()">📄 Memorial (Word .docx)</button>
         <button class="btn btn-secondary" onclick="exportCSV()">⬇ Planilha da rede (CSV)</button>
+        <hr style="margin:.5rem 0;border:none;border-top:1px solid var(--line)">
+        <div style="font-size:.8rem;font-weight:600;color:var(--muted);margin-bottom:.2rem">CAD — formato DXF (AutoCAD, QCAD, LibreCAD, BricsCAD…)</div>
+        <button class="btn btn-secondary" onclick="exportDXFPlanta()">📐 Planta baixa (DXF)</button>
+        <button class="btn btn-secondary" onclick="exportDXFPerfil()">📐 Perfil longitudinal (DXF)</button>
+        <button class="btn btn-secondary" onclick="exportDXFSecao()">📐 Seção transversal (DXF)</button>
       </div>
     </div>
   </div>
@@ -2756,6 +2761,228 @@ function baixarBlob(nome, b) {
 }
 
 /* =====================================================================
+   EXPORTAÇÃO CAD — DXF R12 (AutoCAD Drawing Exchange Format)
+   Gera arquivos texto compatíveis com AutoCAD, QCAD, LibreCAD,
+   BricsCAD, MicroStation e qualquer software que leia DXF R12.
+   Coordenadas em metros (unidade real do projeto).
+   ===================================================================== */
+(function () {
+  /* primitivas DXF */
+  const f = v => (typeof v === 'number' && isFinite(v) ? v : 0).toFixed(4);
+  function dLn(lay, x1, y1, x2, y2) {
+    return `0\nLINE\n8\n${lay}\n10\n${f(x1)}\n20\n${f(y1)}\n30\n0.0\n11\n${f(x2)}\n21\n${f(y2)}\n31\n0.0\n`;
+  }
+  function dCi(lay, cx, cy, r) {
+    return `0\nCIRCLE\n8\n${lay}\n10\n${f(cx)}\n20\n${f(cy)}\n30\n0.0\n40\n${f(r)}\n`;
+  }
+  function dTx(lay, x, y, h, txt, ang) {
+    const s = String(txt == null ? '' : txt).replace(/[\r\n]/g, ' ');
+    return `0\nTEXT\n8\n${lay}\n10\n${f(x)}\n20\n${f(y)}\n30\n0.0\n40\n${f(h)}\n1\n${s}${ang ? '\n50\n' + (+ang).toFixed(2) : ''}\n`;
+  }
+  function dPl(lay, pts, fechado) {
+    let s = `0\nPOLYLINE\n8\n${lay}\n66\n1\n70\n${fechado ? 1 : 0}\n`;
+    pts.forEach(p => { s += `0\nVERTEX\n8\n${lay}\n10\n${f(p[0])}\n20\n${f(p[1])}\n30\n0.0\n`; });
+    return s + '0\nSEQEND\n';
+  }
+  function dTri(lay, p1, p2, p3) { // triângulo sólido via SOLID
+    return `0\nSOLID\n8\n${lay}\n10\n${f(p1[0])}\n20\n${f(p1[1])}\n30\n0.0\n11\n${f(p2[0])}\n21\n${f(p2[1])}\n31\n0.0\n12\n${f(p3[0])}\n22\n${f(p3[1])}\n32\n0.0\n13\n${f(p3[0])}\n23\n${f(p3[1])}\n33\n0.0\n`;
+  }
+  function dArw(lay, x1, y1, x2, y2) { // seta cheia no ponto médio
+    const mx = (x1 + x2) / 2, my = (y1 + y2) / 2, an = Math.atan2(y2 - y1, x2 - x1), L = 1.8, W = 0.9;
+    return dTri(lay, [mx + L * Math.cos(an), my + L * Math.sin(an)],
+      [mx - L * Math.cos(an) + W * Math.sin(an), my - L * Math.sin(an) - W * Math.cos(an)],
+      [mx - L * Math.cos(an) - W * Math.sin(an), my - L * Math.sin(an) + W * Math.cos(an)]);
+  }
+  function dBuild(layers, ents) {
+    let s = '0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1009\n9\n$INSUNITS\n70\n6\n0\nENDSEC\n';
+    s += '0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLAYER\n70\n' + layers.length + '\n';
+    layers.forEach(([n, c]) => { s += `0\nLAYER\n2\n${n}\n70\n0\n62\n${c}\n6\nCONTINUOUS\n`; });
+    return s + '0\nENDTABLE\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n' + ents + '0\nENDSEC\n0\nEOF\n';
+  }
+  function dSave(nome, txt) {
+    const b = new Blob([txt], { type: 'application/dxf' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = nome; a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  function dNome() { return 'Drenagem_' + ((P.proj && P.proj.nome) || 'projeto').replace(/[^a-zA-Z0-9_-]/g, '_'); }
+
+  /* ---------- PLANTA BAIXA ---------- */
+  window.exportDXFPlanta = function () {
+    if (!R || !R.ordem || !R.ordem.length) { toast('Calcule a rede antes de exportar.'); return; }
+    const G = geoRuas();
+    const layers = [['RUA-EIXO', 2], ['RUA-PISTA', 8], ['TRECHOS', 5], ['PV', 7], ['BL-RAMAL', 4], ['TEXTOS', 7]];
+    let e = '';
+    // ruas: eixo + bordas de pista e passeio
+    P.ruas.forEach(r => {
+      const g = G[r.id]; if (!g) return;
+      const a = (+r.larg || 7) / 2, w = a + (+r.passeio || 2);
+      const p0 = g.at(g.sMin), p1 = g.at(g.sMax);
+      e += dLn('RUA-EIXO', p0.x, p0.y, p1.x, p1.y);
+      [a, -a, w, -w].forEach(off => { const q0 = g.at(g.sMin, off), q1 = g.at(g.sMax, off); e += dLn('RUA-PISTA', q0.x, q0.y, q1.x, q1.y); });
+      const m = g.at((g.sMin + g.sMax) / 2, w * 0.5);
+      const rot = ((-g.az % 360) + 360) % 360; e += dTx('TEXTOS', m.x, m.y, 3, r.nome, rot > 180 ? rot - 180 : rot);
+    });
+    // trechos com seta de fluxo e rótulo
+    R.ordem.forEach(t => {
+      const a = posPV(G, pvById(t.m)), b = posPV(G, pvById(t.j)); if (!a || !b) return;
+      e += dLn('TRECHOS', a.x, a.y, b.x, b.y);
+      e += dArw('TRECHOS', a.x, a.y, b.x, b.y);
+      const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      const an = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
+      const rot = ((an % 360) + 360) % 360;
+      e += dTx('TEXTOS', mx, my, 2.5, t.id + ' ' + secLbl(t), (rot > 90 && rot <= 270) ? rot + 180 : rot);
+    });
+    // bocas-de-lobo: retângulo + ramal
+    P.bls.forEach(b => {
+      const pb = posBL(G, b), pv = posPV(G, pvById(b.pv)); if (!pb) return;
+      if (pv) e += dLn('BL-RAMAL', pb.x, pb.y, pv.x, pv.y);
+      const g = G[b.rua], bw = (b.tipo === 'gd' ? 2.0 : 1.0), bh = 0.6;
+      const ca = Math.cos(g.az * Math.PI / 180), sa = Math.sin(g.az * Math.PI / 180);
+      e += dPl('BL-RAMAL', [
+        [pb.x - bw / 2 * ca + bh / 2 * sa, pb.y - bw / 2 * sa - bh / 2 * ca],
+        [pb.x + bw / 2 * ca + bh / 2 * sa, pb.y + bw / 2 * sa - bh / 2 * ca],
+        [pb.x + bw / 2 * ca - bh / 2 * sa, pb.y + bw / 2 * sa + bh / 2 * ca],
+        [pb.x - bw / 2 * ca - bh / 2 * sa, pb.y - bw / 2 * sa + bh / 2 * ca]
+      ], true);
+      e += dTx('TEXTOS', pb.x, pb.y + 1, 2, b.id);
+    });
+    // poços de visita: círculo + rótulo com cotas
+    P.pvs.forEach(pv => {
+      const p = posPV(G, pv); if (!p) return;
+      const r = R.pv[pv.id] || {}, rad = Math.max(0.5, (num(pv.dpv) || 1000) / 2000 * 1.3);
+      e += dCi('PV', p.x, p.y, rad);
+      e += dTx('TEXTOS', p.x + rad + 0.3, p.y + 0.3, 3, pv.id);
+      if (isNum(r.tp) && isNum(r.fundo))
+        e += dTx('TEXTOS', p.x + rad + 0.3, p.y - 1.2, 2, 'CT ' + r.tp.toFixed(3) + ' CF ' + r.fundo.toFixed(3));
+    });
+    dSave(dNome() + '_planta.dxf', dBuild(layers, e));
+    toast('Planta baixa exportada em DXF');
+  };
+
+  /* ---------- PERFIL LONGITUDINAL ---------- */
+  window.exportDXFPerfil = function () {
+    if (!PERFIL_INI) { toast('Selecione o PV inicial do perfil.'); return; }
+    const path = caminho(PERFIL_INI); if (!path.length) { toast('Sem trechos a partir deste PV.'); return; }
+    const layers = [['TERRENO', 3], ['TUBO', 5], ['PV-PERFIL', 7], ['PIEZOMETRICA', 4], ['GUITARRA', 8], ['TEXTOS', 7]];
+    let e = '', X = 0;
+    const pts = [];
+    path.forEach((t, k) => {
+      if (k === 0) pts.push({ id: t.m, x: 0, pv: R.pv[t.m] || {}, p: pvById(t.m) });
+      X += (R.tr[t.id].L || 0);
+      pts.push({ id: t.j, x: X, pv: R.pv[t.j] || {}, p: pvById(t.j) });
+    });
+    // terreno
+    const terr = pts.filter(p => isNum(p.pv.tp));
+    if (terr.length > 1) e += dPl('TERRENO', terr.map(p => [p.x, p.pv.tp]));
+    // tubos (geratrizes)
+    path.forEach((t, k) => {
+      const r = R.tr[t.id]; if (!isNum(r.cm) || !isNum(r.cj)) return;
+      const g = galOf(t), D = g ? g.H : (num(t.D) || 400) / 1000, esp = espTr(t);
+      const x0 = pts[k].x, x1 = pts[k + 1].x;
+      e += dLn('TUBO', x0, r.cm, x1, r.cj);
+      e += dLn('TUBO', x0, r.cm + D, x1, r.cj + D);
+      e += dLn('TUBO', x0, r.cm - esp, x1, r.cj - esp);
+      e += dLn('TUBO', x0, r.cm + D + esp, x1, r.cj + D + esp);
+      e += dTx('TEXTOS', (x0 + x1) / 2, (r.cm + r.cj) / 2 + D + esp + 0.8, 1.5,
+        t.id + ' ' + secLbl(t) + (isNum(r.S) ? ' i=' + (r.S * 100).toFixed(3) + '%' : ''));
+    });
+    // poços de visita no perfil
+    pts.forEach(p => {
+      if (!isNum(p.pv.tp) || !isNum(p.pv.fundo)) return;
+      const hw = ((num(p.p && p.p.dpv) || 1000) / 1000 + 0.3) / 2;
+      const tp = p.pv.tp, fd = p.pv.fundo - 0.15;
+      e += dLn('PV-PERFIL', p.x - hw, tp, p.x + hw, tp);
+      e += dLn('PV-PERFIL', p.x - hw, fd, p.x + hw, fd);
+      e += dLn('PV-PERFIL', p.x - hw, tp, p.x - hw, fd);
+      e += dLn('PV-PERFIL', p.x + hw, tp, p.x + hw, fd);
+      e += dTx('TEXTOS', p.x, tp + 1.5, 2, p.id);
+      e += dTx('TEXTOS', p.x, tp + 0.3, 1.2, 'CT ' + p.pv.tp.toFixed(3));
+      e += dTx('TEXTOS', p.x, fd - 1.0, 1.2, 'CF ' + p.pv.fundo.toFixed(3));
+    });
+    // linha piezométrica
+    const pz = [];
+    path.forEach((t, k) => { const z = R.tr[t.id].piez; if (!z) return; pz.push([pts[k].x, z.Hpm], [pts[k].x, z.Hm], [pts[k + 1].x, z.Hj]); });
+    if (pz.length) e += dPl('PIEZOMETRICA', pz);
+    // guitarra (tabela abaixo do perfil)
+    const vals = [...pts.map(p => p.pv.tp), ...pts.map(p => p.pv.fundo)].filter(v => isNum(v));
+    const ybot = (vals.length ? Math.min(...vals) : 0) - 3;
+    const rowH = 3, labelX = pts[0].x - 45;
+    const rowsPV = [['Estaca', p => estLabel(num(p.p && p.p.dist))], ['Dist. acum. (m)', p => isNum(p.x) ? p.x.toFixed(2) : '-'], ['Cota tampa (m)', p => isNum(p.pv.tp) ? p.pv.tp.toFixed(3) : '-'], ['Cota fundo PV (m)', p => isNum(p.pv.fundo) ? p.pv.fundo.toFixed(3) : '-'], ['Profundidade PV (m)', p => isNum(p.pv.prof) ? p.pv.prof.toFixed(2) : '-']];
+    const rowsTr = [['Trecho', (t, r) => t.id], ['Diametro', t => secLbl(t)], ['Extensao (m)', (t, r) => isNum(r.L) ? r.L.toFixed(2) : '-'], ['Declividade (%)', (t, r) => isNum(r.S) ? (r.S * 100).toFixed(3) : '-'], ['CI mont. -> just. (m)', (t, r) => (isNum(r.cm) ? r.cm.toFixed(3) : '-') + ' -> ' + (isNum(r.cj) ? r.cj.toFixed(3) : '-')]];
+    const totalRows = rowsPV.length + rowsTr.length;
+    let gy = ybot - totalRows * rowH;
+    const gyTop = gy;
+    rowsPV.forEach(([lbl, fn]) => {
+      e += dLn('GUITARRA', pts[0].x, gy, X, gy);
+      e += dTx('GUITARRA', labelX, gy + rowH * 0.3, 1.5, lbl);
+      pts.forEach(p => e += dTx('GUITARRA', p.x, gy + rowH * 0.3, 1.5, fn(p)));
+      gy += rowH;
+    });
+    rowsTr.forEach(([lbl, fn]) => {
+      e += dLn('GUITARRA', pts[0].x, gy, X, gy);
+      e += dTx('GUITARRA', labelX, gy + rowH * 0.3, 1.5, lbl);
+      path.forEach((t, k) => { const r = R.tr[t.id], mx = (pts[k].x + pts[k + 1].x) / 2; e += dTx('GUITARRA', mx, gy + rowH * 0.3, 1.5, fn(t, r)); });
+      gy += rowH;
+    });
+    pts.forEach(p => e += dLn('GUITARRA', p.x, gyTop, p.x, ybot));
+    dSave(dNome() + '_perfil_' + PERFIL_INI + '.dxf', dBuild(layers, e));
+    toast('Perfil longitudinal exportado em DXF');
+  };
+
+  /* ---------- SEÇÃO TRANSVERSAL ---------- */
+  window.exportDXFSecao = function () {
+    if (!SEC_PV) { toast('Selecione um PV para exportar a secao.'); return; }
+    const d = dadosSecao(SEC_PV); if (!d) { toast('Sem dados de secao para este PV.'); return; }
+    const layers = [['TERRENO', 3], ['VALA', 2], ['TUBO', 5], ['BL-CAIXA', 4], ['RAMAL-BL', 4], ['TEXTOS', 7]];
+    let e = '';
+    const { D, De, gal, ci, B, fundoVala, larg, pas, bls, tp, zSup, mfH } = d;
+    const xmax = larg / 2 + pas + 2;
+    // superfície do terreno/pista/passeio
+    const terrPts = [];
+    for (let x = -xmax; x <= xmax + 1e-9; x += 0.2) terrPts.push([+(x.toFixed(4)), zSup(x)]);
+    e += dPl('TERRENO', terrPts);
+    // meio-fios
+    const mf = mfH || 0.15;
+    [-larg / 2, larg / 2].forEach(bx => e += dLn('TERRENO', bx, zSup(Math.abs(bx)), bx, zSup(Math.abs(bx)) - mf));
+    // vala
+    const bv = B / 2;
+    e += dLn('VALA', -bv, fundoVala, bv, fundoVala);
+    e += dLn('VALA', -bv, fundoVala, -bv, zSup(0));
+    e += dLn('VALA', bv, fundoVala, bv, zSup(0));
+    // tubo / galeria
+    if (gal) {
+      const ge = gal.e;
+      e += dPl('TUBO', [[-gal.W / 2, ci - ge], [gal.W / 2, ci - ge], [gal.W / 2, ci + gal.H + ge], [-gal.W / 2, ci + gal.H + ge]], true);
+      for (let k = 0; k < gal.N; k++) {
+        const cx0 = -gal.W / 2 + ge + k * (gal.B + ge);
+        e += dPl('TUBO', [[cx0, ci], [cx0 + gal.B, ci], [cx0 + gal.B, ci + gal.H], [cx0, ci + gal.H]], true);
+      }
+    } else {
+      e += dCi('TUBO', 0, ci + D / 2, De / 2);
+      e += dCi('TUBO', 0, ci + D / 2, D / 2);
+    }
+    // bocas-de-lobo
+    bls.forEach(bl => {
+      const bx = bl.side * (larg / 2 + bl.larg / 2 + 0.1), bw = bl.larg;
+      e += dPl('BL-CAIXA', [[bx - bw / 2, bl.fundo], [bx + bw / 2, bl.fundo], [bx + bw / 2, bl.topo], [bx - bw / 2, bl.topo]], true);
+      e += dTx('TEXTOS', bx, bl.topo + 0.3, 1.2, bl.b.id);
+      if (isNum(bl.ciPV)) {
+        const pvSide = bl.side > 0 ? bv : -bv;
+        e += dLn('RAMAL-BL', bx + bl.side * bw / 2, bl.ciBL, pvSide, bl.ciPV);
+      }
+    });
+    // cotas e rótulos
+    const secNome = gal ? ('Galeria ' + galNome(gal)) : ('Tubo O' + d.t.D + 'mm');
+    e += dTx('TEXTOS', 0, tp + 1.5, 1.8, 'Secao transversal — ' + SEC_PV + ' — ' + secNome);
+    e += dTx('TEXTOS', bv + 1.0, ci, 1.2, 'CI = ' + ci.toFixed(3) + 'm');
+    e += dTx('TEXTOS', bv + 1.0, fundoVala - 0.3, 1.2, 'Fundo vala = ' + fundoVala.toFixed(3) + 'm');
+    e += dTx('TEXTOS', 0, tp + 0.3, 1.2, 'CT = ' + tp.toFixed(3) + 'm');
+    dSave(dNome() + '_secao_' + SEC_PV.replace(/[^a-zA-Z0-9_]/g, '_') + '.dxf', dBuild(layers, e));
+    toast('Secao transversal exportada em DXF');
+  };
+})();
+
+/* =====================================================================
    DESENHOS — planta baixa, perfil longitudinal, seção transversal
    Cores literais (paleta) para os SVG funcionarem também no Word/PDF.
    ===================================================================== */
@@ -3064,7 +3291,8 @@ function vPerfil() {
   ${alertas.map(p => `<div class="piez-alert">✕ <span><b>${esc(p.id)}: extravasamento.</b> Nível d'água ${fmt(R.pv[p.id].H, 3)} m acima da tampa ${fmt(R.pv[p.id].tp, 3)} m.</span></div>`).join('')}
   <div class="card" style="padding:.6rem">
     <div class="bar-btns" style="margin-bottom:.5rem"><label style="font-size:.82rem;font-weight:600;color:var(--muted)">Perfil a partir de</label>
-      <select onchange="PERFIL_INI=this.value;drawPerfil()" style="padding:.35rem .5rem;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)">${opts}</select></div>
+      <select onchange="PERFIL_INI=this.value;drawPerfil()" style="padding:.35rem .5rem;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)">${opts}</select>
+      <button class="btn btn-secondary btn-sm" onclick="exportDXFPerfil()" title="Exportar perfil em DXF para CAD">📐 DXF</button></div>
     <div class="svg-scroll" id="perfil-box"></div>
   </div>
   <div class="card"><h4>Linha piezométrica — todos os trechos (cotas em m)</h4>
@@ -3228,7 +3456,8 @@ function vSecao() {
   <p class="lead">Corte no poço de visita escolhido, com a pista, os meios-fios, os passeios, as bocas-de-lobo (caixas de ralo) ligadas a este PV, os ramais chegando ao PV e a vala do tubo. Abaixo, o detalhe ampliado da vala com todas as medidas. O meio-fio e a sarjeta vêm do tipo escolhido na rua (aba 3) e as caixas de ralo seguem o modelo e as dimensões escolhidos em cada boca-de-lobo (aba 5).</p>
   <div class="card" style="padding:.6rem">
     <div class="bar-btns"><label style="font-size:.82rem;font-weight:600;color:var(--muted)">Poço de visita</label>
-      <select onchange="SEC_PV=this.value;drawSecao()" style="padding:.35rem .5rem;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)">${pvs.map(p => `<option value="${esc(p.id)}"${p.id === SEC_PV ? ' selected' : ''}>${esc(p.id)} — ${esc(ruaNome(p.rua))} est. ${estLabel(num(p.dist))}${(l => { const g = l.filter(b => b.tipo === 'gr').length, bl = l.length - g; return (bl ? ' · ' + bl + (bl > 1 ? ' bocas de lobo' : ' boca de lobo') : '') + (g ? ' · ' + g + (g > 1 ? ' caixas de ralo' : ' caixa de ralo') : ''); })(P.bls.filter(b => b.pv === p.id))}</option>`).join('')}</select></div>
+      <select onchange="SEC_PV=this.value;drawSecao()" style="padding:.35rem .5rem;border-radius:6px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink)">${pvs.map(p => `<option value="${esc(p.id)}"${p.id === SEC_PV ? ' selected' : ''}>${esc(p.id)} — ${esc(ruaNome(p.rua))} est. ${estLabel(num(p.dist))}${(l => { const g = l.filter(b => b.tipo === 'gr').length, bl = l.length - g; return (bl ? ' · ' + bl + (bl > 1 ? ' bocas de lobo' : ' boca de lobo') : '') + (g ? ' · ' + g + (g > 1 ? ' caixas de ralo' : ' caixa de ralo') : ''); })(P.bls.filter(b => b.pv === p.id))}</option>`).join('')}</select>
+      <button class="btn btn-secondary btn-sm" onclick="exportDXFSecao()" title="Exportar seção em DXF para CAD">📐 DXF</button></div>
     <div class="svg-scroll" id="secao-box"></div>
     <div class="svg-scroll" id="vala-box" style="margin-top:.75rem"></div>
     <div id="secao-quadro" style="margin-top:.75rem"></div>
