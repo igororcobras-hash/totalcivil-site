@@ -5278,10 +5278,19 @@ function salvarUsuario(uid, acao) {
       document.getElementById('giAntPav').onclick = function(){ irPasso(G.passo - 1); };
       document.getElementById('giProxPav').onclick = function(){ irPasso(G.passo + 1); };
       document.getElementById('giClosePav').onclick = encerrar;
-      if(el && p.evento){
-        el.addEventListener(p.evento, function avanca(){
-          el.removeEventListener(p.evento, avanca);
-          setTimeout(function(){ irPasso(G.passo + 1); }, 500);
+      if(el){
+        if(p.evento){
+          el.addEventListener(p.evento, function avanca(){
+            el.removeEventListener(p.evento, avanca);
+            setTimeout(function(){ irPasso(G.passo + 1); }, 300);
+          }, { once: true });
+        }
+        el.addEventListener('keydown', function tecla(e){
+          if(e.key === 'Enter' || e.key === 'Tab'){
+            el.removeEventListener('keydown', tecla);
+            if(e.key === 'Tab') e.preventDefault();
+            setTimeout(function(){ irPasso(G.passo + 1); }, 150);
+          }
         }, { once: true });
       }
     }
