@@ -531,6 +531,14 @@ body.cel table.t-cel td[data-l]::before{content:attr(data-l);font-size:.8rem;fon
     </div>
   </div>
 </div>
+<!-- MODAL: prévia da correção automática -->
+<div class="modal-backdrop" id="modal-previa">
+  <div class="modal" style="max-width:760px">
+    <div class="modal-header"><h3>Correção automática — confirme antes de alterar</h3><button class="btn-icon" onclick="closeModal('modal-previa')">✕</button></div>
+    <div class="modal-body" id="previa-body"></div>
+    <div class="modal-footer"><button class="btn btn-secondary" onclick="PREVIA=null;closeModal('modal-previa')">Cancelar (não alterar)</button><button class="btn btn-primary" onclick="aplicarPrevia()">✓ Aplicar estas correções</button></div>
+  </div>
+</div>
 <!-- MODAL: correção automática -->
 <div class="modal-backdrop" id="modal-auto">
   <div class="modal" style="max-width:720px">
@@ -1443,6 +1451,7 @@ const HELP = {
   'ruas.nome': 'Nome do logradouro.',
   'ruas.larg': 'Largura da pista entre meios-fios. Usada no desenho da seção transversal.',
   'ruas.passeio': 'Largura de cada passeio (calçada).',
+  'ruas.raio': 'Raio da curva do meio-fio na esquina (embocadura), por onde o veículo faz a conversão. Usual 5 a 6 m em ruas locais, 8 a 12 m onde passam ônibus e caminhões. No cruzamento vale o maior raio entre as duas ruas. Em branco = 6 m. As caixas de ralo e bocas-de-lobo são desenhadas fora da curva, na sarjeta reta.',
   'ruas.ref': 'Rua com a qual esta se liga ou cruza. Serve para desenhar a planta: a primeira rua fica na origem e as demais são posicionadas a partir dela.',
   'ruas.refDist': 'Estaca da OUTRA rua onde esta começa ou cruza (ex.: 4+00,00).',
   'ruas.ang': 'Ângulo entre esta rua e a outra, medido a partir do sentido do estaqueamento da outra rua: 90 = à esquerda, −90 = à direita, 0 = em continuação, 45 = diagonal.',
@@ -2074,7 +2083,7 @@ function vRuas() {
   const ruas = P.ruas.map((r, i) => `<div class="item" id="it-ruas-${i}"><div class="item-h"><span class="t">${esc(r.nome || r.id)}</span><span class="sp"></span>
     <button class="btn-icon" title="Excluir" onclick="delItem('ruas',${i})">✕</button></div><div class="item-b"><div class="fgrid">
     ${fld(`ruas.${i}.id`, 'Código', {type: 'txt'})}${fld(`ruas.${i}.nome`, 'Nome da rua', {type: 'txt', w2: true})}
-    ${fld(`ruas.${i}.larg`, 'Largura da pista (m)', {step: 0.1})}${fld(`ruas.${i}.passeio`, 'Passeio (m/lado)', {step: 0.1})}${fld(`ruas.${i}.it`, 'Inclinação transversal (%)', {step: 0.5})}${fld(`ruas.${i}.cai`, 'Caimento da pista', {type: 'sel', opts: [['', 'Dois lados (abaulada)'], ['E', 'Um lado — para a esquerda'], ['D', 'Um lado — para a direita']]})}
+    ${fld(`ruas.${i}.larg`, 'Largura da pista (m)', {step: 0.1})}${fld(`ruas.${i}.passeio`, 'Passeio (m/lado)', {step: 0.1})}${fld(`ruas.${i}.raio`, 'Raio das esquinas (m)', {step: 0.5, hint: 'Em branco = ' + RAIO_ESQ_PAD + ' m'})}${fld(`ruas.${i}.it`, 'Inclinação transversal (%)', {step: 0.5})}${fld(`ruas.${i}.cai`, 'Caimento da pista', {type: 'sel', opts: [['', 'Dois lados (abaulada)'], ['E', 'Um lado — para a esquerda'], ['D', 'Um lado — para a direita']]})}
     </div><div class="section-title">Meio-fio e sarjeta</div><div class="fgrid">
     ${fld(`ruas.${i}.mf`, 'Tipo de meio-fio', {type: 'sel', w2: true, opts: Object.entries(MEIOFIO).map(([k, v]) => [k, v.nome])})}
     ${fld(`ruas.${i}.mfH`, 'Espelho do meio-fio (m)', {step: 0.01})}${fld(`ruas.${i}.sjW`, 'Largura da sarjeta (m)', {step: 0.05, ph: '0 = sem sarjeta'})}${(num(r.sjW) || 0) > 0 ? fld(`ruas.${i}.sjI`, 'Caimento da sarjeta (%)', {step: 0.5}) : ''}
@@ -2265,12 +2274,97 @@ function vVerif() {
   return `<h3>Verificação geral do projeto</h3>
   <div class="sumbar"><span class="badge badge-err">✕ ${e} erro(s)</span><span class="badge badge-warn">⚠ ${w} alerta(s)</span><span class="badge badge-ok">✓ ${o} atendido(s)</span></div>
   ${e === 0 && w === 0 && ch.length ? '<div class="nota-tec nota-tec-info"><b>✓</b><span>Todos os critérios foram atendidos.</span></div>' : `<div class="card" style="display:flex;gap:1rem;align-items:center;flex-wrap:wrap">
-    <button class="btn btn-primary" onclick="autoCorrigir()">🛠 Corrigir automaticamente</button>
-    <span style="font-size:.8rem;color:var(--muted);flex:1;min-width:240px">Corrige cotas, declividades, diâmetros, ramais, bocas-de-lobo e PVs pela regra de menor custo (declividade até aprofundar 1/3 do Ø; depois troca de tubo; sem afogar a saída). Mostra um relatório com o que mudou e permite desfazer. Ou use o botão de cada linha abaixo.</span></div>`}
+    <button class="btn btn-primary" onclick="previaCorrecao()">🛠 Corrigir automaticamente (ver antes o que muda)</button>
+    <span style="font-size:.8rem;color:var(--muted);flex:1;min-width:240px">Primeiro mostra a lista de tudo o que será alterado (antes → depois), o motivo de cada decisão e o que continuará pendente; só altera o projeto se você confirmar. Regra de menor custo: declividade até aprofundar 1/3 do Ø; depois troca de tubo; sem afogar a saída. Depois de aplicar ainda é possível desfazer. Ou use o botão de cada linha abaixo.</span></div>`}
   <div class="bar-btns"><div class="seg">${[['prob', 'Pendências'], ['err', 'Erros'], ['warn', 'Alertas'], ['ok', 'Atendidos'], ['todos', 'Todos']].map(([k, t]) => `<button class="${VFILTRO === k ? 'on' : ''}" onclick="VFILTRO='${k}';renderTab()">${t}</button>`).join('')}</div></div>
-  ${lst.length ? `<div class="tbl-wrap"><table><thead><tr><th></th><th>Grupo</th><th>Elemento</th><th>Verificação</th><th>Calculado</th><th>Critério</th><th>Orientação</th><th>Correção</th></tr></thead><tbody>
-  ${lst.map(c => `<tr style="cursor:pointer" onclick="showTab('${aba(c.tab)}')"><td><span class="st ${c.st}">${c.st === 'ok' ? '✓' : c.st === 'warn' ? '⚠' : '✕'}</span></td><td>${nomes[c.tab] || c.tab}</td><td><b>${esc(c.el)}</b></td><td>${esc(c.par)}</td><td class="${c.st}">${esc(c.val)}</td><td>${esc(c.lim)}</td><td style="font-size:.75rem;white-space:normal;min-width:200px">${c.st === 'ok' ? '' : esc(c.nota)}</td><td style="white-space:normal;min-width:170px">${corr(c)}</td></tr>`).join('')}
+  ${lst.length ? `<div class="tbl-wrap"><table><thead><tr><th></th><th>Grupo</th><th>Elemento</th><th>Verificação</th><th>Calculado</th><th>Critério</th><th>Orientação · por quê · risco</th><th>Correção</th></tr></thead><tbody>
+  ${lst.map(c => `<tr style="cursor:pointer" onclick="showTab('${aba(c.tab)}')"><td><span class="st ${c.st}">${c.st === 'ok' ? '✓' : c.st === 'warn' ? '⚠' : '✕'}</span></td><td>${nomes[c.tab] || c.tab}</td><td><b>${esc(c.el)}</b></td><td>${esc(c.par)}</td><td class="${c.st}">${esc(c.val)}</td><td>${esc(c.lim)}</td><td style="font-size:.75rem;white-space:normal;min-width:260px">${c.st === 'ok' ? '' : esc(c.nota) + riscoHTML(c)}</td><td style="white-space:normal;min-width:170px">${corr(c)}</td></tr>`).join('')}
   </tbody></table></div>` : '<div class="empty">Nada nesta categoria.</div>'}`;
+}
+/* ---------- 11b. Por quê / risco de cada verificação e correção com prévia ---------- */
+const RISCOS = [
+  [/[Cc]âmara|Chaminé/, 'A câmara do PV (padrão EMOP) não cabe na profundidade disponível ou ficou abaixo da medida mínima da tabela.', 'Sem altura para a entrada de pessoa e de equipamento de limpeza: inspeção e desobstrução ficam difíceis. Use outra câmara, caixa de passagem ou aprofunde o PV.'],
+  [/Galeria|aduela/i, 'A galeria de aduelas está fora dos limites adotados.', 'Capacidade ou recobrimento insuficientes; revise a seção ou as cotas.'],
+  [/Coeficiente C/, 'O coeficiente de escoamento define quanto da chuva vira enxurrada.', 'Valor fora de 0–1 gera vazão errada: rede subdimensionada (alagamento) ou superdimensionada (custo).'],
+  [/^Área$/, 'Sem área a bacia não gera vazão.', 'A chuva dessa área não entra no cálculo e a rede a jusante fica subdimensionada.'],
+  [/^Destino$/, 'Cada bacia precisa descarregar numa BL ou PV.', 'A vazão da bacia some do cálculo — tubos e bocas-de-lobo a jusante ficam pequenos demais.'],
+  [/Encadeamento|Topologia/, 'Os elementos ligam-se em círculo e a água não teria saída.', 'O cálculo das vazões acumuladas fica inválido; corrija as ligações antes de confiar nos resultados.'],
+  [/Declividade da sarjeta/, 'A sarjeta acompanha o greide da rua; muito plana ou muito íngreme foge da faixa usual.', 'Plana: água parada, poças e lâmina alta junto ao meio-fio. Íngreme: velocidade alta, a água “pula” a boca-de-lobo e erode o pavimento.'],
+  [/Largura alagada/, 'A faixa de água junto ao meio-fio ficou mais larga que o admitido.', 'Água invade a faixa de rolamento: aquaplanagem, respingos em pedestres e travessia difícil.'],
+  [/Lâmina na sarjeta/, 'A altura da água na sarjeta passou da folga do espelho do meio-fio.', 'A água sobe no passeio e pode entrar nos lotes e garagens.'],
+  [/admissível da sarjeta/, 'A vazão que chega é maior do que a sarjeta comporta.', 'Transbordamento da sarjeta para a pista e o passeio antes de chegar à boca-de-lobo.'],
+  [/passa da BL/, 'A boca-de-lobo não engole toda a água; o excedente segue pela sarjeta.', 'Sobrecarga da BL seguinte ou do cruzamento; se não houver BL a jusante a água corre solta na rua.'],
+  [/Engolimento/, 'A capacidade de captação da BL é menor que a vazão que chega.', 'Água passa direto pela boca-de-lobo e acumula a jusante.'],
+  [/Ramal — diâmetro/, 'O tubo de ligação BL → PV está abaixo do mínimo adotado.', 'Entupimento por folhas e lixo e dificuldade de desobstrução.'],
+  [/Ramal — declividade/, 'O ramal tem pouca queda até o PV.', 'Depósito de areia e lixo no ramal, refluxo para a caixa e alagamento da sarjeta.'],
+  [/Ramal — velocidade/, 'A velocidade no ramal saiu da faixa de autolimpeza / desgaste.', 'Baixa: assoreamento e entupimento. Alta: desgaste do tubo e das juntas.'],
+  [/Ramal — lâmina/, 'O ramal trabalha muito cheio ou sob pressão.', 'Refluxo para a caixa da BL e a água volta para a rua.'],
+  [/Ramal — comprimento/, 'Ramal mais longo que o usual.', 'Difícil limpeza e desobstrução; considere outro PV ou uma caixa intermediária.'],
+  [/Tensão trativa/, 'A força da água no fundo do tubo é pequena para arrastar sedimentos.', 'Sem autolimpeza: acúmulo de areia e lixo, redução da seção e entupimento.'],
+  [/Grau de enchimento|Lâmina na galeria/, 'O tubo/galeria trabalha mais cheio que o limite de projeto.', 'Sem folga para chuva maior: a rede entra em carga, há refluxo nos PVs e bocas-de-lobo e alagamento.'],
+  [/Regime \(Froude\)/, 'O escoamento ficou próximo do regime crítico.', 'Ondas instáveis e ressalto hidráulico, com sobrepressão e turbulência nos PVs.'],
+  [/^Velocidade$/, 'A velocidade na rede saiu da faixa entre autolimpeza e desgaste.', 'Baixa: sedimentação e entupimento. Alta: abrasão do tubo, danos nas juntas e nos PVs.'],
+  [/^Declividade$/, 'A declividade do trecho saiu da faixa adotada.', 'Pouca: sedimentação e velocidade baixa. Muita: velocidade alta e PVs muito profundos a jusante.'],
+  [/Diâmetro x montante|Seção x montante/, 'O conduto a jusante é menor que um dos que chegam.', 'Gargalo: o objeto que passa no tubo maior entala no menor, entupindo a rede (contraria a boa prática).'],
+  [/^Diâmetro$|Seção da galeria/, 'A seção está abaixo do mínimo adotado.', 'Risco de entupimento e limpeza difícil.'],
+  [/Recobrimento/, 'Pouca terra sobre o tubo.', 'O tubo pode trincar com o tráfego; exige tubo de classe maior ou envelopamento em concreto.'],
+  [/Profundidade/, 'A profundidade do PV/vala saiu da faixa usual.', 'Muito fundo: escoramento, custo alto e risco de desmoronamento da vala. Raso: os ramais não chegam e o tubo fica sem recobrimento.'],
+  [/geratriz|Degrau/, 'As cotas dos tubos que entram e saem do PV não estão bem concordadas.', 'Remanso no tubo que chega, perda de carga e depósito de sedimentos no PV.'],
+  [/Linha piezométrica/, 'O nível d\'água calculado no PV chega perto ou acima da tampa.', 'Extravasamento pelo tampão — a tampa pode ser deslocada e a água sai na rua.'],
+  [/deságue/, 'A saída da rede fica abaixo do nível d\'água do corpo receptor.', 'Rede afogada: remanso para dentro dos tubos e redução da capacidade.'],
+  [/Extensão/, 'Trecho mais longo que o espaçamento máximo entre PVs.', 'Impossível limpar o tubo com os equipamentos usuais; acrescente um PV intermediário.'],
+  [/Cota|Cotas/, 'As cotas informadas estão incoerentes ou faltando.', 'Declividade e profundidades calculadas ficam erradas.'],
+  [/PV|Ligação|Saídas|deflexão/, 'As ligações da rede estão incompletas ou incoerentes.', 'A vazão não chega ao lugar certo e o dimensionamento fica errado.']
+];
+function riscoHTML(c) {
+  const m = RISCOS.find(([re]) => re.test(c.par || ''));
+  const pq = m ? m[1] : 'O valor calculado está fora do critério de projeto adotado na aba Critérios.';
+  const rs = m ? m[2] : 'O elemento pode não funcionar como previsto; revise antes de licitar.';
+  return `<div style="margin-top:.3rem"><b>Por quê:</b> ${esc(pq)}</div><div style="margin-top:.2rem;color:${c.st === 'err' ? 'var(--err)' : 'var(--warn)'}"><b>Risco${c.st === 'err' ? ' (erro — não atende)' : ' (alerta)'}:</b> ${esc(rs)}</div>`;
+}
+let PREVIA = null;
+function difProjetos(A, B) {
+  const mud = [], nv = v => v == null ? '' : String(v), mm = v => v === '' || v == null ? '—' : fmt(+v, 3);
+  const emop = o => typeof ehEmop === 'function' && ehEmop(o);
+  const cmp = (kind, campos, nome) => (B[kind] || []).forEach(o => {
+    const a = (A[kind] || []).find(x => x.id === o.id);
+    if (!a) { mud.push([nome + ' ' + o.id, 'Novo elemento', '—', 'criado']); return; }
+    campos.forEach(([k, lbl, f]) => { if (kind === 'pvs' && k === 'dpv' && emop(o)) return; if (nv(a[k]) !== nv(o[k])) mud.push([nome + ' ' + o.id, lbl, f ? f(a[k]) : (a[k] == null || a[k] === '' ? '—' : a[k]), f ? f(o[k]) : (o[k] == null || o[k] === '' ? '—' : o[k])]); });
+  });
+  cmp('trechos', [['D', 'Diâmetro (mm)'], ['gal', 'Galeria'], ['cm', 'Cota inf. montante', mm], ['cj', 'Cota inf. jusante', mm], ['iFix', 'Declividade mínima forçada (%)', mm]], 'Trecho');
+  cmp('pvs', [['defl', 'Escoamento', v => DEFL[v] || v || '—'], ['dpv', 'Ø do PV']], 'PV');
+  cmp('bls', [['tipo', 'Tipo', v => BLTIPOS[v] ? BLTIPOS[v].nome : v], ['L', 'Abertura L (m)'], ['prox', 'Excedente segue para', v => v || '—'], ['rD', 'Ramal Ø'], ['rI', 'Ramal i (%)']], 'BL');
+  return mud;
+}
+function previaCorrecao() {
+  const antes = JSON.stringify(P), D0 = DESFAZER, e0 = R.checks.filter(x => x.st === 'err').length, w0 = R.checks.filter(x => x.st === 'warn').length;
+  let cap = null;
+  const sv = {save, renderTab, toast, relatorioCorrecao}, nada = () => {};
+  save = nada; renderTab = nada; toast = nada; relatorioCorrecao = function () { cap = Array.prototype.slice.call(arguments); };
+  let depois = null, e1 = 0, w1 = 0;
+  try { autoCorrigir(); depois = JSON.stringify(P); calc(); e1 = R.checks.filter(x => x.st === 'err').length; w1 = R.checks.filter(x => x.st === 'warn').length; }
+  catch (err) { console.error(err); }
+  finally { save = sv.save; renderTab = sv.renderTab; toast = sv.toast; relatorioCorrecao = sv.relatorioCorrecao; P = migrate(JSON.parse(antes)); DESFAZER = D0; calc(); }
+  if (!depois || !cap) { toast('Não foi possível simular a correção.'); return; }
+  PREVIA = {antes, depois, cap};
+  const mud = difProjetos(JSON.parse(antes), JSON.parse(depois)), motivos = cap[6] || [], pend = cap[5] || [];
+  const c0 = cap[2] || {}, c1 = cap[4] || {}, R$ = v => 'R$ ' + fmt(v || 0, 2);
+  $('previa-body').innerHTML = `
+    <div class="msg info">ℹ <span>Nada foi alterado ainda. Confira abaixo o que a correção automática vai mudar e clique em <b>Aplicar estas correções</b> para confirmar.</span></div>
+    <div class="kv" style="margin:.8rem 0">${kv('Erros', e0 + ' → <b>' + e1 + '</b>', e1 ? 'err' : 'ok')}${kv('Alertas', w0 + ' → <b>' + w1 + '</b>', w1 ? 'warn' : 'ok')}${kv('Custo estimado', R$(c0.total) + ' → ' + R$(c1.total))}${kv('Diferença', ((c1.total || 0) >= (c0.total || 0) ? '+ ' : '− ') + R$(Math.abs((c1.total || 0) - (c0.total || 0))), (c1.total || 0) > (c0.total || 0) ? 'warn' : 'ok')}</div>
+    <div class="section-title" style="margin-top:0">O que será alterado (${mud.length})</div>
+    ${mud.length ? `<div class="tbl-wrap"><table><thead><tr><th>Elemento</th><th>Dado</th><th>Hoje</th><th>Passará a</th></tr></thead><tbody>${mud.map(m => `<tr><td><b>${esc(m[0])}</b></td><td>${esc(m[1])}</td><td>${esc(m[2])}</td><td><b>${esc(m[3])}</b></td></tr>`).join('')}</tbody></table></div>` : '<p class="hint">A correção automática não encontrou nada a alterar nos dados — os itens restantes dependem da sua decisão (veja abaixo).</p>'}
+    ${motivos.length ? `<div class="section-title">Por que cada alteração será feita</div><div class="msgs">${motivos.map(t => `<div class="msg info">ℹ <span>${esc(t)}</span></div>`).join('')}</div>` : ''}
+    <div class="section-title">Continuará precisando da sua decisão (${pend.length})</div>
+    ${pend.length ? '<div class="msgs">' + pend.map(t => `<div class="msg warn">⚠ <span>${esc(t)}</span></div>`).join('') + '</div>' : '<div class="msg ok">✓ <span>Nada pendente após a correção.</span></div>'}`;
+  openModal('modal-previa');
+}
+function aplicarPrevia() {
+  if (!PREVIA) return; const pv = PREVIA; PREVIA = null;
+  P = migrate(JSON.parse(pv.depois)); DESFAZER = pv.antes; calc(); save(); renderTab();
+  closeModal('modal-previa');
+  relatorioCorrecao.apply(null, pv.cap);
+  DESFAZER = pv.antes;
 }
 /* ---------- 12. MEMORIAL ---------- */
 const IMPR_ITENS = [
@@ -2812,18 +2906,30 @@ function baixarBlob(nome, b) {
   window.exportDXFPlanta = function () {
     if (!R || !R.ordem || !R.ordem.length) { toast('Calcule a rede antes de exportar.'); return; }
     const G = geoRuas();
-    const layers = [['RUA-EIXO', 2], ['RUA-PISTA', 8], ['TRECHOS', 5], ['PV', 7], ['BOCA-DE-LOBO', 4], ['RAMAL', 6], ['TEXTOS', 7]];
+    const FZ = Math.max(0.5, Math.min(3, +PLAY.fz || 1));
+    const layers = [['RUA-EIXO', 2], ['MEIO-FIO', 8], ['MEIO-FIO-RAIO-ESQUINA', 8], ['PASSEIO-ALINHAMENTO', 9], ['ESTACAS', 7], ['TRECHOS', 5], ['PV', 7], ['CAIXA-DE-RALO', 4], ['GRELHA', 1], ['BOCA-DE-LOBO', 3], ['RAMAL', 6], ['TEXTOS', 7]];
     let e = '';
-    // ruas: eixo + bordas de pista e passeio
+    const CR = cruzamentos(G);
+    // trechos de [e0,e1] que sobram após retirar os intervalos cortados
+    const sobra = (e0, e1, cs) => { let seg = [[e0, e1]]; (cs || []).forEach(([a, z]) => { const nv = []; seg.forEach(([p, q]) => { if (z <= p || a >= q) nv.push([p, q]); else { if (a > p) nv.push([p, a]); if (z < q) nv.push([z, q]); } }); seg = nv; }); return seg.filter(([p, q]) => q - p > 0.01); };
+    // ruas: eixo, meio-fio (interrompido nas esquinas) e alinhamento dos lotes
     P.ruas.forEach(r => {
       const g = G[r.id]; if (!g) return;
-      const a = (+r.larg || 7) / 2, w = a + (+r.passeio || 2);
-      const p0 = g.at(g.sMin), p1 = g.at(g.sMax);
+      const a = (+r.larg || 7) / 2, w = a + (+r.passeio || 2), [e0, e1] = extRua(G, g);
+      const p0 = g.at(e0), p1 = g.at(e1);
       e += dLn('RUA-EIXO', p0.x, p0.y, p1.x, p1.y);
-      [a, -a, w, -w].forEach(off => { const q0 = g.at(g.sMin, off), q1 = g.at(g.sMax, off); e += dLn('RUA-PISTA', q0.x, q0.y, q1.x, q1.y); });
-      const m = g.at((g.sMin + g.sMax) / 2, w * 0.5);
-      const rot = ((-g.az % 360) + 360) % 360; e += dTx('TEXTOS', m.x, m.y, 3, r.nome, rot > 180 ? rot - 180 : rot);
+      [1, -1].forEach(sg => {
+        sobra(e0, e1, CR.cortes[r.id + '|' + sg]).forEach(([p, q]) => { const q0 = g.at(p, sg * a), q1 = g.at(q, sg * a); e += dLn('MEIO-FIO', q0.x, q0.y, q1.x, q1.y); });
+        const [f0, f1] = extRua(G, g, true);
+        sobra(f0, f1, CR.cortesP[r.id + '|' + sg]).forEach(([p, q]) => { const q0 = g.at(p, sg * w), q1 = g.at(q, sg * w); e += dLn('PASSEIO-ALINHAMENTO', q0.x, q0.y, q1.x, q1.y); });
+      });
+      for (let d = Math.ceil(Math.max(0, e0 + 10) / 20) * 20; d <= e1 - 10 + 1e-6; d += 20) { const q1 = g.at(d, a), q2 = g.at(d, a + 1.2), q3 = g.at(d, a + 2.6);
+        e += dLn('ESTACAS', q1.x, q1.y, q2.x, q2.y) + dTx('ESTACAS', q3.x, q3.y, 1.2 * FZ, String(Math.round(d / 20))); }
+      const m = g.at((e0 + e1) / 2, w * 0.5);
+      const rot = ((g.az % 360) + 360) % 360; e += dTx('TEXTOS', m.x, m.y, 3 * FZ, r.nome, rot > 90 && rot <= 270 ? rot - 180 : rot);
     });
+    // curvas do meio-fio nas esquinas
+    CR.cantos.forEach(c => { e += dPl('MEIO-FIO-RAIO-ESQUINA', c.arco.map(p => [p.x, p.y]), false); });
     // trechos com seta de fluxo e rótulo
     R.ordem.forEach(t => {
       const a = posPV(G, pvById(t.m)), b = posPV(G, pvById(t.j)); if (!a || !b) return;
@@ -2832,30 +2938,30 @@ function baixarBlob(nome, b) {
       const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
       const an = Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI;
       const rot = ((an % 360) + 360) % 360;
-      e += dTx('TEXTOS', mx, my, 2.5, t.id + ' ' + secLbl(t), (rot > 90 && rot <= 270) ? rot + 180 : rot);
+      e += dTx('TEXTOS', mx, my, 2.5 * FZ, t.id + ' ' + secLbl(t), (rot > 90 && rot <= 270) ? rot + 180 : rot);
     });
-    // bocas-de-lobo: retângulo + ramal
+    // caixas de ralo (na sarjeta) e bocas-de-lobo (sob o passeio, faceando o meio-fio) + ramal a 45°
+    const ret = (lay, c, ux, uy, L, B) => { const nx = -uy, ny = ux;
+      return dPl(lay, [[c.x - ux * L / 2 - nx * B / 2, c.y - uy * L / 2 - ny * B / 2], [c.x + ux * L / 2 - nx * B / 2, c.y + uy * L / 2 - ny * B / 2],
+        [c.x + ux * L / 2 + nx * B / 2, c.y + uy * L / 2 + ny * B / 2], [c.x - ux * L / 2 + nx * B / 2, c.y - uy * L / 2 + ny * B / 2]], true); };
     P.bls.forEach(b => {
-      const pb = posBL(G, b), pv = posPV(G, pvById(b.pv)); if (!pb) return;
-      if (pv) e += dLn('RAMAL', pb.x, pb.y, pv.x, pv.y);
-      const g = G[b.rua], bw = (b.tipo === 'gd' ? 2.0 : 1.0), bh = 0.6;
-      const ca = Math.cos(g.az * Math.PI / 180), sa = Math.sin(g.az * Math.PI / 180);
-      e += dPl('BOCA-DE-LOBO', [
-        [pb.x - bw / 2 * ca + bh / 2 * sa, pb.y - bw / 2 * sa - bh / 2 * ca],
-        [pb.x + bw / 2 * ca + bh / 2 * sa, pb.y + bw / 2 * sa - bh / 2 * ca],
-        [pb.x + bw / 2 * ca - bh / 2 * sa, pb.y + bw / 2 * sa + bh / 2 * ca],
-        [pb.x - bw / 2 * ca - bh / 2 * sa, pb.y - bw / 2 * sa + bh / 2 * ca]
-      ], true);
-      e += dTx('TEXTOS', pb.x, pb.y + 1, 2, b.id);
+      const pb = posBL(G, b); if (!pb) return;
+      const rp = ramalPts(G, b); if (rp) e += dPl('RAMAL', rp.map(p => [p.x, p.y]), false);
+      const g = G[b.rua], dm = blDim(b), sg = b.lado === 'D' ? -1 : 1, rua = ruaById(b.rua) || {};
+      e += ret(dm.tp === 'gr' ? 'CAIXA-DE-RALO' : 'BOCA-DE-LOBO', pb, g.ux, g.uy, dm.Le, dm.Be);
+      if (dm.tp === 'gr' || dm.tp === 'cb') { const lc = g.loc(pb), gc = g.at(lc.s, sg * ((+rua.larg || 7) / 2 - dm.gB / 2 - 0.05)), gp = dm.tp === 'gr' ? pb : gc;
+        e += ret('GRELHA', gp, g.ux, g.uy, dm.gL, dm.gB); }
+      const tp = g.at(g.loc(pb).s, sg * ((+rua.larg || 7) / 2 + (+rua.passeio || 2) * 0.6));
+      e += dTx('TEXTOS', tp.x, tp.y, 2 * FZ, b.id);
     });
     // poços de visita: círculo + rótulo com cotas
     P.pvs.forEach(pv => {
       const p = posPV(G, pv); if (!p) return;
       const r = R.pv[pv.id] || {}, rad = Math.max(0.5, (num(pv.dpv) || 1000) / 2000 * 1.3);
       e += dCi('PV', p.x, p.y, rad);
-      e += dTx('TEXTOS', p.x + rad + 0.3, p.y + 0.3, 3, pv.id);
+      e += dTx('TEXTOS', p.x + rad + 0.3, p.y + 0.3, 3 * FZ, pv.id);
       if (isNum(r.tp) && isNum(r.fundo))
-        e += dTx('TEXTOS', p.x + rad + 0.3, p.y - 1.2, 2, 'CT ' + r.tp.toFixed(3) + ' CF ' + r.fundo.toFixed(3));
+        e += dTx('TEXTOS', p.x + rad + 0.3, p.y - 1.2, 2 * FZ, 'CT ' + r.tp.toFixed(3) + ' CF ' + r.fundo.toFixed(3));
     });
     dSave(dNome() + '_planta.dxf', dBuild(layers, e));
     toast('Planta baixa exportada em DXF');
@@ -3171,7 +3277,8 @@ function geoRuas() {
   function mk(r, x0, y0, az, d0) {
     const a = az * Math.PI / 180, ux = Math.cos(a), uy = Math.sin(a);
     const ds = [0].concat(estacasRua(r.id).map(e => +e.dist), P.pvs.filter(p => p.rua === r.id).map(p => num(p.dist) || 0), P.bls.filter(b => b.rua === r.id).map(b => num(b.dist) || 0), P.ruas.filter(o => o.ref === r.id).map(o => num(o.refDist) || 0));
-    return {r, az, ux, uy, nx: -uy, ny: ux, sMin: Math.min(...ds) - 10, sMax: Math.max(...ds) + 10, at: (s, off = 0) => ({x: x0 + (s - d0) * ux - off * uy, y: y0 + (s - d0) * uy + off * ux})};
+    return {r, az, ux, uy, nx: -uy, ny: ux, sMin: Math.min(...ds) - 10, sMax: Math.max(...ds) + 10, at: (s, off = 0) => ({x: x0 + (s - d0) * ux - off * uy, y: y0 + (s - d0) * uy + off * ux}),
+      loc: q => { const dx = q.x - x0, dy = q.y - y0; return {s: d0 + dx * ux + dy * uy, off: -dx * uy + dy * ux}; }};
   }
   function solve(r, d) {
     if (G[r.id]) return G[r.id];
@@ -3188,14 +3295,121 @@ function geoRuas() {
   return G;
 }
 function posPV(G, pv) { const g = pv && G[pv.rua]; return g ? g.at(num(pv.dist) || 0) : null; }
+/* raio de concordância das esquinas (embocaduras) — padrão 6 m quando em branco */
+const RAIO_ESQ_PAD = 6;
+function raioRua(r) { const v = num(r && r.raio); return isNum(v) && v >= 0 ? v : RAIO_ESQ_PAD; }
+/* cruzamentos entre ruas: cantos com raio (curva do meio-fio), trechos do meio-fio interrompidos e
+   limites de desenho das ruas que terminam num cruzamento (rua em T) */
+const _CRZ = new WeakMap();
+function cruzamentos(G) {
+  if (_CRZ.has(G)) return _CRZ.get(G);
+  const out = {cantos: [], cortes: {}, cortesP: {}, clip: {}, clipP: {}};
+  const gs = P.ruas.map(r => G[r.id]).filter(Boolean);
+  const addCorte = (id, sg, a, b) => { const k = id + '|' + sg; (out.cortes[k] = out.cortes[k] || []).push([Math.min(a, b), Math.max(a, b)]); };
+  const addClip = (id, lado, v, o = out.clip) => { const c = o[id] = o[id] || {lo: -Infinity, hi: Infinity}; if (lado > 0) c.hi = Math.min(c.hi, v); else c.lo = Math.max(c.lo, v); };
+  for (let i = 0; i < gs.length; i++) for (let j = i + 1; j < gs.length; j++) {
+    const g1 = gs[i], g2 = gs[j], k = g1.ux * g2.nx + g1.uy * g2.ny;
+    if (Math.abs(k) < 0.2) continue;                 // ruas quase paralelas
+    const k2 = -k, a1 = (+g1.r.larg || 7) / 2, a2 = (+g2.r.larg || 7) / 2;
+    const s1c = -g2.loc(g1.at(0)).off / k, X = g1.at(s1c), s2c = g2.loc(X).s;
+    if (s1c < g1.sMin - 1 || s1c > g1.sMax + 1 || s2c < g2.sMin - 1 || s2c > g2.sMax + 1) continue;
+    const r1a = g1.sMin + 10, r1b = g1.sMax - 10, r2a = g2.sMin + 10, r2b = g2.sMax - 10, ak = Math.abs(k);
+    // a rua 2 avança para o lado σ1 da rua 1? / a rua 1 avança para o lado σ2 da rua 2?
+    const ext2 = sg1 => { const d = Math.sign(sg1 * k2); return d > 0 ? r2b > s2c + a1 / ak + 0.3 : r2a < s2c - a1 / ak - 0.3; };
+    const ext1 = sg2 => { const d = Math.sign(sg2 * k); return d > 0 ? r1b > s1c + a2 / ak + 0.3 : r1a < s1c - a2 / ak - 0.3; };
+    const R0 = Math.max(raioRua(g1.r), raioRua(g2.r));
+    const cn = {};
+    [1, -1].forEach(sg1 => [1, -1].forEach(sg2 => {
+      const sC1 = (sg2 * a2 - g2.loc(g1.at(0, sg1 * a1)).off) / k, C = g1.at(sC1, sg1 * a1), sC2 = g2.loc(C).s;
+      const e1 = Math.sign(sg2 * k), e2 = Math.sign(sg1 * k2);
+      const d1 = {x: e1 * g1.ux, y: e1 * g1.uy}, d2 = {x: e2 * g2.ux, y: e2 * g2.uy};
+      const th = Math.acos(Math.max(-1, Math.min(1, d1.x * d2.x + d1.y * d2.y)));
+      const existe = ext2(sg1) && ext1(sg2);
+      let t = 0, c = {C, sC1, sC2, e1, e2, existe, t: 0};
+      if (existe && R0 > 0 && th > 0.3 && th < Math.PI - 0.05) {
+        t = Math.min(R0 / Math.tan(th / 2), 4 * R0);
+        const R = t * Math.tan(th / 2), bl = Math.hypot(d1.x + d2.x, d1.y + d2.y) || 1, dc = R / Math.sin(th / 2);
+        const O = {x: C.x + (d1.x + d2.x) / bl * dc, y: C.y + (d1.y + d2.y) / bl * dc};
+        const T1 = g1.at(sC1 + e1 * t, sg1 * a1), T2 = g2.at(sC2 + e2 * t, sg2 * a2);
+        let an1 = Math.atan2(T1.y - O.y, T1.x - O.x), an2 = Math.atan2(T2.y - O.y, T2.x - O.x), da = an2 - an1;
+        while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+        const arco = []; for (let q = 0; q <= 16; q++) { const an = an1 + da * q / 16; arco.push({x: O.x + R * Math.cos(an), y: O.y + R * Math.sin(an)}); }
+        out.cantos.push({C, T1, T2, O, R, arco, r1: g1.r.id, r2: g2.r.id});
+        c.t = t;
+      }
+      cn[sg1 + '|' + sg2] = c;
+    }));
+    // meio-fio interrompido na boca de cada rua
+    [1, -1].forEach(sg1 => { if (!ext2(sg1)) return;
+      const ps = [1, -1].map(sg2 => { const c = cn[sg1 + '|' + sg2]; return ext1(sg2) ? c.sC1 + c.e1 * c.t : (c.e1 > 0 ? g1.sMax + 50 : g1.sMin - 50); });
+      addCorte(g1.r.id, sg1, ps[0], ps[1]); });
+    [1, -1].forEach(sg2 => { if (!ext1(sg2)) return;
+      const ps = [1, -1].map(sg1 => { const c = cn[sg1 + '|' + sg2]; return ext2(sg1) ? c.sC2 + c.e2 * c.t : (c.e2 > 0 ? g2.sMax + 50 : g2.sMin - 50); });
+      addCorte(g2.r.id, sg2, ps[0], ps[1]); });
+    // alinhamento dos lotes (borda externa do passeio) interrompido no cruzamento
+    const w1 = a1 + (+g1.r.passeio || 2), w2 = a2 + (+g2.r.passeio || 2);
+    const addP = (id, sg, a, b) => { const kk = id + '|' + sg; (out.cortesP[kk] = out.cortesP[kk] || []).push([Math.min(a, b), Math.max(a, b)]); };
+    [1, -1].forEach(sg1 => { if (!ext2(sg1)) return;
+      addP(g1.r.id, sg1, ...[1, -1].map(sg2 => { const e1 = Math.sign(sg2 * k); return ext1(sg2) ? (sg2 * w2 - g2.loc(g1.at(0, sg1 * w1)).off) / k : (e1 > 0 ? g1.sMax + 50 : g1.sMin - 50); })); });
+    [1, -1].forEach(sg2 => { if (!ext1(sg2)) return;
+      addP(g2.r.id, sg2, ...[1, -1].map(sg1 => { const e2 = Math.sign(sg1 * k2); return ext2(sg1) ? (sg1 * w1 - g1.loc(g2.at(0, sg2 * w2)).off) / k2 : (e2 > 0 ? g2.sMax + 50 : g2.sMin - 50); })); });
+    // rua que termina no cruzamento: desenho vai só até o meio-fio oposto da outra rua
+    [1, -1].forEach(sg2 => { if (!ext1(sg2) && ext1(-sg2)) { const d = Math.sign(sg2 * k); addClip(g1.r.id, d, s1c + d * a2 / ak); addClip(g1.r.id, d, s1c + d * w2 / ak, out.clipP); } });
+    [1, -1].forEach(sg1 => { if (!ext2(sg1) && ext2(-sg1)) { const d = Math.sign(sg1 * k2); addClip(g2.r.id, d, s2c + d * a1 / ak); addClip(g2.r.id, d, s2c + d * w1 / ak, out.clipP); } });
+  }
+  _CRZ.set(G, out); return out;
+}
+/* trecho desenhado de cada rua (corta a ponta que passaria por cima da rua transversal) */
+function extRua(G, g, pas) { const c = cruzamentos(G)[pas ? 'clipP' : 'clip'][g.r.id] || {}; return [Math.max(g.sMin, isNum(c.lo) ? c.lo : -Infinity), Math.min(g.sMax, isNum(c.hi) ? c.hi : Infinity)]; }
+/* dimensões externas da caixa (ao longo do meio-fio × perpendicular) e afastamento do eixo:
+   caixa de ralo → dentro da sarjeta, encostada no espelho do meio-fio;
+   boca de lobo de guia → sob o passeio, faceando o espelho do meio-fio;
+   combinada → grelha na sarjeta + caixa sob o passeio */
+function blDim(b) {
+  const mod = CAIXAS[b.modelo] || {}, tp = b.tipo || 'gs';
+  const cB = num(b.cxB) || mod.cxB || (tp === 'gr' ? 0.30 : tp === 'cb' ? 1.30 : 0.60);
+  const cL = num(b.cxL) || mod.cxL || (tp === 'gd' ? 2.20 : tp === 'gr' ? 0.90 : 1.00);
+  const gB = num(b.gB) || mod.gB || 0.30, gL = num(b.gL) || mod.gL || 0.90;
+  const Be = cB + 0.20, Le = cL + 0.20;
+  return {tp, Be, Le, gB, gL};
+}
+function blOff(b, rua) {
+  const a = (+rua.larg || 7) / 2, d = blDim(b);
+  return d.tp === 'gr' ? a - d.Be / 2 : d.tp === 'cb' ? a - d.gB - 0.05 + d.Be / 2 : a + d.Be / 2;
+}
+/* estaca usada no DESENHO: se a BL cair dentro do cruzamento (no meio da outra rua ou na curva da esquina),
+   é levada para a sarjeta reta antes da esquina, do lado de onde vem a água (montante) */
+function blDistDes(G, b) {
+  const g = G[b.rua]; let s = num(b.dist) || 0; if (!g) return s;
+  const sg = b.lado === 'D' ? -1 : 1, cs = cruzamentos(G).cortes[b.rua + '|' + sg] || [];
+  if (!cs.length) return s;
+  const m = blDim(b).Le / 2 + 0.4, lo = g.sMin + 10, hi = g.sMax - 10;
+  const livre = x => x >= lo - 0.01 && x <= hi + 0.01 && !cs.some(([a, z]) => x > a - m + 1e-6 && x < z + m - 1e-6);
+  const dentro = cs.find(([a, z]) => s > a - m && s < z + m); if (!dentro) return s;
+  const S = typeof greideDecl === 'function' ? greideDecl(b.rua, s) : null, desce = S == null || S >= 0 ? 1 : -1;
+  const cand = desce > 0 ? [dentro[0] - m, dentro[1] + m] : [dentro[1] + m, dentro[0] - m];
+  return cand.find(livre) ?? cand[0];
+}
 function posBL(G, b) {
   const g = G[b.rua]; if (!g) return null; const rua = ruaById(b.rua) || {};
-  const off = ((+rua.larg || 7) / 2) * (b.lado === 'D' ? -1 : 1);
-  return g.at(num(b.dist) || 0, off);
+  const off = blOff(b, rua) * (b.lado === 'D' ? -1 : 1);
+  return g.at(blDistDes(G, b), off);
+}
+/* traçado do ramal: segue a sarjeta no sentido do fluxo e entra no PV a 45° */
+function ramalPts(G, b) {
+  const pb = posBL(G, b), pvo = pvById(b.pv), pv = pvo && posPV(G, pvo), g = G[b.rua]; if (!pb || !pv || !g) return null;
+  const lb = g.loc(pb), lv = g.loc(pv), ds = lv.s - lb.s, dOff = Math.abs(lv.off - lb.off), dir = Math.sign(ds) || 1;
+  if (Math.abs(ds) > dOff + 0.05 && Math.abs(ds) - dOff <= 30) return [pb, g.at(lv.s - dir * dOff, lb.off), pv];
+  return [pb, pv];
 }
 
 /* ---------------- PLANTA BAIXA ---------------- */
-let PL = null, PLAY = {rot: true, est: true, bl: true, bac: true, cot: false};
+let PL = null, PLAY = {rot: true, est: true, bl: true, bac: true, cot: false, fz: 1};
+try { const v = +localStorage.getItem('drn_pl_fz'); if (v >= 0.5 && v <= 3) PLAY.fz = v; } catch (e) {}
+function plFonte(d) { const ns = [0.6, 0.75, 0.9, 1, 1.15, 1.3, 1.5, 1.75, 2, 2.5, 3]; let k = ns.findIndex(v => v >= (PLAY.fz || 1) - 1e-6); if (k < 0) k = 3;
+  PLAY.fz = ns[Math.max(0, Math.min(ns.length - 1, k + d))]; try { localStorage.setItem('drn_pl_fz', PLAY.fz); } catch (e) {}
+  const el = $('pl-fz'); if (el) el.textContent = Math.round(PLAY.fz * 100) + '%'; drawPlanta(); }
+function plRaio(v) { if (v === '') return; P.ruas.forEach(r => { r.raio = +v; }); save(); drawPlanta(); toast('Raio das esquinas: ' + (+v ? v + ' m' : 'sem raio') + ' em todas as ruas'); }
 function plantaBBox(G) {
   const xs = [], ys = [];
   P.ruas.forEach(r => { const g = G[r.id]; if (!g) return; const w = (+r.larg || 7) / 2 + (+r.passeio || 2);
@@ -3210,40 +3424,50 @@ function plantaFit(W, H, G) {
   return {s, tx: W / 2 - (b.x0 + b.x1) / 2 * s, ty: (H - 30) / 2 + (b.y0 + b.y1) / 2 * s};
 }
 function svgPlanta(K, W, H, st, lay) {
+  const FZ = Math.max(0.5, Math.min(3, +(lay && lay.fz) || 1));
   const G = geoRuas(), S = p => ({x: p.x * st.s + st.tx, y: -p.y * st.s + st.ty});
   let s = `<svg ${SVGNS} viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="${K.bg}"/>`;
   const poly = (pts, f, str, sw) => `<polygon points="${pts.map(p => { const q = S(p); return q.x.toFixed(1) + ',' + q.y.toFixed(1); }).join(' ')}" fill="${f}"${str ? ` stroke="${str}" stroke-width="${sw || 1}"` : ''}/>`;
   // passeios e pistas
-  P.ruas.forEach(r => { const g = G[r.id]; if (!g) return; const a = (+r.larg || 7) / 2, w = a + (+r.passeio || 2);
-    s += poly([g.at(g.sMin, w), g.at(g.sMax, w), g.at(g.sMax, -w), g.at(g.sMin, -w)], K.pass); });
-  P.ruas.forEach(r => { const g = G[r.id]; if (!g) return; const a = (+r.larg || 7) / 2;
-    s += poly([g.at(g.sMin, a), g.at(g.sMax, a), g.at(g.sMax, -a), g.at(g.sMin, -a)], K.pav); });
+  P.ruas.forEach(r => { const g = G[r.id]; if (!g) return; const a = (+r.larg || 7) / 2, w = a + (+r.passeio || 2), [e0, e1] = extRua(G, g, true);
+    s += poly([g.at(e0, w), g.at(e1, w), g.at(e1, -w), g.at(e0, -w)], K.pass); });
+  P.ruas.forEach(r => { const g = G[r.id]; if (!g) return; const a = (+r.larg || 7) / 2, [e0, e1] = extRua(G, g);
+    s += poly([g.at(e0, a), g.at(e1, a), g.at(e1, -a), g.at(e0, -a)], K.pav); });
+  // esquinas com raio (curva do meio-fio na embocadura das ruas)
+  cruzamentos(G).cantos.forEach(c => { s += poly([c.C].concat(c.arco), K.pav);
+    const pts = c.arco.map(p => { const q = S(p); return q.x.toFixed(1) + ',' + q.y.toFixed(1); }).join(' ');
+    s += `<polyline points="${pts}" fill="none" stroke="${K.ink}" stroke-width="0.8" opacity="0.55"/>`; });
   // eixo, estacas, nome
   P.ruas.forEach(r => { const g = G[r.id]; if (!g) return; const a = (+r.larg || 7) / 2;
-    const p0 = S(g.at(g.sMin)), p1 = S(g.at(g.sMax)); s += ln(p0.x, p0.y, p1.x, p1.y, '#f5d76e', 1.2, '10 6');
+    const [e0, e1] = extRua(G, g), p0 = S(g.at(e0)), p1 = S(g.at(e1)); s += ln(p0.x, p0.y, p1.x, p1.y, '#f5d76e', 1.2, '10 6');
     const ang = -g.az, fl = (ang > 90 || ang < -90);
     if (lay.est) for (let d = Math.ceil(Math.max(0, g.sMin + 10) / 20) * 20; d <= g.sMax - 10 + 1e-6; d += 20) {
       const q1 = S(g.at(d, a)), q2 = S(g.at(d, a + 1.2)); s += ln(q1.x, q1.y, q2.x, q2.y, K.ink, 1.2);
-      if (20 * st.s > 26) { const q = S(g.at(d, a + 2.6)); s += tx(q.x, q.y + 4, String(Math.round(d / 20)), {fs: 11, a: 'middle', c: K.ink, halo: K.bg}); }
+      if (20 * st.s > 26) { const q = S(g.at(d, a + 2.6)); s += tx(q.x, q.y + 4, String(Math.round(d / 20)), {fs: 11 * FZ, a: 'middle', c: K.ink, halo: K.bg}); }
     }
-    if (lay.rot) { const q = S(g.at(g.sMin + 2, -(a + (+r.passeio || 2) / 2))); s += tx(q.x, q.y + 4, r.nome, {fs: 13, w: 700, c: K.ink, halo: K.pass, rot: fl ? ang + 180 : ang, a: fl ? 'end' : 'start'}); }
+    if (lay.rot) { const q = S(g.at(g.sMin + 2, -(a + (+r.passeio || 2) / 2))); s += tx(q.x, q.y + 4, r.nome, {fs: 13 * FZ, w: 700, c: K.ink, halo: K.pass, rot: fl ? ang + 180 : ang, a: fl ? 'end' : 'start'}); }
   });
   // ramais e BLs
   if (lay.bl) P.bls.forEach(b => {
-    const pb = posBL(G, b), pv = posPV(G, pvById(b.pv)); if (!pb) return;
+    const pb = posBL(G, b); if (!pb) return;
     const B = S(pb); const r = R.bl[b.id] || {};
-    if (pv) { const V = S(pv); s += ln(B.x, B.y, V.x, V.y, K.agua, 2, '6 3'); }
-    const w = Math.max(9, (b.tipo === 'gd' ? 2.0 : 1.0) * st.s), h = Math.max(6, 0.6 * st.s);
-    const g = G[b.rua], ang = -g.az;
-    s += `<g transform="translate(${B.x.toFixed(1)} ${B.y.toFixed(1)}) rotate(${ang.toFixed(1)})" data-k="bl:${esc(b.id)}" style="cursor:pointer"><rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" fill="${r.st === 'err' ? K.err : K.bl}" stroke="${K.ink}" stroke-width="1"/></g>`;
-    if (lay.rot) s += tx(B.x, B.y + (b.lado === 'D' ? 20 : -10), b.id, {fs: 11, a: 'middle', c: K.bl, w: 700, halo: K.bg});
+    const rp = ramalPts(G, b); if (rp) s += `<polyline points="${rp.map(p => { const q = S(p); return q.x.toFixed(1) + ',' + q.y.toFixed(1); }).join(' ')}" fill="none" stroke="${K.agua}" stroke-width="2" stroke-dasharray="6 3"/>`;
+    const dm = blDim(b), sgl = b.lado === 'D' ? -1 : 1;
+    const w = Math.max(9, dm.Le * st.s), h = Math.max(6, dm.Be * st.s);
+    const g = G[b.rua], ang = -g.az, cor = r.st === 'err' ? K.err : K.bl;
+    // grelha (caixa de ralo e combinada) desenhada na sarjeta, junto ao espelho do meio-fio
+    let gr = '';
+    if (dm.tp === 'gr' || dm.tp === 'cb') { const gw = Math.max(6, dm.gL * st.s), gh = Math.max(3, dm.gB * st.s), gy = dm.tp === 'gr' ? 0 : (dm.Be / 2 - (dm.Be - dm.gB / 2 - 0.05)) * st.s * sgl;
+      const ny = -gy; gr = `<rect x="${-gw / 2}" y="${(ny - gh / 2).toFixed(1)}" width="${gw}" height="${gh}" fill="none" stroke="${K.ink}" stroke-width="0.8"/>` + Array.from({length: 4}, (_, q) => { const xx = -gw / 2 + gw * (q + 1) / 5; return `<line x1="${xx.toFixed(1)}" y1="${(ny - gh / 2).toFixed(1)}" x2="${xx.toFixed(1)}" y2="${(ny + gh / 2).toFixed(1)}" stroke="${K.ink}" stroke-width="0.6"/>`; }).join(''); }
+    s += `<g transform="translate(${B.x.toFixed(1)} ${B.y.toFixed(1)}) rotate(${ang.toFixed(1)})" data-k="bl:${esc(b.id)}" style="cursor:pointer"><rect x="${-w / 2}" y="${-h / 2}" width="${w}" height="${h}" fill="${cor}" fill-opacity="${dm.tp === 'gr' ? 0.85 : 1}" stroke="${K.ink}" stroke-width="1"/>${gr}</g>`;
+    if (lay.rot) s += tx(B.x, B.y + (b.lado === 'D' ? 20 : -10), b.id, {fs: 11 * FZ, a: 'middle', c: K.bl, w: 700, halo: K.bg});
   });
   // bacias (rótulo junto ao destino)
   if (lay.bac && 20 * st.s > 55) { const cnt = {}; P.bacias.forEach(bc => {
     const bl = P.bls.find(x => x.id === bc.dest), pv = pvById(bc.dest);
     const p = bl ? posBL(G, bl) : pv ? posPV(G, pv) : null; if (!p) return;
     const k = cnt[bc.dest] = (cnt[bc.dest] || 0) + 1, Q = S(p), side = bl && bl.lado === 'D' ? 1 : -1;
-    s += tx(Q.x + 14, Q.y + side * (22 + 14 * k), bc.id + ' · ' + fmt(num(bc.A), 2) + ' ha · C ' + fmt(num(bc.C), 2), {fs: 11, c: K.ok, halo: K.bg, w: 700});
+    s += tx(Q.x + 14, Q.y + side * (22 + 14 * k), bc.id + ' · ' + fmt(num(bc.A), 2) + ' ha · C ' + fmt(num(bc.C), 2), {fs: 11 * FZ, c: K.ok, halo: K.bg, w: 700});
   }); }
   // trechos
   R.ordem.forEach(t => {
@@ -3258,8 +3482,8 @@ function svgPlanta(K, W, H, st, lay) {
       let deg = an * 180 / Math.PI; if (deg > 90) deg -= 180; if (deg < -90) deg += 180;
       const ox = 14 * Math.sin(an), oy = -14 * Math.cos(an);
       const lbl = t.id + ' · ' + secLbl(t) + ' · ' + fmt(r.L, 1) + ' m · i ' + (isNum(r.S) ? fmt(r.S * 100, 2) : '—') + '%';
-      s += tx(mx - ox, my - oy + 8, segL > lbl.length * 7 + 30 ? lbl : segL > 70 ? t.id + ' ' + secLbl(t) : t.id, {fs: 12, a: 'middle', c: K.aguaD, w: 700, rot: deg, halo: K.bg});
-      if (lay.cot) s += tx(mx + ox, my + oy, 'Q ' + fL(r.Q) + ' L/s · V ' + fmt(r.h.V, 2) + ' m/s', {fs: 11, a: 'middle', c: K.ink, rot: deg, halo: K.bg});
+      s += tx(mx - ox, my - oy + 8, segL > lbl.length * 7 + 30 ? lbl : segL > 70 ? t.id + ' ' + secLbl(t) : t.id, {fs: 12 * FZ, a: 'middle', c: K.aguaD, w: 700, rot: deg, halo: K.bg});
+      if (lay.cot) s += tx(mx + ox, my + oy, 'Q ' + fL(r.Q) + ' L/s · V ' + fmt(r.h.V, 2) + ' m/s', {fs: 11 * FZ, a: 'middle', c: K.ink, rot: deg, halo: K.bg});
     }
   });
   // PVs
@@ -3268,20 +3492,20 @@ function svgPlanta(K, W, H, st, lay) {
     const rad = Math.max(7, (num(pv.dpv) || 1000) / 2000 * st.s * 1.3);
     s += `<g data-k="pv:${esc(pv.id)}" style="cursor:pointer"><circle cx="${Q.x.toFixed(1)}" cy="${Q.y.toFixed(1)}" r="${rad.toFixed(1)}" fill="${K.bg}" stroke="${r.st === 'err' ? K.err : K.ink}" stroke-width="2.4"/><circle cx="${Q.x.toFixed(1)}" cy="${Q.y.toFixed(1)}" r="${(rad * 0.35).toFixed(1)}" fill="${K.ink}"/></g>`;
     if (lay.rot) {
-      s += tx(Q.x + rad + 4, Q.y - rad - 2, pv.id, {fs: 13, w: 700, c: K.ink, halo: K.bg});
-      if (lay.cot && isNum(r.tp)) s += tx(Q.x + rad + 4, Q.y - rad + 12, 'CT ' + fmt(r.tp, 2) + ' · CF ' + fmt(r.fundo, 2), {fs: 11, c: K.muted, halo: K.bg});
+      s += tx(Q.x + rad + 4, Q.y - rad - 2, pv.id, {fs: 13 * FZ, w: 700, c: K.ink, halo: K.bg});
+      if (lay.cot && isNum(r.tp)) s += tx(Q.x + rad + 4, Q.y - rad + 12, 'CT ' + fmt(r.tp, 2) + ' · CF ' + fmt(r.fundo, 2), {fs: 11 * FZ, c: K.muted, halo: K.bg});
     }
   });
   // escala gráfica, norte e legenda
   const nice = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500].find(v => v * st.s >= 70) || 500, bw = nice * st.s;
-  s += rc(16, H - 34, bw / 2, 7, K.ink) + rc(16 + bw / 2, H - 34, bw / 2, 7, K.bg, K.ink) + tx(16, H - 40, '0', {fs: 11, c: K.ink}) + tx(16 + bw, H - 40, nice + ' m', {fs: 11, c: K.ink, a: 'middle'});
-  s += `<g transform="translate(${W - 34} 44)"><path d="M0 -26 L9 6 L0 0 L-9 6 Z" fill="${K.ink}"/>${tx(0, 22, 'N', {fs: 14, w: 700, a: 'middle', c: K.ink})}</g>`;
-  const lg = [[K.agua, 'Rede tronco (seta = fluxo)', 'l'], [K.agua, 'Ramal BL → PV', 'd'], [K.bl, 'Boca-de-lobo', 'r'], [K.ink, 'Poço de visita', 'c'], [K.pav, 'Pista', 'r'], [K.pass, 'Passeio', 'r']];
+  s += rc(16, H - 34, bw / 2, 7, K.ink) + rc(16 + bw / 2, H - 34, bw / 2, 7, K.bg, K.ink) + tx(16, H - 40, '0', {fs: 11 * FZ, c: K.ink}) + tx(16 + bw, H - 40, nice + ' m', {fs: 11 * FZ, c: K.ink, a: 'middle'});
+  s += `<g transform="translate(${W - 34} 44)"><path d="M0 -26 L9 6 L0 0 L-9 6 Z" fill="${K.ink}"/>${tx(0, 22, 'N', {fs: 14 * FZ, w: 700, a: 'middle', c: K.ink})}</g>`;
+  const lg = [[K.agua, 'Rede tronco (seta = fluxo)', 'l'], [K.agua, 'Ramal → PV (45° no fluxo)', 'd'], [K.bl, 'Caixa de ralo / boca-de-lobo', 'r'], [K.ink, 'Poço de visita', 'c'], [K.pav, 'Pista', 'r'], [K.pass, 'Passeio', 'r']];
   const lx = W - 210, ly = H - 20 - lg.length * 18;
   s += rc(lx - 10, ly - 18, 210, lg.length * 18 + 14, K.bg, K.grid);
   lg.forEach(([c, t, k], i) => { const y = ly + i * 18;
     s += k === 'l' ? ln(lx, y - 4, lx + 22, y - 4, c, 4) : k === 'd' ? ln(lx, y - 4, lx + 22, y - 4, c, 2, '6 3') : k === 'c' ? `<circle cx="${lx + 11}" cy="${y - 4}" r="6" fill="${K.bg}" stroke="${c}" stroke-width="2"/>` : rc(lx + 3, y - 9, 16, 10, c, K.ink, 0.6);
-    s += tx(lx + 30, y, t, {fs: 11.5, c: K.ink}); });
+    s += tx(lx + 30, y, t, {fs: 11.5 * FZ, c: K.ink}); });
   return s + '</svg>';
 }
 function vPlanta() {
@@ -3290,6 +3514,9 @@ function vPlanta() {
   <div class="card" style="padding:.6rem">
     <div class="bar-btns" style="margin-bottom:.5rem">
       <button class="btn btn-secondary btn-sm" onclick="plZoom(1.4)">＋</button><button class="btn btn-secondary btn-sm" onclick="plZoom(1/1.4)">－</button><button class="btn btn-secondary btn-sm" onclick="PL=null;drawPlanta()">⤢ Ajustar</button>
+      <span style="font-size:.8rem;display:inline-flex;gap:.25rem;align-items:center;margin-left:.3rem">Fonte <button class="btn btn-secondary btn-sm" title="Diminuir o tamanho dos textos" onclick="plFonte(-1)">A−</button><b id="pl-fz" style="min-width:2.6rem;text-align:center">${Math.round((PLAY.fz || 1) * 100)}%</b><button class="btn btn-secondary btn-sm" title="Aumentar o tamanho dos textos" onclick="plFonte(1)">A＋</button></span>
+      <label style="font-size:.8rem;display:inline-flex;gap:.3rem;align-items:center" title="Raio da curva do meio-fio nas esquinas (embocaduras). Aplica a todas as ruas; para ajustar rua a rua use a aba 3.">Raio das esquinas <select onchange="plRaio(this.value)">${(() => { const vs = [...new Set(P.ruas.map(r => raioRua(r)))]; const cur = vs.length === 1 ? String(vs[0]) : ''; return (cur ? '' : '<option value="" selected>por rua</option>') + [0, 3, 4, 5, 6, 8, 10, 12, 15].map(v => `<option value="${v}" ${String(v) === cur ? 'selected' : ''}>${v ? v + ' m' : 'sem raio'}</option>`).join(''); })()}</select></label>
+      <button class="btn btn-primary btn-sm" onclick="exportDXFPlanta()" title="Baixa a planta baixa em DXF (AutoCAD), com um nível (layer) para cada elemento">📐 Exportar DXF</button>
       ${[['rot', 'Rótulos'], ['est', 'Estacas'], ['bl', 'BLs e ramais'], ['bac', 'Bacias'], ['cot', 'Vazões e cotas']].map(([k, t]) => `<label style="font-size:.8rem;display:inline-flex;gap:.3rem;align-items:center"><input type="checkbox" ${PLAY[k] ? 'checked' : ''} onchange="PLAY.${k}=this.checked;drawPlanta()"/>${t}</label>`).join('')}
     </div>
     <div id="pl-box" style="width:100%;height:min(70vh,640px);border:1px solid var(--line);border-radius:8px;overflow:hidden;touch-action:none;cursor:grab;background:var(--surface)"></div>
