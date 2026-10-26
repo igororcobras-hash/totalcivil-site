@@ -2812,7 +2812,7 @@ function baixarBlob(nome, b) {
   window.exportDXFPlanta = function () {
     if (!R || !R.ordem || !R.ordem.length) { toast('Calcule a rede antes de exportar.'); return; }
     const G = geoRuas();
-    const layers = [['RUA-EIXO', 2], ['RUA-PISTA', 8], ['TRECHOS', 5], ['PV', 7], ['BL-RAMAL', 4], ['TEXTOS', 7]];
+    const layers = [['RUA-EIXO', 2], ['RUA-PISTA', 8], ['TRECHOS', 5], ['PV', 7], ['BOCA-DE-LOBO', 4], ['RAMAL', 6], ['TEXTOS', 7]];
     let e = '';
     // ruas: eixo + bordas de pista e passeio
     P.ruas.forEach(r => {
@@ -2837,10 +2837,10 @@ function baixarBlob(nome, b) {
     // bocas-de-lobo: retângulo + ramal
     P.bls.forEach(b => {
       const pb = posBL(G, b), pv = posPV(G, pvById(b.pv)); if (!pb) return;
-      if (pv) e += dLn('BL-RAMAL', pb.x, pb.y, pv.x, pv.y);
+      if (pv) e += dLn('RAMAL', pb.x, pb.y, pv.x, pv.y);
       const g = G[b.rua], bw = (b.tipo === 'gd' ? 2.0 : 1.0), bh = 0.6;
       const ca = Math.cos(g.az * Math.PI / 180), sa = Math.sin(g.az * Math.PI / 180);
-      e += dPl('BL-RAMAL', [
+      e += dPl('BOCA-DE-LOBO', [
         [pb.x - bw / 2 * ca + bh / 2 * sa, pb.y - bw / 2 * sa - bh / 2 * ca],
         [pb.x + bw / 2 * ca + bh / 2 * sa, pb.y + bw / 2 * sa - bh / 2 * ca],
         [pb.x + bw / 2 * ca - bh / 2 * sa, pb.y + bw / 2 * sa + bh / 2 * ca],
@@ -3006,7 +3006,7 @@ function baixarBlob(nome, b) {
   window.exportDXFSecao = function () {
     if (!SEC_PV) { toast('Selecione um PV para exportar a secao.'); return; }
     const d = dadosSecao(SEC_PV); if (!d) { toast('Sem dados de secao para este PV.'); return; }
-    const layers = [['TERRENO', 3], ['VALA', 2], ['TUBO', 5], ['BL-CAIXA', 4], ['RAMAL-BL', 4], ['TEXTOS', 7]];
+    const layers = [['TERRENO', 3], ['MEIO-FIO', 1], ['VALA', 2], ['TUBO', 5], ['BOCA-DE-LOBO', 4], ['RAMAL', 6], ['TEXTOS', 7]];
     let e = '';
     const { D, De, gal, ci, B, fundoVala, larg, pas, bls, tp, zSup, mfH } = d;
     const xmax = larg / 2 + pas + 2;
@@ -3014,9 +3014,9 @@ function baixarBlob(nome, b) {
     const terrPts = [];
     for (let x = -xmax; x <= xmax + 1e-9; x += 0.2) terrPts.push([+(x.toFixed(4)), zSup(x)]);
     e += dPl('TERRENO', terrPts);
-    // meio-fios
+    // meio-fios (layer próprio)
     const mf = mfH || 0.15;
-    [-larg / 2, larg / 2].forEach(bx => e += dLn('TERRENO', bx, zSup(Math.abs(bx)), bx, zSup(Math.abs(bx)) - mf));
+    [-larg / 2, larg / 2].forEach(bx => e += dLn('MEIO-FIO', bx, zSup(Math.abs(bx)), bx, zSup(Math.abs(bx)) - mf));
     // vala
     const bv = B / 2;
     e += dLn('VALA', -bv, fundoVala, bv, fundoVala);
@@ -3037,11 +3037,11 @@ function baixarBlob(nome, b) {
     // bocas-de-lobo
     bls.forEach(bl => {
       const bx = bl.side * (larg / 2 + bl.larg / 2 + 0.1), bw = bl.larg;
-      e += dPl('BL-CAIXA', [[bx - bw / 2, bl.fundo], [bx + bw / 2, bl.fundo], [bx + bw / 2, bl.topo], [bx - bw / 2, bl.topo]], true);
+      e += dPl('BOCA-DE-LOBO', [[bx - bw / 2, bl.fundo], [bx + bw / 2, bl.fundo], [bx + bw / 2, bl.topo], [bx - bw / 2, bl.topo]], true);
       e += dTx('TEXTOS', bx, bl.topo + 0.3, 1.2, bl.b.id);
       if (isNum(bl.ciPV)) {
         const pvSide = bl.side > 0 ? bv : -bv;
-        e += dLn('RAMAL-BL', bx + bl.side * bw / 2, bl.ciBL, pvSide, bl.ciPV);
+        e += dLn('RAMAL', bx + bl.side * bw / 2, bl.ciBL, pvSide, bl.ciPV);
       }
     });
     // cotas e rótulos
@@ -3057,7 +3057,7 @@ function baixarBlob(nome, b) {
   /* ---------- TODAS AS SEÇÕES (um único arquivo, lado a lado) ---------- */
   window.exportDXFTodasSecoes = function () {
     if (!R || !R.ordem || !R.ordem.length) { toast('Calcule a rede antes de exportar.'); return; }
-    const layers = [['TERRENO', 3], ['VALA', 2], ['TUBO', 5], ['BL-CAIXA', 4], ['RAMAL-BL', 4], ['TEXTOS', 7]];
+    const layers = [['TERRENO', 3], ['MEIO-FIO', 1], ['VALA', 2], ['TUBO', 5], ['BOCA-DE-LOBO', 4], ['RAMAL', 6], ['TEXTOS', 7]];
     let e = '', offsetX = 0, count = 0;
     const pvIds = [...new Set([...R.ordem.map(t => t.m), ...R.ordem.map(t => t.j)])];
     pvIds.forEach(pvId => {
@@ -3070,7 +3070,7 @@ function baixarBlob(nome, b) {
       for (let x = -xmax; x <= xmax + 1e-9; x += 0.2) terrPts.push([+(( ox + x).toFixed(4)), zSup(x)]);
       e += dPl('TERRENO', terrPts);
       const mf = mfH || 0.15;
-      [-larg / 2, larg / 2].forEach(bx => e += dLn('TERRENO', ox + bx, zSup(Math.abs(bx)), ox + bx, zSup(Math.abs(bx)) - mf));
+      [-larg / 2, larg / 2].forEach(bx => e += dLn('MEIO-FIO', ox + bx, zSup(Math.abs(bx)), ox + bx, zSup(Math.abs(bx)) - mf));
       // vala
       const bv = B / 2;
       e += dLn('VALA', ox - bv, fundoVala, ox + bv, fundoVala);
@@ -3091,11 +3091,11 @@ function baixarBlob(nome, b) {
       // bocas-de-lobo
       bls.forEach(bl => {
         const bx = ox + bl.side * (larg / 2 + bl.larg / 2 + 0.1), bw = bl.larg;
-        e += dPl('BL-CAIXA', [[bx - bw / 2, bl.fundo], [bx + bw / 2, bl.fundo], [bx + bw / 2, bl.topo], [bx - bw / 2, bl.topo]], true);
+        e += dPl('BOCA-DE-LOBO', [[bx - bw / 2, bl.fundo], [bx + bw / 2, bl.fundo], [bx + bw / 2, bl.topo], [bx - bw / 2, bl.topo]], true);
         e += dTx('TEXTOS', bx, bl.topo + 0.3, 1.2, bl.b.id);
         if (isNum(bl.ciPV)) {
           const pvSide = bl.side > 0 ? (ox + bv) : (ox - bv);
-          e += dLn('RAMAL-BL', bx + bl.side * bw / 2, bl.ciBL, pvSide, bl.ciPV);
+          e += dLn('RAMAL', bx + bl.side * bw / 2, bl.ciBL, pvSide, bl.ciPV);
         }
       });
       // rótulos

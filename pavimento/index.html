@@ -5638,29 +5638,45 @@ function salvarUsuario(uid, acao) {
   function dBuild(layers,ents){var s='0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1009\n9\n$INSUNITS\n70\n6\n0\nENDSEC\n0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLAYER\n70\n'+layers.length+'\n';layers.forEach(function(lr){s+='0\nLAYER\n2\n'+lr[0]+'\n70\n0\n62\n'+lr[1]+'\n6\nCONTINUOUS\n';});return s+'0\nENDTABLE\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n'+ents+'0\nENDSEC\n0\nEOF\n';}
   function dSave(nome,txt){var b=new Blob([txt],{type:'application/dxf'});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=nome;a.click();setTimeout(function(){URL.revokeObjectURL(a.href);},2000);}
 
+  // Sanitiza nome de camada para DXF (max 31 chars, ASCII sem acentos)
+  function lnm(s){return s.toUpperCase().replace(/[ÀÁÂÃÄ]/g,'A').replace(/[ÈÉÊË]/g,'E').replace(/[ÌÍÎÏ]/g,'I').replace(/[ÒÓÔÕÖ]/g,'O').replace(/[ÙÚÛÜ]/g,'U').replace(/Ç/g,'C').replace(/[^A-Z0-9_-]/g,'-').replace(/-+/g,'-').replace(/^-|-$/g,'').slice(0,31);}
+
   window.exportDXFSecoesPav=function(){
     var sels=(typeof secaoSelecionadas==='function'?secaoSelecionadas():[]).filter(function(o){return o&&o.G;});
     if(!sels.length){alert('Nenhuma seção transversal calculada.');return;}
     var P=secaoParams();
-    var layers=[['TERRENO',3],['PAVIMENTO',4],['FORMACAO',2],['TALUDE',6],['EIXO',7],['TEXTO',7]];
+    // Coleta layers dinâmicos das camadas + fixos
+    var camLayers=P.camadas.map(function(c){return [lnm(c[0]),4];});
+    var layers=[['TERRENO',3]].concat(camLayers).concat([['FORMACAO',2],['TALUDE-CORTE',1],['TALUDE-ATERRO',5],['MEIO-FIO',6],['EIXO',7],['TEXTO',7]]);
     var e='',ox=0;
     sels.forEach(function(o){
       var L=o.L,G=o.G;
       var b=G.b,xl=-(b+G.E.d),xr=b+G.D.d;
+      // terreno
       e+=dPl('TERRENO',[[xl+ox,G.E.tInt],[-b+ox,G.tE],[ox,G.tC],[b+ox,G.tD],[xr+ox,G.D.tInt]],false);
+      // camadas do pavimento — cada uma no seu layer (de baixo para cima)
       var yB=G.form;
       for(var i=P.camadas.length-1;i>=0;i--){
-        var cam=P.camadas[i],esp=cam[1];
+        var cam=P.camadas[i],esp=cam[1],lay=lnm(cam[0]);
         if(!(esp>0))continue;
         var yT=yB+esp;
-        e+=dPl('PAVIMENTO',[[-b+ox,yB],[b+ox,yB],[b+ox,yT],[-b+ox,yT]],true);
+        e+=dPl(lay,[[-b+ox,yB],[b+ox,yB],[b+ox,yT],[-b+ox,yT]],true);
         e+=dTx('TEXTO',-b+ox+0.05,(yB+yT)/2,0.07,cam[0]+' '+esp.toFixed(3)+'m');
         yB=yT;
       }
+      // linha de formação
       e+=dPl('FORMACAO',[[-b+ox,G.form],[b+ox,G.form]],false);
-      if(G.E.d>0)e+=dPl('TALUDE',[[xl+ox,G.E.tInt],[-b+ox,G.tE]],false);
-      if(G.D.d>0)e+=dPl('TALUDE',[[b+ox,G.tD],[xr+ox,G.D.tInt]],false);
+      // taludes corte vs aterro
+      if(G.E.d>0)e+=dPl(G.E.corte?'TALUDE-CORTE':'TALUDE-ATERRO',[[xl+ox,G.E.tInt],[-b+ox,G.tE]],false);
+      if(G.D.d>0)e+=dPl(G.D.corte?'TALUDE-CORTE':'TALUDE-ATERRO',[[b+ox,G.tD],[xr+ox,G.D.tInt]],false);
+      // meio-fio
+      if(P.hMF>0){
+        e+=dLn('MEIO-FIO',-b+ox,G.tE,-b+ox,G.tE+P.hMF);
+        e+=dLn('MEIO-FIO',b+ox,G.tD,b+ox,G.tD+P.hMF);
+      }
+      // eixo
       e+=dLn('EIXO',ox,G.form-0.2,ox,G.tC+0.3);
+      // rótulo
       var yLab=Math.min(G.E.tInt,G.tE,G.tC,G.tD,G.D.tInt,G.form)-0.8;
       e+=dTx('TEXTO',ox,yLab,0.18,'Est. '+L.est.toFixed(3)+'m');
       e+=dTx('TEXTO',ox,yLab-0.30,0.12,'('+L.sit+')');
