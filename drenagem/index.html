@@ -4546,7 +4546,7 @@ svgSecao = function (pvId, K, W = 1100) {
   const c = P.crit, half = d.larg / 2 + d.pas + 0.6, m = d.emop;
   const bls = mostraRalos() ? d.bls.map(b => Object.assign({pl: blPlano(d, b)}, b)) : [];
   const temVista = bls.some(b => !b.pl.caixa || !b.pl.ramal);
-  const notas = (temVista ? 1 : 0) + (m ? 2 : 0);
+  const notas = 1 + (temVista && mostraVista() ? 1 : 0) + (m ? 2 : 0);   // 1ª linha: legenda dos traços
   const zTop = d.tp + 0.6, zBot = Math.min(d.fundoVala - (bls.length ? 0.75 : 0), ...bls.map(b => b.fundo - 0.1)) - 0.5;
   const sc = (W - 140) / (2 * half), Hd = (zTop - zBot) * sc;
   const H0 = Math.round(70 + Hd + 30), H = H0 + notas * 24;
@@ -4572,9 +4572,14 @@ svgSecao = function (pvId, K, W = 1100) {
   // PV em corte
   const xi = d.dpv / 2, xe = xi + d.parede;
   s += pvEmopCorte(m ? d : Object.assign({}, d, {emop: pvCircMedidas(d.dpv, d.tp, d.fundoPV)}), X, Y, sc, K);
+  // água no PV = linha piezométrica no PV (mesmo nível na câmara e na boca do tubo de saída)
+  const rPV = R && R.pv[pvId], Hpv = rPV && isNum(rPV.H) && rPV.H > -1e8 ? Math.min(rPV.H, d.tp) : null, hwPV = (m ? m.L : (d.dpv || 1)) / 2;
+  if (Hpv != null && Hpv > d.fundoPV) s += rc(X(-hwPV), Y(Hpv), 2 * hwPV * sc, (Hpv - d.fundoPV) * sc, K.aguaF, null);
+  const hD = d.gal ? d.gal.H : d.D, dAg = Hpv != null && d.rt && d.rt.h ? Object.assign({}, d, {rt: Object.assign({}, d.rt, {h: Object.assign({}, d.rt.h, {carga: Hpv > d.ci + hD + 1e-4, yD: Math.max(0, Math.min(1, (Hpv - d.ci) / hD))})})}) : d;
   // tubo (boca no fundo do PV)
   const cy = d.ci + d.D / 2;
-  s += condCorte(d, X, Y, sc, K, 2);
+  s += condCorte(dAg, X, Y, sc, K, 2);
+  if (Hpv != null && Hpv > d.fundoPV) s += ln(X(-hwPV), Y(Hpv), X(hwPV), Y(Hpv), '#E8731A', 2.4, '9 6');
   // caixas de ralo e ramais (contínuo = no plano do corte; pontilhado = em vista, fora do corte)
   bls.forEach(b => {
     const x0 = b.side * d.larg / 2, wb = 0.10;
@@ -4602,7 +4607,7 @@ svgSecao = function (pvId, K, W = 1100) {
     s += `<polygon points="${X(xs)},${Y(z1)} ${X(xf)},${Y(z2)} ${X(xf)},${Y(z2 + rr)} ${X(xs)},${Y(z1 + rr)}" fill="${vR ? 'none' : K.bg}" stroke="${K.agua}" stroke-width="1.6"${dR}/>`;
     const yr = rm.carga ? 1 : Math.min(1, rm.yD || 0);
     if (yr > 0) s += `<polygon points="${X(xs)},${Y(z1)} ${X(xf)},${Y(z2)} ${X(xf)},${Y(z2 + yr * rr)} ${X(xs)},${Y(z1 + yr * rr)}" fill="${K.aguaF}"${vR ? ' fill-opacity=".55"' : ''}/>`;
-    s += `<line x1="${X(xs)}" y1="${Y(z1 + rr / 2)}" x2="${X(xf)}" y2="${Y(z2 + rr / 2)}" stroke="#E8731A" stroke-width="2" stroke-dasharray="9 6"/>`;
+    if (yr > 0) s += `<line x1="${X(xs)}" y1="${Y(z1 + yr * rr)}" x2="${X(xf)}" y2="${Y(z2 + yr * rr)}" stroke="#E8731A" stroke-width="2" stroke-dasharray="9 6"${vR ? ' opacity=".6"' : ''}/>`;   // linha piezométrica do ramal = superfície da água
     s += tx(X(b.side * (d.larg / 2 + d.pas * 0.5)), Y(b.topo) - 14, b.b.id + (vC ? ' (em vista)' : ''), {fs: 15, w: 700, a: 'middle', c: K.bl, halo: K.bg});
     // caixa de ralo: modelo e medidas internas, embaixo da caixa
     const mod = ((CAIXAS[b.b.modelo] || {}).nome || BLTIPOS[b.b.tipo].nome).split(' — ');
@@ -4640,6 +4645,13 @@ svgSecao = function (pvId, K, W = 1100) {
   s += gradeCotas(K, 's:' + pvId, X(-half), X(half), zBot, zTop, Y, sc, X(-half) - 6);
   // notas
   let yn = H0 + 16;
+  { let lx = 20; const it = (sym, t) => { s += sym(lx, yn - 4) + tx(lx + 38, yn, t, {fs: 12, c: K.ink}); lx += 46 + t.length * 6.4 * fzDes(); };
+    it((x, y) => ln(x, y, x + 30, y, '#8B5A2B', 3), 'Terreno / pavimento');
+    it((x, y) => rc(x, y - 6, 30, 10, K.aguaF, K.agua, 1.4), 'Tubo e lâmina d\'água');
+    it((x, y) => ln(x, y, x + 30, y, '#E8731A', 2.4, '9 6'), 'Linha piezométrica (nível d\'água)');
+    it((x, y) => ln(x + 15, y - 8, x + 15, y + 6, '#8B5A2B', 4), 'Escoramento da vala');
+    it((x, y) => ln(x, y, x + 30, y, ACO, 2), 'Armadura (aço)');
+    yn += 24; }
   if (temVista && mostraVista()) { s += ln(20, yn - 4, 60, yn - 4, K.ink, 1.4, DASH) + tx(70, yn, 'Pontilhado: boca de lobo, caixa de ralo ou ramal em vista, fora do plano do corte (em outra estaca, descendo para o PV no sentido da água).', {fs: 12, c: K.ink}); yn += 24; }
   if (m) s += tx(20, yn, (m.mod ? 'PV ' + BANCO_NOME[m.mod.banco] + ' (' + m.mod.cod + '): câmara interna ' : m.geo ? 'PV especial em concreto armado: câmara interna ' : 'PV padrão EMOP: câmara interna ') + fmtCam(m) + ' · paredes de blocos de concreto 20 cm, cheios de concreto e amarrados por barras de aço', {fs: 12, c: K.ink}) +
     tx(20, yn + 22, 'Lajes de fundo e de tampa em concreto armado (' + fmt(m.eF, 2) + ' / ' + fmt(m.eT, 2) + ' m) · chaminé centralizada em anéis Ø0,60 (h ' + fmt(Math.max(0, m.hc || 0), 2) + ' m) · tampão de ferro fundido Ø0,60', {fs: 12, c: K.ink});
