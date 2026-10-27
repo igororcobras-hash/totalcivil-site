@@ -1184,7 +1184,7 @@ function calc() {
     P.bls.filter(u => u.prox === bl.id && res.bl[u.id]).forEach(u => { const x = res.bl[u.id]; r.CAin += x.CAbyp; r.tc = Math.max(r.tc, x.tc); });
     r.i = idf(r.tc); r.Qafl = r.CAin * r.i / 360;
     // sarjeta
-    const Sauto = sarjDecl(bl.rua, num(bl.dist));
+    const Sauto = typeof sarjDeclLado === 'function' ? sarjDeclLado(bl.rua, num(bl.dist), bl.lado) : sarjDecl(bl.rua, num(bl.dist));   // sarjeta do próprio lado (topografia)
     const Sp = num(bl.S) != null ? num(bl.S) : (isNum(Sauto) ? Sauto * 100 : null);
     const rua = ruaById(bl.rua);
     const g = geomSarjeta(rua, bl), z = g.z;
@@ -1719,7 +1719,7 @@ function toggleHelp(b) { const h = b.closest('.field, td, th').querySelector('.f
    ===================================================================== */
 const TABS = [
   ['projeto', '1. Projeto'], ['chuva', '2. Chuva (IDF · tc)'], ['ruas', '3. Ruas e greide'],
-  ['bacias', '4. Bacias'], ['bls', '5. Sarjetas e bocas-de-lobo'], ['pvs', '6. Poços de visita'],
+  ['bacias', '4. Bacias'], ['bls', '5. Sarjetas e bocas-de-lobo'], ['pvs', '6. Poços de visita e topografia'],
   ['rede', '7. Rede tronco'], ['planta', '8. Planta baixa'], ['perfil', '9. Perfil e piezométrica'], ['secao', '10. Seção transversal'],
   ['custos', '11. Custos (SINAPI/SCO)'], ['verif', '12. Verificação'], ['memorial', '13. Memorial e impressão']
 ];
@@ -2198,7 +2198,7 @@ function vBLs() {
 
 /* ---------- 6. POÇOS DE VISITA ---------- */
 function vPVs() {
-  return `<h3>Poços de visita</h3>
+  return `<h3>Poços de visita e topografia</h3>
   <p class="lead">Uma linha por PV, localizado por estaca. A tampa vem do greide quando em branco. Na mesma linha: fundo, profundidade, ligações, perda por turbulência <span class="formula">h<sub>f</sub> = K · V² / 2g</span>, nível d'água e folga até a tampa.</p>
   <div class="bar-btns"><button class="btn btn-primary btn-sm" onclick="addItem('pvs')">＋ Poço de visita</button></div>
   ${sheet('pvs', [
@@ -2279,7 +2279,7 @@ function sugestaoCheck(c) {
 function vVerif() {
   const ch = R.checks, e = ch.filter(c => c.st === 'err').length, w = ch.filter(c => c.st === 'warn').length, o = ch.filter(c => c.st === 'ok').length;
   const lst = ch.filter(c => VFILTRO === 'todos' || (VFILTRO === 'prob' ? c.st !== 'ok' : c.st === VFILTRO));
-  const nomes = {bacias: 'Bacias', bls: 'Sarjetas/BL/ramais', pvs: 'Poços de visita', rede: 'Rede tronco', perfil: 'Piezométrica'};
+  const nomes = {ruas: 'Ruas e topografia', bacias: 'Bacias', bls: 'Sarjetas/BL/ramais', pvs: 'Poços de visita', rede: 'Rede tronco', perfil: 'Piezométrica'};
   const aba = t => t === 'perfil' ? 'perfil' : t;
   const corr = c => {
     if (c.st === 'ok') return '';
@@ -3414,7 +3414,7 @@ function blDistDes(G, b) {
   const m = blDim(b).Le / 2 + 0.4, lo = g.sMin + 10, hi = g.sMax - 10;
   const livre = x => x >= lo - 0.01 && x <= hi + 0.01 && !cs.some(([a, z]) => x > a - m + 1e-6 && x < z + m - 1e-6);
   const dentro = cs.find(([a, z]) => s > a - m && s < z + m); if (!dentro) return s;
-  const S = typeof greideDecl === 'function' ? greideDecl(b.rua, s) : null, desce = S == null || S >= 0 ? 1 : -1;
+  const S = typeof sarjSentidoLado === 'function' ? sarjSentidoLado(b.rua, s, b.lado) : null, desce = S == null || S >= 0 ? 1 : -1;
   const cand = desce > 0 ? [dentro[0] - m, dentro[1] + m] : [dentro[1] + m, dentro[0] - m];
   return cand.find(livre) ?? cand[0];
 }
@@ -3731,7 +3731,7 @@ function dadosSecao(pvId) {
   const zSup = x => { const a = Math.abs(x), xs = Math.max(0, larg / 2 - sjW); return rp.tp - it * Math.min(a, xs) - (a > xs ? sjI * (Math.min(a, larg / 2) - xs) : 0); };
   const bls = P.bls.filter(b => b.pv === pvId).map(b => {
     const rb = R.bl[b.id] || {}, side = b.lado === 'D' ? 1 : -1;
-    const zCurb = zSup(larg / 2);
+    const zMF = typeof cotaMF === 'function' ? cotaMF(b.rua, num(b.dist) || 0, b.lado) : null, zCurb = isNum(zMF) ? zMF : zSup(larg / 2);   // pé do meio-fio na estaca da caixa (topografia)
     const naSarjeta = b.tipo === 'gr';   // caixa de ralo na sarjeta: grelha de ferro fundido no topo, no nível da sarjeta
     const prof = num(b.cxH) || +c.blProf || 1.0, topo = zCurb + (naSarjeta ? 0 : mfH), fundo = topo - prof;
     const rD = (num(b.rD) || 400) / 1000, rI = (num(b.rI) || 0) / 100, rL = num(b.rL) || 0;
@@ -4042,14 +4042,14 @@ function autoCorrigir() {
 }
 function proximaBL(b) {
   // próxima BL no mesmo lado e rua, no sentido em que o greide desce
-  const S = greideDecl(b.rua, num(b.dist)); const dir = S == null || S >= 0 ? 1 : -1;
+  const S = (typeof sarjSentidoLado === 'function' ? sarjSentidoLado(b.rua, num(b.dist), b.lado) : greideDecl(b.rua, num(b.dist))); const dir = S == null || S >= 0 ? 1 : -1;
   return P.bls.filter(x => x.id !== b.id && x.rua === b.rua && x.lado === b.lado && (num(x.dist) - num(b.dist)) * dir > 0)
     .sort((x, y) => Math.abs(num(x.dist) - num(b.dist)) - Math.abs(num(y.dist) - num(b.dist)))[0] || null;
 }
 /* acrescenta uma boca-de-lobo a montante e divide as áreas que chegavam na BL original */
 function addBLMontante(id) {
   const b = P.bls.find(x => x.id === id); if (!b) return;
-  const S = greideDecl(b.rua, num(b.dist)); const up = S == null || S >= 0 ? -1 : 1;
+  const S = (typeof sarjSentidoLado === 'function' ? sarjSentidoLado(b.rua, num(b.dist), b.lado) : greideDecl(b.rua, num(b.dist))); const up = S == null || S >= 0 ? -1 : 1;
   const ant = P.bls.filter(x => x.id !== b.id && x.rua === b.rua && x.lado === b.lado && (num(x.dist) - num(b.dist)) * up > 0)
     .sort((x, y) => Math.abs(num(x.dist) - num(b.dist)) - Math.abs(num(y.dist) - num(b.dist)))[0];
   let d = ant ? (num(ant.dist) + num(b.dist)) / 2 : num(b.dist) + up * 20;
@@ -4919,7 +4919,7 @@ cellRes = function (kind, i, key, el) {
 };
 vPVs = function () {
   const md = Object.entries(PVMOD).map(([k, v]) => [k, v.nome]);
-  return `<h3>Poços de visita</h3>
+  return `<h3>Poços de visita e topografia</h3>
   <p class="lead">Uma linha por PV, localizado por estaca. A tampa vem do greide quando em branco. Na mesma linha: padrão do PV, câmara, fundo, profundidade, ligações, perda por turbulência <span class="formula">h<sub>f</sub> = K · V² / 2g</span>, nível d'água e folga até a tampa.</p>
   <p class="lead" style="margin-top:-.3rem"><b>Padrão EMOP</b> (câmara de blocos de concreto 20 cm armados, lajes de concreto armado, chaminé Ø0,60 e tampão FoFo Ø0,60): no automático, a menor câmara e a altura que atendem aos tubos e à topografia. Escolha outra medida na coluna <b>Padrão do PV</b> ou digite nos detalhes (▸).</p>
   <div class="bar-btns"><button class="btn btn-primary btn-sm" onclick="addItem('pvs')">＋ Poço de visita</button>
@@ -6621,7 +6621,7 @@ function fluxoDirBL(G, b) {
   if (ins.length === 1) return ins[0];
   // chegam tubos dos dois lados da rua (PV de encontro): vale o tubo do lado da caixa
   if (ins.length > 1) { const pp = posPV(G, pvo), sP = pp ? g.loc(pp).s : 0, sB = num(b.dist) || 0; return Math.sign(sP - sB) || ins[0]; }
-  const S = greideDecl(b.rua, num(b.dist)); return S == null || S >= 0 ? 1 : -1;
+  const S = (typeof sarjSentidoLado === 'function' ? sarjSentidoLado(b.rua, num(b.dist), b.lado) : greideDecl(b.rua, num(b.dist))); return S == null || S >= 0 ? 1 : -1;
 }
 /* ângulo (0–180°) entre o ramal (caixa → PV) e a rede tronco no sentido do fluxo; 90° = mesma estaca do PV */
 function angRamal(G, b) {
@@ -6765,7 +6765,7 @@ function fixRamalContra(id) {
   const ang = () => angRamal(geoRuas(), b), Lr = () => ramalLGeo(geoRuas(), b);
   const a0 = ang(); if (!(a0 > 90.5)) return null;
   const d0 = num(b.dist), pv0 = b.pv, Lmax = num(P.crit.ramalLmax) || 15, G = geoRuas(), g = G[b.rua], rua = ruaById(b.rua); if (!g || !rua) return null;
-  const Sg = greideDecl(b.rua, d0), desce = Sg == null || Sg >= 0 ? 1 : -1;
+  const Sg = (typeof sarjSentidoLado === 'function' ? sarjSentidoLado(b.rua, d0, b.lado) : greideDecl(b.rua, d0)), desce = Sg == null || Sg >= 0 ? 1 : -1;
   const s45 = distPorAng(G, b, 45);
   if (isNum(s45) && (s45 - d0) * desce < 0 && s45 >= g.sMin + 10 && s45 <= g.sMax - 10) {
     b.dist = +s45.toFixed(2);
@@ -7321,6 +7321,140 @@ const _drawPerfil62 = drawPerfil; drawPerfil = function () { const r = _drawPerf
 </script>
 <script>
 /* =====================================================================
+   PATCH V1-02-63 (27/10/2026) — Topografia: cotas do eixo, do pé do
+   meio-fio (linha d'água) e do muro / alinhamento, dos dois lados.
+   Usadas nos cálculos: declividade e inclinação transversal da sarjeta
+   de cada lado, cota das caixas e dos ramais, verificações de lote e
+   passeio. Lado esquerdo/direito = olhando no sentido das estacas.
+   ===================================================================== */
+const TOPO_K = {E: 'mfE', D: 'mfD'}, TOPO_M = {E: 'muE', D: 'muD'};
+/* desnível eixo → pé do meio-fio que a seção-tipo da rua daria (pista + sarjeta) */
+function topoDeltaPad(rua) {
+  const larg = +rua.larg || 7, it = (num(rua.it) || 3) / 100, W = Math.min(num(rua.sjW) || 0, larg / 2), sjI = num(rua.sjI) > 0 ? num(rua.sjI) / 100 : it;
+  return it * (larg / 2 - W) + sjI * W;
+}
+/* desnível eixo → pé do meio-fio no ponto (interpolado entre as estacas onde foi medido; sem medição = seção-tipo) */
+function topoDelta(ruaId, dist, lado) {
+  const rua = ruaById(ruaId); if (!rua) return null; const k = TOPO_K[lado === 'D' ? 'D' : 'E'];
+  const pts = estacasRua(ruaId).filter(e => isNum(num(e.cota)) && isNum(num(e[k]))).map(e => ({d: +e.dist, v: +e.cota - +e[k]}));
+  if (!pts.length) return topoDeltaPad(rua);
+  if (dist <= pts[0].d) return pts[0].v; if (dist >= pts[pts.length - 1].d) return pts[pts.length - 1].v;
+  for (let i = 0; i < pts.length - 1; i++) { const a = pts[i], b = pts[i + 1]; if (dist >= a.d && dist <= b.d) return a.v + (b.v - a.v) * (dist - a.d) / ((b.d - a.d) || 1); }
+  return pts[pts.length - 1].v;
+}
+const topoTemMF = (ruaId, lado) => estacasRua(ruaId).some(e => isNum(num(e[TOPO_K[lado === 'D' ? 'D' : 'E']])));
+/* cota do pé do meio-fio (linha d'água da sarjeta) no ponto */
+function cotaMF(ruaId, dist, lado) { const z = greideCota(ruaId, dist), dl = topoDelta(ruaId, dist, lado); return isNum(z) && isNum(dl) ? z - dl : null; }
+/* cota do muro / alinhamento no ponto (só onde foi medida, interpolada) */
+function cotaMuro(ruaId, dist, lado) {
+  const k = TOPO_M[lado === 'D' ? 'D' : 'E'], pts = estacasRua(ruaId).filter(e => isNum(num(e[k]))).map(e => ({d: +e.dist, v: +e[k]}));
+  if (!pts.length) return null; if (dist <= pts[0].d) return pts[0].v; if (dist >= pts[pts.length - 1].d) return pts[pts.length - 1].v;
+  for (let i = 0; i < pts.length - 1; i++) { const a = pts[i], b = pts[i + 1]; if (dist >= a.d && dist <= b.d) return a.v + (b.v - a.v) * (dist - a.d) / ((b.d - a.d) || 1); }
+  return null;
+}
+/* declividade da sarjeta de UM lado (mesma regra do greide: maior declividade que chega ao ponto) */
+function sarjDeclLado(ruaId, dist, lado) {
+  if (!topoTemMF(ruaId, lado)) return sarjDecl(ruaId, dist);
+  const es = estacasRua(ruaId).filter(e => isNum(num(e.cota))); if (es.length < 2 || !isNum(dist)) return null;
+  const f = x => cotaMF(ruaId, x, lado), z = f(dist), segs = [];
+  let k = es.findIndex(e => e.dist > dist + 1e-6); if (k < 0) k = es.length;
+  const ant = es.filter(e => e.dist < dist - 1e-6).pop(), pos = es[k];
+  if (ant) { const za = f(ant.dist); segs.push({S: (za - z) / ((dist - ant.dist) || 1), dz: za - z}); }
+  else if (es[1]) { const z0 = f(es[0].dist), z1 = f(es[1].dist); segs.push({S: (z0 - z1) / ((es[1].dist - es[0].dist) || 1), dz: z0 - z1}); }
+  if (pos) { const zp = f(pos.dist); segs.push({S: (zp - z) / ((pos.dist - dist) || 1), dz: zp - z}); }
+  const chegam = segs.filter(x => x.dz > 1e-9), L = chegam.length ? chegam : segs.map(x => ({S: Math.abs(x.S)}));
+  return L.length ? Math.max(...L.map(x => Math.abs(x.S))) : null;
+}
+/* sentido em que a sarjeta de um lado desce (m/m, + = desce no sentido das estacas) */
+function sarjSentidoLado(ruaId, dist, lado) {
+  if (!topoTemMF(ruaId, lado)) return greideDecl(ruaId, dist);
+  const a = cotaMF(ruaId, dist - 1, lado), b = cotaMF(ruaId, dist + 1, lado); return isNum(a) && isNum(b) ? (a - b) / 2 : greideDecl(ruaId, dist);
+}
+/* inclinação transversal da pista naquele lado e ponto (a partir do desnível medido) */
+const _geomSarj63 = geomSarjeta;
+geomSarjeta = function (rua, bl) {
+  const g = _geomSarj63.apply(this, arguments);
+  if (!rua || !bl || num(bl.z) > 0 || !topoTemMF(rua.id, bl.lado)) return g;
+  const larg = +rua.larg || 7, dl = topoDelta(rua.id, num(bl.dist) || 0, bl.lado); if (!isNum(dl)) return g;
+  const W = g.simples ? 0 : g.W, Sw = g.simples ? 0 : g.Sw, Sx = (dl - Sw * W) / ((larg / 2 - W) || 1);
+  const Sxa = Math.max(0.005, Sx), o = Object.assign({}, g, {Sx: Sxa, z: 1 / Sxa, topo: true, SxMedido: Sx});
+  if (g.simples) o.Sw = Sxa;
+  o.desc = g.desc.replace(/pista a [\d,]+%/, 'pista a ' + fmt(Sxa * 100, 1) + '% (topografia)').replace(/\(z = [\d,]+\)/, '(z = ' + fmt(1 / Sxa, 1) + ', topografia)');
+  return o;
+};
+/* sentido da sarjeta para as funções que procuram a BL seguinte / a montante */
+/* verificações da topografia */
+function checksTopo(res) {
+  P.ruas.forEach(rua => {
+    const larg = +rua.larg || 7, pas = +rua.passeio || 2, mfH = num(rua.mfH) || 0.15;
+    estacasRua(rua.id).forEach(e => ['E', 'D'].forEach(l => {
+      const d = +e.dist, ladoN = l === 'D' ? 'direito' : 'esquerdo', el = (rua.nome || rua.id) + ' est. ' + estLabel(d) + ' (' + ladoN + ')';
+      const mf = isNum(num(e[TOPO_K[l]])) ? +e[TOPO_K[l]] : null, mu = isNum(num(e[TOPO_M[l]])) ? +e[TOPO_M[l]] : null;
+      if (isNum(mf) && isNum(num(e.cota))) { const dl = +e.cota - mf, g = _geomSarj63(rua, null), W = g.simples ? 0 : g.W, Sw = g.simples ? 0 : g.Sw, Sx = (dl - Sw * W) / ((larg / 2 - W) || 1);
+        if (Sx < 0.005) res.checks.push({tab: 'ruas', el, par: 'Topografia — inclinação transversal da pista', val: fmt(Sx * 100, 2) + ' %', lim: '≥ 0,5 % para o meio-fio', st: 'warn', nota: Sx < 0 ? 'O pé do meio-fio está mais alto que o eixo: a pista cai para o outro lado e esta sarjeta não recebe a água da pista. Confira o levantamento ou trate a rua como caimento único (aba 3).' : 'Pista quase plana até o meio-fio: a água espalha na pista. Confira o levantamento.'}); }
+      if (isNum(mu)) { const zTopoMF = (isNum(mf) ? mf : cotaMF(rua.id, d, l)) + mfH;
+        if (isNum(zTopoMF) && mu < zTopoMF - 0.02) res.checks.push({tab: 'ruas', el, par: 'Topografia — lote abaixo do meio-fio', val: 'muro ' + fmt(mu, 3) + ' m', lim: '≥ topo do meio-fio ' + fmt(zTopoMF, 3) + ' m', st: 'warn', nota: 'O alinhamento (muro) está abaixo do topo do meio-fio: a água da rua pode entrar no lote. Preveja captação antes deste ponto, elevação do meio-fio ou soleira de proteção.'});
+        else if (isNum(zTopoMF)) { const ip = (mu - zTopoMF) / pas; if (ip > 0.03 + 1e-4) res.checks.push({tab: 'ruas', el, par: 'Topografia — inclinação do passeio', val: fmt(ip * 100, 1) + ' %', lim: '≤ 3 % (NBR 9050)', st: 'warn', nota: 'Passeio com inclinação transversal acima de 3 %: fora do limite de acessibilidade. Ajuste a cota do meio-fio ou do passeio no projeto de pavimentação.'}); }
+      }
+    }));
+  });
+}
+const _calc63 = calc;
+calc = function () { const res = _calc63.apply(this, arguments); try { checksTopo(res); } catch (e) { console.error('Topografia:', e); } return res; };
+
+/* ---------- tela 📐 Topografia: só as cotas do terreno ---------- */
+let TOPO_RUA = null;
+function abrirTopografia(ruaId) {
+  if (!$('modal-topo')) { const m = document.createElement('div'); m.className = 'modal-backdrop'; m.id = 'modal-topo';
+    m.innerHTML = `<div class="modal" style="max-width:980px"><div class="modal-header"><h3>📐 Topografia — cotas do terreno</h3><button class="btn-icon" onclick="fecharTopografia()">✕</button></div><div class="modal-body" id="topo-body"></div><div class="modal-footer"><button class="btn btn-primary" onclick="fecharTopografia()">Concluir</button></div></div>`;
+    document.body.appendChild(m); }
+  TOPO_RUA = ruaId || TOPO_RUA || (P.ruas[0] || {}).id; topoTela(); openModal('modal-topo');
+}
+function fecharTopografia() { closeModal('modal-topo'); calc(); renderTab(); }
+function topoTela() {
+  const box = $('topo-body'); if (!box) return;
+  if (!P.ruas.length) { box.innerHTML = '<div class="empty">Cadastre as ruas na aba 3 antes de lançar a topografia.</div>'; return; }
+  if (!ruaById(TOPO_RUA)) TOPO_RUA = P.ruas[0].id;
+  const rua = ruaById(TOPO_RUA), larg = +rua.larg || 7, pas = +rua.passeio || 2, idx = P.estacas.map((e, i) => ({e, i})).filter(x => x.e.rua === TOPO_RUA).sort((a, b) => (+a.e.dist || 0) - (+b.e.dist || 0));
+  const inp = (i, k, ph) => `<input type="number" step="0.001" inputmode="decimal" style="width:100%;min-width:84px" value="${isNum(num(P.estacas[i][k])) ? P.estacas[i][k] : ''}" placeholder="${ph}" onchange="topoSet(${i},'${k}',this.value)"/>`;
+  box.innerHTML = `<div class="bar-btns" style="flex-wrap:wrap;gap:.35rem;margin-bottom:.6rem">${P.ruas.map(r => `<button class="btn ${r.id === TOPO_RUA ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="TOPO_RUA='${r.id}';topoTela()">${esc(r.nome || r.id)}</button>`).join('')}</div>
+    <p style="font-size:.82rem;color:var(--muted);margin:.2rem 0 .6rem">Lado <b>esquerdo / direito</b> olhando no sentido crescente das estacas. <b>Meio-fio</b> = cota do pé do meio-fio (linha d'água da sarjeta), a ${fmt(larg / 2, 2)} m do eixo (metade da pista). <b>Muro</b> = cota do alinhamento, a ${fmt(larg / 2 + pas, 2)} m do eixo. Em branco = calculado pela seção-tipo da rua (valor em cinza). Só o eixo é obrigatório.</p>
+    <div class="tbl-wrap"><table><thead><tr><th>Estaca</th><th>Eixo (m)</th><th>Meio-fio esq. (m)</th><th>Meio-fio dir. (m)</th><th>Muro esq. (m)</th><th>Muro dir. (m)</th><th></th></tr></thead><tbody>
+    ${idx.map(({e, i}) => { const pE = cotaMF(TOPO_RUA, +e.dist, 'E'), pD = cotaMF(TOPO_RUA, +e.dist, 'D'), dl = topoDeltaPad(rua), z = num(e.cota);
+      const phE = isNum(num(e.mfE)) ? '' : isNum(z) ? fmt(z - dl, 3).replace(',', '.') : '', phD = isNum(num(e.mfD)) ? '' : isNum(z) ? fmt(z - dl, 3).replace(',', '.') : '';
+      return `<tr><td style="min-width:110px"><input type="text" inputmode="decimal" value="${estLabel(+e.dist)}" style="width:100%" onchange="topoSet(${i},'dist',this.value)"/></td>
+      <td>${inp(i, 'cota', '')}</td><td>${inp(i, 'mfE', phE)}</td><td>${inp(i, 'mfD', phD)}</td><td>${inp(i, 'muE', '')}</td><td>${inp(i, 'muD', '')}</td>
+      <td><button class="btn-icon" title="Excluir estaca" onclick="topoDel(${i})">✕</button></td></tr>`; }).join('') || '<tr><td colspan="7" class="empty">Sem estacas nesta rua.</td></tr>'}
+    </tbody></table></div>
+    <div class="bar-btns" style="margin:.6rem 0 0;flex-wrap:wrap"><button class="btn btn-secondary btn-sm" onclick="addEstacaSil(TOPO_RUA);save();topoTela()">＋ Estaca</button><button class="btn btn-secondary btn-sm" onclick="for(let k=0;k<3;k++)addEstacaSil(TOPO_RUA);save();topoTela()">＋ 3 estacas a cada 20 m</button>
+      <button class="btn btn-secondary btn-sm" onclick="$('topo-colar').style.display=$('topo-colar').style.display==='none'?'':'none'">📋 Colar da planilha</button></div>
+    <div id="topo-colar" style="display:none;margin-top:.6rem"><p style="font-size:.8rem;color:var(--muted);margin:0 0 .3rem">Cole linhas do Excel (ou do levantamento) na ordem: <b>estaca · eixo · meio-fio esq. · meio-fio dir. · muro esq. · muro dir.</b> — colunas vazias podem ficar em branco. Estacas já existentes são atualizadas.</p>
+      <textarea id="topo-txt" rows="6" style="width:100%;font-family:monospace" placeholder="0+00,00	10,520	10,380	10,375	10,600	10,610"></textarea><button class="btn btn-primary btn-sm" style="margin-top:.4rem" onclick="topoColar()">Importar linhas</button></div>`;
+}
+function topoSet(i, k, v) {
+  const e = P.estacas[i]; if (!e) return;
+  if (k === 'dist') { const d = parseEst(v); if (!isNum(d)) return toast('Estaca inválida'); e.dist = +(+d).toFixed(2); }
+  else { const x = String(v).trim() === '' ? '' : +String(v).replace(',', '.'); if (x !== '' && !isNum(x)) return toast('Cota inválida'); e[k] = x; }
+  save(); calc(); if (k === 'dist' || k === 'cota') topoTela();
+}
+function topoDel(i) { if (!confirm('Excluir esta estaca da topografia?')) return; P.estacas.splice(i, 1); save(); calc(); topoTela(); }
+function topoColar() {
+  const n = v => { const t = String(v || '').trim().replace(/\s/g, ''); if (!t) return ''; const x = +t.replace(/\./g, t.includes(',') ? '' : '.').replace(',', '.'); return isNum(x) ? x : ''; };
+  let k = 0;
+  String($('topo-txt').value || '').split(/\r?\n/).forEach(l => {
+    const c = l.split(/\t|;|\s{2,}|\|/).map(x => x.trim()); if (!c[0]) return; const d = parseEst(c[0]); if (!isNum(d)) return;
+    let e = P.estacas.find(x => x.rua === TOPO_RUA && Math.abs(+x.dist - d) < 0.01); if (!e) { e = {rua: TOPO_RUA, dist: +(+d).toFixed(2), cota: '', obs: ''}; P.estacas.push(e); }
+    [['cota', 1], ['mfE', 2], ['mfD', 3], ['muE', 4], ['muD', 5]].forEach(([f, j]) => { const v = n(c[j]); if (v !== '') e[f] = v; }); k++;
+  });
+  save(); calc(); topoTela(); toast(k + ' estaca(s) importada(s) na ' + (ruaById(TOPO_RUA) || {}).nome + '.');
+}
+/* botão na aba 6 (Poços de visita e topografia) e na aba 3 */
+const btnTopo = '<button class="btn btn-primary btn-sm" onclick="abrirTopografia()" title="Digitar só as cotas do terreno: eixo, pé do meio-fio e muro dos dois lados">📐 Topografia</button>';
+const _vPVs63 = vPVs; vPVs = function () { return _vPVs63.apply(this, arguments).replace('<h3>Poços de visita e topografia</h3>', '<h3>Poços de visita e topografia</h3><div class="card" style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap;padding:.6rem .8rem">' + btnTopo + '<span style="font-size:.8rem;color:var(--muted);flex:1;min-width:220px">Cotas do terreno por estaca (eixo, meio-fio e muro dos dois lados). O eixo dá a tampa dos PVs; o meio-fio dá a declividade e a inclinação de cada sarjeta e a cota das caixas; o muro verifica lote e passeio.</span></div>'); };
+const _vRuas63 = vRuas; vRuas = function () { return _vRuas63.apply(this, arguments).replace('<button class="btn btn-primary btn-sm" onclick="addItem(\'ruas\')">＋ Rua</button>', '<button class="btn btn-primary btn-sm" onclick="addItem(\'ruas\')">＋ Rua</button> ' + btnTopo); };
+</script>
+<script>
+/* =====================================================================
    CRONOGRAMA FÍSICO-FINANCEIRO — módulo comum Total Civil (v1, 20/10/2026)
    Mesmo código na Drenagem, no Orçamento e (depois) no Pavimento Flexível.
    - auto(etapas, prazo): distribui cada etapa nos meses pela sequência
@@ -7619,7 +7753,7 @@ async function enviarAoOrcamento(solK, bank) {
   var ORDER = ['projeto','chuva','ruas','bacias','bls','pvs','rede','planta','perfil','secao','custos','verif','memorial'];
   var TAB_NAMES = {
     projeto:'1. Projeto', chuva:'2. Chuva (IDF · tc)', ruas:'3. Ruas e greide',
-    bacias:'4. Bacias', bls:'5. Sarjetas e bocas-de-lobo', pvs:'6. Poços de visita',
+    bacias:'4. Bacias', bls:'5. Sarjetas e bocas-de-lobo', pvs:'6. Poços de visita e topografia',
     rede:'7. Rede tronco', planta:'8. Planta baixa', perfil:'9. Perfil e piezométrica',
     secao:'10. Seção transversal', custos:'11. Custos (SINAPI/SCO)',
     verif:'12. Verificação', memorial:'13. Memorial e impressão'
@@ -7691,172 +7825,184 @@ async function enviarAoOrcamento(solK, bank) {
         norma:'' }
     ]},
     ruas:{ passos:[
-      { sel:'.btn-add',
-        titulo:'1 / 7 — Adicionar rua',
-        dica:'Clique em "+ Adicionar" para inserir a primeira via. Cada rua representa um logradouro ou segmento de via que recebe a drenagem pluvial do projeto.',
-        norma:'' },
-      { sel:'[data-p^="ruas."][data-p$=".nome"]',
-        titulo:'2 / 7 — Nome da rua',
-        dica:'Identificação do logradouro. Ex.: "Rua A", "Av. Brasil". Aparece nas tabelas de bacias, bocas-de-lobo, perfis e no memorial.',
-        norma:'' },
-      { sel:'[data-p^="ruas."][data-p$=".larg"]',
-        titulo:'3 / 7 — Largura da pista (m)',
-        dica:'Largura total da pista de rolamento em metros, sem contar as calçadas. Padrão: 7 m para via local de mão dupla; 3,5 m por faixa é o mínimo do DNIT.',
-        norma:'DNIT 099/2009-EM — largura mínima de faixa 3,5 m.' },
-      { sel:'[data-p^="ruas."][data-p$=".passeio"]',
-        titulo:'4 / 7 — Largura do passeio/calçada (m)',
-        dica:'Largura da calçada de cada lado, em metros. Influencia a área impermeável total da via e o cálculo do coeficiente de escoamento. Padrão: 2 a 3 m por lado.',
-        norma:'' },
-      { sel:'[data-p^="ruas."][data-p$=".mf"]',
-        titulo:'5 / 7 — Meio-fio e sarjeta',
-        dica:'Tipo de guia de meio-fio. "Meio-fio com sarjeta conjugada 30 cm (espelho 15 cm)" é o padrão mfs30, pré-selecionado por ser o mais usado. As dimensões afetam a capacidade da sarjeta calculada na aba 5.',
-        norma:'ABNT NBR 9050 — rebaixo de meio-fio obrigatório nas travessias de pedestres.' },
-      { sel:'[data-p^="ruas."][data-p$=".it"]',
-        titulo:'6 / 7 — Declividade transversal da pista (%)',
-        dica:'Inclinação da pista em direção à guia, em percentual. Padrão: 2 % para asfalto; 3 % para paralelepípedo. Necessária para o escoamento atingir o meio-fio e as bocas-de-lobo.',
-        norma:'DNIT IPR-719 — caimento transversal mínimo 2 % para CBUQ.' },
-      { sel:'[data-p^="ruas."][data-p$=".iz"]',
-        titulo:'7 / 7 — Declividade longitudinal (%)',
-        dica:'Inclinação do greide da via ao longo do eixo, em percentual. Obtida do levantamento topográfico. Influencia a velocidade na sarjeta e a eficiência das bocas-de-lobo. Declividades abaixo de 0,5 % exigem atenção especial no dimensionamento.',
-        norma:'' }
+      { sel:"button[onclick*=\"addItem('ruas')\"]",
+        titulo:"1 / 9 — Adicionar rua",
+        dica:"Clique em \"＋ Rua\" para cada logradouro. Cada rua tem seu próprio greide (estacas) e sua seção-tipo.",
+        norma:"" },
+      { sel:"[data-p^=\"ruas.\"][data-p$=\".nome\"]",
+        titulo:"2 / 9 — Nome da rua",
+        dica:"Nome do logradouro. Aparece na planta, no perfil, nas listas de BL/PV e no memorial.",
+        norma:"" },
+      { sel:"[data-p^=\"ruas.\"][data-p$=\".larg\"]",
+        titulo:"3 / 9 — Largura da pista (m)",
+        dica:"Largura de meio-fio a meio-fio. A metade da largura é a distância do eixo até o meio-fio, onde fica a sarjeta e a caixa de ralo/boca de lobo.",
+        norma:"" },
+      { sel:"[data-p^=\"ruas.\"][data-p$=\".passeio\"]",
+        titulo:"4 / 9 — Largura do passeio (m)",
+        dica:"Do meio-fio até o muro/alinhamento. A cota do muro fica a (largura/2 + passeio) do eixo.",
+        norma:"NBR 9050 — inclinação transversal do passeio ≤ 3 %." },
+      { sel:"[data-p^=\"ruas.\"][data-p$=\".it\"]",
+        titulo:"5 / 9 — Inclinação transversal da pista (%)",
+        dica:"Caimento do eixo para o meio-fio. Típico 2 a 3 %. Quando a topografia do meio-fio for digitada (botão 📐 Topografia), a inclinação real de cada lado passa a vir dela.",
+        norma:"DNIT IPR-724 — abaulamento 2 a 3 %." },
+      { sel:"[data-p^=\"ruas.\"][data-p$=\".mfH\"]",
+        titulo:"6 / 9 — Altura do meio-fio (m)",
+        dica:"Altura da guia acima da sarjeta (≈ 0,15 m). Limita a lâmina admissível na sarjeta e é usada para verificar se o lote fica abaixo do topo do meio-fio.",
+        norma:"" },
+      { sel:"[data-p^=\"ruas.\"][data-p$=\".sjW\"]",
+        titulo:"7 / 9 — Sarjeta: largura e declividade",
+        dica:"Largura (W) e declividade transversal da sarjeta (seção composta). Em branco = sarjeta simples com a mesma inclinação da pista.",
+        norma:"HEC-22 / Izzard — sarjeta composta." },
+      { sel:"button[onclick*=\"abrirTopografia\"]",
+        titulo:"8 / 9 — 📐 Topografia (cotas do terreno)",
+        dica:"Abre uma tela limpa só com as cotas: Estaca · Eixo · Meio-fio esq. · Meio-fio dir. · Muro esq. · Muro dir. O lado é visto no sentido das estacas. Pode colar direto do Excel. O mesmo botão está na aba 6.",
+        norma:"" },
+      { sel:"[data-p^=\"estacas.\"][data-p$=\".cota\"]",
+        titulo:"9 / 9 — Estacas do eixo (greide)",
+        dica:"Cota do eixo em cada estaca. Dá a tampa dos PVs e o greide do perfil. Lance ao menos a estaca inicial e a final de cada rua; use \"＋ 3 estacas a cada 20 m\" para agilizar.",
+        norma:"Estaqueamento padrão a cada 20 m." }
     ]},
     bacias:{ passos:[
-      { sel:'.btn-add',
-        titulo:'1 / 5 — Adicionar bacia',
-        dica:'Clique em "+ Adicionar" para cadastrar uma bacia de contribuição. Cada bacia representa uma área que drena para um ponto específico da rede (geralmente uma boca-de-lobo).',
-        norma:'' },
-      { sel:'[data-p^="bacias."][data-p$=".rua"]',
-        titulo:'2 / 5 — Rua de contribuição',
-        dica:'Via da qual a bacia capta as águas pluviais. Vincula a bacia ao greide e às características topográficas da rua cadastrada na aba anterior.',
-        norma:'' },
-      { sel:'[data-p^="bacias."][data-p$=".c"]',
-        titulo:'3 / 5 — Coeficiente de escoamento C',
-        dica:'Fração da precipitação que escoa superficialmente (0 a 1). Valores típicos: asfalto/concreto = 0,85–0,95; paralelepípedo = 0,70–0,85; gramado/área verde = 0,10–0,35; área residencial mista = 0,40–0,70.',
-        norma:'DAEE / NBR 13133 — método racional: Q = C·i·A; verifique o C composto da bacia.' },
-      { sel:'[data-p^="bacias."][data-p$=".A"]',
-        titulo:'4 / 5 — Área da bacia (ha)',
-        dica:'Área de contribuição em hectares. Inclua toda a área que drena para a boca-de-lobo ou ponto de captação. Pode ser medida em planta ou obtida por SIG/Google Earth. 1 ha = 10.000 m².',
-        norma:'NBR 13133 — método racional válido para bacias até ~2 km².' },
-      { sel:'[data-p^="bacias."][data-p$=".tc"]',
-        titulo:'5 / 5 — Tempo de concentração (min)',
-        dica:'Tempo para a água percorrer o ponto mais distante da bacia até o ponto de captação. Mínimo: 5 min para bacias urbanas pequenas. Use a calculadora de Kirpich na aba Chuva para obter o tc.',
-        norma:'DAEE — tc mínimo recomendado: 5 min para micro-bacias urbanas.' }
+      { sel:"button[onclick*=\"addItem('bacias')\"]",
+        titulo:"1 / 5 — Adicionar bacia",
+        dica:"Cada bacia é uma área de contribuição que chega a uma caixa de ralo/boca de lobo ou a um PV.",
+        norma:"" },
+      { sel:"[data-p^=\"bacias.\"][data-p$=\".A\"]",
+        titulo:"2 / 5 — Área (ha)",
+        dica:"Área da bacia em hectares (1 ha = 10.000 m²).",
+        norma:"" },
+      { sel:"[data-p^=\"bacias.\"][data-p$=\".C\"]",
+        titulo:"3 / 5 — Coeficiente de escoamento C",
+        dica:"Fração da chuva que escoa. Asfalto 0,80–0,95; telhados 0,75–0,95; lotes residenciais 0,40–0,60; gramados 0,10–0,35.",
+        norma:"Método racional Q = C·i·A/360." },
+      { sel:"[data-p^=\"bacias.\"][data-p$=\".dest\"]",
+        titulo:"4 / 5 — Destino",
+        dica:"Caixa de ralo/boca de lobo ou PV que recebe a água desta bacia.",
+        norma:"" },
+      { sel:"[data-p^=\"bacias.\"][data-p$=\".tc\"]",
+        titulo:"5 / 5 — Tempo de concentração",
+        dica:"Automático (Kirpich) ou digitado. Em microdrenagem urbana adota-se tc mínimo de 5 a 10 min.",
+        norma:"" }
     ]},
     bls:{ passos:[
-      { sel:'.btn-add',
-        titulo:'1 / 5 — Adicionar boca-de-lobo',
-        dica:'Cadastre as bocas-de-lobo ou caixas de ralo do projeto. Cada dispositivo capta as águas da sarjeta e encaminha para a rede tronco via ramal. Use "+ Adicionar" para inserir a primeira.',
-        norma:'' },
-      { sel:'[data-p^="bls."][data-p$=".rua"]',
-        titulo:'2 / 5 — Rua / sarjeta de captação',
-        dica:'Via da qual a boca-de-lobo capta a água da sarjeta. Vincula o dispositivo ao greide e à declividade transversal da rua — necessários para calcular a capacidade de captação.',
-        norma:'' },
-      { sel:'[data-p^="bls."][data-p$=".est"]',
-        titulo:'3 / 5 — Estaca / posição ao longo da via',
-        dica:'Posição longitudinal da boca-de-lobo no estaqueamento da rede. Use o mesmo sistema de estacas adotado nos PVs e nos trechos. Ex.: "0+000", "25", "50.5".',
-        norma:'' },
-      { sel:'[data-p^="bls."][data-p$=".z"]',
-        titulo:'4 / 5 — z = 1/i transversal (opcional)',
-        dica:'Recíproco da declividade transversal: z = 100 / i (%). Se deixado em branco, o programa usa automaticamente o z da rua. Informe somente para sobrepor o valor em pontos com declividade diferente da rua. z = 50 equivale a i = 2 %; z = 33 equivale a i = 3 %.',
-        norma:'' },
-      { sel:'[data-p^="bls."][data-p$=".pvId"]',
-        titulo:'5 / 5 — PV de destino do ramal',
-        dica:'Poço de visita para onde o ramal da boca-de-lobo descarrega. Deve estar cadastrado na aba Poços de Visita. O programa calcula o ramal automaticamente com o diâmetro mínimo (300 mm) e a declividade disponível entre a boca-de-lobo e o PV.',
-        norma:'' }
+      { sel:"button[onclick*=\"addItem('bls')\"]",
+        titulo:"1 / 7 — Adicionar caixa de ralo / boca de lobo",
+        dica:"Cada dispositivo fica na sarjeta (pé do meio-fio) da rua e do lado escolhidos. O ímã afasta o dispositivo do cruzamento e o mantém na sarjeta.",
+        norma:"" },
+      { sel:"[data-p^=\"bls.\"][data-p$=\".rua\"]",
+        titulo:"2 / 7 — Rua e estaca",
+        dica:"Rua e distância (estaca) onde fica a captação. A declividade da sarjeta vem da topografia do meio-fio daquele lado (ou do greide do eixo, se o meio-fio não foi digitado).",
+        norma:"" },
+      { sel:"[data-p^=\"bls.\"][data-p$=\".lado\"]",
+        titulo:"3 / 7 — Lado",
+        dica:"Esquerdo ou direito, olhando no sentido das estacas.",
+        norma:"" },
+      { sel:"[data-p^=\"bls.\"][data-p$=\".tipo\"]",
+        titulo:"4 / 7 — Tipo de dispositivo",
+        dica:"Caixa de ralo (grelha), boca de lobo (guia) ou combinada. O botão \"Trocar todas\" desta aba troca todos de uma vez, com dimensões padrão ou personalizadas.",
+        norma:"DAEE/CETESB — eficiência de captação." },
+      { sel:"[data-p^=\"bls.\"][data-p$=\".ang\"]",
+        titulo:"5 / 7 — Ângulo do ramal",
+        dica:"O ramal é locado por ângulo em relação à rua (90° ou 45° a favor do fluxo). Tubo de concreto é reto: sem curvas nem ramificações. Ângulo contra o fluxo (> 90°) é erro.",
+        norma:"" },
+      { sel:"[data-p^=\"bls.\"][data-p$=\".pv\"]",
+        titulo:"6 / 7 — PV de destino",
+        dica:"Poço de visita que recebe o ramal. O comprimento do ramal é calculado pela geometria da planta.",
+        norma:"" },
+      { sel:"button[onclick*=\"abrirDispTodas\"]",
+        titulo:"7 / 7 — Trocar todos os dispositivos",
+        dica:"Troca todas as caixas de ralo por bocas de lobo (ou vice-versa) e permite editar as dimensões personalizadas. \"Desfazer\" volta ao estado anterior.",
+        norma:"" }
     ]},
     pvs:{ passos:[
-      { sel:'.btn-add',
-        titulo:'1 / 6 — Adicionar Poço de Visita',
-        dica:'Cadastre os PVs da rede. Cada PV é um nó: recebe ramais de bocas-de-lobo e conecta trechos da rede tronco. Use "+ Adicionar" para inserir o primeiro PV.',
-        norma:'ABNT NBR 9649 — requisitos de poços de visita em redes de drenagem.' },
-      { sel:'[data-p^="pvs."][data-p$=".nome"]',
-        titulo:'2 / 6 — Nome / identificação do PV',
-        dica:'Identificação do poço de visita. Ex.: "PV-01", "PV-A". O nome aparece nas tabelas de rede, nos perfis longitudinais e na planta baixa.',
-        norma:'' },
-      { sel:'[data-p^="pvs."][data-p$=".est"]',
-        titulo:'3 / 6 — Estaca / posição',
-        dica:'Posição do PV no estaqueamento da rede. Use a mesma referência das bocas-de-lobo e trechos para manter consistência nas tabelas e perfis.',
-        norma:'' },
-      { sel:'[data-p^="pvs."][data-p$=".rua"]',
-        titulo:'4 / 6 — Rua onde está o PV',
-        dica:'Logradouro sobre o qual está o PV. Usado para calcular a cota do greide do tubo de saída e o recobrimento. Selecione a rua cadastrada na aba 3.',
-        norma:'' },
-      { sel:'[data-p^="pvs."][data-p$=".ztampa"]',
-        titulo:'5 / 6 — Cota da tampa (m)',
-        dica:'Cota topográfica da tampa do PV em metros, obtida do levantamento planialtimétrico. Junto com a profundidade e o desnível, determina o recobrimento dos tubos. Pode ser deixada em branco se o cálculo automático de cotas for suficiente.',
-        norma:'' },
-      { sel:'[data-p^="pvs."][data-p$=".profMax"]',
-        titulo:'6 / 6 — Profundidade máxima do PV (m)',
-        dica:'Limita a profundidade de escavação no local do PV. Padrão: 3,5–4,5 m. Reduza em áreas com nível d\'água elevado ou interferências com fundações. O programa alerta quando a rede ultrapassa este limite.',
-        norma:'DNIT — profundidade econômica máxima ~5 m; acima disso considerar rebombamento ou tunelamento.' }
+      { sel:"button[onclick*=\"abrirTopografia\"]",
+        titulo:"1 / 6 — 📐 Topografia",
+        dica:"Tela limpa só com as cotas do terreno por estaca: eixo, pé do meio-fio (linha d'água) e muro dos dois lados. O meio-fio fica a largura/2 do eixo; o muro a largura/2 + passeio. Em branco = seção-tipo. Aceita colar do Excel.",
+        norma:"NBR 9050 — passeio ≤ 3 %; lote abaixo do meio-fio gera alerta." },
+      { sel:"button[onclick*=\"addItem('pvs')\"]",
+        titulo:"2 / 6 — Adicionar poço de visita",
+        dica:"PV em cada mudança de direção, de diâmetro, de declividade, em encontros de rede e a no máximo ~100 m de distância.",
+        norma:"Espaçamento máximo usual 80–120 m." },
+      { sel:"[data-p^=\"pvs.\"][data-p$=\".rua\"]",
+        titulo:"3 / 6 — Rua e estaca do PV",
+        dica:"Posição do PV no eixo da rua. A cota da tampa sai do greide das estacas (topografia do eixo).",
+        norma:"" },
+      { sel:"[data-p^=\"pvs.\"][data-p$=\".tampa\"]",
+        titulo:"4 / 6 — Cota da tampa (m)",
+        dica:"Em branco = calculada pelo greide. Digite só se a tampa for diferente do pavimento.",
+        norma:"" },
+      { sel:"[data-p^=\"pvs.\"][data-p$=\".modelo\"]",
+        titulo:"5 / 6 — Modelo do PV",
+        dica:"Poço de drenagem quadrado (SINAPI/SCO/EMOP, base da aba Custos). As dimensões internas crescem quando entram muitos tubos ou tubos muito próximos.",
+        norma:"" },
+      { sel:"button[onclick*=\"dimensionarPVs\"]",
+        titulo:"6 / 6 — Dimensionar PVs",
+        dica:"Escolhe o modelo e as dimensões de cada poço pelo número, diâmetro e ângulo dos tubos.",
+        norma:"" }
     ]},
     rede:{ passos:[
-      { sel:'[data-p^="trechos."][data-p$=".pvI"]',
-        titulo:'1 / 6 — PV inicial do trecho (montante)',
-        dica:'Poço de visita de onde o escoamento parte. O fluxo vai de PV inicial → PV final. Certifique-se de que os PVs foram cadastrados na aba anterior antes de montar os trechos.',
-        norma:'' },
-      { sel:'[data-p^="trechos."][data-p$=".pvF"]',
-        titulo:'2 / 6 — PV final do trecho (jusante)',
-        dica:'Poço de visita onde o escoamento chega. A cota do PV final deve ser menor que a do PV inicial para garantir escoamento por gravidade. Verifique no perfil após preencher as cotas.',
-        norma:'' },
-      { sel:'[data-p^="trechos."][data-p$=".D"]',
-        titulo:'3 / 6 — Diâmetro do tubo (mm)',
-        dica:'Diâmetro interno em mm. Diâmetros comerciais: 300, 400, 500, 600, 700, 800, 900, 1000, 1200, 1500 mm. Mínimo recomendado: 300 mm. Deixe em branco e use "⚙ Dimensionar rede" para o programa escolher automaticamente.',
-        norma:'ABNT NBR 8890 — tubos de concreto armado para esgotos pluviais.' },
-      { sel:'[data-p^="trechos."][data-p$=".S"]',
-        titulo:'4 / 6 — Declividade do tubo (%)',
-        dica:'Inclinação do tubo em percentual. Mínimo: 0,5–1,0 % para evitar deposição de sólidos. Declividades muito altas (>5–10 %) exigem proteção anti-erosiva na saída.',
-        norma:'ABNT NBR 9649 — velocidade mínima 0,6 m/s; DAEE — 0,5 m/s para drenagem pluvial.' },
-      { sel:'[data-p^="trechos."][data-p$=".L"]',
-        titulo:'5 / 6 — Comprimento do trecho (m)',
-        dica:'Comprimento entre os dois PVs em metros, obtido do levantamento. Afeta o volume de escavação, o custo e a linha piezométrica.',
-        norma:'' },
-      { sel:'button[onclick*="autoDimensionar"], .btn[onclick*="autoDimensionar"]',
-        titulo:'6 / 6 — Dimensionar rede automaticamente',
-        dica:'Use "⚙ Dimensionar rede" para o programa escolher o menor diâmetro comercial que atende cada trecho e lançar as cotas dos tubos a partir das tampas. Após o dimensionamento, confira os alertas na aba Verificação.',
-        norma:'' }
+      { sel:"[data-p^=\"trechos.\"][data-p$=\".m\"]",
+        titulo:"1 / 6 — PV de montante",
+        dica:"PV onde o trecho começa (mais alto).",
+        norma:"" },
+      { sel:"[data-p^=\"trechos.\"][data-p$=\".j\"]",
+        titulo:"2 / 6 — PV de jusante",
+        dica:"PV onde o trecho termina. A rede deve seguir o greide; contra o greide gera alerta.",
+        norma:"" },
+      { sel:"[data-p^=\"trechos.\"][data-p$=\".L\"]",
+        titulo:"3 / 6 — Extensão (m)",
+        dica:"Calculada pela planta (distância entre PVs).",
+        norma:"" },
+      { sel:"[data-p^=\"trechos.\"][data-p$=\".secao\"]",
+        titulo:"4 / 6 — Seção / diâmetro",
+        dica:"Diâmetro do tubo de concreto. Acima de Ø 1500 o programa indica galeria/aduela.",
+        norma:"NBR 8890 — tubos de concreto." },
+      { sel:"button[onclick*=\"autoCotas\"]",
+        titulo:"5 / 6 — Lançar cotas",
+        dica:"Recalcula as cotas dos tubos com recobrimento mínimo, declividade mínima e degraus nos PVs (incluindo a perda de carga, para a piezométrica não subir).",
+        norma:"" },
+      { sel:"button[onclick*=\"autoDimensionar\"]",
+        titulo:"6 / 6 — Dimensionar rede",
+        dica:"Escolhe o menor diâmetro comercial que atende Manning com y/D e velocidades dentro dos critérios.",
+        norma:"Manning; V 0,6–5,0 m/s; y/D ≤ 0,85." }
     ]},
     planta:{ passos:[
-      { sel:null,
-        titulo:'1 / 3 — Planta baixa da rede',
-        dica:'A planta é gerada automaticamente a partir das ruas, bacias, bocas-de-lobo, PVs e trechos cadastrados. Se aparecer vazia, certifique-se de que a rede está montada (abas 3 a 7) antes de abrir esta aba.',
-        norma:'' },
-      { sel:null,
-        titulo:'2 / 3 — Exportar DXF',
-        dica:'Use "⬇ DXF" para exportar a planta em formato CAD (DXF R12). O arquivo pode ser aberto em AutoCAD, QGIS, LibreCAD e outros CADs. Cada elemento (meio-fio, boca-de-lobo, PV, tubulação, cota…) fica em uma layer separada.',
-        norma:'' },
-      { sel:null,
-        titulo:'3 / 3 — Imprimir a planta',
-        dica:'Use "🖨 Imprimir" para incluir a planta no memorial. O DXF exportado usa cotas reais em metros; no CAD ajuste a escala conforme o formato de papel do projeto (ex.: 1:500 para A1, 1:1000 para A3).',
-        norma:'' }
+      { sel:"button[onclick*=\"plEditar\"]",
+        titulo:"1 / 4 — Editar a planta",
+        dica:"Arraste PVs e caixas de ralo. O ímã mantém as caixas na sarjeta e fora dos cruzamentos; as cotas e comprimentos são recalculados (desenho e cálculo sempre iguais). Desfazer/Refazer disponíveis.",
+        norma:"" },
+      { sel:"button[onclick*=\"plTodas45\"]",
+        titulo:"2 / 4 — Todos os ramais a 45°",
+        dica:"Coloca todos os ramais a 45° a favor do fluxo, quando a geometria permite.",
+        norma:"" },
+      { sel:"button[onclick*=\"plFonte\"]",
+        titulo:"3 / 4 — Tamanho da fonte",
+        dica:"Aumenta ou diminui os textos do desenho.",
+        norma:"" },
+      { sel:"button[onclick*=\"exportDXFPlanta\"]",
+        titulo:"4 / 4 — Exportar DXF",
+        dica:"Exporta a planta para o CAD.",
+        norma:"" }
     ]},
     perfil:{ passos:[
       { sel:null,
-        titulo:'1 / 3 — Perfil longitudinal',
-        dica:'O perfil é gerado automaticamente para cada rua. Mostra: greide do terreno, linha do greide dos tubos, tampas dos PVs, recobrimento e linha piezométrica. Selecione a rua no menu acima do desenho.',
-        norma:'' },
+        titulo:"1 / 2 — Perfil longitudinal",
+        dica:"Mostra terreno (eixo), tubos, PVs, lâmina d'água e linha piezométrica. A piezométrica coincide com a lâmina d'água em escoamento livre.",
+        norma:"" },
       { sel:null,
-        titulo:'2 / 3 — Verificar recobrimento',
-        dica:'A linha vermelha no perfil indica recobrimento insuficiente. Corrija aumentando a cota do greide no PV inicial, adotando tubo PA-2 ou proteção mecânica (laje ou envelopamento de concreto). Os alertas aparecem na aba Verificação.',
-        norma:'DNIT/DAEE — recobrimento mínimo 0,80 m sem proteção; 0,30 m com laje de concreto.' },
-      { sel:null,
-        titulo:'3 / 3 — Exportar perfil em DXF',
-        dica:'Use "⬇ DXF" para exportar o perfil em CAD com greide do terreno, tubos, PVs e cotas. Selecione a rua desejada antes de exportar para obter o perfil da via correta.',
-        norma:'' }
+        titulo:"2 / 2 — Fonte e linhas de apoio",
+        dica:"Use os controles acima do desenho para mudar a fonte e ocultar as linhas pontilhadas.",
+        norma:"" }
     ]},
     secao:{ passos:[
       { sel:null,
-        titulo:'1 / 3 — Seção transversal tipo',
-        dica:'A seção tipo mostra largura da pista, passeios, meio-fio e posição do tubo. É gerada automaticamente com as dimensões informadas nas abas Ruas e Rede. Selecione a rua no menu acima.',
-        norma:'' },
+        titulo:"1 / 2 — Seção transversal",
+        dica:"Mostra pista, meio-fio, passeio, caixa de ralo, ramal e PV com a lâmina d'água. A cota do meio-fio vem da topografia digitada (📐 Topografia).",
+        norma:"" },
       { sel:null,
-        titulo:'2 / 3 — Conferir posição do tubo',
-        dica:'Verifique se o tubo está posicionado sob a pista ou calçada com o recobrimento mínimo. O programa marca em vermelho se houver conflito ou recobrimento insuficiente.',
-        norma:'' },
-      { sel:null,
-        titulo:'3 / 3 — Exportar seção em DXF',
-        dica:'Use "⬇ DXF" para exportar a seção em CAD. Cada elemento (asfalto, meio-fio, tubo, vala, cota) fica em layer separada para facilitar a edição no programa CAD.',
-        norma:'' }
+        titulo:"2 / 2 — Legenda, fonte e pontilhados",
+        dica:"A legenda explica todas as linhas. Ajuste a fonte e oculte as linhas pontilhadas nos controles acima do desenho.",
+        norma:"" }
     ]},
     custos:{ passos:[
       { sel:null,
@@ -7878,21 +8024,13 @@ async function enviarAoOrcamento(solK, bank) {
     ]},
     verif:{ passos:[
       { sel:null,
-        titulo:'1 / 4 — Painel de verificação do projeto',
-        dica:'A aba Verificação consolida todos os alertas e erros. Verifique os itens marcados em vermelho (✕ erro grave) e laranja (⚠ atenção). O projeto só está completo quando todos os erros estiverem resolvidos.',
-        norma:'' },
-      { sel:'.seg button',
-        titulo:'2 / 4 — Usar os filtros',
-        dica:'Use os filtros "Pendências", "Erros", "Alertas", "Atendidos" e "Todos" para navegar entre os tipos de verificação. Clique em uma linha da tabela para ir diretamente ao campo que precisa ser corrigido.',
-        norma:'' },
-      { sel:null,
-        titulo:'3 / 4 — Erros críticos',
-        dica:'Erros (✕ vermelho) impedem a aprovação do projeto: recobrimento insuficiente, velocidade abaixo do mínimo, diâmetro abaixo do permitido, rede fora do traçado. Corrija antes de emitir o memorial.',
-        norma:'ABNT NBR 9649 / DAEE — critérios de aceitação de projetos de drenagem pluvial.' },
-      { sel:null,
-        titulo:'4 / 4 — Alertas de atenção',
-        dica:'Alertas (⚠ laranja) não impedem aprovação, mas devem ser justificados no memorial. Ex.: velocidade acima do máximo (verificar proteção anti-erosiva), y/D elevado (verificar linha piezométrica), tc abaixo do mínimo (justificar no memorial).',
-        norma:'' }
+        titulo:"1 / 2 — Verificação",
+        dica:"Lista erros (vermelho) e alertas (amarelo) de todas as abas, inclusive topografia (lote abaixo do meio-fio, passeio > 3 %, pista invertida).",
+        norma:"" },
+      { sel:"button[onclick*=\"previaCorrecao\"]",
+        titulo:"2 / 2 — Prévia da correção",
+        dica:"Mostra o que será corrigido (e os riscos) antes de aplicar. Só aplica se você confirmar.",
+        norma:"" }
     ]},
     memorial:{ passos:[
       { sel:null,
