@@ -2292,6 +2292,7 @@ function vVerif() {
 }
 /* ---------- 11b. Por quê / risco de cada verificação e correção com prévia ---------- */
 const RISCOS = [
+  [/Modelo de PV na base/, 'Os tubos que chegam a este PV pedem uma câmara maior que o maior PV de drenagem da base de preços.', 'Sem composição pronta: o PV precisa de projeto estrutural e orçamento próprios; se usar o modelo menor, os tubos ficam colados e a parede enfraquece.'],
   [/Tubos ligados ao PV/, 'Chegam mais de 4 tubos (rede e ramais) ao mesmo poço de visita.', 'Paredes muito recortadas, perda de resistência e fundo do PV sem espaço para as calhas; dificulta a limpeza.'],
   [/esquina/, 'A caixa está na curva do meio-fio da esquina ou dentro do cruzamento. As normas municipais (ex.: PMSP DP-H07) mandam evitar captações nas esquinas e colocá-las pouco a montante da faixa de pedestres.', 'A água da sarjeta não chega à caixa (ela fica fora da linha da sarjeta), a grelha fica na trajetória de conversão dos veículos e a enxurrada atravessa o cruzamento.'],
   [/Ramal — ângulo/, 'O ramal chega ao PV contra o sentido de escoamento da rede tronco (entra pela parede de saída).', 'O jato do ramal bate de frente com o fluxo da rede: perda de carga, turbulência, refluxo para o ramal e depósito no PV. É erro de projeto: a caixa deve ficar a montante do PV (ideal 45°).'],
@@ -3639,8 +3640,10 @@ function svgPerfil(ini, K, W0 = 1200) {
     if (!isNum(r.cm) || !isNum(r.cj)) return;
     s += `<polygon points="${x0},${PY(r.cm - e)} ${x1},${PY(r.cj - e)} ${x1},${PY(r.cj + D + e)} ${x0},${PY(r.cm + D + e)}" fill="${K.pipe}"/>`;
     s += `<polygon points="${x0},${PY(r.cm)} ${x1},${PY(r.cj)} ${x1},${PY(r.cj + D)} ${x0},${PY(r.cm + D)}" fill="${K.bg}" stroke="${K.agua}" stroke-width="1.2"/>`;
-    const y = r.h.carga ? D : (r.h.y || 0);
-    if (y > 0) s += `<polygon points="${x0},${PY(r.cm)} ${x1},${PY(r.cj)} ${x1},${PY(r.cj + y)} ${x0},${PY(r.cm + y)}" fill="${K.aguaF}"/>`;
+    // lâmina d'água = linha piezométrica (em escoamento livre coincidem; com remanso a água sobe junto; acima da geratriz o tubo está cheio)
+    const y = r.h.carga ? D : (r.h.y || 0), zp = r.piez;
+    const w0 = zp && isNum(zp.Hm) ? Math.min(zp.Hm, r.cm + D) : r.cm + y, w1 = zp && isNum(zp.Hj) ? Math.min(zp.Hj, r.cj + D) : r.cj + y;
+    if (w0 > r.cm + 1e-4 || w1 > r.cj + 1e-4) s += `<polygon points="${x0},${PY(r.cm)} ${x1},${PY(r.cj)} ${x1},${PY(Math.max(r.cj, w1))} ${x0},${PY(Math.max(r.cm, w0))}" fill="${K.aguaF}"/>`;
     const lb = t.id + ' · ' + secLbl(t) + ' · i ' + (isNum(r.S) ? fmt(r.S * 100, 2) : '—') + ' %';
     s += tx((x0 + x1) / 2, PY((r.cm + r.cj) / 2 + D + e) - 10, (x1 - x0) > lb.length * 7.5 + 20 ? lb : t.id, {fs: 13, a: 'middle', w: 700, c: K.aguaD, halo: K.soil});
   });
@@ -3656,7 +3659,7 @@ function svgPerfil(ini, K, W0 = 1200) {
   });
   // linha piezométrica
   const pz = [];
-  path.forEach((t, k) => { const z = R.tr[t.id].piez; if (!z) return; const x0 = PX(pts[k].x), x1 = PX(pts[k + 1].x); pz.push(`${x0},${PY(z.Hpm)}`, `${x0 + 7},${PY(z.Hm)}`, `${x1},${PY(z.Hj)}`); });
+  path.forEach((t, k) => { const z = R.tr[t.id].piez; if (!z) return; const x0 = PX(pts[k].x), x1 = PX(pts[k + 1].x); pz.push(`${x0},${PY(z.Hpm)}`, `${x0},${PY(z.Hm)}`, `${x1},${PY(z.Hj)}`); });
   if (pz.length) s += `<polyline points="${pz.join(' ')}" fill="none" stroke="${K.orange}" stroke-width="2.4" stroke-dasharray="8 4"/>`;
   // legenda
   const ly = mt + hp + 20;
@@ -4239,7 +4242,7 @@ const nomeItem = k => {
   if (tp === 'ala') return ALA_NOME[a] || k;
   const r = regras(custosCfg()).find(x => x.k === k); return r ? r.nome : k;
 };
-const unidItem = k => k.startsWith('ala:') ? ALA_UN[k.split(':')[1]] : k.startsWith('prot:') ? ({pa2: 'm', aco: 'kg'}[k.split(':')[1]] || 'm³') : ({tubo: 'm', gal: 'm', esc: 'm³', reat: 'm³', escor: 'm²', berco: 'm³', pvbase: 'un', pvacr: 'm', bl: 'un'})[k.split(':')[0]];
+const unidItem = k => k.startsWith('ala:') ? ALA_UN[k.split(':')[1]] : k.startsWith('prot:') ? ({pa2: 'm', aco: 'kg'}[k.split(':')[1]] || 'm³') : ({tubo: 'm', gal: 'm', esc: 'm³', reat: 'm³', escor: 'm²', berco: 'm³', pvbase: 'un', pvacr: 'm', pvq: 'un', pvqa: 'm', pvch: 'm', bl: 'un'})[k.split(':')[0]];
 
 /* -------- aba Custos -------- */
 function vCustos() {
@@ -4792,8 +4795,10 @@ svgPerfil = function (ini, K, W0 = 1200) {
     if (!isNum(r.cm) || !isNum(r.cj)) return;
     s += `<polygon points="${x0},${PY(r.cm - e)} ${x1},${PY(r.cj - e)} ${x1},${PY(r.cj + D + e)} ${x0},${PY(r.cm + D + e)}" fill="${K.pipe}"/>`;
     s += `<polygon points="${x0},${PY(r.cm)} ${x1},${PY(r.cj)} ${x1},${PY(r.cj + D)} ${x0},${PY(r.cm + D)}" fill="${K.bg}" stroke="${K.agua}" stroke-width="1.2"/>`;
-    const y = r.h.carga ? D : (r.h.y || 0);
-    if (y > 0) s += `<polygon points="${x0},${PY(r.cm)} ${x1},${PY(r.cj)} ${x1},${PY(r.cj + y)} ${x0},${PY(r.cm + y)}" fill="${K.aguaF}"/>`;
+    // lâmina d'água = linha piezométrica (em escoamento livre coincidem; com remanso a água sobe junto; acima da geratriz o tubo está cheio)
+    const y = r.h.carga ? D : (r.h.y || 0), zp = r.piez;
+    const w0 = zp && isNum(zp.Hm) ? Math.min(zp.Hm, r.cm + D) : r.cm + y, w1 = zp && isNum(zp.Hj) ? Math.min(zp.Hj, r.cj + D) : r.cj + y;
+    if (w0 > r.cm + 1e-4 || w1 > r.cj + 1e-4) s += `<polygon points="${x0},${PY(r.cm)} ${x1},${PY(r.cj)} ${x1},${PY(Math.max(r.cj, w1))} ${x0},${PY(Math.max(r.cm, w0))}" fill="${K.aguaF}"/>`;
     const lb = t.id + ' · ' + secLbl(t) + ' · i ' + (isNum(r.S) ? fmt(r.S * 100, 2) : '—') + ' %';
     s += tx((x0 + x1) / 2, PY((r.cm + r.cj) / 2 + D + e) - 10, (x1 - x0) > lb.length * 7.5 + 20 ? lb : t.id, {fs: 13, a: 'middle', w: 700, c: K.aguaD, halo: K.soil});
   });
@@ -4832,7 +4837,7 @@ svgPerfil = function (ini, K, W0 = 1200) {
   rot.forEach(o => { s += tx(o.x, o.y - 6, o.ids.join(' / '), {fs: 11, a: 'middle', c: K.ink, w: 700, halo: K.bg}); });
   // linha piezométrica
   const pz = [];
-  path.forEach((t, k) => { const z = R.tr[t.id].piez; if (!z) return; const x0 = PX(pts[k].x), x1 = PX(pts[k + 1].x); pz.push(`${x0},${PY(z.Hpm)}`, `${x0 + 7},${PY(z.Hm)}`, `${x1},${PY(z.Hj)}`); });
+  path.forEach((t, k) => { const z = R.tr[t.id].piez; if (!z) return; const x0 = PX(pts[k].x), x1 = PX(pts[k + 1].x); pz.push(`${x0},${PY(z.Hpm)}`, `${x0},${PY(z.Hm)}`, `${x1},${PY(z.Hj)}`); });
   if (pz.length) s += `<polyline points="${pz.join(' ')}" fill="none" stroke="${K.orange}" stroke-width="2.4" stroke-dasharray="8 4"/>`;
   // linhas de cota por cima do desenho (a cada 1 m, fixas; as do usuário podem ser arrastadas e apagadas)
   s += gradeCotas(K, 'p:' + ini, ml, W - mr, ymin, ymax, PY, sy, ml - 8);
@@ -5466,10 +5471,14 @@ function itensLic(sol, bank) {
       const ch = prof - bl[2] - 0.15;
       if (ch > 0.05) add(g[5], 'Chaminé do PV em anéis pré-moldados Ø0,60 m', 'm', ch, {emop: '06.017.0080'}, pv.id + ': profundidade ' + fmt(prof, 2) + ' m − altura da câmara ' + fmt(bl[2], 2) + ' m − laje 0,15 m');
     } else {
-      const base = resolve1(bank, ruleDe('pvbase:' + d, bank, cfg), LIC.BK, cfg.regime);
-      add(g[5], bank === 'sco' ? 'Poço de visita de blocos de concreto (equivalente à câmara de ' + fmt(lado, 2) + ' m)' : 'Base de PV circular pré-moldado Ø' + fmt(d / 1000, 1) + ' m (sem tampão)', 'un', 1, {[bank]: ruleDe('pvbase:' + d, bank, cfg), emop: (EMOP_PVBL.find(x => x[1] >= lado - 1e-6) || EMOP_PVBL[6])[0]}, pv.id + ': câmara ' + fmt(lado, 2) + ' m');
-      if (bank === 'sinapi') { const hB = base && base.descr && (base.descr.match(/PROFUNDIDADE = ([\d,]+) M/) || [])[1]; const ac = prof - (hB ? parseFloat(hB.replace(',', '.')) : 1.35);
-        if (ac > 0.05) add(g[5], 'Acréscimo de PV circular pré-moldado Ø' + fmt(d / 1000, 1) + ' m', 'm', ac, {sinapi: ruleDe('pvacr:' + d, 'sinapi', cfg), emop: '06.017.0080'}, pv.id + ': profundidade ' + fmt(prof, 2) + ' m − altura da base'); }
+      // PV quadrado de drenagem do catálogo da base (SINAPI: base + acréscimo; SCO: câmara de altura fixa) + chaminé
+      const m = r.emop, cat = PV_CAT[bank] || PV_CAT.sinapi, Dt2 = m && m.Dt ? m.Dt : Dt;
+      const mod = cat.find(x => x.L >= lado - 1e-6 && (!x.Dmax || x.Dmax >= Dt2 - 1e-6)) || cat[cat.length - 1];
+      const em = (EMOP_PVBL.find(x => x[1] >= mod.L - 1e-6 && x[3] >= Dt2 - 1e-6) || EMOP_PVBL[6])[0];
+      const Hi = m ? m.Hi : Math.min(prof, 1.40), hc = m && isNum(m.hc) ? Math.max(0, m.hc) : Math.max(0, prof - Hi - 0.15);
+      add(g[5], 'Poço de visita de drenagem ' + fmtL(mod.L) + (mod.H ? ' × h ' + fmt(mod.H, 2) + ' m' : ' — base h 1,40 m'), 'un', 1, {[bank]: mod.cod, emop: em}, pv.id + ': câmara mínima ' + fmt(lado, 2) + ' m · maior coletor Ø' + fmt(Dt2, 2) + ' → ' + mod.nome);
+      if (!mod.H && Hi - (mod.hBase || 1.40) > 0.05) add(g[5], 'Acréscimo de poço de visita de drenagem ' + fmtL(mod.L), 'm', Hi - (mod.hBase || 1.40), {sinapi: mod.acr, emop: '06.017.0080'}, pv.id + ': altura da câmara ' + fmt(Hi, 2) + ' m − 1,40 m da base');
+      if (hc > 0.05) add(g[5], 'Chaminé do PV Ø0,60 m em anéis pré-moldados', 'm', hc, {sinapi: 'SC-99318', emop: '06.017.0080'}, pv.id + ': profundidade ' + fmt(prof, 2) + ' m − câmara ' + fmt(Hi, 2) + ' m − laje');
     }
     add(g[5], 'Tampão de ferro fundido dúctil Ø0,60 m, classe D400 (articulado)', 'un', 1, {emop: '06.016.0007', sco: 'SCO-DR 35.05.0225'}, pv.id);
   });
@@ -6636,6 +6645,7 @@ calc = function () {
   const res = _calc61.apply(this, arguments);
   try { checksGeo(res); } catch (e) { console.error('Geo checks:', e); }
   try { checksPVTubos(res); } catch (e) { console.error('PV tubos:', e); }
+  try { checksPVModelo(res); } catch (e) { console.error('PV modelo:', e); }
   return res;
 };
 /* ações de correção */
@@ -6771,7 +6781,12 @@ emopMedidas = function (pv, r, E) {
     const ref = r.outs.length ? it.find(x => x.id === r.outs[0].id) : null, ref0 = ref ? ref.an : it[0].an + Math.PI;
     const par = {jus: [], mon: [], E: [], D: []}, norm = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a <= -Math.PI) a += 2 * Math.PI; return a; };
     const NRM = {jus: 0, mon: Math.PI, E: Math.PI / 2, D: -Math.PI / 2};
-    const soma = a => a.reduce((s, x) => s + x.w, 0), need = a => a.length ? soma(a) + (a.length + 1) * E.pvEmopFolga : 0;
+    // largura de parede necessária: tubos em alturas diferentes (folga vertical ≥ folga mínima) podem ficar um sobre o outro
+    const vz = x => isNum(x.ci) ? [x.ci - (x.De - x.D) / 2 - E.pvEmopFolga / 2, x.ci + x.D + (x.De - x.D) / 2 + E.pvEmopFolga / 2] : null;
+    const colunas = a => { const cs = []; a.slice().sort((p, q) => q.w - p.w).forEach(x => { const z = vz(x);
+        const c = z && cs.find(cl => cl.every(y => { const zy = vz(y); return zy && (z[1] <= zy[0] || zy[1] <= z[0]); }));
+        if (c) c.push(x); else cs.push([x]); }); return cs; };
+    const soma = a => colunas(a).reduce((s, cl) => s + Math.max(...cl.map(x => x.w)), 0), need = a => a.length ? soma(a) + (colunas(a).length + 1) * E.pvEmopFolga : 0;
     const poe = (x, k) => { const beta = Math.abs(norm(x.f - NRM[k])); x.beta = beta * 180 / Math.PI; x.w = x.De / Math.cos(beta); par[k].push(x); };
     it.forEach(x => { x.f = norm(x.an - ref0); });
     // saída na parede de jusante; os demais (maiores primeiro) vão para a parede viável (incidência ≤ 60°) que deixa a câmara menor
@@ -6783,8 +6798,17 @@ emopMedidas = function (pv, r, E) {
       poe(x, best.k); });
     const nec = {}; let Lneed = 0, Lpar = 'jus';
     Object.keys(par).forEach(k => { nec[k] = need(par[k]); if (nec[k] > Lneed) { Lneed = nec[k]; Lpar = k; } });
-    const Lauto = emopLado(Math.max(Lneed, EMOP_LADOS[0])), L = m.Ldig || Lauto;
-    const gap = {}; Object.keys(par).forEach(k => { if (par[k].length) gap[k] = (L - soma(par[k])) / (par[k].length + 1); });
+    // modelo real da base escolhida na aba Custos (só PVs QUADRADOS de drenagem — nunca de esgoto)
+    const Dt = Math.max(0, ...r.ins.concat(r.outs).map(t => deTr(t) / (1 + 2 * esp)));
+    const mod = pvModelo(pvBancoCat(), Lneed, Dt, m.HiNeed);
+    const Lauto = mod ? mod.L : Math.ceil(Math.max(Lneed, 1) * 10 - 1e-6) / 10, L = m.Ldig || Lauto;
+    m.mod = mod; m.bancoCat = pvBancoCat(); m.Dt = Dt;
+    if (mod && mod.H && !m.Hdig) {   // altura da câmara fixa no modelo (SCO / EMOP); acima dela, chaminé
+      const raso = isNum(m.disp) && m.disp < mod.H - 1e-6;
+      m.Hauto = mod.H; m.Hi = raso ? Math.max(0, Math.floor(m.disp * 100 + 1e-6) / 100) : mod.H; m.hMot = raso ? 'raso' : 'modelo';
+      m.hc = isNum(m.disp) ? m.disp - m.Hi : null; m.q = Object.assign({}, m.q, {cham: isNum(m.hc) ? Math.max(0, m.hc) : 0});
+    }
+    const gap = {}; Object.keys(par).forEach(k => { if (par[k].length) gap[k] = (L - soma(par[k])) / (colunas(par[k]).length + 1); });
     const ext = L + 2 * E.pvEmopParede;
     Object.assign(m, {par, nec, Lneed, Lpar, Lauto, L, gap, geo: true});
     m.q = Object.assign({}, m.q, {alv: 4 * (L + E.pvEmopParede) * m.Hi, lajeF: ext * ext * E.pvEmopLajeF, lajeT: Math.max(0, ext * ext - Math.PI * 0.30 * 0.30) * E.pvEmopLajeT});
@@ -6887,6 +6911,83 @@ vBLs = function () {
     <span style="font-size:.78rem;color:var(--muted);flex:1;min-width:220px">A posição é sempre automática: caixa de ralo dentro da sarjeta, encostada no espelho do meio-fio; boca de lobo sob o passeio, faceando o espelho. Nunca dentro do cruzamento.</span></div>`;
   return h.replace(/(<div class="bar-btns"><button class="btn btn-primary btn-sm" onclick="addItem\('bls'\)">[^<]*<\/button><\/div>)/, '$1' + bar);
 };
+/* ---------- catálogo de PVs de DRENAGEM, sempre quadrados (SINAPI RJ, SCO-Rio e EMOP) ----------
+   SINAPI: base em blocos de concreto com 1,40 m + acréscimo por metro; chaminé Ø0,60 pré-moldada.
+   SCO-Rio e EMOP: câmara com altura fixa e coletor máximo do modelo; acima, chaminé. */
+const fmtL = L => fmt(L, 2) + ' × ' + fmt(L, 2) + ' m';
+const PV_CAT = {
+  sinapi: [[1.0, 'SC-99252', 'SC-99254'], [1.5, 'SC-99290', 'SC-99241'], [2.0, 'SC-99301', 'SC-99307'], [2.5, 'SC-99326', 'SC-99282'], [3.0, 'SC-99303', 'SC-99304'], [3.5, 'SC-99310', 'SC-99311'], [4.0, 'SC-99315', 'SC-99327']]
+    .map(([L, cod, acr]) => ({banco: 'sinapi', L, H: null, hBase: 1.40, Dmax: null, cod, acr, cham: 'SC-99318', nome: 'PV de drenagem em blocos de concreto ' + fmtL(L) + ' (SINAPI ' + cod + ')'})),
+  sco: [[1.0, 1.40, 0.50, 'SCO-DR 20.05.0050', 'concreto armado'], [1.2, 1.40, 0.70, 'SCO-DR 20.10.0050'], [1.3, 1.40, 0.80, 'SCO-DR 20.10.0053'], [1.4, 1.50, 0.90, 'SCO-DR 20.10.0056'], [1.5, 1.60, 1.00, 'SCO-DR 20.10.0059'], [1.7, 1.80, 1.20, 'SCO-DR 20.10.0065'], [2.0, 2.10, 1.50, 'SCO-DR 20.10.0068'], [2.5, 2.60, 2.00, 'SCO-DR 20.10.0072']]
+    .map(([L, H, Dmax, cod, mat]) => ({banco: 'sco', L, H, Dmax, cod, cham: null, nome: 'PV de ' + (mat || 'blocos de concreto') + ' ' + fmtL(L) + ' × h ' + fmt(H, 2) + ' m, coletor até Ø' + fmt(Dmax, 2) + ' (' + cod + ')'})),
+  emop: EMOP_PVBL.map(([cod, L, H, Dmax]) => ({banco: 'emop', L, H, Dmax, cod, cham: '06.017.0080', nome: 'PV de blocos de concreto ' + fmtL(L) + ' × h ' + fmt(H, 2) + ' m, coletor até Ø' + fmt(Dmax, 2) + ' (EMOP ' + cod + ')'}))
+};
+const BANCO_NOME = {sinapi: 'SINAPI RJ', sco: 'SCO-Rio', emop: 'EMOP'};
+function pvBancoCat() { const b = P && P.custos && P.custos.banco; return PV_CAT[b] ? b : 'sinapi'; }
+function pvModelo(banco, Lneed, Dt, HiNeed) {
+  return (PV_CAT[banco] || PV_CAT.sinapi).find(x => x.L >= Lneed - 1e-6 && (!x.Dmax || x.Dmax >= Dt - 1e-6) && (!x.H || !isNum(HiNeed) || x.H >= HiNeed - 1e-6)) || null;
+}
+/* validação do lado digitado: pelo catálogo da base */
+FB['pvs.pvL'] = (v, o) => {
+  const r = R && R.pv[o.id], m = r && r.emop; if (!m) return null; const lados = (PV_CAT[pvBancoCat()] || []).map(x => x.L);
+  if (!(v > 0)) return mk('info', 'Automático: ' + (m.mod ? m.mod.nome : fmtL(m.Lauto)) + ' — ' + motivoCam(m));
+  if (v < m.Lneed - 1e-6) return mk('err', 'Pequena para os tubos: a ' + PAREDE_NOME[m.Lpar] + ' precisa de ' + fmt(m.Lneed, 2) + ' m.', m.Lauto, 'Usar ' + fmt(m.Lauto, 2));
+  if (!lados.some(x => Math.abs(x - v) < 1e-6)) { const s2 = lados.find(x => x >= v - 1e-6); return mk('warn', 'Não existe PV de drenagem ' + fmtL(v) + ' na base ' + BANCO_NOME[pvBancoCat()] + ' (lados: ' + lados.map(x => fmt(x, 2)).join(' · ') + ' m).', s2, s2 ? 'Usar ' + fmt(s2, 2) : ''); }
+  return mk('ok', 'Atende: mínimo ' + fmt(m.Lneed, 2) + ' m (o automático seria ' + fmt(m.Lauto, 2) + ' m).');
+};
+/* verificações do modelo + quantitativos pelo modelo */
+function checksPVModelo(res) {
+  const lados = (PV_CAT[pvBancoCat()] || []).map(x => x.L), bn = BANCO_NOME[pvBancoCat()];
+  res.checks = res.checks.filter(x => x.par !== 'Câmara EMOP na série');
+  P.pvs.forEach(pv => { const r = res.pv[pv.id], m = r && r.emop; if (!m) return;
+    r.msgs = r.msgs.filter(x => !/^Câmara EMOP na série/.test(x.t));
+    const add = (par, val, lim, st, nota) => { res.checks.push({tab: 'pvs', el: pv.id, par, val, lim, st, nota: nota || ''}); r.msgs.push({s: st, t: par + ': ' + val + (st !== 'ok' && nota ? ' — ' + nota : '')}); r.st = worst(r.st, st); };
+    if (!m.mod) add('Modelo de PV na base ' + bn, 'precisa de câmara ≥ ' + fmt(m.Lneed, 2) + ' m, coletor Ø' + fmt(m.Dt, 2) + (isNum(m.HiNeed) ? ', altura ≥ ' + fmt(m.HiNeed, 2) + ' m' : ''), 'modelo de drenagem da base', 'warn', 'Nenhum PV quadrado de drenagem da base ' + bn + ' tem câmara tão grande: será um PV especial em concreto armado (projeto estrutural próprio; o orçamento usa o maior modelo da base como referência — ajuste o preço). Alternativas: trocar a base na aba Custos ou ligar parte das caixas em outro PV.');
+    else add('Modelo de PV na base ' + bn, m.mod.nome, 'câmara ≥ ' + fmt(m.Lneed, 2) + ' m' + (m.mod.Dmax ? ', coletor ≤ Ø' + fmt(m.mod.Dmax, 2) : ''), 'ok');
+    if (m.Ldig && !lados.some(x => Math.abs(x - m.Ldig) < 1e-6)) add('Câmara fora do catálogo', fmtL(m.Ldig), 'lados ' + bn + ': ' + lados.map(x => fmt(x, 2)).join(' · '), 'warn', 'Não há PV de drenagem com essa medida na base: o orçamento usará o modelo maior mais próximo.');
+  });
+  if (res.quant) { const q = res.quant.pvs = {}; P.pvs.forEach(p => { const r = res.pv[p.id], m = r && r.emop; const k = (m ? (m.mod ? m.mod.nome : 'PV especial ' + fmtL(m.L)) : p.tipo) + ' · ' + (p.tampaCl || ''); q[k] = (q[k] || 0) + 1; }); }
+}
+/* regras de preço: PV quadrado de drenagem (base, acréscimo, chaminé) no lugar do circular */
+const _regras61 = regras;
+regras = function (cfg) {
+  const L = _regras61.apply(this, arguments).filter(x => !/^pv(base|acr):/.test(x.k));
+  const lados = [...new Set(PV_CAT.sinapi.concat(PV_CAT.sco).map(x => x.L))].sort((a, b) => a - b);
+  const ls = v => String(+v.toFixed(1)).replace('.', ',');
+  lados.forEach(Lq => { const mm = Math.round(Lq * 1000), si = PV_CAT.sinapi.find(x => x.L === Lq), sc = PV_CAT.sco.find(x => x.L === Lq);
+    L.push({k: 'pvq:' + mm, nome: 'Poço de visita de drenagem ' + fmtL(Lq) + (si ? ' — base h 1,40 m' : ''),
+      sinapi: si ? [[/^BASE PARA POÇO DE VISITA RETANGULAR PARA DRENAGEM, EM ALVENARIA COM BLOCOS DE CONCRETO/, new RegExp('= ' + ls(Lq) + 'X' + ls(Lq) + ' M')], []] : undefined,
+      sco: sc ? [[Lq === 1.0 ? /^Poço de visita de concreto armado de \(1,00x1,00/ : new RegExp('^Poço de visita de blocos de concreto.*internamente \\(' + fmt(Lq, 2).replace('.', ',') + 'x')], []] : undefined});
+    if (si) L.push({k: 'pvqa:' + mm, nome: 'Acréscimo de poço de visita de drenagem ' + fmtL(Lq) + ' (por metro)',
+      sinapi: [[/^ACRÉSCIMO PARA POÇO DE VISITA RETANGULAR PARA DRENAGEM, EM ALVENARIA COM BLOCOS DE CONCRETO/, new RegExp('= ' + ls(Lq) + 'X' + ls(Lq) + ' M')], []]}); });
+  L.push({k: 'pvch', nome: 'Chaminé do PV Ø0,60 m em anéis pré-moldados (por metro)', sinapi: [[/^CHAMINÉ CIRCULAR PARA POÇO DE VISITA PARA DRENAGEM, EM CONCRETO PRÉ-MOLDADO/], []]});   // SCO não tem chaminé de drenagem: usa o equivalente SINAPI
+  return L;
+};
+Object.assign(REF_UNIT, {pvq: 4000, pvqa: 2000, pvch: 360});
+/* orçamento da aba Custos: PVs pelo modelo escolhido */
+const _orc61 = orcamento;
+orcamento = function () {
+  const o = _orc61.apply(this, arguments); if (!o || !o.linhas) return o;
+  const cfg = custosCfg(), linhas = o.linhas.filter(x => !/^pv(base|acr):/.test(x.k)), idx = {};
+  linhas.forEach(x => { idx[x.k] = x; });
+  const add = (k, q) => { if (!(q > 0)) return; const p = preco(k); const x = idx[k] || (idx[k] = {k, p, q: 0}); if (!linhas.includes(x)) linhas.push(x); x.q += q; };
+  P.pvs.forEach(pv => { const r = R.pv[pv.id]; if (!r || !isNum(r.prof)) return; const m = r.emop;
+    const lado = m ? m.L : (num(pv.dpv) || 1000) / 1000;
+    const mod = (PV_CAT[cfg.banco] || PV_CAT.sinapi).find(x => x.L >= lado - 1e-6 && (!x.Dmax || !m || x.Dmax >= (m.Dt || 0) - 1e-6)) || (PV_CAT[cfg.banco] || PV_CAT.sinapi).slice(-1)[0];
+    const mm = Math.round(mod.L * 1000), Hi = m ? m.Hi : Math.min(r.prof, 1.40), hc = m && isNum(m.hc) ? Math.max(0, m.hc) : Math.max(0, r.prof - Hi - 0.15);
+    add('pvq:' + mm, 1);
+    if (!mod.H) add('pvqa:' + mm, Math.max(0, Hi - (mod.hBase || 1.40)));
+    add('pvch', hc);
+  });
+  linhas.forEach(x => { x.total = x.q * (x.p.preco || 0); });
+  const ordem = ['tubo', 'prot', 'gal', 'esc', 'berco', 'reat', 'escor', 'pvq', 'pvqa', 'pvch', 'bl', 'ala'];
+  linhas.sort((a, b) => ordem.indexOf(a.k.split(':')[0]) - ordem.indexOf(b.k.split(':')[0]) || a.k.localeCompare(b.k, 'pt', {numeric: true}));
+  const sub = linhas.reduce((s2, x) => s2 + x.total, 0);
+  return Object.assign(o, {linhas, sub, total: sub * (1 + (o.bdi || 0) / 100)});
+};
+const _motCamMod = motivoCam;
+motivoCam = function (m) { const t = _motCamMod.apply(this, arguments); if (!m || !m.geo) return t;
+  return t.replace(/ → (mínimo da série, )?[\d,]+ m( da série EMOP)?/, m.mod ? ' → modelo ' + BANCO_NOME[m.mod.banco] + ': ' + m.mod.nome : ' → nenhum modelo de drenagem da base atende (PV especial)'); };
 /* ---------- exemplos: caixas e ramais em todos os PVs, locadas a 45° fora das esquinas ---------- */
 function ajustaCaptacoesEx(p) {
   const P0 = P; P = p;
