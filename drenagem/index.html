@@ -2272,7 +2272,7 @@ function vVerif() {
     if (/Largura alagada|Lâmina na sarjeta|Vazão × admissível/.test(c.par)) return `<button type="button" class="fixbtn" title="Cria uma BL antes desta e divide as áreas que chegam nela" onclick="event.stopPropagation();addBLMontante('${esc(c.el)}')">Acrescentar BL a montante</button>`;
     if (/deságue/.test(c.par)) return '<small style="color:var(--warn)">Decisão do projetista: rever o NA do receptor ou elevar a rede.</small>';
     if (/esquina/.test(c.par)) return `<button type="button" class="fixbtn" title="Leva a caixa para a sarjeta reta, pouco a montante da curva da esquina" onclick="event.stopPropagation();moverForaEsquina('${esc(c.el)}')">Mover para antes da esquina</button>`;
-    if (/Ramal — ângulo/.test(c.par)) return `<button type="button" class="fixbtn" title="Recoloca a caixa a montante do PV com o ramal a 45° da rede" onclick="event.stopPropagation();blAngulo('${esc(c.el)}',45)">Recolocar a 45°</button>`;
+    if (/Ramal — ângulo/.test(c.par)) return `<button type="button" class="fixbtn" title="Recoloca a caixa a montante do PV com o ramal a 45° da rede" onclick="event.stopPropagation();corrigirRamal('${esc(c.el)}')">Corrigir ligação do ramal</button>`;
     if (/Comprimento × planta/.test(c.par)) return `<button type="button" class="fixbtn" title="Usa a distância entre os PVs medida na planta" onclick="event.stopPropagation();usarLPlanta('${esc(c.el)}')">Usar comprimento da planta</button>`;
     return `<button type="button" class="btn btn-secondary btn-sm" onclick="event.stopPropagation();showTab('${aba(c.tab)}')">Abrir ›</button>`;
   };
@@ -2290,7 +2290,8 @@ function vVerif() {
 const RISCOS = [
   [/Tubos ligados ao PV/, 'Chegam mais de 4 tubos (rede e ramais) ao mesmo poço de visita.', 'Paredes muito recortadas, perda de resistência e fundo do PV sem espaço para as calhas; dificulta a limpeza.'],
   [/esquina/, 'A caixa está na curva do meio-fio da esquina ou dentro do cruzamento. As normas municipais (ex.: PMSP DP-H07) mandam evitar captações nas esquinas e colocá-las pouco a montante da faixa de pedestres.', 'A água da sarjeta não chega à caixa (ela fica fora da linha da sarjeta), a grelha fica na trajetória de conversão dos veículos e a enxurrada atravessa o cruzamento.'],
-  [/Ramal — ângulo/, 'O ramal chega ao PV contra o sentido de escoamento da rede tronco.', 'Choque entre o jato do ramal e o fluxo da rede, perda de carga e depósito no PV; posicione a caixa a montante do PV (ângulo de até 90°, ideal 45°).'],
+  [/Ramal — ângulo/, 'O ramal chega ao PV contra o sentido de escoamento da rede tronco (entra pela parede de saída).', 'O jato do ramal bate de frente com o fluxo da rede: perda de carga, turbulência, refluxo para o ramal e depósito no PV. É erro de projeto: a caixa deve ficar a montante do PV (ideal 45°).'],
+  [/Tubos muito próximos/, 'Os tubos que chegam numa mesma parede do PV não deixam a folga mínima entre si ou até o canto.', 'Parede enfraquecida entre os furos, impossível rejuntar e vedar os tubos; risco de trinca e infiltração. Aumente a câmara ou mude a parede de chegada.'],
   [/Comprimento × planta/, 'O comprimento digitado no trecho é diferente da distância entre os PVs no desenho.', 'Quantitativos, declividade e orçamento ficam incoerentes com a planta.'],
   [/[Cc]âmara|Chaminé/, 'A câmara do PV (padrão EMOP) não cabe na profundidade disponível ou ficou abaixo da medida mínima da tabela.', 'Sem altura para a entrada de pessoa e de equipamento de limpeza: inspeção e desobstrução ficam difíceis. Use outra câmara, caixa de passagem ou aprofunde o PV.'],
   [/Galeria|aduela/i, 'A galeria de aduelas está fora dos limites adotados.', 'Capacidade ou recobrimento insuficientes; revise a seção ou as cotas.'],
@@ -6516,12 +6517,17 @@ rotularTabelas = function () { _rotTabProt.apply(this, arguments); try { ajudaAu
 /* sentido do escoamento da rede tronco no PV, projetado no eixo da rua da caixa (+1 = estacas crescentes) */
 function fluxoDirBL(G, b) {
   const g = G[b.rua], pvo = pvById(b.pv); if (!g || !pvo) return 1;
-  let best = 0;
+  const ins = [], outs = [];
   P.trechos.forEach(t => { if (t.m !== pvo.id && t.j !== pvo.id) return;
     const a = posPV(G, pvById(t.m)), c = posPV(G, pvById(t.j)); if (!a || !c) return;
     const dx = c.x - a.x, dy = c.y - a.y, L = Math.hypot(dx, dy); if (L < 0.01) return;
-    const d = (dx * g.ux + dy * g.uy) / L; if (Math.abs(d) > 0.7 && Math.abs(d) > Math.abs(best)) best = d; });
-  if (best) return Math.sign(best);
+    const d = (dx * g.ux + dy * g.uy) / L; if (Math.abs(d) <= 0.7) return;
+    (t.m === pvo.id ? outs : ins).push(Math.sign(d)); });
+  // a saída segue pela rua: a caixa deve ficar a montante dela
+  if (outs.length) return outs[0];
+  if (ins.length === 1) return ins[0];
+  // chegam tubos dos dois lados da rua (PV de encontro): vale o tubo do lado da caixa
+  if (ins.length > 1) { const pp = posPV(G, pvo), sP = pp ? g.loc(pp).s : 0, sB = num(b.dist) || 0; return Math.sign(sP - sB) || ins[0]; }
   const S = greideDecl(b.rua, num(b.dist)); return S == null || S >= 0 ? 1 : -1;
 }
 /* ângulo (0–180°) entre o ramal (caixa → PV) e a rede tronco no sentido do fluxo; 90° = mesma estaca do PV */
@@ -6568,7 +6574,7 @@ function checksGeo(res) {
   P.bls.forEach(b => { const r = res.bl[b.id]; if (!r) return;
     const add = (par, val, lim, st, nota) => { res.checks.push({tab: 'bls', el: b.id, par, val, lim, st, nota: nota || ''}); if (r.msgs) r.msgs.push({s: st, t: par + ': ' + val + ' (' + lim + ')' + (st !== 'ok' && nota ? ' — ' + nota : '')}); r.st = worst(r.st, st); };
     const a = num(b.ang);
-    if (isNum(a)) add('Ramal — ângulo com a rede', fmt(a, 1) + '°', '≤ 90° (a favor do fluxo; ideal 45°)', a <= 90.5 ? 'ok' : 'warn', 'O ramal chega ao PV contra o sentido do escoamento da rede. Coloque a caixa a montante do PV.');
+    if (isNum(a)) add('Ramal — ângulo com a rede', fmt(a, 1) + '°', '≤ 90° (a favor do fluxo; ideal 45°)', a <= 90.5 ? 'ok' : 'err', 'O ramal chega ao PV contra o sentido do escoamento da rede tronco. Corrija: leve a caixa para montante na sarjeta, ligue-a a outro PV próximo ou crie um PV no trecho a jusante (o botão ao lado escolhe a solução).');
     if (blNaEsquina(G, b)) add('Posição — esquina', 'est. ' + estLabel(num(b.dist)) + ' na curva do meio-fio / cruzamento', 'na sarjeta reta, fora da curva da esquina', 'warn', 'A caixa não fica na linha da sarjeta: não capta a água calculada. Mova para pouco antes da esquina (a montante da faixa de pedestres).');
   });
   P.trechos.forEach(t => { const v = num(t.L); if (!(v > 0)) return; const Lg = trechoLGeo(t, G); if (!isNum(Lg) || Math.abs(Lg - v) <= 0.5) return;
@@ -6580,6 +6586,7 @@ calc = function () {
   try { sincGeo(); } catch (e) { console.error('Geo sinc:', e); }
   const res = _calc61.apply(this, arguments);
   try { checksGeo(res); } catch (e) { console.error('Geo checks:', e); }
+  try { checksPVTubos(res); } catch (e) { console.error('PV tubos:', e); }
   return res;
 };
 /* ações de correção */
@@ -6602,12 +6609,9 @@ autoCorrigir = function () {
   try {
     const G = geoRuas();
     P.bls.forEach(b => { if (blNaEsquina(G, b)) { const d0 = num(b.dist); if (moverForaEsquina(b.id, true)) _motGeo.push(b.id + ': caixa estava na curva da esquina (est. ' + estLabel(d0) + ') — levada para a sarjeta reta a montante, est. ' + estLabel(num(b.dist)) + '.'); } });
-    // ramal contra o fluxo: caixa recolocada a montante do PV, ramal a 45°
+    // ramal contra o fluxo: caixa a montante na sarjeta, outro PV próximo ou PV novo no trecho (cotas mantidas)
     sincGeo(true);
-    P.bls.forEach(b => { if (!(num(b.ang) > 90.5)) return; const G1 = geoRuas(), g = G1[b.rua], d0 = num(b.dist), s = distPorAng(G1, b, 45);
-      if (!g || !isNum(s) || s < g.sMin + 10 - 0.01 || s > g.sMax - 10 + 0.01) return; b.dist = +s.toFixed(2);
-      if (blNaEsquina(geoRuas(), b)) { b.dist = d0; return; }
-      _motGeo.push(b.id + ': ramal chegava ao PV contra o fluxo (' + fmt(num(b.ang), 1) + '°) — caixa levada da est. ' + estLabel(d0) + ' para ' + estLabel(b.dist) + ', ramal a 45°.'); });
+    P.bls.slice().forEach(b => { if (num(b.ang) > 90.5) { const t = fixRamalContra(b.id); if (t) _motGeo.push(t); } });
     const G2 = geoRuas();
     P.trechos.forEach(t => { const v = num(t.L), Lg = trechoLGeo(t, G2); if (v > 0 && isNum(Lg) && Math.abs(Lg - v) > 0.5) { _motGeo.push(t.id + ': comprimento ' + fmt(v, 2) + ' m trocado pelo da planta, ' + fmt(Lg, 2) + ' m.'); t.L = +Lg.toFixed(2); } });
   } catch (e) { console.error(e); }
@@ -6654,6 +6658,114 @@ Object.assign(FB, {
 
 const _applyFix61 = applyFix;
 applyFix = function (path, val) { const m = String(path).match(/^bls\.(\d+)\.ang$/); if (m && P.bls[+m[1]]) { blAngulo(P.bls[+m[1]].id, +val); return; } return _applyFix61.apply(this, arguments); };
+/* ramal contra o fluxo — soluções, nesta ordem:
+   1) caixa para montante NA SARJETA (só se isso for a montante também para a água da rua);
+   2) ligar a outro PV próximo da mesma rua (ramal ≤ máximo, a favor do fluxo);
+   3) criar um PV no trecho da rede a jusante, na posição de 45°, dividindo o trecho com as MESMAS cotas. */
+function fixRamalContra(id) {
+  const b = P.bls.find(x => x.id === id); if (!b) return null;
+  const ang = () => angRamal(geoRuas(), b), Lr = () => ramalLGeo(geoRuas(), b);
+  const a0 = ang(); if (!(a0 > 90.5)) return null;
+  const d0 = num(b.dist), pv0 = b.pv, Lmax = num(P.crit.ramalLmax) || 15, G = geoRuas(), g = G[b.rua], rua = ruaById(b.rua); if (!g || !rua) return null;
+  const Sg = greideDecl(b.rua, d0), desce = Sg == null || Sg >= 0 ? 1 : -1;
+  const s45 = distPorAng(G, b, 45);
+  if (isNum(s45) && (s45 - d0) * desce < 0 && s45 >= g.sMin + 10 && s45 <= g.sMax - 10) {
+    b.dist = +s45.toFixed(2);
+    if (!blNaEsquina(geoRuas(), b) && ang() <= 90.5) return b.id + ': ramal contra o fluxo (' + fmt(a0, 1) + '°) — caixa levada para montante na sarjeta, est. ' + estLabel(d0) + ' → ' + estLabel(b.dist) + ', ramal a 45°.';
+    b.dist = d0;
+  }
+  const faixa = (+rua.larg || 7) / 2 + (+rua.passeio || 2);
+  let best = null;
+  P.pvs.forEach(pv => { if (pv.id === pv0) return; const q = posPV(G, pv); if (!q || Math.abs(g.loc(q).off) > faixa) return;
+    b.pv = pv.id; const a = ang(), L = Lr(); b.pv = pv0;
+    if (isNum(a) && a <= 90.5 && isNum(L) && L <= Lmax) { const sc = L + Math.abs(a - 45) * 0.05; if (!best || sc < best.sc) best = {pv, sc, a, L}; } });
+  if (best) { b.pv = best.pv.id; return b.id + ': ramal contra o fluxo no ' + pv0 + ' (' + fmt(a0, 1) + '°) — ligado ao ' + best.pv.id + ' (' + fmt(best.a, 1) + '°, L ' + fmt(best.L, 2) + ' m).'; }
+  // PV novo no trecho que sai do PV no sentido da caixa
+  const p0 = posPV(G, pvById(pv0)); if (!p0) return null;
+  const s0 = g.loc(p0).s, dirF = fluxoDirBL(G, b);
+  const off = blOff(b, rua) * (b.lado === 'D' ? -1 : 1), dn = Math.abs(g.loc(p0).off - off), sNew = d0 + dirF * dn;
+  for (const t of P.trechos) {
+    if (t.m !== pv0) continue; const pj = pvById(t.j), qj = pj && posPV(G, pj); if (!qj) continue; const lj = g.loc(qj);
+    if (Math.abs(lj.off) > 0.5 || Math.abs(g.loc(p0).off) > 0.5) continue;
+    const sj = lj.s; if (!((sNew - s0) * (sj - s0) > 0 && Math.abs(sNew - s0) >= 2 && Math.abs(sj - sNew) >= 2 && Math.abs(sNew - s0) < Math.abs(sj - s0))) continue;
+    const cm = num(t.cm), cj = num(t.cj), fr = Math.abs(sNew - s0) / Math.abs(sj - s0), ci = isNum(cm) && isNum(cj) ? +(cm + (cj - cm) * fr).toFixed(3) : '';
+    const base = pvById(pv0), nid = idCapt(P);
+    P.pvs.push(Object.assign(JSON.parse(JSON.stringify(base)), {id: nid, rua: b.rua, dist: +sNew.toFixed(2), defl: 'reta', tampa: '', na: '', pvL: '', pvHi: '', obs: 'PV para receber ramal a 45° (a favor do fluxo)'}));
+    let k = 1, tid; do { tid = t.id + '.' + k++; } while (P.trechos.some(x => x.id === tid));
+    const dz = +((P.crit.dz || {}).reta) || 0, Lt = num(t.L) > 0, t2 = Object.assign(JSON.parse(JSON.stringify(t)), {id: tid, m: nid, cm: ci === '' ? '' : +(ci - dz).toFixed(3), L: Lt ? +Math.abs(sj - sNew).toFixed(2) : ''});   // degrau mínimo no PV novo; PVs das pontas não mudam
+    t.j = nid; t.cj = ci; if (Lt) t.L = +Math.abs(sNew - s0).toFixed(2);
+    P.trechos.splice(P.trechos.indexOf(t) + 1, 0, t2);
+    b.pv = nid;
+    return b.id + ': ramal contra o fluxo no ' + pv0 + ' (' + fmt(a0, 1) + '°) — criado o ' + nid + ' no trecho ' + t.id + ' (est. ' + estLabel(sNew) + '; cotas dos PVs das pontas mantidas, degrau mínimo no PV novo), ramal a 45°.';
+  }
+  b.pv = pv0; b.dist = d0; return null;
+}
+function corrigirRamal(id) {
+  const antes = JSON.stringify(P), t = fixRamalContra(id);
+  if (!t) { toast('Não há solução automática: arraste a caixa ou o PV na planta (✏️ Editar no desenho).'); return; }
+  DESFAZER = antes; PLED.undo.push(antes); save(); calc(); renderTab(); toast(t);
+}
+/* PV EMOP: cada tubo vai para a parede para onde aponta em planta; tubo oblíquo ocupa De / cos(ângulo) da parede */
+const _emopMed61 = emopMedidas;
+emopMedidas = function (pv, r, E) {
+  const m = _emopMed61.apply(this, arguments);
+  try {
+    const G = geoCache(), c0 = posPV(G, pv); if (!c0) return m;
+    const esp = +P.crit.espF || 0.10, ciRam = {};
+    Object.values(m.par).forEach(a => a.forEach(x => { if (/^ramal /.test(x.id)) ciRam[x.id] = x.ci; }));
+    const it = [];
+    const add = (id, D, De, ci, q) => { if (!q) return; const dx = q.x - c0.x, dy = q.y - c0.y; if (Math.hypot(dx, dy) < 0.05) return; it.push({id, D, De, ci, an: Math.atan2(dy, dx)}); };
+    r.outs.forEach(t => add(t.id, (num(t.D) || 0) / 1000, deTr(t), num(t.cm), posPV(G, pvById(t.j))));
+    r.ins.forEach(t => add(t.id, (num(t.D) || 0) / 1000, deTr(t), num(t.cj), posPV(G, pvById(t.m))));
+    P.bls.filter(b => b.pv === pv.id).forEach(b => { const D = (num(b.rD) || 400) / 1000; add('ramal ' + b.id, D, D * (1 + 2 * esp), ciRam['ramal ' + b.id], posBL(G, b)); });
+    if (!it.length) return m;
+    const ref = r.outs.length ? it.find(x => x.id === r.outs[0].id) : null, ref0 = ref ? ref.an : it[0].an + Math.PI;
+    const par = {jus: [], mon: [], E: [], D: []}, norm = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a <= -Math.PI) a += 2 * Math.PI; return a; };
+    const NRM = {jus: 0, mon: Math.PI, E: Math.PI / 2, D: -Math.PI / 2};
+    const soma = a => a.reduce((s, x) => s + x.w, 0), need = a => a.length ? soma(a) + (a.length + 1) * E.pvEmopFolga : 0;
+    const poe = (x, k) => { const beta = Math.abs(norm(x.f - NRM[k])); x.beta = beta * 180 / Math.PI; x.w = x.De / Math.cos(beta); par[k].push(x); };
+    it.forEach(x => { x.f = norm(x.an - ref0); });
+    // saída na parede de jusante; os demais (maiores primeiro) vão para a parede viável (incidência ≤ 60°) que deixa a câmara menor
+    if (ref) poe(ref, 'jus');
+    it.filter(x => x !== ref).sort((a, b) => b.De - a.De).forEach(x => {
+      const cand = Object.keys(NRM).filter(k => Math.abs(norm(x.f - NRM[k])) <= Math.PI / 3 + 1e-6 && !(k === 'jus' && ref));
+      const ks = cand.length ? cand : [Object.keys(NRM).sort((p, q) => Math.abs(norm(x.f - NRM[p])) - Math.abs(norm(x.f - NRM[q])))[0]];
+      let best = null; ks.forEach(k => { const w = x.De / Math.cos(Math.min(Math.abs(norm(x.f - NRM[k])), 1.2)), n = need(par[k].concat([{w}])), sc = n + Math.abs(norm(x.f - NRM[k])) * 0.01; if (!best || sc < best.sc) best = {k, sc}; });
+      poe(x, best.k); });
+    const nec = {}; let Lneed = 0, Lpar = 'jus';
+    Object.keys(par).forEach(k => { nec[k] = need(par[k]); if (nec[k] > Lneed) { Lneed = nec[k]; Lpar = k; } });
+    const Lauto = emopLado(Math.max(Lneed, EMOP_LADOS[0])), L = m.Ldig || Lauto;
+    const gap = {}; Object.keys(par).forEach(k => { if (par[k].length) gap[k] = (L - soma(par[k])) / (par[k].length + 1); });
+    const ext = L + 2 * E.pvEmopParede;
+    Object.assign(m, {par, nec, Lneed, Lpar, Lauto, L, gap, geo: true});
+    m.q = Object.assign({}, m.q, {alv: 4 * (L + E.pvEmopParede) * m.Hi, lajeF: ext * ext * E.pvEmopLajeF, lajeT: Math.max(0, ext * ext - Math.PI * 0.30 * 0.30) * E.pvEmopLajeT});
+  } catch (e) { console.error('PV geo:', e); }
+  return m;
+};
+const _motCam61 = motivoCam;
+motivoCam = function (m) {
+  const t0 = _motCam61.apply(this, arguments); if (!m || !m.geo) return t0;
+  const a = m.par[m.Lpar] || [], E = m.E, resto = t0.indexOf('; ') >= 0 ? t0.slice(t0.indexOf('; ')) : '.';
+  let t = a.length ? PAREDE_NOME[m.Lpar] + ': ' + a.map(x => x.id + ' Ø ext. ' + fmt(x.De, 2) + (x.beta > 3 ? ' a ' + fmt(x.beta, 0) + '° (ocupa ' + fmt(x.w, 2) + ')' : '')).join(' + ') + ' + ' + (a.length + 1) + ' folgas de ' + fmt(E.pvEmopFolga, 2) + ' = ' + fmt(m.Lneed, 2) + ' m' : 'sem tubos ligados';
+  t += m.Lneed <= EMOP_LADOS[0] + 1e-6 ? ' → mínimo da série, ' + fmt(m.Lauto, 2) + ' m' : ' → ' + fmt(m.Lauto, 2) + ' m da série EMOP';
+  return t + resto;
+};
+/* folga entre tubos na parede do PV: alerta quando ficam muito próximos (câmara digitada pequena) */
+function checksPVTubos(res) {
+  P.pvs.forEach(pv => { const r = res.pv[pv.id], m = r && r.emop; if (!m || !m.gap) return; const E = m.E;
+    Object.keys(m.gap).forEach(k => { const gp = m.gap[k]; if (gp >= E.pvEmopFolga - 1e-3) return;
+      const st = gp < 0.05 ? 'err' : 'warn', lst = m.par[k].map(x => x.id).join(', ');
+      res.checks.push({tab: 'pvs', el: pv.id, par: 'Tubos muito próximos na ' + PAREDE_NOME[k], val: 'folga ' + fmt(Math.max(0, gp) * 100, 0) + ' cm (' + lst + ')', lim: '≥ ' + fmt(E.pvEmopFolga * 100, 0) + ' cm', st,
+        nota: 'Câmara ' + fmt(m.L, 2) + ' m pequena para os tubos desta parede. Use ' + fmt(m.Lauto, 2) + ' × ' + fmt(m.Lauto, 2) + ' m (deixe o lado da câmara em branco para o automático) ou ligue um ramal em outra parede/PV.'});
+      r.st = worst(r.st, st); r.msgs.push({s: st, t: 'Tubos muito próximos na ' + PAREDE_NOME[k] + ': folga ' + fmt(Math.max(0, gp) * 100, 0) + ' cm'}); });
+  });
+  // PV circular: perímetro interno precisa acomodar todos os tubos com folga
+  P.pvs.forEach(pv => { const r = res.pv[pv.id]; if (!r || r.emop) return; const Dp = (num(pv.dpv) || 1000) / 1000, esp = +P.crit.espF || 0.10, folga = 0.15;
+    const des = r.ins.concat(r.outs).map(t => deTr(t)).concat(P.bls.filter(b => b.pv === pv.id).map(b => (num(b.rD) || 400) / 1000 * (1 + 2 * esp)));
+    const nec = des.reduce((s, x) => s + x, 0) + des.length * folga, per = Math.PI * Dp;
+    if (des.length && nec > per + 1e-6) { const prox = [1000, 1200, 1500, 2000, 2500, 3000].find(d => Math.PI * d / 1000 >= nec);
+      res.checks.push({tab: 'pvs', el: pv.id, par: 'Tubos muito próximos no PV circular', val: des.length + ' tubos ocupam ' + fmt(nec, 2) + ' m', lim: '≤ perímetro ' + fmt(per, 2) + ' m', st: 'warn', nota: 'Os furos ficam colados. Use PV Ø ' + (prox || 3000) + ' mm ou câmara EMOP.'}); r.st = worst(r.st, 'warn'); } });
+}
 /* ---------- exemplos: caixas e ramais em todos os PVs, locadas a 45° fora das esquinas ---------- */
 function ajustaCaptacoesEx(p) {
   const P0 = P; P = p;
