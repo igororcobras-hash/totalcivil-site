@@ -784,7 +784,7 @@ function exampleBairro() {
   // tronco na Rua Gonçalves Dias (R6), de norte para sul
   const T = [['PV-T1', 20, 'd90', 'Cruzamento com a Rua das Acácias'], ['PV-T2', 70, 'reta'], ['PV-T3', 120, 'T', 'Cruzamento com a Rua dos Ipês'], ['PV-T4', 170, 'reta'], ['PV-T5', 220, 'T', 'Cruzamento com a Rua das Palmeiras'], ['PV-T6', 240, 'reta', 'Lançamento no canal']];
   T.forEach(([id, d, df, ob]) => p.pvs.push(pv(id, 'R6', d, df, ob)));
-  p.pvs[p.pvs.length - 1].na = 6.00;
+  p.pvs[p.pvs.length - 1].na = 5.00;
   for (let k = 0; k < T.length - 1; k++) p.trechos.push(tr('TR' + (k + 1), T[k][0], T[k + 1][0]));
   // coletores nas ruas L–O: PVs em 20 (cruz. R4), 70, 120 (cruz. R5), 170 → PV do tronco
   const chegada = {R1: 'PV-T1', R2: 'PV-T3', R3: 'PV-T5'};
@@ -1303,7 +1303,11 @@ function calc() {
         const cjI = num(t.cj), cmO = num(out.cm), dI = (num(t.D) || 0) / 1000, dO = (num(out.D) || 0) / 1000;
         if (isNum(cjI) && isNum(cmO)) {
           const dz = cjI - cmO;
-          add('Degrau ' + t.id + '→' + out.id, fmt(dz, 3) + ' m', '≥ ' + fmt(dzMin, 2) + ' m', dz >= dzMin - 1e-4 ? 'ok' : 'err', 'Degrau insuficiente para compensar a perda por turbulência no PV.');
+          // degrau necessário: o maior entre o mínimo da tabela e a perda no PV corrigida pelas lâminas (a água no PV não pode subir acima da lâmina do tubo que chega)
+          const xI = res.tr[t.id], xO = res.tr[out.id], yI = xI && xI.h && isNum(xI.h.y) ? xI.h.y : 0, yO = xO && xO.h && isNum(xO.h.y) ? xO.h.y : 0;
+          const dzHid = hf + yO - yI, dzNec = Math.max(dzMin, dzHid);
+          add('Degrau ' + t.id + '→' + out.id, fmt(dz, 3) + ' m', '≥ ' + fmt(dzNec, 2) + ' m' + (dzHid > dzMin + 1e-4 ? ' (perda no PV ' + fmt(hf, 2) + ' m)' : ''), dz >= dzNec - 1e-3 ? 'ok' : 'err',
+            dzHid > dzMin + 1e-4 ? 'A perda no PV (hf = K·V²/2g = ' + fmt(hf, 2) + ' m) é maior que o degrau: a água sobe no PV e afoga o tubo ' + t.id + ', levantando a linha piezométrica a montante. Aumente o degrau para ' + fmt(dzNec, 2) + ' m (Corrigir automaticamente) ou reduza a velocidade de saída.' : 'Degrau insuficiente para compensar a perda por turbulência no PV.');
           const coroa = (cjI + dI) - (cmO + dO);
           if (coroa < -1e-3) add('Alinhamento de geratriz superior', fmt(coroa, 3) + ' m', 'coroa de saída ≤ coroa de entrada', 'err', 'A coroa do tubo de saída está acima da de entrada (remanso).');
         }
@@ -2530,7 +2534,7 @@ function abrirProjeto(id) { saveNow(); DB.cur = id; P = migrate(DB.list[id].data
 function novoProjeto(ex) {
   saveNow(); const id = uid(); P = ex === 'bairro' ? exampleBairro() : ex ? exampleProject() : blankProject('Novo projeto');
   if (ex === 'bairro') { calc(); autoDimensionar(); }
-  else if (ex) autoCotas(true);
+  else if (ex) { calc(); autoCotas(true); calc(); autoCotas(true); }   // 2 passadas: os degraus dependem da perda em cada PV
   DB.cur = id; saveNow(); afterLoad(); closeModal('modal-projetos');
   if (ex === 'bairro') { DB.exBairro = id; autoCorrigir(); closeModal('modal-auto'); DESFAZER = null; showTab('planta'); toast('Exemplo de bairro criado e dimensionado automaticamente'); }
   else showTab('projeto');
@@ -3896,7 +3900,10 @@ function autoCotas(silencioso) {
     let cm = tm - hmin;
     ot.filter(u => u.j === t.m && done[u.id]).forEach(u => {
       const cjI = num(u.cj), dI = (num(u.D) || 0) / 1000;
-      cm = Math.min(cm, cjI - (+c.dz[pm.defl] || 0), cjI + dI - D);
+      // degrau ≥ perda no PV (K·V²/2g) corrigida pelas lâminas, para a água do PV não afogar o tubo que chega
+      const rp = R && R.pv && R.pv[t.m], xO = R && R.tr[t.id], xI = R && R.tr[u.id];
+      const dzH = rp && isNum(rp.hf) ? rp.hf + (xO && xO.h && isNum(xO.h.y) ? xO.h.y : 0) - (xI && xI.h && isNum(xI.h.y) ? xI.h.y : 0) : 0;
+      cm = Math.min(cm, cjI - Math.max(+c.dz[pm.defl] || 0, dzH), cjI + dI - D);
     });
     const r = R && R.tr[t.id];
     let iLow = c.imin / 100, iHigh = Infinity;
@@ -4399,7 +4406,7 @@ function emopMedidas(pv, r, E) {
   if (isNum(disp)) {
     const hCham = sobe10(disp - E.pvEmopChamMax);
     if (hCham > Hauto + 1e-6) { Hauto = hCham; hMot = 'cham'; }
-    if (Hauto > disp + 1e-6) { Hauto = Math.max(0, +disp.toFixed(2)); hMot = 'raso'; }
+    if (Hauto > disp + 1e-6) { Hauto = Math.max(0, Math.floor(disp * 100 + 1e-6) / 100); hMot = 'raso'; }
   }
   const Hdig = num(pv.pvHi) > 0 ? num(pv.pvHi) : null, Hi = Hdig || Hauto;
   const hc = isNum(disp) ? disp - Hi : null;
@@ -6822,14 +6829,60 @@ function trocarTodas(alvo) {
   toast(de.length + ' trocadas para ' + novo + '.' + (e ? ' Atenção: ' + e + ' erro(s) na verificação — veja a aba 12.' : '') + ' Para voltar: botão Desfazer.');
 }
 function desfazerTroca() { if (!PLED.undo.length) return toast('Nada para desfazer'); PLED.redo.push(JSON.stringify(P)); P = migrate(JSON.parse(PLED.undo.pop())); save(); calc(); renderTab(); toast('Desfeito'); }
+/* janela: alterar dispositivo, material e medidas (padrão ou personalizadas) de várias captações */
+let DSP = {alvo: 'todas', rua: '', tipo: 'gr', constr: 'Pré-moldada', pad: '', cxB: '', cxL: '', cxH: '', gB: '', gL: '', L: ''};
+function dspPadrao() {
+  const k = modeloDe(DSP.tipo, DSP.constr), m = CAIXAS[k] || {};
+  Object.assign(DSP, {cxB: m.cxB != null ? m.cxB : '', cxL: m.cxL != null ? m.cxL : '', cxH: m.cxH != null ? m.cxH : '', gB: m.gB != null ? m.gB : (DSP.tipo === 'gr' || DSP.tipo === 'cb' ? 0.30 : ''), gL: m.gL != null ? m.gL : (DSP.tipo === 'gr' || DSP.tipo === 'cb' ? 0.90 : ''), L: DSP.tipo === 'gr' ? '' : (m.L != null ? m.L : BLTIPOS[DSP.tipo].L)});
+}
+function dspAlvos() { return P.bls.filter(b => (DSP.alvo === 'todas' || (DSP.alvo === 'gr' ? b.tipo === 'gr' : b.tipo !== 'gr')) && (!DSP.rua || b.rua === DSP.rua)); }
+function abrirDispTodas() {
+  if (!$('modal-disp')) { const d = document.createElement('div'); d.className = 'modal-backdrop'; d.id = 'modal-disp';
+    d.innerHTML = `<div class="modal" style="max-width:820px"><div class="modal-header"><h3>⇄ Alterar dispositivo de várias captações</h3><button class="btn-icon" onclick="closeModal('modal-disp')">✕</button></div>
+      <div class="modal-body" id="disp-body"></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeModal('modal-disp')">Cancelar</button><button class="btn btn-primary" onclick="aplicarDispTodas()">✓ Aplicar</button></div></div>`;
+    document.body.appendChild(d); }
+  dspPadrao(); dspTela(); openModal('modal-disp');
+}
+function dspSet(k, v) { DSP[k] = v; if (k === 'tipo' || k === 'constr') dspPadrao(); dspTela(); }
+function dspTela() {
+  const nT = P.bls.length, nG = P.bls.filter(b => b.tipo === 'gr').length, al = dspAlvos(), gr = DSP.tipo === 'gr' || DSP.tipo === 'cb';
+  const sel = (k, opts) => `<select onchange="dspSet('${k}',this.value)">${opts.map(([v, t]) => `<option value="${esc(v)}" ${String(DSP[k]) === String(v) ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`;
+  const inp = (k, lb, st) => `<div class="field"><label>${lb}</label><input type="number" step="${st || 0.05}" value="${DSP[k] === '' ? '' : DSP[k]}" onchange="DSP.${k}=this.value===''?'':+this.value;dspTela()"/></div>`;
+  const pads = (CX_PAD[DSP.tipo] || []).map(([b, l, h, lab]) => `<button class="btn btn-secondary btn-sm" onclick="Object.assign(DSP,{cxB:${b},cxL:${l}${h ? ',cxH:' + h : ''}});dspTela()">${fmt(b, 2)} × ${fmt(l, 2)}${h ? ' × ' + fmt(h, 2) : ''}${lab ? ' (EMOP)' : ''}</button>`).join(' ');
+  const grs = GRELHAS.map(([b, l]) => `<button class="btn btn-secondary btn-sm" onclick="Object.assign(DSP,{gB:${b},gL:${l}});dspTela()">${fmt(b, 2)} × ${fmt(l, 2)}</button>`).join(' ');
+  $('disp-body').innerHTML = `<div class="fgrid">
+      <div class="field"><label>Aplicar em</label>${sel('alvo', [['todas', 'Todas as captações (' + nT + ')'], ['gr', 'Só as caixas de ralo (' + nG + ')'], ['bl', 'Só as bocas de lobo (' + (nT - nG) + ')']])}</div>
+      <div class="field"><label>Somente na rua</label>${sel('rua', [['', 'Todas as ruas']].concat(P.ruas.map(r => [r.id, r.nome])))}</div>
+      <div class="field" style="grid-column:span 2"><label>Novo dispositivo</label>${sel('tipo', DISP_NOME)}</div>
+      <div class="field"><label>Material da caixa</label>${sel('constr', MAT_CX)}</div></div>
+    <div class="section-title">Caixa — medidas internas (m)</div>
+    <div style="font-size:.8rem;margin-bottom:.4rem">Padrões: ${pads || '—'}</div>
+    <div class="fgrid">${inp('cxB', 'Largura B (perpendicular ao meio-fio)')}${inp('cxL', 'Comprimento L (ao longo do meio-fio)')}${inp('cxH', 'Profundidade H')}</div>
+    ${gr ? `<div class="section-title">Grelha de ferro fundido (m)</div><div style="font-size:.8rem;margin-bottom:.4rem">Padrões: ${grs}</div><div class="fgrid">${inp('gB', 'Largura da grelha')}${inp('gL', 'Comprimento da grelha')}</div>` : ''}
+    ${DSP.tipo !== 'gr' ? `<div class="section-title">Abertura na guia (m)</div><div class="fgrid">${inp('L', 'Comprimento da abertura L', 0.1)}</div>` : ''}
+    <div class="msg info" style="margin-top:.8rem">ℹ <span><b>${al.length}</b> captaç${al.length === 1 ? 'ão será alterada' : 'ões serão alteradas'} para <b>${esc((DISP_NOME.find(x => x[0] === DSP.tipo) || [])[1] || DSP.tipo)}</b>, ${esc(DSP.constr)}, caixa ${fmt(+DSP.cxB || 0, 2)} × ${fmt(+DSP.cxL || 0, 2)} × ${fmt(+DSP.cxH || 0, 2)} m${gr ? ', grelha ' + fmt(+DSP.gB || 0, 2) + ' × ' + fmt(+DSP.gL || 0, 2) + ' m' : ''}${DSP.tipo !== 'gr' ? ', abertura ' + fmt(+DSP.L || 0, 2) + ' m' : ''}. A posição se ajusta sozinha (sarjeta / espelho do meio-fio) e capacidades, ramais, câmaras dos PVs e verificações são recalculados. Dá para desfazer.</span></div>`;
+}
+function aplicarDispTodas() {
+  const al = dspAlvos(); if (!al.length) return toast('Nenhuma captação nesse filtro.');
+  if (!(+DSP.cxB > 0 && +DSP.cxL > 0 && +DSP.cxH > 0)) return toast('Informe as três medidas da caixa.');
+  if ((DSP.tipo === 'gr' || DSP.tipo === 'cb') && !(+DSP.gB > 0 && +DSP.gL > 0)) return toast('Informe as medidas da grelha.');
+  if (DSP.tipo !== 'gr' && !(+DSP.L > 0)) return toast('Informe o comprimento da abertura na guia.');
+  const antes = JSON.stringify(P);
+  al.forEach(b => { b.tipo = DSP.tipo; b.constr = DSP.constr; trocaDisp(b);
+    b.cxB = +DSP.cxB; b.cxL = +DSP.cxL; b.cxH = +DSP.cxH;
+    if (DSP.tipo === 'gr' || DSP.tipo === 'cb') { b.gB = +DSP.gB; b.gL = +DSP.gL; }
+    b.L = DSP.tipo === 'gr' ? 0 : +DSP.L; });
+  DESFAZER = antes; PLED.undo.push(antes); PLED.redo = [];
+  closeModal('modal-disp'); save(); calc(); renderTab();
+  const e = R.checks.filter(c => c.st === 'err').length;
+  toast(al.length + ' captações alteradas.' + (e ? ' Atenção: ' + e + ' erro(s) na verificação — veja a aba 12.' : '') + ' Para voltar: ↶ Desfazer.');
+}
 const _vBLs61 = vBLs;
 vBLs = function () {
   const h = _vBLs61.apply(this, arguments), nG = P.bls.filter(b => b.tipo === 'gr').length, nB = P.bls.length - nG;
   const bar = `<div class="card" style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;padding:.6rem .8rem">
-    <b style="font-size:.85rem">Trocar todas de uma vez:</b>
-    <button class="btn btn-secondary btn-sm" onclick="trocarTodas('gs')" title="Converte todas as caixas de ralo (grelha na sarjeta) em bocas de lobo de guia simples">Caixas de ralo → bocas de lobo (${nG})</button>
-    <button class="btn btn-secondary btn-sm" onclick="trocarTodas('gd')" title="Converte todas as caixas de ralo em bocas de lobo de guia dupla">Caixas de ralo → bocas de lobo duplas (${nG})</button>
-    <button class="btn btn-secondary btn-sm" onclick="trocarTodas('gr')" title="Converte todas as bocas de lobo (guia simples, dupla ou combinada) em caixas de ralo com grelha na sarjeta">Bocas de lobo → caixas de ralo (${nB})</button>
+    <button class="btn btn-primary btn-sm" onclick="abrirDispTodas()" title="Troca o dispositivo (caixa de ralo, boca de lobo simples, dupla ou combinada), o material e as medidas de várias captações de uma vez">⇄ Alterar dispositivo de todas…</button>
+    <span style="font-size:.8rem">${nG} caixa(s) de ralo · ${nB} boca(s) de lobo</span>
     <button class="btn btn-secondary btn-sm" onclick="desfazerTroca()">↶ Desfazer</button>
     <span style="font-size:.78rem;color:var(--muted);flex:1;min-width:220px">A posição é sempre automática: caixa de ralo dentro da sarjeta, encostada no espelho do meio-fio; boca de lobo sob o passeio, faceando o espelho. Nunca dentro do cruzamento.</span></div>`;
   return h.replace(/(<div class="bar-btns"><button class="btn btn-primary btn-sm" onclick="addItem\('bls'\)">[^<]*<\/button><\/div>)/, '$1' + bar);
