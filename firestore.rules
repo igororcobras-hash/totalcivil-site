@@ -166,6 +166,20 @@ service cloud.firestore {
       }
     }
 
+    // Projetos da Drenagem Pluvial salvos na nuvem: só o dono (com a Drenagem liberada) lê e grava; o administrador lê e exclui.
+    // A lista é feita só por uid (sem índice composto); o tamanho de cada projeto é limitado a ~1 MB pelo próprio Firestore.
+    match /projetosDrenagem/{projetoId} {
+      allow read: if podeUsar('drenagem')
+                  && (resource.data.uid == request.auth.uid || admin());
+      allow create: if podeUsar('drenagem')
+                    && request.resource.data.uid == request.auth.uid;
+      allow update: if podeUsar('drenagem')
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == request.auth.uid;
+      allow delete: if podeUsar('drenagem')
+                    && (resource.data.uid == request.auth.uid || admin());
+    }
+
     // Qualquer outro caminho fica bloqueado.
     match /{documento=**} {
       allow read, write: if false;
