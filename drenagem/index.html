@@ -1499,7 +1499,8 @@ const HELP = {
   'bls.z': 'Inverso da declividade transversal (z = 1/i). Em branco usa o valor da rua. Ex.: 3 % → z = 33.',
   'bls.prox': 'Boca-de-lobo que recebe a água que esta não conseguir engolir. Sem indicação, o excedente é considerado perdido na via.',
   'bls.pv': 'Poço de visita da rede tronco onde o ramal desta linha se liga.',
-  'bls.rL': 'Comprimento do tubo de ligação entre a boca-de-lobo e o PV.',
+  'bls.rL': 'Comprimento do tubo de ligação entre a caixa e o PV, medido em linha reta na planta (centro da caixa ao centro do PV). É calculado automaticamente pela posição da caixa e do PV — não pode ser digitado, para nunca divergir do desenho. Para mudar, mude a estaca, o ângulo ou arraste a caixa na planta.',
+  'bls.ang': 'Ângulo entre o ramal (tubo reto da caixa ao PV) e a rede tronco, medido no PV, no sentido do escoamento. 45° = caixa a montante do PV, ramal entrando a favor do fluxo (recomendado); 90° = caixa na mesma estaca do PV; acima de 90° = ramal contra o fluxo (evitar). Digite o ângulo e a estaca da caixa é calculada; digite a estaca e o ângulo é recalculado. Tubo de concreto não admite curva: o ângulo é obtido pela posição da caixa.',
   'bls.rD': 'Diâmetro do tubo de ligação (ramal).',
   'bls.rI': 'Declividade do ramal. Usual ≥ 1 %.',
   'pvs.id': 'Código do poço de visita (ex.: PV-01). Ao alterar, trechos e ramais ligados são atualizados.',
@@ -2164,8 +2165,9 @@ function vBLs() {
     {h: 'Q adm. sarjeta', u: 'L/s', res: 'Qadm'}, {h: 'Capacid. PV', u: 'L/s', res: 'Qcap'}, {h: 'Engolida', u: 'L/s', res: 'Qeng'}, {h: 'Passa', u: 'L/s', res: 'Qbyp'},
     {h: 'Passa p/', p: 'prox', o: (o) => ({type: 'sel', opts: [['', '—']].concat(P.bls.filter(x => x.id !== o.id).map(x => [x.id, x.id]))}), w: 90, k: 'bls.prox'},
     {h: 'Ramal → PV rede', p: 'pv', o: () => ({type: 'sel', opts: optsPV(true)}), w: 100, k: 'bls.pv'},
+    {h: 'Ângulo ramal × rede', u: '°', p: 'ang', o: {step: 1, ph: '—'}, w: 74, k: 'bls.ang'},
     {h: 'Ramal Ø', u: 'mm', p: 'rD', o: {type: 'sel', num: true, opts: optsD()}, w: 86, k: 'bls.rD'},
-    {h: 'Ramal L', u: 'm', p: 'rL', o: {step: 0.5}, w: 64, k: 'bls.rL'},
+    {h: 'Ramal L (planta)', u: 'm', p: 'rL', o: {step: 0.01}, w: 70, k: 'bls.rL'},
     {h: 'Ramal i', u: '%', p: 'rI', o: {step: 0.1}, w: 64, k: 'bls.rI'},
     {h: 'V ramal', u: 'm/s', res: 'rV'}, {h: 'y/D ramal', res: 'ryD'}
   ], (o, i) => (o.tipo === 'gr' || o.tipo === 'cb' ? fld(`bls.${i}.gL`, 'Grelha — comprimento (m)', {step: 0.05}) + fld(`bls.${i}.gB`, 'Grelha — largura (m)', {step: 0.05}) + fld(`bls.${i}.ga`, 'Grelha — área livre (%)', {step: 5}) : '') +
@@ -2269,6 +2271,9 @@ function vVerif() {
     if (sg.length) return sg.map(({p, f}) => `<button type="button" class="fixbtn" title="${esc(f.t)}" onclick='event.stopPropagation();applyFix(${JSON.stringify(p)},${JSON.stringify(f.fix)})'>${esc(f.fixTxt)}</button>`).join(' ');
     if (/Largura alagada|Lâmina na sarjeta|Vazão × admissível/.test(c.par)) return `<button type="button" class="fixbtn" title="Cria uma BL antes desta e divide as áreas que chegam nela" onclick="event.stopPropagation();addBLMontante('${esc(c.el)}')">Acrescentar BL a montante</button>`;
     if (/deságue/.test(c.par)) return '<small style="color:var(--warn)">Decisão do projetista: rever o NA do receptor ou elevar a rede.</small>';
+    if (/esquina/.test(c.par)) return `<button type="button" class="fixbtn" title="Leva a caixa para a sarjeta reta, pouco a montante da curva da esquina" onclick="event.stopPropagation();moverForaEsquina('${esc(c.el)}')">Mover para antes da esquina</button>`;
+    if (/Ramal — ângulo/.test(c.par)) return `<button type="button" class="fixbtn" title="Recoloca a caixa a montante do PV com o ramal a 45° da rede" onclick="event.stopPropagation();blAngulo('${esc(c.el)}',45)">Recolocar a 45°</button>`;
+    if (/Comprimento × planta/.test(c.par)) return `<button type="button" class="fixbtn" title="Usa a distância entre os PVs medida na planta" onclick="event.stopPropagation();usarLPlanta('${esc(c.el)}')">Usar comprimento da planta</button>`;
     return `<button type="button" class="btn btn-secondary btn-sm" onclick="event.stopPropagation();showTab('${aba(c.tab)}')">Abrir ›</button>`;
   };
   return `<h3>Verificação geral do projeto</h3>
@@ -2283,6 +2288,10 @@ function vVerif() {
 }
 /* ---------- 11b. Por quê / risco de cada verificação e correção com prévia ---------- */
 const RISCOS = [
+  [/Tubos ligados ao PV/, 'Chegam mais de 4 tubos (rede e ramais) ao mesmo poço de visita.', 'Paredes muito recortadas, perda de resistência e fundo do PV sem espaço para as calhas; dificulta a limpeza.'],
+  [/esquina/, 'A caixa está na curva do meio-fio da esquina ou dentro do cruzamento. As normas municipais (ex.: PMSP DP-H07) mandam evitar captações nas esquinas e colocá-las pouco a montante da faixa de pedestres.', 'A água da sarjeta não chega à caixa (ela fica fora da linha da sarjeta), a grelha fica na trajetória de conversão dos veículos e a enxurrada atravessa o cruzamento.'],
+  [/Ramal — ângulo/, 'O ramal chega ao PV contra o sentido de escoamento da rede tronco.', 'Choque entre o jato do ramal e o fluxo da rede, perda de carga e depósito no PV; posicione a caixa a montante do PV (ângulo de até 90°, ideal 45°).'],
+  [/Comprimento × planta/, 'O comprimento digitado no trecho é diferente da distância entre os PVs no desenho.', 'Quantitativos, declividade e orçamento ficam incoerentes com a planta.'],
   [/[Cc]âmara|Chaminé/, 'A câmara do PV (padrão EMOP) não cabe na profundidade disponível ou ficou abaixo da medida mínima da tabela.', 'Sem altura para a entrada de pessoa e de equipamento de limpeza: inspeção e desobstrução ficam difíceis. Use outra câmara, caixa de passagem ou aprofunde o PV.'],
   [/Galeria|aduela/i, 'A galeria de aduelas está fora dos limites adotados.', 'Capacidade ou recobrimento insuficientes; revise a seção ou as cotas.'],
   [/Coeficiente C/, 'O coeficiente de escoamento define quanto da chuva vira enxurrada.', 'Valor fora de 0–1 gera vazão errada: rede subdimensionada (alagamento) ou superdimensionada (custo).'],
@@ -2331,9 +2340,9 @@ function difProjetos(A, B) {
     if (!a) { mud.push([nome + ' ' + o.id, 'Novo elemento', '—', 'criado']); return; }
     campos.forEach(([k, lbl, f]) => { if (kind === 'pvs' && k === 'dpv' && emop(o)) return; if (nv(a[k]) !== nv(o[k])) mud.push([nome + ' ' + o.id, lbl, f ? f(a[k]) : (a[k] == null || a[k] === '' ? '—' : a[k]), f ? f(o[k]) : (o[k] == null || o[k] === '' ? '—' : o[k])]); });
   });
-  cmp('trechos', [['D', 'Diâmetro (mm)'], ['gal', 'Galeria'], ['cm', 'Cota inf. montante', mm], ['cj', 'Cota inf. jusante', mm], ['iFix', 'Declividade mínima forçada (%)', mm]], 'Trecho');
+  cmp('trechos', [['L', 'Comprimento (m)'], ['D', 'Diâmetro (mm)'], ['gal', 'Galeria'], ['cm', 'Cota inf. montante', mm], ['cj', 'Cota inf. jusante', mm], ['iFix', 'Declividade mínima forçada (%)', mm]], 'Trecho');
   cmp('pvs', [['defl', 'Escoamento', v => DEFL[v] || v || '—'], ['dpv', 'Ø do PV']], 'PV');
-  cmp('bls', [['tipo', 'Tipo', v => BLTIPOS[v] ? BLTIPOS[v].nome : v], ['L', 'Abertura L (m)'], ['prox', 'Excedente segue para', v => v || '—'], ['rD', 'Ramal Ø'], ['rI', 'Ramal i (%)']], 'BL');
+  cmp('bls', [['rua', 'Rua', v => ruaNome(v) || v], ['dist', 'Estaca', v => isNum(num(v)) ? estLabel(num(v)) : '—'], ['tipo', 'Tipo', v => BLTIPOS[v] ? BLTIPOS[v].nome : v], ['L', 'Abertura L (m)'], ['prox', 'Excedente segue para', v => v || '—'], ['rD', 'Ramal Ø'], ['rI', 'Ramal i (%)']], 'BL');
   return mud;
 }
 function previaCorrecao() {
@@ -3393,13 +3402,12 @@ function blDistDes(G, b) {
 function posBL(G, b) {
   const g = G[b.rua]; if (!g) return null; const rua = ruaById(b.rua) || {};
   const off = blOff(b, rua) * (b.lado === 'D' ? -1 : 1);
-  return g.at(blDistDes(G, b), off);
+  return g.at(num(b.dist) || 0, off);
 }
-/* traçado do ramal: segue a sarjeta no sentido do fluxo e entra no PV a 45° */
+/* ramal: tubo de concreto RETO da caixa ao PV — sem curvas nem derivações (não há conexões como no PVC);
+   o ângulo com a rede tronco é dado pela posição da caixa (estaca), não por curvas no tubo */
 function ramalPts(G, b) {
-  const pb = posBL(G, b), pvo = pvById(b.pv), pv = pvo && posPV(G, pvo), g = G[b.rua]; if (!pb || !pv || !g) return null;
-  const lb = g.loc(pb), lv = g.loc(pv), ds = lv.s - lb.s, dOff = Math.abs(lv.off - lb.off), dir = Math.sign(ds) || 1;
-  if (Math.abs(ds) > dOff + 0.05 && Math.abs(ds) - dOff <= 30) return [pb, g.at(lv.s - dir * dOff, lb.off), pv];
+  const pb = posBL(G, b), pvo = pvById(b.pv), pv = pvo && posPV(G, pvo); if (!pb || !pv) return null;
   return [pb, pv];
 }
 
@@ -3451,7 +3459,8 @@ function svgPlanta(K, W, H, st, lay) {
   if (lay.bl) P.bls.forEach(b => {
     const pb = posBL(G, b); if (!pb) return;
     const B = S(pb); const r = R.bl[b.id] || {};
-    const rp = ramalPts(G, b); if (rp) s += `<polyline points="${rp.map(p => { const q = S(p); return q.x.toFixed(1) + ',' + q.y.toFixed(1); }).join(' ')}" fill="none" stroke="${K.agua}" stroke-width="2" stroke-dasharray="6 3"/>`;
+    const rp = ramalPts(G, b); if (rp) { const pts = rp.map(p => { const q = S(p); return q.x.toFixed(1) + ',' + q.y.toFixed(1); }).join(' ');
+      s += `<g data-k="ram:${esc(b.id)}"><polyline points="${pts}" fill="none" stroke="${K.agua}" stroke-width="2" stroke-dasharray="6 3"/><polyline points="${pts}" fill="none" stroke="transparent" stroke-width="12"/></g>`; }
     const dm = blDim(b), sgl = b.lado === 'D' ? -1 : 1;
     const w = Math.max(9, dm.Le * st.s), h = Math.max(6, dm.Be * st.s);
     const g = G[b.rua], ang = -g.az, cor = r.st === 'err' ? K.err : K.bl;
@@ -3500,7 +3509,7 @@ function svgPlanta(K, W, H, st, lay) {
   const nice = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500].find(v => v * st.s >= 70) || 500, bw = nice * st.s;
   s += rc(16, H - 34, bw / 2, 7, K.ink) + rc(16 + bw / 2, H - 34, bw / 2, 7, K.bg, K.ink) + tx(16, H - 40, '0', {fs: 11 * FZ, c: K.ink}) + tx(16 + bw, H - 40, nice + ' m', {fs: 11 * FZ, c: K.ink, a: 'middle'});
   s += `<g transform="translate(${W - 34} 44)"><path d="M0 -26 L9 6 L0 0 L-9 6 Z" fill="${K.ink}"/>${tx(0, 22, 'N', {fs: 14 * FZ, w: 700, a: 'middle', c: K.ink})}</g>`;
-  const lg = [[K.agua, 'Rede tronco (seta = fluxo)', 'l'], [K.agua, 'Ramal → PV (45° no fluxo)', 'd'], [K.bl, 'Caixa de ralo / boca-de-lobo', 'r'], [K.ink, 'Poço de visita', 'c'], [K.pav, 'Pista', 'r'], [K.pass, 'Passeio', 'r']];
+  const lg = [[K.agua, 'Rede tronco (seta = fluxo)', 'l'], [K.agua, 'Ramal → PV (tubo reto)', 'd'], [K.bl, 'Caixa de ralo / boca-de-lobo', 'r'], [K.ink, 'Poço de visita', 'c'], [K.pav, 'Pista', 'r'], [K.pass, 'Passeio', 'r']];
   const lx = W - 210, ly = H - 20 - lg.length * 18;
   s += rc(lx - 10, ly - 18, 210, lg.length * 18 + 14, K.bg, K.grid);
   lg.forEach(([c, t, k], i) => { const y = ly + i * 18;
@@ -3510,16 +3519,19 @@ function svgPlanta(K, W, H, st, lay) {
 }
 function vPlanta() {
   return `<h3>Planta baixa da rede</h3>
-  <p class="lead">Ruas, cruzamentos, estacas, poços de visita, bocas-de-lobo, ramais e rede tronco com o sentido do escoamento. Arraste para mover, use a roda do mouse ou os botões para ampliar. Toque num PV, BL ou trecho para ver os dados. A posição das ruas é definida na aba 3 (rua de ligação, estaca e ângulo).</p>
+  <p class="lead">Ruas, cruzamentos, estacas, poços de visita, bocas-de-lobo, ramais e rede tronco com o sentido do escoamento. Arraste para mover, use a roda do mouse ou os botões para ampliar. Toque num PV, caixa ou trecho para ver e alterar os dados. Com <b>✏️ Editar no desenho</b> você arrasta caixas, PVs e ramais como num CAD e todas as abas são atualizadas. Ramais são tubos de concreto retos da caixa ao PV (sem curvas). A posição das ruas é definida na aba 3 (rua de ligação, estaca e ângulo).</p>
   <div class="card" style="padding:.6rem">
     <div class="bar-btns" style="margin-bottom:.5rem">
       <button class="btn btn-secondary btn-sm" onclick="plZoom(1.4)">＋</button><button class="btn btn-secondary btn-sm" onclick="plZoom(1/1.4)">－</button><button class="btn btn-secondary btn-sm" onclick="PL=null;drawPlanta()">⤢ Ajustar</button>
       <span style="font-size:.8rem;display:inline-flex;gap:.25rem;align-items:center;margin-left:.3rem">Fonte <button class="btn btn-secondary btn-sm" title="Diminuir o tamanho dos textos" onclick="plFonte(-1)">A−</button><b id="pl-fz" style="min-width:2.6rem;text-align:center">${Math.round((PLAY.fz || 1) * 100)}%</b><button class="btn btn-secondary btn-sm" title="Aumentar o tamanho dos textos" onclick="plFonte(1)">A＋</button></span>
       <label style="font-size:.8rem;display:inline-flex;gap:.3rem;align-items:center" title="Raio da curva do meio-fio nas esquinas (embocaduras). Aplica a todas as ruas; para ajustar rua a rua use a aba 3.">Raio das esquinas <select onchange="plRaio(this.value)">${(() => { const vs = [...new Set(P.ruas.map(r => raioRua(r)))]; const cur = vs.length === 1 ? String(vs[0]) : ''; return (cur ? '' : '<option value="" selected>por rua</option>') + [0, 3, 4, 5, 6, 8, 10, 12, 15].map(v => `<option value="${v}" ${String(v) === cur ? 'selected' : ''}>${v ? v + ' m' : 'sem raio'}</option>`).join(''); })()}</select></label>
       <button class="btn btn-primary btn-sm" onclick="exportDXFPlanta()" title="Baixa a planta baixa em DXF (AutoCAD), com um nível (layer) para cada elemento">📐 Exportar DXF</button>
+      <button id="pl-ed-btn" class="btn ${PLED.on ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="plEditar()" title="Liga/desliga a edição no desenho: arrastar caixas, PVs e ramais">${PLED.on ? '✏️ Editando no desenho' : '✏️ Editar no desenho'}</button>
+      <button class="btn btn-secondary btn-sm" onclick="plDesfazer()" title="Desfaz a última alteração feita no desenho (Ctrl+Z)">↶ Desfazer</button><button class="btn btn-secondary btn-sm" onclick="plRefazer()" title="Refaz (Ctrl+Y)">↷ Refazer</button>
       ${[['rot', 'Rótulos'], ['est', 'Estacas'], ['bl', 'BLs e ramais'], ['bac', 'Bacias'], ['cot', 'Vazões e cotas']].map(([k, t]) => `<label style="font-size:.8rem;display:inline-flex;gap:.3rem;align-items:center"><input type="checkbox" ${PLAY[k] ? 'checked' : ''} onchange="PLAY.${k}=this.checked;drawPlanta()"/>${t}</label>`).join('')}
     </div>
-    <div id="pl-box" style="width:100%;height:min(70vh,640px);border:1px solid var(--line);border-radius:8px;overflow:hidden;touch-action:none;cursor:grab;background:var(--surface)"></div>
+    <div id="pl-ed-hint" class="msg info" style="margin:0 0 .5rem;${PLED.on ? '' : 'display:none'}">✏️ <span><b>Edição no desenho ligada.</b> Arraste uma <b>caixa</b> (muda estaca, lado ou rua), um <b>PV</b> (anda ao longo da sua rua) ou o <b>ramal</b> até outro PV (troca a ligação). <b>Shift</b> ao soltar a caixa = ramal a 45° da rede. <b>Esc</b> cancela, <b>Ctrl+Z</b> desfaz. Só muda a posição em planta: tampas, fundos e cotas dos tubos ficam como estão; todas as abas são atualizadas.</span></div>
+    <div id="pl-box" class="${PLED.on ? 'pl-edit' : ''}" style="width:100%;height:min(70vh,640px);border:1px solid var(--line);border-radius:8px;overflow:hidden;touch-action:none;cursor:grab;background:var(--surface)"></div>
     <div id="pl-info" style="margin-top:.6rem"></div>
   </div>`;
 }
@@ -3535,20 +3547,36 @@ function plZoom(f, cx, cy) {
   if (!PL) return; cx = cx == null ? PL.W / 2 : cx; cy = cy == null ? PL.H / 2 : cy;
   PL.tx = cx - (cx - PL.tx) * f; PL.ty = cy - (cy - PL.ty) * f; PL.s *= f; drawPlanta();
 }
+let PLED = {on: false, undo: [], redo: []};
 function plantaEventos(box) {
-  box._ev = true; const pts = new Map(); let last = null, moved = 0, pinch = null;
+  box._ev = true; const pts = new Map(); let last = null, moved = 0, pinch = null, drag = null;
   const rel = e => { const r = box.getBoundingClientRect(); return {x: (e.clientX - r.left) * PL.W / r.width, y: (e.clientY - r.top) * PL.H / r.height}; };
+  const wpt = p => ({x: (p.x - PL.tx) / PL.s, y: -(p.y - PL.ty) / PL.s});
   box.addEventListener('wheel', e => { e.preventDefault(); const p = rel(e); plZoom(e.deltaY < 0 ? 1.18 : 1 / 1.18, p.x, p.y); }, {passive: false});
-  box.addEventListener('pointerdown', e => { box.setPointerCapture(e.pointerId); pts.set(e.pointerId, rel(e)); last = rel(e); moved = 0; box.style.cursor = 'grabbing';
-    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); } });
+  box.addEventListener('pointerdown', e => { box.setPointerCapture(e.pointerId); pts.set(e.pointerId, rel(e)); last = rel(e); moved = 0;
+    if (PLED.on && pts.size === 1) {
+      const el = document.elementFromPoint(e.clientX, e.clientY), g = el && el.closest('[data-k]');
+      if (g) { const k = g.getAttribute('data-k'), i = k.indexOf(':'), tp = k.slice(0, i), id = k.slice(i + 1);
+        if (tp === 'bl' || tp === 'pv' || tp === 'ram') { drag = {tp, id, snap: JSON.stringify(P), w: wpt(last)}; box.style.cursor = 'move'; return; } }
+    }
+    box.style.cursor = 'grabbing';
+    if (pts.size === 2) { drag = null; const [a, b] = [...pts.values()]; pinch = Math.hypot(a.x - b.x, a.y - b.y); } });
   box.addEventListener('pointermove', e => {
     if (!pts.has(e.pointerId)) return; const p = rel(e); pts.set(e.pointerId, p);
+    if (drag) { moved += Math.abs(p.x - last.x) + Math.abs(p.y - last.y); last = p; if (moved < 4) return; drag.w = wpt(p); drag.shift = e.shiftKey; plArrasta(drag); drawPlanta(); plOverlay(drag); return; }
     if (pts.size === 2 && pinch) { const [a, b] = [...pts.values()]; const d = Math.hypot(a.x - b.x, a.y - b.y); plZoom(d / pinch, (a.x + b.x) / 2, (a.y + b.y) / 2); pinch = d; moved += 10; return; }
     PL.tx += p.x - last.x; PL.ty += p.y - last.y; moved += Math.abs(p.x - last.x) + Math.abs(p.y - last.y); last = p; drawPlanta();
   });
-  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; box.style.cursor = 'grab';
-    if (moved < 6) { const el = document.elementFromPoint(e.clientX, e.clientY); const g = el && el.closest('[data-k]'); if (g) plantaInfo(g.getAttribute('data-k')); } };
+  const up = e => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; box.style.cursor = '';
+    if (drag) { const d = drag; drag = null; if (d.cancel) return; if (moved >= 4) { d.w = wpt(rel(e)); d.shift = e.shiftKey; plArrasta(d); plSolta(d); } else plantaInfo((d.tp === 'ram' ? 'bl' : d.tp) + ':' + d.id); return; }
+    if (moved < 6) { const el = document.elementFromPoint(e.clientX, e.clientY); const g = el && el.closest('[data-k]'); if (g) { const k = g.getAttribute('data-k'); plantaInfo(k.startsWith('ram:') ? 'bl:' + k.slice(4) : k); } } };
   box.addEventListener('pointerup', up); box.addEventListener('pointercancel', up);
+  window.addEventListener('keydown', e => {
+    if (TAB !== 'planta' || /INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) return;
+    if (e.key === 'Escape' && drag) { P = migrate(JSON.parse(drag.snap)); drag.cancel = true; drag = null; calc(); drawPlanta(); toast('Movimento cancelado'); }
+    else if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); plDesfazer(); }
+    else if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); plRefazer(); }
+  });
 }
 function plantaInfo(k) {
   const [tipo, id] = k.split(':'); let h = '';
@@ -6478,6 +6506,279 @@ function ajudaAuto() {
 const _rotTabProt = rotularTabelas;
 rotularTabelas = function () { _rotTabProt.apply(this, arguments); try { ajudaAuto(); } catch (e) { console.error('Ajuda:', e); } };
 
+</script>
+<script>
+/* =====================================================================
+   PATCH V1-02-61 (27/10/2026) — locação de caixas por ângulo ↔ estaca,
+   ramal reto (tubo de concreto sem curvas), coerência planta ↔ abas e
+   edição interativa da planta baixa (sem alterar cotas).
+   ===================================================================== */
+/* sentido do escoamento da rede tronco no PV, projetado no eixo da rua da caixa (+1 = estacas crescentes) */
+function fluxoDirBL(G, b) {
+  const g = G[b.rua], pvo = pvById(b.pv); if (!g || !pvo) return 1;
+  let best = 0;
+  P.trechos.forEach(t => { if (t.m !== pvo.id && t.j !== pvo.id) return;
+    const a = posPV(G, pvById(t.m)), c = posPV(G, pvById(t.j)); if (!a || !c) return;
+    const dx = c.x - a.x, dy = c.y - a.y, L = Math.hypot(dx, dy); if (L < 0.01) return;
+    const d = (dx * g.ux + dy * g.uy) / L; if (Math.abs(d) > 0.7 && Math.abs(d) > Math.abs(best)) best = d; });
+  if (best) return Math.sign(best);
+  const S = greideDecl(b.rua, num(b.dist)); return S == null || S >= 0 ? 1 : -1;
+}
+/* ângulo (0–180°) entre o ramal (caixa → PV) e a rede tronco no sentido do fluxo; 90° = mesma estaca do PV */
+function angRamal(G, b) {
+  const g = G[b.rua], pb = posBL(G, b), pvo = pvById(b.pv), pv = pvo && posPV(G, pvo); if (!g || !pb || !pv) return null;
+  const lb = g.loc(pb), lv = g.loc(pv), ds = (lv.s - lb.s) * fluxoDirBL(G, b), dn = Math.abs(lv.off - lb.off);
+  if (Math.hypot(ds, dn) < 0.05) return null;
+  return Math.atan2(dn, ds) * 180 / Math.PI;
+}
+/* estaca da caixa para um ângulo dado */
+function distPorAng(G, b, ang) {
+  const g = G[b.rua], pvo = pvById(b.pv), pv = pvo && posPV(G, pvo), rua = ruaById(b.rua); if (!g || !pv || !rua || !(ang > 1 && ang < 179)) return null;
+  const off = blOff(b, rua) * (b.lado === 'D' ? -1 : 1), lv = g.loc(pv), dn = Math.abs(lv.off - off);
+  return lv.s - fluxoDirBL(G, b) * dn / Math.tan(ang * Math.PI / 180);
+}
+function ramalLGeo(G, b) { const pb = posBL(G, b), pvo = pvById(b.pv), pv = pvo && posPV(G, pvo); return pb && pv ? Math.hypot(pv.x - pb.x, pv.y - pb.y) : null; }
+function trechoLGeo(t, G) { G = G || geoRuas(); const a = posPV(G, pvById(t.m)), b = posPV(G, pvById(t.j)); return a && b ? Math.hypot(b.x - a.x, b.y - a.y) : null; }
+/* trecho entre PVs de ruas diferentes: comprimento automático = distância em planta (tubo reto) */
+let _GC = {sig: null, G: null};
+function geoCache() {
+  const sig = JSON.stringify([P.ruas, P.pvs.map(p => [p.id, p.rua, p.dist]), P.bls.map(b => [b.rua, b.dist]), P.estacas.map(e => [e.rua, e.dist])]);
+  if (_GC.sig !== sig || _GC.P !== P) _GC = {sig, P, G: geoRuas()};
+  return _GC.G;
+}
+const _trLAuto61 = trechoLAuto;
+trechoLAuto = function (t) { const v = _trLAuto61.apply(this, arguments); if (v != null) return v; try { const L = trechoLGeo(t, geoCache()); return L > 0.01 ? +L.toFixed(2) : null; } catch (e) { return null; } };
+/* sincroniza ângulo e comprimento do ramal com a planta (sempre que a geometria muda) */
+let _sigGeo = {P: null, s: ''};
+function sincGeo(forcar) {
+  if (!P || !P.bls) return;
+  const s = JSON.stringify([P.ruas, P.pvs.map(p => [p.id, p.rua, p.dist]), P.bls.map(b => [b.id, b.rua, b.dist, b.lado, b.pv, b.tipo, b.modelo, b.cxB, b.cxL, b.gB]), P.trechos.map(t => [t.m, t.j]), P.estacas.map(e => [e.rua, e.dist, e.cota])]);
+  if (!forcar && _sigGeo.P === P && _sigGeo.s === s) return;
+  _sigGeo = {P, s};
+  const G = geoRuas();
+  P.bls.forEach(b => { const a = angRamal(G, b), L = ramalLGeo(G, b); b.ang = isNum(a) ? +a.toFixed(1) : ''; if (isNum(L) && L > 0) b.rL = +L.toFixed(2); });
+}
+/* em que esquina (curva do meio-fio / cruzamento) a caixa está, se estiver */
+function blNaEsquina(G, b) {
+  const g = G[b.rua]; if (!g) return false; const s = num(b.dist) || 0, cs = cruzamentos(G).cortes[b.rua + '|' + (b.lado === 'D' ? -1 : 1)] || [];
+  const m = blDim(b).Le / 2; return cs.some(([a, z]) => s > a - m + 0.01 && s < z + m - 0.01);
+}
+function checksGeo(res) {
+  const G = geoRuas();
+  P.bls.forEach(b => { const r = res.bl[b.id]; if (!r) return;
+    const add = (par, val, lim, st, nota) => { res.checks.push({tab: 'bls', el: b.id, par, val, lim, st, nota: nota || ''}); if (r.msgs) r.msgs.push({s: st, t: par + ': ' + val + ' (' + lim + ')' + (st !== 'ok' && nota ? ' — ' + nota : '')}); r.st = worst(r.st, st); };
+    const a = num(b.ang);
+    if (isNum(a)) add('Ramal — ângulo com a rede', fmt(a, 1) + '°', '≤ 90° (a favor do fluxo; ideal 45°)', a <= 90.5 ? 'ok' : 'warn', 'O ramal chega ao PV contra o sentido do escoamento da rede. Coloque a caixa a montante do PV.');
+    if (blNaEsquina(G, b)) add('Posição — esquina', 'est. ' + estLabel(num(b.dist)) + ' na curva do meio-fio / cruzamento', 'na sarjeta reta, fora da curva da esquina', 'warn', 'A caixa não fica na linha da sarjeta: não capta a água calculada. Mova para pouco antes da esquina (a montante da faixa de pedestres).');
+  });
+  P.trechos.forEach(t => { const v = num(t.L); if (!(v > 0)) return; const Lg = trechoLGeo(t, G); if (!isNum(Lg) || Math.abs(Lg - v) <= 0.5) return;
+    res.checks.push({tab: 'rede', el: t.id, par: 'Comprimento × planta', val: fmt(v, 2) + ' m digitado', lim: fmt(Lg, 2) + ' m na planta', st: 'warn', nota: 'O comprimento informado não bate com a distância entre os PVs no desenho.'});
+    const r = res.tr[t.id]; if (r) { r.st = worst(r.st, 'warn'); r.msgs && r.msgs.push({s: 'warn', t: 'Comprimento ' + fmt(v, 2) + ' m × ' + fmt(Lg, 2) + ' m na planta'}); } });
+}
+const _calc61 = calc;
+calc = function () {
+  try { sincGeo(); } catch (e) { console.error('Geo sinc:', e); }
+  const res = _calc61.apply(this, arguments);
+  try { checksGeo(res); } catch (e) { console.error('Geo checks:', e); }
+  return res;
+};
+/* ações de correção */
+function blAngulo(id, ang, silencioso) {
+  const b = P.bls.find(x => x.id === id); if (!b) return; const G = geoRuas(), s = distPorAng(G, b, ang); if (!isNum(s)) { if (!silencioso) toast('Não foi possível calcular a estaca para ' + ang + '°.'); return; }
+  b.dist = +s.toFixed(2); if (silencioso) return; save(); calc(); renderTab(); toast(id + ': estaca ' + estLabel(b.dist) + ' (ramal a ' + ang + '° da rede)');
+}
+function moverForaEsquina(id, silencioso) {
+  const b = P.bls.find(x => x.id === id); if (!b) return; const G = geoRuas(), d0 = num(b.dist), d = blDistDes(G, b);
+  if (Math.abs(d - d0) < 0.01) return false; b.dist = +d.toFixed(2);
+  if (!silencioso) { save(); calc(); renderTab(); toast(id + ': movida da est. ' + estLabel(d0) + ' para ' + estLabel(b.dist) + ' (fora da esquina)'); }
+  return true;
+}
+function usarLPlanta(id, silencioso) { const t = P.trechos.find(x => x.id === id); if (!t) return; const L = trechoLGeo(t); if (!isNum(L)) return; t.L = +L.toFixed(2); if (!silencioso) { save(); calc(); renderTab(); toast(id + ': comprimento ' + fmt(t.L, 2) + ' m (planta)'); } }
+/* correção automática: antes de tudo, tira caixas das esquinas e alinha comprimentos com a planta */
+let _motGeo = [];
+const _autoCor61 = autoCorrigir;
+autoCorrigir = function () {
+  const antes0 = JSON.stringify(P); _motGeo = [];
+  try {
+    const G = geoRuas();
+    P.bls.forEach(b => { if (blNaEsquina(G, b)) { const d0 = num(b.dist); if (moverForaEsquina(b.id, true)) _motGeo.push(b.id + ': caixa estava na curva da esquina (est. ' + estLabel(d0) + ') — levada para a sarjeta reta a montante, est. ' + estLabel(num(b.dist)) + '.'); } });
+    // ramal contra o fluxo: caixa recolocada a montante do PV, ramal a 45°
+    sincGeo(true);
+    P.bls.forEach(b => { if (!(num(b.ang) > 90.5)) return; const G1 = geoRuas(), g = G1[b.rua], d0 = num(b.dist), s = distPorAng(G1, b, 45);
+      if (!g || !isNum(s) || s < g.sMin + 10 - 0.01 || s > g.sMax - 10 + 0.01) return; b.dist = +s.toFixed(2);
+      if (blNaEsquina(geoRuas(), b)) { b.dist = d0; return; }
+      _motGeo.push(b.id + ': ramal chegava ao PV contra o fluxo (' + fmt(num(b.ang), 1) + '°) — caixa levada da est. ' + estLabel(d0) + ' para ' + estLabel(b.dist) + ', ramal a 45°.'); });
+    const G2 = geoRuas();
+    P.trechos.forEach(t => { const v = num(t.L), Lg = trechoLGeo(t, G2); if (v > 0 && isNum(Lg) && Math.abs(Lg - v) > 0.5) { _motGeo.push(t.id + ': comprimento ' + fmt(v, 2) + ' m trocado pelo da planta, ' + fmt(Lg, 2) + ' m.'); t.L = +Lg.toFixed(2); } });
+  } catch (e) { console.error(e); }
+  const out = _autoCor61.apply(this, arguments);
+  if (_motGeo.length) DESFAZER = antes0;
+  return out;
+};
+const _relCor61 = relatorioCorrecao;
+relatorioCorrecao = function () { const a = Array.prototype.slice.call(arguments); if (_motGeo.length) a[6] = _motGeo.concat(a[6] || []); _motGeo = []; return _relCor61.apply(this, a); };
+/* aba 5: digitar o ângulo calcula a estaca; digitar a estaca recalcula o ângulo */
+const _onField61 = onField;
+onField = function (e) {
+  const p = (e.target.dataset || {}).p || '', m = p.match(/^bls\.(\d+)\.ang$/);
+  if (m) {
+    const b = P.bls[+m[1]], v = num(e.target.value);
+    if (b && isNum(v) && v > 5 && v < 175) { const s = distPorAng(geoRuas(), b, v); if (isNum(s)) b.dist = +s.toFixed(2); }
+    save(); clearTimeout(recalcT); recalcT = setTimeout(() => { calc(); refreshRes(); }, 200); return;
+  }
+  if (/^bls\.\d+\.rL$/.test(p)) { calc(); refreshRes(); return; }   // calculado pela planta
+  return _onField61.apply(this, arguments);
+};
+const _refresh61 = refreshRes;
+refreshRes = function () {
+  const out = _refresh61.apply(this, arguments);
+  try {
+    const at = document.activeElement;
+    document.querySelectorAll('input[data-p^="bls."]').forEach(el => {
+      const mm = el.dataset.p.match(/^bls\.(\d+)\.(ang|rL|dist)$/); if (!mm) return; const b = P.bls[+mm[1]]; if (!b) return;
+      if (mm[2] === 'rL') { el.readOnly = true; el.title = 'Calculado pela planta (linha reta caixa → PV)'; el.style.background = 'var(--surface)'; }
+      if (el === at) return;
+      if (mm[2] === 'ang') el.value = isNum(num(b.ang)) ? fmt(num(b.ang), 1).replace(',', '.') : '';
+      if (mm[2] === 'rL') el.value = isNum(num(b.rL)) ? num(b.rL) : '';
+      if (mm[2] === 'dist' && isNum(num(b.dist))) el.value = estLabel(num(b.dist));
+    });
+  } catch (e) { console.error(e); }
+  return out;
+};
+document.addEventListener('change', e => { const p = e.target.dataset && e.target.dataset.p; if (p && /^bls\.\d+\.(ang|dist)$/.test(p) && e.target.tagName !== 'SELECT') { calc(); refreshRes(); } });
+Object.assign(FB, {
+  'bls.ang': (v, o) => { const a = num(v); if (!isNum(a)) return mk('info', 'Sem PV ligado ou posição indefinida.');
+    return a > 90.5 ? mk('warn', 'Ramal contra o fluxo da rede (' + fmt(a, 1) + '°). Use até 90°, de preferência 45°.', 45, 'Usar 45°') : mk('ok', 'Ramal a ' + fmt(a, 1) + '° da rede · caixa na est. ' + estLabel(num(o.dist)) + ' · L ' + fmt(num(o.rL), 2) + ' m'); },
+  'bls.rL': (v) => !(v > 0) ? mk('err', 'Ligue a caixa a um PV para calcular o ramal.') : v > P.crit.ramalLmax ? mk('warn', 'Maior que ' + f2(P.crit.ramalLmax, 0) + ' m: aproxime a caixa do PV ou preveja caixa de passagem.') : mk('ok', 'Medido na planta: ' + fmt(v, 2) + ' m.')
+});
+
+const _applyFix61 = applyFix;
+applyFix = function (path, val) { const m = String(path).match(/^bls\.(\d+)\.ang$/); if (m && P.bls[+m[1]]) { blAngulo(P.bls[+m[1]].id, +val); return; } return _applyFix61.apply(this, arguments); };
+/* ---------- exemplos: caixas e ramais em todos os PVs, locadas a 45° fora das esquinas ---------- */
+function ajustaCaptacoesEx(p) {
+  const P0 = P; P = p;
+  try {
+    let nb = p.bacias.length;
+    p.pvs.forEach(pv => {
+      if (p.bls.some(b => b.pv === pv.id)) return;
+      const diretas = p.bacias.filter(x => x.dest === pv.id), novas = [];
+      ['E', 'D'].forEach(l => { const m = CAIXAS['cxr-pm'], id = idCapt(p); novas.push(id);
+        p.bls.push({id, modelo: 'cxr-pm', rua: pv.rua, dist: num(pv.dist) || 0, lado: l, tipo: 'gr', L: 0, a: 0.05, gL: m.gL, gB: m.gB, ga: 60, fr: BLTIPOS.gr.fr, S: '', z: '', prox: '', pv: pv.id, rL: '', rD: 400, rI: 2.0, constr: m.constr, cxB: m.cxB, cxL: m.cxL, cxH: m.cxH});
+        if (!diretas.length) p.bacias.push({id: 'B' + (++nb), nome: 'Meia pista e passeio junto ao ' + pv.id + ' (' + (l === 'D' ? 'dir.' : 'esq.') + ')', A: 0.02, C: 0.80, dest: id, tcMode: 'man', tc: 10, kL: '', kH: ''}); });
+      // áreas que lançavam direto no PV passam a chegar pelas caixas (metade em cada lado)
+      diretas.forEach(x => { const A = num(x.A) || 0; x.A = +(A / 2).toFixed(4); x.dest = novas[0];
+        p.bacias.push(Object.assign(JSON.parse(JSON.stringify(x)), {id: 'B' + (++nb), nome: (x.nome || x.id) + ' (outro lado)', dest: novas[1]})); });
+    });
+    const G = geoRuas();
+    p.bls.forEach(b => {
+      const g = G[b.rua]; if (!g) return; const lo = g.sMin + 10, hi = g.sMax - 10;
+      let s = distPorAng(G, b, 45); if (!isNum(s) || s < lo - 0.01 || s > hi + 0.01) s = distPorAng(G, b, 90);
+      if (isNum(s)) b.dist = +s.toFixed(2);
+    });
+    const G2 = geoRuas();
+    p.bls.forEach(b => { const d = blDistDes(G2, b); if (isNum(d)) b.dist = +d.toFixed(2); });
+    _sigGeo = {P: null, s: ''}; sincGeo(true);
+  } finally { P = P0; }
+  return p;
+}
+const _exProj61 = exampleProject, _exBairro61 = exampleBairro;
+exampleProject = function () { return ajustaCaptacoesEx(_exProj61.apply(this, arguments)); };
+exampleBairro = function () { return ajustaCaptacoesEx(_exBairro61.apply(this, arguments)); };
+
+/* ---------- planta: painel de dados com locação editável ---------- */
+const _plInfo61 = plantaInfo;
+plantaInfo = function (k) {
+  _plInfo61.apply(this, arguments);
+  const [tipo, id] = [k.slice(0, k.indexOf(':')), k.slice(k.indexOf(':') + 1)], box = $('pl-info'); if (!box) return;
+  let h = '';
+  if (tipo === 'bl') { const b = P.bls.find(x => x.id === id); if (!b) return;
+    h = `<div class="section-title" style="margin-top:.6rem">Locação da caixa (altera todas as abas)</div><div class="bar-btns" style="align-items:flex-end;flex-wrap:wrap;gap:.5rem">
+      <label style="font-size:.8rem">Rua<br><select onchange="plSetBL('${esc(id)}','rua',this.value)">${P.ruas.map(r => `<option value="${esc(r.id)}" ${r.id === b.rua ? 'selected' : ''}>${esc(r.nome)}</option>`).join('')}</select></label>
+      <label style="font-size:.8rem">Lado<br><select onchange="plSetBL('${esc(id)}','lado',this.value)"><option value="E" ${b.lado !== 'D' ? 'selected' : ''}>Esquerdo</option><option value="D" ${b.lado === 'D' ? 'selected' : ''}>Direito</option></select></label>
+      <label style="font-size:.8rem">Estaca<br><input type="text" style="width:6.5rem" value="${estLabel(num(b.dist) || 0)}" onchange="plSetBL('${esc(id)}','dist',this.value)"/></label>
+      <label style="font-size:.8rem">Ângulo ramal × rede (°)<br><input type="number" step="1" style="width:5.5rem" value="${isNum(num(b.ang)) ? num(b.ang) : ''}" onchange="plSetBL('${esc(id)}','ang',this.value)"/></label>
+      <button class="btn btn-secondary btn-sm" onclick="plSetBL('${esc(id)}','ang',45)">45°</button><button class="btn btn-secondary btn-sm" onclick="plSetBL('${esc(id)}','ang',90)">90°</button>
+      <label style="font-size:.8rem">Ramal → PV<br><select onchange="plSetBL('${esc(id)}','pv',this.value)">${P.pvs.map(p => `<option value="${esc(p.id)}" ${p.id === b.pv ? 'selected' : ''}>${esc(p.id)}</option>`).join('')}</select></label>
+      <span style="font-size:.8rem;color:var(--muted)">Ramal reto: L = <b>${fmt(num(b.rL), 2)} m</b> · Ø ${esc(b.rD)} mm</span></div>`; }
+  if (tipo === 'pv') { const pv = P.pvs.find(x => x.id === id); if (!pv) return;
+    h = `<div class="section-title" style="margin-top:.6rem">Locação do PV em planta</div><div class="bar-btns" style="align-items:flex-end;gap:.5rem;flex-wrap:wrap">
+      <label style="font-size:.8rem">Estaca na ${esc(ruaNome(pv.rua))}<br><input type="text" style="width:6.5rem" value="${estLabel(num(pv.dist) || 0)}" onchange="plSetPV('${esc(id)}',this.value)"/></label>
+      <span style="font-size:.8rem;color:var(--muted)">Mudar a estaca do PV mantém a tampa, o fundo e as cotas dos tubos; muda só a posição em planta e os comprimentos.</span></div>`; }
+  if (h) box.firstElementChild ? box.firstElementChild.insertAdjacentHTML('beforeend', h) : box.insertAdjacentHTML('beforeend', h);
+};
+function plPush() { PLED.undo.push(JSON.stringify(P)); if (PLED.undo.length > 60) PLED.undo.shift(); PLED.redo = []; }
+function plDepois(k) { save(); calc(); drawPlanta(); if (k) plantaInfo(k); }
+function plSetBL(id, campo, v) {
+  const b = P.bls.find(x => x.id === id); if (!b) return; plPush();
+  if (campo === 'dist') { const d = parseEst(v); if (!isNum(d)) { PLED.undo.pop(); return toast('Estaca inválida'); } b.dist = +(+d).toFixed(2); }
+  else if (campo === 'ang') { const a = num(v); if (!(a > 5 && a < 175)) { PLED.undo.pop(); return toast('Ângulo entre 5° e 175°'); } blAngulo(id, a, true); }
+  else b[campo] = v;
+  plDepois('bl:' + id);
+}
+/* congela as cotas antes de mexer na posição de um PV (só muda a vista de topo) */
+function congelaCotasPV(id) {
+  const pv = pvById(id); if (!pv || !R) return; const r = R.pv[id];
+  if (r && !isNum(num(pv.tampa)) && isNum(r.tp)) pv.tampa = +r.tp.toFixed(3);
+  P.trechos.forEach(t => { if (t.m !== id && t.j !== id) return; const x = R.tr[t.id]; if (!x) return;
+    if (!isNum(num(t.cm)) && isNum(x.cm)) t.cm = +x.cm.toFixed(3); if (!isNum(num(t.cj)) && isNum(x.cj)) t.cj = +x.cj.toFixed(3); });
+}
+/* comprimentos digitados dos trechos ligados ao PV passam a ser os da planta */
+function atualizaLTrechos(id) { const G = geoRuas(); P.trechos.forEach(t => { if ((t.m === id || t.j === id) && num(t.L) > 0) { const L = trechoLGeo(t, G); if (isNum(L)) t.L = +L.toFixed(2); } }); }
+function plSetPV(id, v) {
+  const pv = pvById(id), d = parseEst(v); if (!pv || !isNum(d)) return toast('Estaca inválida');
+  plPush(); congelaCotasPV(id); pv.dist = +(+d).toFixed(2); atualizaLTrechos(id); plDepois('pv:' + id);
+}
+function plEditar() {
+  PLED.on = !PLED.on; const b = $('pl-ed-btn'), h = $('pl-ed-hint'), box = $('pl-box');
+  if (b) { b.className = 'btn ' + (PLED.on ? 'btn-primary' : 'btn-secondary') + ' btn-sm'; b.textContent = PLED.on ? '✏️ Editando no desenho' : '✏️ Editar no desenho'; }
+  if (h) h.style.display = PLED.on ? '' : 'none'; if (box) box.classList.toggle('pl-edit', PLED.on);
+}
+function plDesfazer() { if (!PLED.undo.length) return toast('Nada para desfazer no desenho'); PLED.redo.push(JSON.stringify(P)); P = migrate(JSON.parse(PLED.undo.pop())); save(); calc(); if (TAB === 'planta') drawPlanta(); else renderTab(); toast('Desfeito'); }
+function plRefazer() { if (!PLED.redo.length) return toast('Nada para refazer'); PLED.undo.push(JSON.stringify(P)); P = migrate(JSON.parse(PLED.redo.pop())); save(); calc(); if (TAB === 'planta') drawPlanta(); else renderTab(); toast('Refeito'); }
+/* arrastar: só posição em planta */
+function plArrasta(d) {
+  const G = geoRuas(), w = d.w;
+  if (d.tp === 'bl') {
+    const b = P.bls.find(x => x.id === d.id); if (!b) return;
+    let best = null;
+    P.ruas.forEach(r => { const g = G[r.id]; if (!g) return; const l = g.loc(w), a = (+r.larg || 7) / 2, lim = a + (+r.passeio || 2) + 1;
+      if (Math.abs(l.off) > lim || l.s < g.sMin - 1 || l.s > g.sMax + 1) return;
+      const sc = Math.abs(Math.abs(l.off) - a) - (r.id === b.rua ? 0.8 : 0); if (!best || sc < best.sc) best = {r, l, sc}; });
+    if (!best) return;
+    b.rua = best.r.id; b.lado = best.l.off >= 0 ? 'E' : 'D'; b.dist = +best.l.s.toFixed(1);
+    if (d.shift) { const s = distPorAng(geoRuas(), b, 45); if (isNum(s)) b.dist = +s.toFixed(2); }
+    const G2 = geoRuas(), a = angRamal(G2, b), L = ramalLGeo(G2, b);
+    d.txt = `<b>${esc(b.id)}</b> · ${esc(ruaNome(b.rua))} · lado ${b.lado === 'D' ? 'direito' : 'esquerdo'} · est. <b>${estLabel(b.dist)}</b> · ramal ${isNum(a) ? fmt(a, 1) + '°' : '—'} · L ${isNum(L) ? fmt(L, 2) + ' m' : '—'}${blNaEsquina(G2, b) ? ' · <span style="color:var(--warn)">⚠ na esquina</span>' : ''}`;
+  } else if (d.tp === 'pv') {
+    const pv = pvById(d.id), g = pv && G[pv.rua]; if (!g) return;
+    if (!d.frz) { congelaCotasPV(d.id); d.frz = true; }
+    const ests = estacasRua(pv.rua).map(e => +e.dist); let s = g.loc(w).s;
+    if (ests.length) s = Math.min(Math.max(s, Math.min(...ests)), Math.max(...ests));
+    pv.dist = +s.toFixed(1);
+    d.txt = `<b>${esc(pv.id)}</b> · ${esc(ruaNome(pv.rua))} · est. <b>${estLabel(pv.dist)}</b> · cotas mantidas`;
+  } else if (d.tp === 'ram') {
+    let best = null; P.pvs.forEach(p => { const q = posPV(G, p); if (!q) return; const dd = Math.hypot(q.x - w.x, q.y - w.y); if (!best || dd < best.dd) best = {p, dd}; });
+    d.alvo = best && best.dd <= Math.max(3, 18 / PL.s) ? best.p.id : null;
+    d.txt = d.alvo ? 'Soltar para ligar <b>' + esc(d.id) + '</b> ao <b>' + esc(d.alvo) + '</b>' : 'Leve a ponta do ramal até um PV';
+  }
+  const inf = $('pl-info'); if (inf && d.txt) inf.innerHTML = `<div class="card" style="margin:0">✏️ ${d.txt}</div>`;
+}
+function plOverlay(d) {
+  if (d.tp !== 'ram') return; const svg = $('pl-box') && $('pl-box').firstChild, b = P.bls.find(x => x.id === d.id); if (!svg || !b) return;
+  const G = geoRuas(), pb = posBL(G, b); if (!pb) return; const S = p => ({x: p.x * PL.s + PL.tx, y: -p.y * PL.s + PL.ty}), A = S(pb), B = S(d.w);
+  svg.insertAdjacentHTML('beforeend', `<line x1="${A.x}" y1="${A.y}" x2="${B.x}" y2="${B.y}" stroke="${d.alvo ? '#16a34a' : '#dc2626'}" stroke-width="3" stroke-dasharray="8 4"/>`);
+}
+function plSolta(d) {
+  const antes = d.snap;
+  if (d.tp === 'ram') { const b = P.bls.find(x => x.id === d.id); if (!b || !d.alvo || d.alvo === b.pv) { drawPlanta(); return; } b.pv = d.alvo; }
+  if (d.tp === 'pv') atualizaLTrechos(d.id);
+  if (antes === JSON.stringify(P)) { drawPlanta(); return; }
+  PLED.undo.push(antes); if (PLED.undo.length > 60) PLED.undo.shift(); PLED.redo = [];
+  const k = (d.tp === 'ram' ? 'bl' : d.tp) + ':' + d.id;
+  plDepois(k);
+  toast(d.tp === 'ram' ? d.id + ' agora liga ao ' + d.alvo : d.tp === 'pv' ? d.id + ' na est. ' + estLabel(num(pvById(d.id).dist)) + ' (cotas mantidas)' : d.id + ' na est. ' + estLabel(num(P.bls.find(x => x.id === d.id).dist)));
+}
+(function () { const st = document.createElement('style'); st.textContent = '#pl-box{user-select:none;-webkit-user-select:none}#pl-box.pl-edit [data-k^="bl:"],#pl-box.pl-edit [data-k^="pv:"]{cursor:move}#pl-box.pl-edit [data-k^="ram:"]{cursor:crosshair}'; document.head.appendChild(st); })();
 </script>
 <script>
 /* =====================================================================
