@@ -6013,11 +6013,15 @@ function gerProjeto(op) {
       for (let k = 0; k < ss.length - 1; k++) { const g = ss[k + 1] - ss[k], m = Math.ceil(g / op.esp - 1e-6); for (let q = 1; q < m; q++) addNode(r.id, +(ss[k] + g * q / m).toFixed(1)); }
     });
     // lançamento: o escolhido ou o ponto mais baixo da rede
-    let out = null;
-    if (GER.saida) { const [ru, s] = GER.saida.split('@'); out = addNode(ru, +s); }
+    // deságues: os inseridos pelo usuário (um ou vários) ou, sem nenhum, o ponto mais baixo
+    let outs = [];
+    const sais = (GER.saidas || []).filter(x => x && ruaById(x.rua) && isNum(num(x.s)));
+    if (sais.length) outs = sais.map(x => { const n = addNode(x.rua, +num(x.s)); n.na = x.na; return n; }).filter((n, i, a) => a.indexOf(n) === i);
+    else if (GER.saida) { const [ru, s] = GER.saida.split('@'); outs = [addNode(ru, +s)]; }
     nodes.forEach(n => { n.z = greideCota(n.pts[0].rua, n.pts[0].s); });
-    if (!out) out = nodes.filter(n => n.cap || n.cruz).sort((x, y) => x.z - y.z)[0];
-    if (!out) return null;
+    if (!outs.length) { const o = nodes.filter(n => n.cap || n.cruz).sort((x, y) => x.z - y.z)[0]; if (o) outs = [o]; }
+    if (!outs.length) return null;
+    const out = outs[0], isOut = n => outs.includes(n);
     // arestas entre nós vizinhos na mesma rua
     const adj = new Map(nodes.map(n => [n, []]));
     rs.forEach(({r}) => {
@@ -6025,7 +6029,7 @@ function gerProjeto(op) {
       for (let k = 0; k < L.length - 1; k++) if (L[k].n !== L[k + 1].n) { const e = {rua: r.id, L: L[k + 1].s - L[k].s}; adj.get(L[k].n).push(Object.assign({to: L[k + 1].n}, e)); adj.get(L[k + 1].n).push(Object.assign({to: L[k].n}, e)); }
     });
     // árvore de menor custo até o lançamento: extensão + penalidade por subir contra o greide
-    const dist = new Map([[out, 0]]), par = new Map(), fila = [out], feito = new Set();
+    const dist = new Map(outs.map(o => [o, 0])), par = new Map(), fila = outs.slice(), feito = new Set();
     while (fila.length) {
       fila.sort((a, b) => dist.get(a) - dist.get(b)); const v = fila.shift(); if (feito.has(v)) continue; feito.add(v);
       adj.get(v).forEach(e => { const u = e.to, cst = dist.get(v) + e.L + 40 * Math.max(0, v.z - u.z);
@@ -6034,7 +6038,7 @@ function gerProjeto(op) {
     // poda: nós sem captação e sem nada chegando
     const vivos = new Set(nodes.filter(n => dist.has(n)));
     let mud = true;
-    while (mud) { mud = false; vivos.forEach(n => { if (n === out || n.cap) return; const filhos = [...vivos].some(u => par.get(u) && par.get(u).to === n); if (!filhos) { vivos.delete(n); mud = true; } }); }
+    while (mud) { mud = false; vivos.forEach(n => { if (isOut(n) || n.cap) return; const filhos = [...vivos].some(u => par.get(u) && par.get(u).to === n); if (!filhos) { vivos.delete(n); mud = true; } }); }
     const ordR = id => P.ruas.findIndex(r => r.id === id);
     const lista = [...vivos].sort((a, b) => ordR(a.pts[0].rua) - ordR(b.pts[0].rua) || a.pts[0].s - b.pts[0].s);
     lista.forEach((n, k) => { n.id = 'PV-' + String(k + 1).padStart(2, '0'); });
@@ -6042,12 +6046,12 @@ function gerProjeto(op) {
     lista.forEach(n => {
       const ins = lista.filter(u => par.get(u) && par.get(u).to === n), o = par.get(n);
       let defl = 'reta';
-      if (n !== out) { if (!ins.length) defl = 'ini'; else if (ins.length === 1) defl = par.get(ins[0]).rua === o.rua ? 'reta' : 'd90'; else defl = ins.length === 2 ? 'T' : 'X'; }
-      base.pvs.push({id: n.id, rua: n.pts[0].rua, dist: n.pts[0].s, tipo: EMOP_TIPO, modelo: 'emop', dpv: 1000, tampaCl: TAMPAS[0], tampa: '', defl, na: '', pvL: '', pvHi: '',
-        obs: (n === out ? 'Lançamento' : '') + (n.cruz ? (n === out ? ' · ' : '') + 'Cruzamento ' + n.pts.map(p => nomeRua(p.rua)).join(' × ') : '')});
+      if (!isOut(n)) { if (!ins.length) defl = 'ini'; else if (ins.length === 1) defl = par.get(ins[0]).rua === o.rua ? 'reta' : 'd90'; else defl = ins.length === 2 ? 'T' : 'X'; }
+      base.pvs.push({id: n.id, rua: n.pts[0].rua, dist: n.pts[0].s, tipo: EMOP_TIPO, modelo: 'emop', dpv: 1000, tampaCl: TAMPAS[0], tampa: '', defl, na: isOut(n) && isNum(num(n.na)) ? +num(n.na) : '', pvL: '', pvHi: '',
+        obs: (isOut(n) ? 'Lançamento' : '') + (n.cruz ? (isOut(n) ? ' · ' : '') + 'Cruzamento ' + n.pts.map(p => nomeRua(p.rua)).join(' × ') : '')});
     });
     let nt = 0;
-    lista.filter(n => n !== out).sort((a, b) => dist.get(b) - dist.get(a)).forEach(n => { const o = par.get(n);
+    lista.filter(n => !isOut(n)).sort((a, b) => dist.get(b) - dist.get(a)).forEach(n => { const o = par.get(n);
       base.trechos.push({id: 'T' + (++nt), m: n.id, j: o.to.id, L: +o.L.toFixed(2), D: c.dmin, cm: '', cj: '', mat: MATS[1], aL: '', cL: '', tcL: ''}); });
     // captações, ramais e bacias
     let nb = 0;
@@ -6068,7 +6072,7 @@ function gerProjeto(op) {
     const maior = pj.trechos.reduce((m, t) => galOf(t) ? m : Math.max(m, num(t.D) || 0), 0);
     const info = {nPV: pj.pvs.length, nBL: pj.bls.length, nTr: pj.trechos.length, ext, maior: pj.trechos.some(galOf) ? 'galeria de aduelas' : 'Ø ' + maior + ' mm',
       prof: Math.max(0, ...pj.pvs.map(p => (R.pv[p.id] || {}).prof || 0)), e: R.checks.filter(x => x.st === 'err').length, w: R.checks.filter(x => x.st === 'warn').length,
-      custo: custoRede().total, saida: out.id + ' — ' + nomeRua(out.pts[0].rua) + ' est. ' + estLabel(out.pts[0].s)};
+      custo: custoRede().total, saida: outs.filter(o => o.id).map(o => o.id + ' — ' + nomeRua(o.pts[0].rua) + ' est. ' + estLabel(o.pts[0].s)).join(' · ')};
     return {p: pj, info};
   } finally { P = P0; calc(); }
 }
@@ -6096,6 +6100,40 @@ function abrirGerador() {
   garantirModalGer(); openModal('modal-ger'); GER.ops = null; gerTela();
 }
 function gerSet(k, v) { GER[k] = v; GER.ops = null; gerTela(); }
+/* deságues (lançamentos) do gerador: inserir, editar e excluir */
+function gerDesaguesHTML(sai) {
+  const L = GER.saidas = GER.saidas || [];
+  const optR = v => P.ruas.map(r => `<option value="${esc(r.id)}" ${r.id === v ? 'selected' : ''}>${esc(r.nome)}</option>`).join('');
+  const linhas = L.map((x, i) => { const z = greideCota(x.rua, num(x.s));
+    return `<tr><td><b>D${i + 1}</b></td><td><select onchange="gerDes(${i},'rua',this.value)">${optR(x.rua)}</select></td>
+      <td><input type="text" style="width:7rem" value="${isNum(num(x.s)) ? estLabel(num(x.s)) : ''}" onchange="gerDes(${i},'s',this.value)"/></td>
+      <td class="td-num">${isNum(z) ? fmt(z, 2) : '—'}</td>
+      <td><input type="number" step="0.01" style="width:6rem" placeholder="opcional" value="${x.na == null ? '' : esc(x.na)}" onchange="gerDes(${i},'na',this.value)"/></td>
+      <td><button class="btn btn-danger btn-sm" onclick="gerDesDel(${i})" title="Excluir este deságue">✕ Excluir</button></td></tr>`; }).join('');
+  return `<div class="section-title" style="margin-top:.8rem">Deságues (lançamentos da rede)</div>
+    ${L.length ? `<div class="tbl-wrap"><table style="font-size:.85rem"><thead><tr><th></th><th>Rua</th><th>Estaca</th><th class="td-num">Cota do greide (m)</th><th>NA do receptor (m)</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>
+      <p style="font-size:.75rem;color:var(--muted);margin:.3rem 0 0">Com mais de um deságue, cada trecho da rede segue para o deságue de menor custo (menor extensão e sem subir contra o greide). O NA do receptor (rio, canal ou galeria existente) entra no PV de lançamento para verificar se a saída fica afogada.</p>`
+      : `<div class="msg info">ℹ <span>Nenhum deságue inserido: o programa usa o <b>ponto mais baixo</b> (${sai[0] ? esc(sai[0].t) + ', cota ' + fmt(sai[0].z, 2) : '—'}).</span></div>`}
+    <div class="bar-btns" style="margin:.5rem 0 0;align-items:center;flex-wrap:wrap">
+      <button class="btn btn-secondary btn-sm" onclick="gerDesAdd()">＋ Inserir deságue</button>
+      <select id="ger-des-sug" style="max-width:340px"><option value="">Sugestões: extremos de rua, do mais baixo…</option>${sai.map(x => `<option value="${esc(x.k)}">${esc(x.t)} — cota ${fmt(x.z, 2)}</option>`).join('')}</select>
+      <button class="btn btn-secondary btn-sm" onclick="gerDesAdd($('ger-des-sug').value)">＋ Inserir sugestão</button>
+      ${L.length ? '<button class="btn btn-secondary btn-sm" onclick="GER.saidas=[];GER.saida=\'\';GER.ops=null;gerTela()">Excluir todos (voltar ao automático)</button>' : ''}</div>`;
+}
+function gerDesAdd(k) {
+  GER.saidas = GER.saidas || []; let x;
+  if (k) { const [rua, s] = k.split('@'); x = {rua, s: +s, na: ''}; }
+  else { const sai = gerSaidas()[0]; const [rua, s] = sai ? sai.k.split('@') : [(P.ruas[0] || {}).id, 0]; x = {rua, s: +s, na: ''}; }
+  if (GER.saidas.some(y => y.rua === x.rua && Math.abs(num(y.s) - x.s) < 1.5)) return toast('Esse deságue já está na lista.');
+  GER.saidas.push(x); GER.saida = ''; GER.ops = null; gerTela();
+}
+function gerDes(i, k, v) {
+  const x = (GER.saidas || [])[i]; if (!x) return;
+  if (k === 's') { const d = parseEst(v); if (!isNum(d)) return toast('Estaca inválida'); x.s = +d; }
+  else if (k === 'na') x.na = v === '' ? '' : +v; else x[k] = v;
+  GER.ops = null; gerTela();
+}
+function gerDesDel(i) { (GER.saidas || []).splice(i, 1); GER.ops = null; gerTela(); }
 function gerTela() {
   const sai = gerSaidas(), tem = P.pvs.length || P.trechos.length || P.bls.length;
   const opc = `<option value="">Automático — ponto mais baixo (${sai[0] ? esc(sai[0].t) + ', cota ' + fmt(sai[0].z, 2) : '—'})</option>` + sai.map(s => `<option value="${esc(s.k)}"${GER.saida === s.k ? ' selected' : ''}>${esc(s.t)} — cota ${fmt(s.z, 2)}</option>`).join('');
@@ -6119,8 +6157,8 @@ function gerTela() {
     <div class="card"><h4>Dados mínimos</h4><div class="fgrid">
       <div class="field"><label>Profundidade do lote atrás do passeio (m)</label><input type="number" step="1" value="${GER.lote}" onchange="gerSet('lote',+this.value)"></div>
       <div class="field"><label>Coeficiente de escoamento C das quadras</label><input type="number" step="0.05" value="${GER.C}" onchange="gerSet('C',+this.value)"></div>
-      <div class="field" style="grid-column:span 2"><label>Lançamento (deságue)</label><select onchange="gerSet('saida',this.value)">${opc}</select></div>
-    </div><p style="font-size:.75rem;color:var(--muted);margin:.5rem 0 0">Chuva (IDF), período de retorno e critérios vêm das abas 1 e 2. Ruas: ${gerRuas().length} com greide.</p>
+    </div>
+    ${gerDesaguesHTML(sai)}<p style="font-size:.75rem;color:var(--muted);margin:.5rem 0 0">Chuva (IDF), período de retorno e critérios vêm das abas 1 e 2. Ruas: ${gerRuas().length} com greide.</p>
     <div class="bar-btns" style="margin:.7rem 0 0"><button class="btn btn-primary" onclick="gerCalcular()">${GER.ops ? '⟳ Gerar de novo' : '🧭 Gerar as 3 opções'}</button></div></div>
     <div id="ger-res">${res}</div>`;
 }
@@ -6560,8 +6598,12 @@ function sincGeo(forcar) {
   if (!P || !P.bls) return;
   const s = JSON.stringify([P.ruas, P.pvs.map(p => [p.id, p.rua, p.dist]), P.bls.map(b => [b.id, b.rua, b.dist, b.lado, b.pv, b.tipo, b.modelo, b.cxB, b.cxL, b.gB]), P.trechos.map(t => [t.m, t.j]), P.estacas.map(e => [e.rua, e.dist, e.cota])]);
   if (!forcar && _sigGeo.P === P && _sigGeo.s === s) return;
-  _sigGeo = {P, s};
-  const G = geoRuas();
+  let G = geoRuas(), mov = 0;
+  // ímã obrigatório: caixa de ralo sempre na sarjeta e boca de lobo sempre no espelho do meio-fio — nunca dentro do cruzamento
+  for (let it = 0; it < 3; it++) { let k = 0; P.bls.forEach(b => { if (!blNaEsquina(G, b)) return; const d = blDistDes(G, b); if (isNum(d) && Math.abs(d - num(b.dist)) > 0.005) { b.dist = +d.toFixed(2); k++; } }); if (!k) break; mov += k; G = geoRuas(); }
+  if (mov && typeof toast === 'function') setTimeout(() => toast(mov + (mov > 1 ? ' caixas estavam' : ' caixa estava') + ' dentro do cruzamento e ' + (mov > 1 ? 'foram levadas' : 'foi levada') + ' para a sarjeta, antes da curva da esquina.'), 50);
+  const s2 = mov ? JSON.stringify([P.ruas, P.pvs.map(p => [p.id, p.rua, p.dist]), P.bls.map(b => [b.id, b.rua, b.dist, b.lado, b.pv, b.tipo, b.modelo, b.cxB, b.cxL, b.gB]), P.trechos.map(t => [t.m, t.j]), P.estacas.map(e => [e.rua, e.dist, e.cota])]) : s;
+  _sigGeo = {P, s: s2};
   P.bls.forEach(b => { const a = angRamal(G, b), L = ramalLGeo(G, b); b.ang = isNum(a) ? +a.toFixed(1) : ''; if (isNum(L) && L > 0) b.rL = +L.toFixed(2); });
 }
 /* em que esquina (curva do meio-fio / cruzamento) a caixa está, se estiver */
@@ -6766,6 +6808,32 @@ function checksPVTubos(res) {
     if (des.length && nec > per + 1e-6) { const prox = [1000, 1200, 1500, 2000, 2500, 3000].find(d => Math.PI * d / 1000 >= nec);
       res.checks.push({tab: 'pvs', el: pv.id, par: 'Tubos muito próximos no PV circular', val: des.length + ' tubos ocupam ' + fmt(nec, 2) + ' m', lim: '≤ perímetro ' + fmt(per, 2) + ' m', st: 'warn', nota: 'Os furos ficam colados. Use PV Ø ' + (prox || 3000) + ' mm ou câmara EMOP.'}); r.st = worst(r.st, 'warn'); } });
 }
+/* aba 5: trocar o dispositivo de todas as captações de uma vez */
+function trocarTodas(alvo) {
+  const de = alvo === 'gr' ? P.bls.filter(b => b.tipo !== 'gr') : P.bls.filter(b => b.tipo === 'gr');
+  if (!de.length) return toast(alvo === 'gr' ? 'Todas já são caixas de ralo.' : 'Não há caixas de ralo para trocar.');
+  const novo = alvo === 'gr' ? 'Caixa de ralo na sarjeta (grelha)' : (DISP_NOME.find(x => x[0] === alvo) || [, alvo])[1];
+  if (!confirm('Trocar ' + de.length + (de.length > 1 ? ' captações' : ' captação') + ' para "' + novo + '"?\n\nAs medidas da caixa voltam ao padrão do dispositivo (mesmo material). A posição se ajusta sozinha: caixa de ralo dentro da sarjeta, boca de lobo sob o passeio faceando o espelho do meio-fio. Ramais, capacidades e verificações são recalculados. Depois é possível desfazer.')) return;
+  const antes = JSON.stringify(P);
+  de.forEach(b => { b.tipo = alvo; trocaDisp(b); if (alvo !== 'gr' && !(num(b.L) > 0)) b.L = BLTIPOS[alvo].L; });
+  DESFAZER = antes; PLED.undo.push(antes); PLED.redo = [];
+  save(); calc(); renderTab();
+  const e = R.checks.filter(c => c.st === 'err').length;
+  toast(de.length + ' trocadas para ' + novo + '.' + (e ? ' Atenção: ' + e + ' erro(s) na verificação — veja a aba 12.' : '') + ' Para voltar: botão Desfazer.');
+}
+function desfazerTroca() { if (!PLED.undo.length) return toast('Nada para desfazer'); PLED.redo.push(JSON.stringify(P)); P = migrate(JSON.parse(PLED.undo.pop())); save(); calc(); renderTab(); toast('Desfeito'); }
+const _vBLs61 = vBLs;
+vBLs = function () {
+  const h = _vBLs61.apply(this, arguments), nG = P.bls.filter(b => b.tipo === 'gr').length, nB = P.bls.length - nG;
+  const bar = `<div class="card" style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;padding:.6rem .8rem">
+    <b style="font-size:.85rem">Trocar todas de uma vez:</b>
+    <button class="btn btn-secondary btn-sm" onclick="trocarTodas('gs')" title="Converte todas as caixas de ralo (grelha na sarjeta) em bocas de lobo de guia simples">Caixas de ralo → bocas de lobo (${nG})</button>
+    <button class="btn btn-secondary btn-sm" onclick="trocarTodas('gd')" title="Converte todas as caixas de ralo em bocas de lobo de guia dupla">Caixas de ralo → bocas de lobo duplas (${nG})</button>
+    <button class="btn btn-secondary btn-sm" onclick="trocarTodas('gr')" title="Converte todas as bocas de lobo (guia simples, dupla ou combinada) em caixas de ralo com grelha na sarjeta">Bocas de lobo → caixas de ralo (${nB})</button>
+    <button class="btn btn-secondary btn-sm" onclick="desfazerTroca()">↶ Desfazer</button>
+    <span style="font-size:.78rem;color:var(--muted);flex:1;min-width:220px">A posição é sempre automática: caixa de ralo dentro da sarjeta, encostada no espelho do meio-fio; boca de lobo sob o passeio, faceando o espelho. Nunca dentro do cruzamento.</span></div>`;
+  return h.replace(/(<div class="bar-btns"><button class="btn btn-primary btn-sm" onclick="addItem\('bls'\)">[^<]*<\/button><\/div>)/, '$1' + bar);
+};
 /* ---------- exemplos: caixas e ramais em todos os PVs, locadas a 45° fora das esquinas ---------- */
 function ajustaCaptacoesEx(p) {
   const P0 = P; P = p;
@@ -6858,6 +6926,8 @@ function plArrasta(d) {
       const sc = Math.abs(Math.abs(l.off) - a) - (r.id === b.rua ? 0.8 : 0); if (!best || sc < best.sc) best = {r, l, sc}; });
     if (!best) return;
     b.rua = best.r.id; b.lado = best.l.off >= 0 ? 'E' : 'D'; b.dist = +best.l.s.toFixed(1);
+    { const Gm = geoRuas(); if (blNaEsquina(Gm, b)) { const g = Gm[b.rua], cs = cruzamentos(Gm).cortes[b.rua + '|' + (b.lado === 'D' ? -1 : 1)] || [], m = blDim(b).Le / 2 + 0.4, x = num(b.dist);
+      const dd = cs.find(([a, z]) => x > a - m && x < z + m); if (dd) { const c = [dd[0] - m, dd[1] + m].filter(v => v >= g.sMin + 10 - 0.01 && v <= g.sMax - 10 + 0.01).sort((p, q) => Math.abs(p - x) - Math.abs(q - x)); if (c.length) b.dist = +c[0].toFixed(2); } } }
     if (d.shift) { const s = distPorAng(geoRuas(), b, 45); if (isNum(s)) b.dist = +s.toFixed(2); }
     const G2 = geoRuas(), a = angRamal(G2, b), L = ramalLGeo(G2, b);
     d.txt = `<b>${esc(b.id)}</b> · ${esc(ruaNome(b.rua))} · lado ${b.lado === 'D' ? 'direito' : 'esquerdo'} · est. <b>${estLabel(b.dist)}</b> · ramal ${isNum(a) ? fmt(a, 1) + '°' : '—'} · L ${isNum(L) ? fmt(L, 2) + ' m' : '—'}${blNaEsquina(G2, b) ? ' · <span style="color:var(--warn)">⚠ na esquina</span>' : ''}`;
