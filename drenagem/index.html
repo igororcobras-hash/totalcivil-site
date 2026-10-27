@@ -1377,7 +1377,7 @@ function calc() {
     const De = deTr(t), B = De + 2 * c.valaFolga, e = espTr(t);
     if (r.gal) { const k = galNome(r.gal); q.gal[k] = (q.gal[k] || 0) + r.L; } else q.tubos[t.D] = (q.tubos[t.D] || 0) + r.L;
     if (isNum(r.tm) && isNum(r.tj) && isNum(r.cm) && isNum(r.cj)) {
-      const hM = r.tm - r.cm + e + c.berco, hJ = r.tj - r.cj + e + c.berco;
+      const hM = terraTopoPV(pvById(t.m), r.tm) - r.cm + e + c.berco, hJ = terraTopoPV(pvById(t.j), r.tj) - r.cj + e + c.berco;   // vala escavada a partir do terreno natural (a terraplenagem vem depois da rede)
       const V = B * r.L * (hM + hJ) / 2;
       r.vala = {B, hM, hJ, V};
       q.escav += V; q.berco += B * c.berco * r.L; q.reaterro += V - B * c.berco * r.L - aExtTr(t) * r.L;
@@ -2111,13 +2111,15 @@ function vRuas() {
   let est = '';
   P.ruas.forEach(r => {
     const idx = P.estacas.map((e, i) => ({e, i})).filter(x => x.e.rua === r.id).sort((a, b) => (num(a.e.dist) || 0) - (num(b.e.dist) || 0));
-    est += `<div class="card"><h4>${esc(r.nome)} — estaqueamento e greide</h4>
-      ${idx.length ? `<div class="tbl-wrap"><table><thead><tr><th>Estaca ${qbtn('pvs.dist')}</th><th>Cota do greide (m)</th><th>Declividade até a próxima</th><th>Elementos nesta estaca</th><th>Obs.</th><th></th></tr></thead><tbody>
+    est += `<div class="card"><h4>${esc(r.nome)} — estaqueamento, terreno natural e greide de projeto</h4>
+      ${idx.length ? `<div class="tbl-wrap"><table><thead><tr><th>Estaca ${qbtn('pvs.dist')}</th><th>Terreno natural (m)</th><th>Greide de projeto (m)</th><th>Corte (−) / aterro (+)</th><th>Declividade até a próxima</th><th>Elementos nesta estaca</th><th>Obs.</th><th></th></tr></thead><tbody>
       ${idx.map(({e, i}, k) => { const nx = idx[k + 1]; const d = nx ? (e.cota - nx.e.cota) / ((nx.e.dist - e.dist) || 1) * 100 : null;
         const st = d == null ? '' : Math.abs(d) < P.crit.imin ? 'warn' : 'ok';
         const el = P.pvs.filter(p => p.rua === r.id && Math.abs((num(p.dist) || -1) - e.dist) < 0.01).map(p => p.id).concat(P.bls.filter(b => b.rua === r.id && Math.abs((num(b.dist) || -1) - e.dist) < 0.01).map(b => b.id)).join(', ');
         return `<tr><td style="width:120px"><input type="text" inputmode="decimal" data-p="estacas.${i}.dist" data-t="est" data-full="1" value="${estLabel(num(e.dist))}"/></td>
+        <td style="width:120px"><input type="number" step="any" data-p="estacas.${i}.tn" data-t="num" value="${isNum(num(e.tn)) ? e.tn : ''}" placeholder="${e.cota}" title="Cota do terreno natural no eixo. Em branco = o greide é o próprio terreno."/></td>
         <td style="width:120px"><input type="number" step="any" data-p="estacas.${i}.cota" data-t="num" value="${e.cota}"/></td>
+        <td class="td-num">${isNum(num(e.tn)) && isNum(num(e.cota)) && Math.abs(e.cota - e.tn) > 5e-4 ? (e.cota > e.tn ? '+' : '') + fmt(e.cota - e.tn, 2) + ' m' : '—'}</td>
         <td class="td-num ${st}" title="${st === 'warn' ? 'Abaixo da mínima: a sarjeta pode empoçar. Ajuste o greide ou preveja BL no ponto baixo.' : ''}">${d == null ? '—' : fmt(d, 2) + ' %' + (d < 0 ? ' ↑ sobe' : '')}${st === 'warn' ? ' ⚠' : ''}</td>
         <td style="font-size:.78rem">${esc(el)}</td>
         <td><input type="text" data-p="estacas.${i}.obs" data-t="txt" value="${esc(e.obs)}"/></td><td><button class="btn-icon" onclick="delItem('estacas',${i})">✕</button></td></tr>`; }).join('')}
@@ -2485,7 +2487,7 @@ function memorialHTML(sel) {
     ...Object.entries(q.ramais).sort((a, b) => a[0] - b[0]).map(([d, l]) => tr(['Tubo de concreto Ø ' + d + ' mm — ramais', 'm', fmt(l, 2)])),
     ...Object.entries(q.pvs).map(([k, v]) => tr(['Poço de visita — ' + esc(k), 'un', v])),
     ...Object.entries(q.bls).map(([k, v]) => tr(['Boca-de-lobo — ' + esc(k), 'un', v])),
-    tr(['Escavação de vala — rede tronco', 'm³', fmt(q.escav, 2)]), tr(['Berço / lastro', 'm³', fmt(q.berco, 2)]), tr(['Reaterro compactado (estimado)', 'm³', fmt(q.reaterro, 2)])])}
+    tr(['Escavação de vala — rede tronco', 'm³', fmt(q.escav, 2)]), tr(['Berço / lastro', 'm³', fmt(q.berco, 2)]), tr(['Reaterro compactado (estimado)', 'm³', fmt(q.reaterro, 2)]), ...terraLinhasQuant().map(([a2, u, v]) => tr([esc(a2), u, fmt(v, 1)]))])}
   <p style="font-size:.75rem;color:#555">Volumes de vala com paredes verticais (B = D externo + ${fmt(2 * c.valaFolga, 2)} m), profundidade média entre as extremidades de cada trecho. Não incluem ramais, PVs, bota-fora e empolamento.</p>` : ''}
 
   ${sel.custos ? orcHTML(H) : ''}
@@ -2728,7 +2730,7 @@ function tabelasMemoria() {
   Object.entries(q.ramais).sort((a, b) => a[0] - b[0]).forEach(([d, l]) => Q.push(['Tubo de concreto Ø ' + d + ' mm — ramais', 'm', l]));
   Object.entries(q.pvs).forEach(([k, v]) => Q.push(['Poço de visita — ' + k, 'un', v]));
   Object.entries(q.bls).forEach(([k, v]) => Q.push(['Boca-de-lobo — ' + k, 'un', v]));
-  Q.push(['Escavação de vala — rede tronco', 'm³', q.escav], ['Berço / lastro', 'm³', q.berco], ['Reaterro compactado (estimado)', 'm³', q.reaterro]);
+  Q.push(['Escavação de vala — rede tronco', 'm³', q.escav], ['Berço / lastro', 'm³', q.berco], ['Reaterro compactado (estimado)', 'm³', q.reaterro], ...terraLinhasQuant());
   T.push({nome: 'Quantitativos', titulo: 'Quantitativos estimados', head: ['Item', 'Unid.', 'Quantidade'], rows: Q, fm: ['@', '@', '0.00']});
   { const o = orcamento(), cfg = custosCfg();
     T.push({nome: 'Orçamento', titulo: 'Orçamento estimado — ' + (o.comBanco ? (cfg.banco === 'sinapi' ? 'SINAPI RJ ' : 'SCO-Rio ') + cfg.comp + (cfg.regime === 'D' ? ' desonerado' : ' não desonerado') : 'valores de referência') + ' · BDI ' + fmt(o.bdi, 2) + ' %',
@@ -3923,7 +3925,7 @@ function autoCotas(silencioso) {
       // degrau ≥ perda no PV (K·V²/2g) corrigida pelas lâminas, para a água do PV não afogar o tubo que chega
       const rp = R && R.pv && R.pv[t.m], xO = R && R.tr[t.id], xI = R && R.tr[u.id];
       const dzH = rp && isNum(rp.hf) ? rp.hf + (xO && xO.h && isNum(xO.h.y) ? xO.h.y : 0) - (xI && xI.h && isNum(xI.h.y) ? xI.h.y : 0) : 0;
-      cm = Math.min(cm, cjI - Math.max(+c.dz[pm.defl] || 0, dzH), cjI + dI - D);
+      cm = Math.min(cm, cjI - Math.max(+c.dz[pm.defl] || 0, dzH > 0 ? dzH + 0.003 : 0), cjI + dI - D);   /* +3 mm: a perda recalculada depois do ajuste de lâmina não pode furar o degrau */
     });
     const r = R && R.tr[t.id];
     let iLow = c.imin / 100, iHigh = Infinity;
@@ -4170,6 +4172,15 @@ function regras(cfg) {
     [['Pré-moldada', 'EM CONCRETO PRÉ-MOLDADO', /pré-moldado/i], ['Blocos de concreto', 'EM ALVENARIA COM BLOCOS DE CONCRETO', /blocos de concreto/i], ['Alvenaria de tijolo maciço', 'EM ALVENARIA COM TIJOLOS CERÂMICOS MACIÇOS', /tijolo maci/i], ['Concreto moldado in loco', 'EM ALVENARIA COM BLOCOS DE CONCRETO', /blocos de concreto/i]].forEach(([c, sc, rs]) =>
       L.push({k: `bl:${t}:${c}`, nome: 'Caixa de boca-de-lobo — ' + BLTIPOS[t].nome.toLowerCase() + ' — ' + c.toLowerCase(),
         sinapi: [[new RegExp('^CAIXA PARA BOCA DE LOBO ' + s)], [new RegExp(sc)]], sco: [[/^Caixa de ralo/, rs], []]})));
+  // terraplenagem (corte, carga, transporte e aterro do greide de projeto)
+  L.push({k: 'terra:corte', nome: 'Corte e escavação de material de 1ª categoria com trator de esteiras (reaproveitado no aterro)',
+    sinapi: [[/^ESCAVAÇÃO HORIZONTAL EM SOLO DE 1A CATEGORIA COM TRATOR DE ESTEIRAS \(150HP/], []], sco: [[/^Escavação mecânica com trator tipo D-6R, em material de 1ª categoria/], []]});
+  L.push({k: 'terra:cargabf', nome: 'Escavação e carga de material de 1ª categoria em caminhão (bota-fora e empréstimo)',
+    sinapi: [[/^ESCAVAÇÃO HORIZONTAL, INCLUINDO CARGA E DESCARGA EM SOLO DE 1A CATEGORIA COM TRATOR DE ESTEIRAS \(150HP/], []]});
+  L.push({k: 'terra:transp', nome: 'Transporte de material com caminhão basculante de 10 m³ em via urbana pavimentada (m³ × km)',
+    sinapi: [[/^TRANSPORTE COM CAMINHÃO BASCULANTE DE 10 M³, EM VIA URBANA PAVIMENTADA, DMT ATÉ 30 KM \(UNIDADE: M3XKM/], []]});
+  L.push({k: 'terra:aterro', nome: 'Aterro compactado em camadas com material de 1ª categoria (exclusive fornecimento e transporte)',
+    sco: [[/^Construção de aterro, conforme Caderno de Encargos - PCRJ/], []]});
   return L;
 }
 function precoDe(v, regime) { const p = regime === 'D' ? v.precoCom : v.preco; return isNum(+p) ? +p : null; }
@@ -4214,12 +4225,12 @@ async function verificarMesNovo() {
 }
 
 /* -------- orçamento estimado (quantidades × preços) -------- */
-const REF_UNIT = {esc: 18, reat: 25, escor: 35, berco: 360, pvbase: 1600, pvacr: 650, bl: 1500};
+const REF_UNIT = {esc: 18, reat: 25, escor: 35, berco: 360, pvbase: 1600, pvacr: 650, bl: 1500, 'terra:corte': 5.5, 'terra:cargabf': 17, 'terra:transp': 3.1, 'terra:aterro': 8};
 function preco(k) {
   const p = (custosCfg().precos || {})[k];
   if (p && isNum(p.preco)) return p;
   const tipo = k.split(':')[0];
-  const ref = tipo === 'tubo' ? CTUBO_PAD[+k.split(':')[1]] : REF_UNIT[tipo];
+  const ref = tipo === 'tubo' ? CTUBO_PAD[+k.split(':')[1]] : (REF_UNIT[k] != null ? REF_UNIT[k] : REF_UNIT[tipo]);
   return {cod: '—', descr: 'Valor de referência (sem banco carregado)', unid: '', preco: ref || 0, fonte: 'referência', hBase: tipo === 'pvbase' ? 1.35 : null};
 }
 function orcamento() {
@@ -4259,7 +4270,7 @@ const nomeItem = k => {
   if (tp === 'ala') return ALA_NOME[a] || k;
   const r = regras(custosCfg()).find(x => x.k === k); return r ? r.nome : k;
 };
-const unidItem = k => k.startsWith('ala:') ? ALA_UN[k.split(':')[1]] : k.startsWith('prot:') ? ({pa2: 'm', aco: 'kg'}[k.split(':')[1]] || 'm³') : ({tubo: 'm', gal: 'm', esc: 'm³', reat: 'm³', escor: 'm²', berco: 'm³', pvbase: 'un', pvacr: 'm', pvq: 'un', pvqa: 'm', pvch: 'm', bl: 'un'})[k.split(':')[0]];
+const unidItem = k => k === 'terra:transp' ? 'm³·km' : k.startsWith('terra:') ? 'm³' : k.startsWith('ala:') ? ALA_UN[k.split(':')[1]] : k.startsWith('prot:') ? ({pa2: 'm', aco: 'kg'}[k.split(':')[1]] || 'm³') : ({tubo: 'm', gal: 'm', esc: 'm³', reat: 'm³', escor: 'm²', berco: 'm³', pvbase: 'un', pvacr: 'm', pvq: 'un', pvqa: 'm', pvch: 'm', bl: 'un'})[k.split(':')[0]];
 
 /* -------- aba Custos -------- */
 function vCustos() {
@@ -7350,14 +7361,16 @@ function topoDeltaPad(rua) {
 }
 /* desnível eixo → pé do meio-fio no ponto (interpolado entre as estacas onde foi medido; sem medição = seção-tipo) */
 function topoDelta(ruaId, dist, lado) {
-  const rua = ruaById(ruaId); if (!rua) return null; const k = TOPO_K[lado === 'D' ? 'D' : 'E'];
+  const rua = ruaById(ruaId); if (!rua) return null;
+  if (temTerra(ruaId)) return topoDeltaPad(rua); /* com terraplenagem, a rua final segue a seção-tipo sobre o greide de projeto */
+  const k = TOPO_K[lado === 'D' ? 'D' : 'E'];
   const pts = estacasRua(ruaId).filter(e => isNum(num(e.cota)) && isNum(num(e[k]))).map(e => ({d: +e.dist, v: +e.cota - +e[k]}));
   if (!pts.length) return topoDeltaPad(rua);
   if (dist <= pts[0].d) return pts[0].v; if (dist >= pts[pts.length - 1].d) return pts[pts.length - 1].v;
   for (let i = 0; i < pts.length - 1; i++) { const a = pts[i], b = pts[i + 1]; if (dist >= a.d && dist <= b.d) return a.v + (b.v - a.v) * (dist - a.d) / ((b.d - a.d) || 1); }
   return pts[pts.length - 1].v;
 }
-const topoTemMF = (ruaId, lado) => estacasRua(ruaId).some(e => isNum(num(e[TOPO_K[lado === 'D' ? 'D' : 'E']])));
+const topoTemMF = (ruaId, lado) => !temTerra(ruaId) && estacasRua(ruaId).some(e => isNum(num(e[TOPO_K[lado === 'D' ? 'D' : 'E']])));
 /* cota do pé do meio-fio (linha d'água da sarjeta) no ponto */
 function cotaMF(ruaId, dist, lado) { const z = greideCota(ruaId, dist), dl = topoDelta(ruaId, dist, lado); return isNum(z) && isNum(dl) ? z - dl : null; }
 /* cota do muro / alinhamento no ponto (só onde foi medida, interpolada) */
@@ -7405,9 +7418,9 @@ function checksTopo(res) {
     estacasRua(rua.id).forEach(e => ['E', 'D'].forEach(l => {
       const d = +e.dist, ladoN = l === 'D' ? 'direito' : 'esquerdo', el = (rua.nome || rua.id) + ' est. ' + estLabel(d) + ' (' + ladoN + ')';
       const mf = isNum(num(e[TOPO_K[l]])) ? +e[TOPO_K[l]] : null, mu = isNum(num(e[TOPO_M[l]])) ? +e[TOPO_M[l]] : null;
-      if (isNum(mf) && isNum(num(e.cota))) { const dl = +e.cota - mf, g = _geomSarj63(rua, null), W = g.simples ? 0 : g.W, Sw = g.simples ? 0 : g.Sw, Sx = (dl - Sw * W) / ((larg / 2 - W) || 1);
+      if (!temTerra(rua.id) && isNum(mf) && isNum(num(e.cota))) { const dl = +e.cota - mf, g = _geomSarj63(rua, null), W = g.simples ? 0 : g.W, Sw = g.simples ? 0 : g.Sw, Sx = (dl - Sw * W) / ((larg / 2 - W) || 1);
         if (Sx < 0.005) res.checks.push({tab: 'ruas', el, par: 'Topografia — inclinação transversal da pista', val: fmt(Sx * 100, 2) + ' %', lim: '≥ 0,5 % para o meio-fio', st: 'warn', nota: Sx < 0 ? 'O pé do meio-fio está mais alto que o eixo: a pista cai para o outro lado e esta sarjeta não recebe a água da pista. Confira o levantamento ou trate a rua como caimento único (aba 3).' : 'Pista quase plana até o meio-fio: a água espalha na pista. Confira o levantamento.'}); }
-      if (isNum(mu)) { const zTopoMF = (isNum(mf) ? mf : cotaMF(rua.id, d, l)) + mfH;
+      if (isNum(mu)) { const zTopoMF = (temTerra(rua.id) ? cotaMF(rua.id, d, l) : (isNum(mf) ? mf : cotaMF(rua.id, d, l))) + mfH;
         if (isNum(zTopoMF) && mu < zTopoMF - 0.02) res.checks.push({tab: 'ruas', el, par: 'Topografia — lote abaixo do meio-fio', val: 'muro ' + fmt(mu, 3) + ' m', lim: '≥ topo do meio-fio ' + fmt(zTopoMF, 3) + ' m', st: 'warn', nota: 'O alinhamento (muro) está abaixo do topo do meio-fio: a água da rua pode entrar no lote. Preveja captação antes deste ponto, elevação do meio-fio ou soleira de proteção.'});
         else if (isNum(zTopoMF)) { const ip = (mu - zTopoMF) / pas; if (ip > 0.03 + 1e-4) res.checks.push({tab: 'ruas', el, par: 'Topografia — inclinação do passeio', val: fmt(ip * 100, 1) + ' %', lim: '≤ 3 % (NBR 9050)', st: 'warn', nota: 'Passeio com inclinação transversal acima de 3 %: fora do limite de acessibilidade. Ajuste a cota do meio-fio ou do passeio no projeto de pavimentação.'}); }
       }
@@ -7431,11 +7444,11 @@ function topoTela() {
   if (!P.ruas.length) { box.innerHTML = '<div class="empty">Cadastre as ruas na aba 3 antes de lançar a topografia.</div>'; return; }
   if (!ruaById(TOPO_RUA)) TOPO_RUA = P.ruas[0].id;
   const rua = ruaById(TOPO_RUA), larg = +rua.larg || 7, pas = +rua.passeio || 2, idx = P.estacas.map((e, i) => ({e, i})).filter(x => x.e.rua === TOPO_RUA).sort((a, b) => (+a.e.dist || 0) - (+b.e.dist || 0));
-  const inp = (i, k, ph) => `<input type="number" step="0.001" inputmode="decimal" style="width:100%;min-width:84px" value="${isNum(num(P.estacas[i][k])) ? P.estacas[i][k] : ''}" placeholder="${ph}" onchange="topoSet(${i},'${k}',this.value)"/>`;
+  const inp = (i, k, ph) => `<input type="number" step="0.001" inputmode="decimal" style="width:100%;min-width:84px" value="${isNum(k === 'cota' ? natEst(P.estacas[i]) : num(P.estacas[i][k])) ? (k === 'cota' ? natEst(P.estacas[i]) : P.estacas[i][k]) : ''}" placeholder="${ph}" onchange="topoSet(${i},'${k}',this.value)"/>`;
   box.innerHTML = `<div class="bar-btns" style="flex-wrap:wrap;gap:.35rem;margin-bottom:.6rem">${P.ruas.map(r => `<button class="btn ${r.id === TOPO_RUA ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="TOPO_RUA='${r.id}';topoTela()">${esc(r.nome || r.id)}</button>`).join('')}</div>
-    <p style="font-size:.82rem;color:var(--muted);margin:.2rem 0 .6rem">Lado <b>esquerdo / direito</b> olhando no sentido crescente das estacas. <b>Meio-fio</b> = cota do pé do meio-fio (linha d'água da sarjeta), a ${fmt(larg / 2, 2)} m do eixo (metade da pista). <b>Muro</b> = cota do alinhamento, a ${fmt(larg / 2 + pas, 2)} m do eixo. Em branco = calculado pela seção-tipo da rua (valor em cinza). Só o eixo é obrigatório.</p>
-    <div class="tbl-wrap"><table><thead><tr><th>Estaca</th><th>Eixo (m)</th><th>Meio-fio esq. (m)</th><th>Meio-fio dir. (m)</th><th>Muro esq. (m)</th><th>Muro dir. (m)</th><th></th></tr></thead><tbody>
-    ${idx.map(({e, i}) => { const pE = cotaMF(TOPO_RUA, +e.dist, 'E'), pD = cotaMF(TOPO_RUA, +e.dist, 'D'), dl = topoDeltaPad(rua), z = num(e.cota);
+    <p style="font-size:.82rem;color:var(--muted);margin:.2rem 0 .6rem">Lado <b>esquerdo / direito</b> olhando no sentido crescente das estacas. <b>Meio-fio</b> = cota do pé do meio-fio (linha d'água da sarjeta), a ${fmt(larg / 2, 2)} m do eixo (metade da pista). <b>Muro</b> = cota do alinhamento, a ${fmt(larg / 2 + pas, 2)} m do eixo. Em branco = calculado pela seção-tipo da rua (valor em cinza). Só o eixo é obrigatório. <b>Todas as cotas desta tela são do terreno natural.</b> O greide de projeto e os cortes e aterros ficam em <b>🏗 Terraplenagem</b>.</p>
+    <div class="tbl-wrap"><table><thead><tr><th>Estaca</th><th>Eixo — terreno natural (m)</th><th>Meio-fio esq. (m)</th><th>Meio-fio dir. (m)</th><th>Muro esq. (m)</th><th>Muro dir. (m)</th><th></th></tr></thead><tbody>
+    ${idx.map(({e, i}) => { const pE = cotaMF(TOPO_RUA, +e.dist, 'E'), pD = cotaMF(TOPO_RUA, +e.dist, 'D'), dl = topoDeltaPad(rua), z = natEst(e);
       const phE = isNum(num(e.mfE)) ? '' : isNum(z) ? fmt(z - dl, 3).replace(',', '.') : '', phD = isNum(num(e.mfD)) ? '' : isNum(z) ? fmt(z - dl, 3).replace(',', '.') : '';
       return `<tr><td style="min-width:110px"><input type="text" inputmode="decimal" value="${estLabel(+e.dist)}" style="width:100%" onchange="topoSet(${i},'dist',this.value)"/></td>
       <td>${inp(i, 'cota', '')}</td><td>${inp(i, 'mfE', phE)}</td><td>${inp(i, 'mfD', phD)}</td><td>${inp(i, 'muE', '')}</td><td>${inp(i, 'muD', '')}</td>
@@ -7449,17 +7462,19 @@ function topoTela() {
 function topoSet(i, k, v) {
   const e = P.estacas[i]; if (!e) return;
   if (k === 'dist') { const d = parseEst(v); if (!isNum(d)) return toast('Estaca inválida'); e.dist = +(+d).toFixed(2); }
-  else { const x = String(v).trim() === '' ? '' : +String(v).replace(',', '.'); if (x !== '' && !isNum(x)) return toast('Cota inválida'); e[k] = x; }
+  else { const x = String(v).trim() === '' ? '' : +String(v).replace(',', '.'); if (x !== '' && !isNum(x)) return toast('Cota inválida'); if (k === 'cota') setNatural(e, x); else e[k] = x; }
   save(); calc(); if (k === 'dist' || k === 'cota') topoTela();
 }
+/* eixo da topografia = terreno natural (tn); o greide de projeto (cota) acompanha enquanto não foi alterado */
+function setNatural(e, x) { const old = natEst(e); e.tn = x; if (x !== '' && (!isNum(num(e.cota)) || (isNum(old) && Math.abs(+e.cota - old) < 5e-4))) e.cota = x; }
 function topoDel(i) { if (!confirm('Excluir esta estaca da topografia?')) return; P.estacas.splice(i, 1); save(); calc(); topoTela(); }
 function topoColar() {
   const n = v => { const t = String(v || '').trim().replace(/\s/g, ''); if (!t) return ''; const x = +t.replace(/\./g, t.includes(',') ? '' : '.').replace(',', '.'); return isNum(x) ? x : ''; };
   let k = 0;
   String($('topo-txt').value || '').split(/\r?\n/).forEach(l => {
     const c = l.split(/\t|;|\s{2,}|\|/).map(x => x.trim()); if (!c[0]) return; const d = parseEst(c[0]); if (!isNum(d)) return;
-    let e = P.estacas.find(x => x.rua === TOPO_RUA && Math.abs(+x.dist - d) < 0.01); if (!e) { e = {rua: TOPO_RUA, dist: +(+d).toFixed(2), cota: '', obs: ''}; P.estacas.push(e); }
-    [['cota', 1], ['mfE', 2], ['mfD', 3], ['muE', 4], ['muD', 5]].forEach(([f, j]) => { const v = n(c[j]); if (v !== '') e[f] = v; }); k++;
+    let e = P.estacas.find(x => x.rua === TOPO_RUA && Math.abs(+x.dist - d) < 0.01); if (!e) { e = {rua: TOPO_RUA, dist: +(+d).toFixed(2), cota: '', tn: '', obs: ''}; P.estacas.push(e); }
+    [['cota', 1], ['mfE', 2], ['mfD', 3], ['muE', 4], ['muD', 5]].forEach(([f, j]) => { const v = n(c[j]); if (v !== '') { if (f === 'cota') setNatural(e, v); else e[f] = v; } }); k++;
   });
   save(); calc(); topoTela(); toast(k + ' estaca(s) importada(s) na ' + (ruaById(TOPO_RUA) || {}).nome + '.');
 }
@@ -7467,6 +7482,200 @@ function topoColar() {
 const btnTopo = '<button class="btn btn-primary btn-sm" onclick="abrirTopografia()" title="Digitar só as cotas do terreno: eixo, pé do meio-fio e muro dos dois lados">📐 Topografia</button>';
 const _vPVs63 = vPVs; vPVs = function () { return _vPVs63.apply(this, arguments).replace('<h3>Poços de visita e topografia</h3>', '<h3>Poços de visita e topografia</h3><div class="card" style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap;padding:.6rem .8rem">' + btnTopo + '<span style="font-size:.8rem;color:var(--muted);flex:1;min-width:220px">Cotas do terreno por estaca (eixo, meio-fio e muro dos dois lados). O eixo dá a tampa dos PVs; o meio-fio dá a declividade e a inclinação de cada sarjeta e a cota das caixas; o muro verifica lote e passeio.</span></div>'); };
 const _vRuas63 = vRuas; vRuas = function () { return _vRuas63.apply(this, arguments).replace('<button class="btn btn-primary btn-sm" onclick="addItem(\'ruas\')">＋ Rua</button>', '<button class="btn btn-primary btn-sm" onclick="addItem(\'ruas\')">＋ Rua</button> ' + btnTopo); };
+</script>
+<script>
+/* =====================================================================
+   PATCH V1-02-64 (27/10/2026) — Terraplenagem.
+   As cotas digitadas na topografia são do TERRENO NATURAL. O greide de
+   projeto (estaca.cota) é proposto pelo programa — declividade longitudinal
+   mínima da sarjeta, o mais próximo possível do terreno (mínimos quadrados),
+   cruzamentos com a mesma cota nas duas ruas — e pode ser editado.
+   Ordem de obra: 1) redes enterradas, escavadas a partir do terreno natural;
+   2) terraplenagem (cortes e aterros até o greide); 3) sarjetas e caixas.
+   Volumes de corte e aterro, bota-fora/empréstimo e transporte entram no orçamento.
+   ===================================================================== */
+const natEst = e => isNum(num(e.tn)) ? +e.tn : (isNum(num(e.cota)) ? +e.cota : null);
+const temTerra = ruaId => estacasRua(ruaId).some(e => isNum(num(e.tn)) && isNum(num(e.cota)) && Math.abs(+e.cota - +e.tn) > 5e-4);
+function interpPts(pts, d) {
+  if (!pts.length) return null; if (pts.length === 1) return pts[0].v;
+  const i = d <= pts[0].d ? 0 : d >= pts[pts.length - 1].d ? pts.length - 2 : pts.findIndex((p, k) => k < pts.length - 1 && d >= p.d && d <= pts[k + 1].d), a = pts[i], b = pts[i + 1];
+  return a.v + (b.v - a.v) * (d - a.d) / ((b.d - a.d) || 1);
+}
+/* terreno natural no eixo (interpolado) */
+const terrenoCota = (ruaId, d) => interpPts(estacasRua(ruaId).map(e => ({d: +e.dist, v: natEst(e)})).filter(x => isNum(x.v)), d);
+/* topo do terreno de onde a vala é escavada: o terreno natural (a terraplenagem vem depois da rede) */
+function terraTopoPV(pv, tampa) {
+  if (!pv || isNum(num(pv.tampa)) || !temTerra(pv.rua)) return tampa;
+  const n = terrenoCota(pv.rua, num(pv.dist)); return isNum(n) ? n : tampa;
+}
+function terraParam() { P.terra = Object.assign({smin: '', hmin: 0.25, dmtBF: 5, dmtEmp: 5, emp: 1.25, fh: 1}, P.terra || {}); return P.terra; }
+const terraSmin = () => { const t = terraParam(), s = num(t.smin) > 0 ? num(t.smin) : (num(P.crit.imin) || 0.5); return s / 100; };
+
+/* ---------- direções do escoamento ao longo da rua (pontos altos e baixos significativos) ---------- */
+function terraDirs(z, hmin) {
+  const n = z.length, piv = [0]; let dir = 0, ext = 0;
+  for (let i = 1; i < n; i++) {
+    if (dir === 0) { if (Math.abs(z[i] - z[0]) >= hmin) { dir = z[i] < z[0] ? 1 : -1; ext = i; } }
+    else if (dir === 1) { if (z[i] <= z[ext]) ext = i; else if (z[i] - z[ext] >= hmin) { piv.push(ext); dir = -1; ext = i; } }
+    else { if (z[i] >= z[ext]) ext = i; else if (z[ext] - z[i] >= hmin) { piv.push(ext); dir = 1; ext = i; } }
+  }
+  if (piv[piv.length - 1] !== n - 1) piv.push(n - 1);
+  const dirs = new Array(n - 1).fill(1);
+  for (let k = 0; k < piv.length - 1; k++) { const d = z[piv[k]] > z[piv[k + 1]] ? 1 : z[piv[k]] < z[piv[k + 1]] ? -1 : (z[0] >= z[n - 1] ? 1 : -1); for (let s = piv[k]; s < piv[k + 1]; s++) dirs[s] = d; }
+  return dirs;
+}
+/* projeção de Dykstra: menor alteração (mínimos quadrados) que respeita as declividades mínimas e iguala as cotas nos cruzamentos */
+function dykstra(z, ineq, eq, iters, tol) {
+  const x = z.slice(), pI = ineq.map(() => [0, 0]), pE = eq.map(() => [0, 0]); let conv = false, mv = 0;
+  for (let it = 0; it < iters; it++) {
+    mv = 0;
+    ineq.forEach((c, k) => {
+      const yi = x[c.i] + pI[k][0], yj = x[c.j] + pI[k][1], v = c.d * (yi - yj);
+      if (v >= c.b) { x[c.i] = yi; x[c.j] = yj; pI[k] = [0, 0]; }
+      else { const t = (c.b - v) / 2, ni = yi + c.d * t, nj = yj - c.d * t; pI[k] = [yi - ni, yj - nj]; x[c.i] = ni; x[c.j] = nj; mv = Math.max(mv, c.b - v); }
+    });
+    eq.forEach((c, k) => { const yi = x[c.i] + pE[k][0], yj = x[c.j] + pE[k][1], v = yi - yj, m = v / 2, ni = yi - m, nj = yj + m; pE[k] = [yi - ni, yj - nj]; x[c.i] = ni; x[c.j] = nj; mv = Math.max(mv, Math.abs(v)); });
+    if (mv < tol) { conv = true; break; }
+  }
+  return {x, conv: conv || mv < 5e-4, mv};
+}
+let TERRA_BAK = null, TERRA_RUA = null;
+function terraPropor(silencioso) {
+  const rs0 = P.ruas.filter(r => estacasRua(r.id).filter(e => isNum(natEst(e))).length >= 2);
+  if (!rs0.length) { if (!silencioso) toast('Digite o terreno natural (eixo) de ao menos 2 estacas em alguma rua.'); return false; }
+  TERRA_BAK = JSON.stringify(P.estacas);
+  rs0.forEach(r => estacasRua(r.id).forEach(e => { if (!isNum(num(e.tn)) && isNum(num(e.cota))) e.tn = +e.cota; }));
+  /* estacas nos cruzamentos (a mesma cota de greide nas duas ruas) */
+  let J = [], ins = 0;
+  try { J = gerCruzamentos(geoRuas(), gerRuas()); } catch (e) { J = []; }
+  const garante = (ruaId, s) => { const es = estacasRua(ruaId); const p = es.find(e => Math.abs(e.dist - s) < 1.5); if (p) return p;
+    const n = terrenoCota(ruaId, s), g = greideCota(ruaId, s); const e = {rua: ruaId, dist: +(+s).toFixed(2), tn: +n.toFixed(3), cota: +(isNum(g) ? g : n).toFixed(3), obs: 'cruzamento'}; P.estacas.push(e); ins++; return e; };
+  const pares = J.map(j => [garante(j.a, j.sA), garante(j.b, j.sB)]);
+  const rs = rs0, idx = new Map(), z = [], vars = [];
+  rs.forEach(r => estacasRua(r.id).filter(e => isNum(natEst(e))).forEach(e => { idx.set(e, z.length); z.push(natEst(e)); vars.push(e); }));
+  const smin = terraSmin() * 1.02, hmin = Math.max(0, num(terraParam().hmin) || 0), ineq = [], eq = [];
+  rs.forEach(r => {
+    const es = estacasRua(r.id).filter(e => isNum(natEst(e))), dirs = terraDirs(es.map(natEst), hmin);
+    for (let k = 0; k < es.length - 1; k++) ineq.push({i: idx.get(es[k]), j: idx.get(es[k + 1]), d: dirs[k], b: smin * ((es[k + 1].dist - es[k].dist) || 1)});
+  });
+  pares.forEach(([a, b]) => { if (idx.has(a) && idx.has(b) && a !== b) eq.push({i: idx.get(a), j: idx.get(b)}); });
+  const sol = dykstra(z, ineq, eq, 8000, 1e-6);
+  vars.forEach((e, k) => { e.cota = +sol.x[k].toFixed(3); });
+  const falhas = ineq.filter(c => c.d * (vars[c.i].cota - vars[c.j].cota) < c.b / 1.02 - 1e-6).length, difCruz = eq.filter(c => Math.abs(vars[c.i].cota - vars[c.j].cota) > 1.5e-3).length;
+  save(); calc();
+  if ($('terra-body') && $('modal-terra') && $('modal-terra').classList.contains('open')) terraTela();
+  if (!silencioso) toast('Greide proposto' + (ins ? ' (' + ins + ' estaca(s) incluída(s) nos cruzamentos)' : '') + (falhas || difCruz ? ' — atenção: ' + falhas + ' trecho(s) abaixo da declividade mínima e ' + difCruz + ' cruzamento(s) com cotas diferentes; confira' : '') + '. Edite à vontade.');
+  return true;
+}
+function terraDesfazer() { if (!TERRA_BAK) return; P.estacas.length = 0; JSON.parse(TERRA_BAK).forEach(e => P.estacas.push(e)); TERRA_BAK = null; save(); calc(); terraTela(); toast('Greide anterior restaurado'); }
+function terraZerar() { if (!confirm('Igualar o greide ao terreno natural em todas as estacas (sem terraplenagem)?')) return; TERRA_BAK = JSON.stringify(P.estacas); P.estacas.forEach(e => { if (isNum(num(e.tn))) e.cota = +e.tn; }); save(); calc(); terraTela(); }
+
+/* ---------- volumes ---------- */
+function terraSecArea(r, e) {
+  const larg = +r.larg || 7, b = larg / 2, pas = +r.passeio || 2, mfH = num(r.mfH) > 0 ? +r.mfH : 0.15, pad = topoDeltaPad(r), n0 = natEst(e), g0 = +e.cota;
+  const nm = k => isNum(num(e[k])) ? +e[k] : null, mfE = nm('mfE') ?? n0, mfD = nm('mfD') ?? n0, muE = nm('muE') ?? mfE, muD = nm('muD') ?? mfD;
+  const gMF = g0 - pad, gMu = gMF + mfH + 0.02 * pas, xs = [-(b + pas), -b, 0, b, b + pas], nat = [muE, mfE, n0, mfD, muD], prj = [gMu, gMF, g0, gMF, gMu];
+  let fill = 0, cut = 0;
+  for (let k = 0; k < 4; k++) {
+    const w = xs[k + 1] - xs[k], d1 = prj[k] - nat[k], d2 = prj[k + 1] - nat[k + 1];
+    if (d1 >= 0 && d2 >= 0) fill += (d1 + d2) / 2 * w; else if (d1 <= 0 && d2 <= 0) cut += -(d1 + d2) / 2 * w;
+    else { const w1 = w * Math.abs(d1) / (Math.abs(d1) + Math.abs(d2)), w2 = w - w1, a1 = Math.abs(d1) * w1 / 2, a2 = Math.abs(d2) * w2 / 2; if (d1 > 0) { fill += a1; cut += a2; } else { cut += a1; fill += a2; } }
+  }
+  return {fill, cut};
+}
+function terraCalc() {
+  const rs = []; let corte = 0, aterro = 0;
+  P.ruas.forEach(r => {
+    const es = estacasRua(r.id).filter(e => isNum(natEst(e)) && isNum(num(e.cota))), at = temTerra(r.id), A = es.map(e => at ? terraSecArea(r, e) : {fill: 0, cut: 0}); let c = 0, a = 0;
+    for (let k = 0; k < es.length - 1; k++) { const L = es[k + 1].dist - es[k].dist; c += (A[k].cut + A[k + 1].cut) / 2 * L; a += (A[k].fill + A[k + 1].fill) / 2 * L; }
+    rs.push({r, es, A, at, corte: c, aterro: a}); corte += c; aterro += a;
+  });
+  const t = terraParam(), fh = num(t.fh) > 0 ? +t.fh : 1, emp = num(t.emp) > 0 ? +t.emp : 1.25, reuso = Math.min(corte, aterro / fh), sobra = Math.max(0, corte - reuso), falta = Math.max(0, aterro - reuso * fh) / fh;
+  return {rs, corte, aterro, reuso, sobra, falta, emp, tBF: sobra * emp * (num(t.dmtBF) || 0), tEmp: falta * emp * (num(t.dmtEmp) || 0), ativo: corte + aterro > 1e-6};
+}
+/* linhas de quantitativos (memorial e planilha) */
+function terraLinhasQuant() {
+  const T = terraCalc(); if (!T.ativo) return [];
+  return [['Terraplenagem — corte (volume no corte)', 'm³', T.corte], ['Terraplenagem — aterro compactado', 'm³', T.aterro], ['Corte reaproveitado no aterro', 'm³', T.reuso],
+    ['Sobra levada a bota-fora', 'm³', T.sobra], ['Material de empréstimo', 'm³', T.falta], ['Transporte (m³ × km, já empolado)', 'm³·km', T.tBF + T.tEmp]];
+}
+/* orçamento: terraplenagem separada da escavação de vala */
+const _orc64 = orcamento;
+orcamento = function () {
+  const o = _orc64.apply(this, arguments); if (!o || !o.linhas) return o;
+  const T = terraCalc(); if (!T.ativo) return o;
+  const cfg = custosCfg(); if (!(cfg.precos || {})['terra:corte'] && cfg.auto !== false && !window.__terraAtualiza && typeof atualizarCustos === 'function') { window.__terraAtualiza = true; atualizarCustos(true); }
+  const linhas = o.linhas.slice(), add = (k, q) => { if (!(q > 0)) return; const p = preco(k); linhas.unshift({k, p, q, total: q * (p.preco || 0)}); };
+  add('terra:transp', T.tBF + T.tEmp); add('terra:aterro', T.aterro); add('terra:cargabf', T.sobra + T.falta); add('terra:corte', T.reuso);
+  const sub = linhas.reduce((s, x) => s + x.total, 0);
+  return Object.assign(o, {linhas, sub, total: sub * (1 + (o.bdi || 0) / 100)});
+};
+/* verificação: recobrimento durante a obra (rede executada antes do aterro) */
+function checksTerra(res) {
+  if (!P.ruas.some(r => temTerra(r.id))) return;
+  P.trechos.forEach(t => {
+    const r = res.tr[t.id]; if (!r) return;
+    const val = (pv, rec) => { if (!pv || !temTerra(pv.rua) || !isNum(rec)) return null; const n = terrenoCota(pv.rua, num(pv.dist)), g = tampaPV(pv); return isNum(n) && isNum(g) ? rec - Math.max(0, g - n) : null; };
+    const rm = val(pvById(t.m), r.recM), rj = val(pvById(t.j), r.recJ), menor = Math.min(...[rm, rj].filter(isNum));
+    if (isFinite(menor) && menor < 0.30) res.checks.push({tab: 'rede', el: t.id, par: 'Recobrimento durante a obra (antes do aterro)', val: fmt(menor, 2) + ' m', lim: '≥ 0,30 m', st: 'warn',
+      nota: 'Como a rede é assentada antes da terraplenagem, nesta parte o tubo fica com pouco recobrimento (ou acima do terreno natural) até o aterro. Execute o aterro compactado em camadas junto com o assentamento ou proteja o tubo, e evite tráfego pesado antes da conclusão.'});
+  });
+}
+const _calc64 = calc;
+calc = function () { const res = _calc64.apply(this, arguments); try { checksTerra(res); } catch (e) { console.error('Terraplenagem:', e); } return res; };
+
+/* ---------- tela 🏗 Terraplenagem ---------- */
+function abrirTerraplenagem(ruaId) {
+  if (!$('modal-terra')) { const m = document.createElement('div'); m.className = 'modal-backdrop'; m.id = 'modal-terra';
+    m.innerHTML = `<div class="modal" style="max-width:1040px"><div class="modal-header"><h3>🏗 Terraplenagem — greide de projeto, cortes e aterros</h3><button class="btn-icon" onclick="fecharTerraplenagem()">✕</button></div><div class="modal-body" id="terra-body"></div><div class="modal-footer"><button class="btn btn-primary" onclick="fecharTerraplenagem()">Concluir</button></div></div>`;
+    document.body.appendChild(m); }
+  TERRA_RUA = ruaId || TERRA_RUA || (P.ruas[0] || {}).id; terraTela(); openModal('modal-terra');
+}
+function fecharTerraplenagem() { closeModal('modal-terra'); calc(); renderTab(); }
+function terraSetP(k, v) { terraParam()[k] = v === '' ? '' : +v; save(); calc(); terraTela(); }
+function terraSetGr(i, v) { const e = P.estacas[i]; if (!e) return; const x = String(v).trim() === '' ? '' : +String(v).replace(',', '.'); if (x !== '' && !isNum(x)) return toast('Cota inválida'); e.cota = x; save(); calc(); terraTela(); }
+function terraTela() {
+  const box = $('terra-body'); if (!box) return;
+  if (!P.ruas.length) { box.innerHTML = '<div class="empty">Cadastre as ruas (aba 3) e digite o terreno natural (📐 Topografia) antes.</div>'; return; }
+  if (!ruaById(TERRA_RUA)) TERRA_RUA = P.ruas[0].id;
+  const t = terraParam(), T = terraCalc(), rr = T.rs.find(x => x.r.id === TERRA_RUA), smin = terraSmin() * 100;
+  const idx = P.estacas.map((e, i) => ({e, i})).filter(x => x.e.rua === TERRA_RUA).sort((a, b) => (+a.e.dist || 0) - (+b.e.dist || 0));
+  const pf = (k, rot, ph, st) => `<div class="field"><label>${rot}</label><input type="number" step="${st || 'any'}" value="${t[k] === '' ? '' : t[k]}" placeholder="${ph || ''}" onchange="terraSetP('${k}',this.value)"/></div>`;
+  const v = x => fmt(x, 1) + ' m³';
+  box.innerHTML = `<p style="font-size:.82rem;color:var(--muted);margin:0 0 .6rem">As cotas da <b>topografia</b> são do <b>terreno natural</b>. O <b>greide de projeto</b> é a rua depois da terraplenagem: o programa propõe o greide com a declividade mínima da sarjeta, o mais próximo possível do terreno, e você edita. Ordem de obra: <b>1)</b> rede enterrada, escavada a partir do terreno natural; <b>2)</b> terraplenagem até o greide; <b>3)</b> sarjetas e caixas de ralo. A tampa dos PVs e a declividade das sarjetas seguem o greide de projeto.</p>
+    <div class="fgrid">${pf('smin', 'Declividade longitudinal mínima do greide (%)', 'crit.: ' + fmt(P.crit.imin, 2), 0.05)}${pf('hmin', 'Desnível mínimo para ponto alto/baixo (m)', '0,25', 0.05)}${pf('dmtBF', 'DMT bota-fora (km)', '', 0.5)}${pf('dmtEmp', 'DMT empréstimo (km)', '', 0.5)}${pf('emp', 'Empolamento (transporte)', '1,25', 0.05)}${pf('fh', 'm³ de aterro por m³ de corte', '1,00', 0.05)}</div>
+    <div class="bar-btns" style="flex-wrap:wrap;gap:.4rem;margin:.7rem 0"><button class="btn btn-primary btn-sm" onclick="terraPropor()">⚙ Propor greide (todas as ruas)</button><button class="btn btn-secondary btn-sm" onclick="terraDesfazer()" ${TERRA_BAK ? '' : 'disabled'}>↩ Desfazer</button><button class="btn btn-secondary btn-sm" onclick="terraZerar()">Greide = terreno natural</button><button class="btn btn-secondary btn-sm" onclick="fecharTerraplenagem();abrirTopografia()">📐 Topografia</button></div>
+    <div class="bar-btns" style="flex-wrap:wrap;gap:.35rem;margin-bottom:.5rem">${P.ruas.map(r => `<button class="btn ${r.id === TERRA_RUA ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="TERRA_RUA='${r.id}';terraTela()">${esc(r.nome || r.id)}</button>`).join('')}</div>
+    <div class="tbl-wrap"><table><thead><tr><th>Estaca</th><th>Terreno natural (m)</th><th>Greide de projeto (m)</th><th>Corte (−) / aterro (+) no eixo</th><th>Declividade até a próxima</th></tr></thead><tbody>
+    ${idx.map(({e, i}, k) => { const nx = idx[k + 1], n = natEst(e), g = num(e.cota), h = isNum(n) && isNum(g) ? g - n : null, d = nx && isNum(g) && isNum(num(nx.e.cota)) ? (g - nx.e.cota) / ((nx.e.dist - e.dist) || 1) * 100 : null, baixa = d != null && Math.abs(d) < smin - 1e-6;
+      return `<tr><td>${estLabel(+e.dist)}</td><td class="td-num">${isNum(n) ? fmt(n, 3) : '—'}</td><td><input type="number" step="0.001" style="width:100%;min-width:90px" value="${isNum(g) ? e.cota : ''}" onchange="terraSetGr(${i},this.value)"/></td>
+      <td class="td-num" style="color:${h == null || Math.abs(h) < 5e-4 ? 'inherit' : h > 0 ? 'var(--warn,#b45309)' : 'var(--err,#b91c1c)'}">${h == null ? '—' : (h > 0 ? '+' : '') + fmt(h, 2) + ' m'}</td>
+      <td class="td-num ${baixa ? 'warn' : ''}">${d == null ? '—' : fmt(d, 2) + ' %' + (d < 0 ? ' ↑' : '') + (baixa ? ' ⚠' : '')}</td></tr>`; }).join('') || '<tr><td colspan="5" class="empty">Sem estacas nesta rua.</td></tr>'}
+    </tbody></table></div>
+    <div class="card" style="margin-top:.8rem"><h4>Volumes${T.ativo ? '' : ' — sem terraplenagem (greide igual ao terreno)'}</h4>
+    <div class="tbl-wrap"><table><thead><tr><th>Rua</th><th>Corte</th><th>Aterro</th></tr></thead><tbody>${T.rs.filter(x => x.at).map(x => `<tr><td>${esc(x.r.nome || x.r.id)}</td><td class="td-num">${v(x.corte)}</td><td class="td-num">${v(x.aterro)}</td></tr>`).join('') || '<tr><td colspan="3" class="empty">Nenhuma rua com terraplenagem.</td></tr>'}
+    ${T.ativo ? `<tr><td><b>Total</b></td><td class="td-num"><b>${v(T.corte)}</b></td><td class="td-num"><b>${v(T.aterro)}</b></td></tr>` : ''}</tbody></table></div>
+    ${T.ativo ? `<p style="font-size:.82rem;margin:.5rem 0 0">Corte reaproveitado no aterro: <b>${v(T.reuso)}</b> · Sobra a levar ao bota-fora (${fmt(t.dmtBF, 1)} km): <b>${v(T.sobra)}</b> · Falta de material (empréstimo a ${fmt(t.dmtEmp, 1)} km): <b>${v(T.falta)}</b> · Transporte: <b>${fmt(T.tBF + T.tEmp, 0)} m³·km</b>.</p>
+    <p style="font-size:.74rem;color:var(--muted);margin:.4rem 0 0">Volumes pela média das áreas das seções (pista + passeios) entre estacas, até a superfície acabada do greide, sem descontar as interseções das ruas e sem a espessura do pavimento. Os itens entram no orçamento (aba 11): corte, escavação e carga do bota-fora/empréstimo, transporte e aterro compactado. O fornecimento do material de empréstimo não está incluído.</p>` : ''}</div>`;
+}
+const btnTerra = '<button class="btn btn-primary btn-sm" onclick="abrirTerraplenagem()" title="Greide de projeto, cortes, aterros, bota-fora e transporte">🏗 Terraplenagem</button>';
+const _vPVs64 = vPVs; vPVs = function () { return _vPVs64.apply(this, arguments).replace(btnTopo, btnTopo + ' ' + btnTerra); };
+const _vRuas64 = vRuas; vRuas = function () { return _vRuas64.apply(this, arguments).replace(btnTopo, btnTopo + ' ' + btnTerra); };
+/* gerador: propõe o greide antes de gerar, se só o terreno natural foi digitado */
+const _gerTela64 = gerTela;
+gerTela = function () {
+  _gerTela64.apply(this, arguments);
+  if (!P.ruas.some(r => estacasRua(r.id).some(e => isNum(num(e.tn))))) return;
+  const b = document.querySelector('#ger-body [onclick="gerCalcular()"]'); if (!b || !b.parentNode) return;
+  const d = document.createElement('div'); d.style.cssText = 'font-size:.82rem;margin:.6rem 0 0';
+  d.innerHTML = `<label style="display:flex;gap:.5rem;align-items:flex-start;cursor:pointer"><input type="checkbox" ${GER.propGr === false ? '' : 'checked'} onchange="GER.propGr=this.checked" style="margin-top:.15rem"/><span><b>Propor o greide de terraplenagem antes de gerar</b> (as cotas digitadas são do terreno natural; o programa define o greide com a declividade mínima da sarjeta). Se desmarcar, vale o greide que já está na aba 3.</span></label>`;
+  b.parentNode.parentNode.insertBefore(d, b.parentNode);
+};
+const _gerCalcular64 = gerCalcular;
+gerCalcular = function () {
+  if (GER.disp && GER.propGr !== false && P.ruas.some(r => estacasRua(r.id).some(e => isNum(num(e.tn)))) && !P.ruas.some(r => temTerra(r.id))) terraPropor(true);
+  return _gerCalcular64.apply(this, arguments);
+};
 </script>
 <script>
 /* =====================================================================
@@ -7841,41 +8050,45 @@ async function enviarAoOrcamento(solK, bank) {
     ]},
     ruas:{ passos:[
       { sel:"button[onclick*=\"addItem('ruas')\"]",
-        titulo:"1 / 9 — Adicionar rua",
+        titulo:"1 / 10 — Adicionar rua",
         dica:"Clique em \"＋ Rua\" para cada logradouro. Cada rua tem seu próprio greide (estacas) e sua seção-tipo.",
         norma:"" },
       { sel:"[data-p^=\"ruas.\"][data-p$=\".nome\"]",
-        titulo:"2 / 9 — Nome da rua",
+        titulo:"2 / 10 — Nome da rua",
         dica:"Nome do logradouro. Aparece na planta, no perfil, nas listas de BL/PV e no memorial.",
         norma:"" },
       { sel:"[data-p^=\"ruas.\"][data-p$=\".larg\"]",
-        titulo:"3 / 9 — Largura da pista (m)",
+        titulo:"3 / 10 — Largura da pista (m)",
         dica:"Largura de meio-fio a meio-fio. A metade da largura é a distância do eixo até o meio-fio, onde fica a sarjeta e a caixa de ralo/boca de lobo.",
         norma:"" },
       { sel:"[data-p^=\"ruas.\"][data-p$=\".passeio\"]",
-        titulo:"4 / 9 — Largura do passeio (m)",
+        titulo:"4 / 10 — Largura do passeio (m)",
         dica:"Do meio-fio até o muro/alinhamento. A cota do muro fica a (largura/2 + passeio) do eixo.",
         norma:"NBR 9050 — inclinação transversal do passeio ≤ 3 %." },
       { sel:"[data-p^=\"ruas.\"][data-p$=\".it\"]",
-        titulo:"5 / 9 — Inclinação transversal da pista (%)",
+        titulo:"5 / 10 — Inclinação transversal da pista (%)",
         dica:"Caimento do eixo para o meio-fio. Típico 2 a 3 %. Quando a topografia do meio-fio for digitada (botão 📐 Topografia), a inclinação real de cada lado passa a vir dela.",
         norma:"DNIT IPR-724 — abaulamento 2 a 3 %." },
       { sel:"[data-p^=\"ruas.\"][data-p$=\".mfH\"]",
-        titulo:"6 / 9 — Altura do meio-fio (m)",
+        titulo:"6 / 10 — Altura do meio-fio (m)",
         dica:"Altura da guia acima da sarjeta (≈ 0,15 m). Limita a lâmina admissível na sarjeta e é usada para verificar se o lote fica abaixo do topo do meio-fio.",
         norma:"" },
       { sel:"[data-p^=\"ruas.\"][data-p$=\".sjW\"]",
-        titulo:"7 / 9 — Sarjeta: largura e declividade",
+        titulo:"7 / 10 — Sarjeta: largura e declividade",
         dica:"Largura (W) e declividade transversal da sarjeta (seção composta). Em branco = sarjeta simples com a mesma inclinação da pista.",
         norma:"HEC-22 / Izzard — sarjeta composta." },
       { sel:"button[onclick*=\"abrirTopografia\"]",
-        titulo:"8 / 9 — 📐 Topografia (cotas do terreno)",
-        dica:"Abre uma tela limpa só com as cotas: Estaca · Eixo · Meio-fio esq. · Meio-fio dir. · Muro esq. · Muro dir. O lado é visto no sentido das estacas. Pode colar direto do Excel. O mesmo botão está na aba 6.",
+        titulo:"8 / 10 — 📐 Topografia (terreno natural)",
+        dica:"Tela limpa só com as cotas do TERRENO NATURAL: Eixo · Meio-fio esq. · Meio-fio dir. · Muro esq. · Muro dir. O lado é visto no sentido das estacas. Meio-fio a largura/2 do eixo; muro a largura/2 + passeio. Em branco = seção-tipo. Aceita colar do Excel. O mesmo botão está na aba 6.",
         norma:"" },
+      { sel:"button[onclick*=\"abrirTerraplenagem\"]",
+        titulo:"9 / 10 — 🏗 Terraplenagem (greide de projeto)",
+        dica:"Como a topografia é do terreno natural, o programa propõe o greide de projeto: declividade longitudinal mínima da sarjeta (critério da aba 1), o mais próximo possível do terreno e com a mesma cota nos cruzamentos. Você edita estaca a estaca. Mostra corte e aterro, volumes, bota-fora, empréstimo e transporte, que entram no orçamento (aba 11). Ordem de obra: rede enterrada, terraplenagem, sarjetas e caixas.",
+        norma:"Declividade mínima da sarjeta: critério da aba 1 (usual 0,5 %)." },
       { sel:"[data-p^=\"estacas.\"][data-p$=\".cota\"]",
-        titulo:"9 / 9 — Estacas do eixo (greide)",
-        dica:"Cota do eixo em cada estaca. Dá a tampa dos PVs e o greide do perfil. Lance ao menos a estaca inicial e a final de cada rua; use \"＋ 3 estacas a cada 20 m\" para agilizar.",
-        norma:"Estaqueamento padrão a cada 20 m." }
+        titulo:"10 / 10 — Estacas: terreno natural e greide",
+        dica:"Cada estaca tem o terreno natural (da topografia) e o greide de projeto. Sem terraplenagem, deixe o natural em branco: o greide é o próprio terreno. A tampa dos PVs, a declividade das sarjetas e a extensão dos trechos seguem o greide de projeto.",
+        norma:"" }
     ]},
     bacias:{ passos:[
       { sel:"button[onclick*=\"addItem('bacias')\"]",
@@ -7931,27 +8144,31 @@ async function enviarAoOrcamento(solK, bank) {
     ]},
     pvs:{ passos:[
       { sel:"button[onclick*=\"abrirTopografia\"]",
-        titulo:"1 / 6 — 📐 Topografia",
-        dica:"Tela limpa só com as cotas do terreno por estaca: eixo, pé do meio-fio (linha d'água) e muro dos dois lados. O meio-fio fica a largura/2 do eixo; o muro a largura/2 + passeio. Em branco = seção-tipo. Aceita colar do Excel.",
-        norma:"NBR 9050 — passeio ≤ 3 %; lote abaixo do meio-fio gera alerta." },
+        titulo:"1 / 7 — 📐 Topografia (terreno natural)",
+        dica:"Tela limpa só com as cotas do TERRENO NATURAL: Eixo · Meio-fio esq. · Meio-fio dir. · Muro esq. · Muro dir. O lado é visto no sentido das estacas. Meio-fio a largura/2 do eixo; muro a largura/2 + passeio. Em branco = seção-tipo. Aceita colar do Excel. O mesmo botão está na aba 6.",
+        norma:"" },
+      { sel:"button[onclick*=\"abrirTerraplenagem\"]",
+        titulo:"2 / 7 — 🏗 Terraplenagem (greide de projeto)",
+        dica:"Como a topografia é do terreno natural, o programa propõe o greide de projeto: declividade longitudinal mínima da sarjeta (critério da aba 1), o mais próximo possível do terreno e com a mesma cota nos cruzamentos. Você edita estaca a estaca. Mostra corte e aterro, volumes, bota-fora, empréstimo e transporte, que entram no orçamento (aba 11). Ordem de obra: rede enterrada, terraplenagem, sarjetas e caixas.",
+        norma:"Declividade mínima da sarjeta: critério da aba 1 (usual 0,5 %)." },
       { sel:"button[onclick*=\"addItem('pvs')\"]",
-        titulo:"2 / 6 — Adicionar poço de visita",
+        titulo:"3 / 7 — Adicionar poço de visita",
         dica:"PV em cada mudança de direção, de diâmetro, de declividade, em encontros de rede e a no máximo ~100 m de distância.",
         norma:"Espaçamento máximo usual 80–120 m." },
       { sel:"[data-p^=\"pvs.\"][data-p$=\".rua\"]",
-        titulo:"3 / 6 — Rua e estaca do PV",
+        titulo:"4 / 7 — Rua e estaca do PV",
         dica:"Posição do PV no eixo da rua. A cota da tampa sai do greide das estacas (topografia do eixo).",
         norma:"" },
       { sel:"[data-p^=\"pvs.\"][data-p$=\".tampa\"]",
-        titulo:"4 / 6 — Cota da tampa (m)",
+        titulo:"5 / 7 — Cota da tampa (m)",
         dica:"Em branco = calculada pelo greide. Digite só se a tampa for diferente do pavimento.",
         norma:"" },
       { sel:"[data-p^=\"pvs.\"][data-p$=\".modelo\"]",
-        titulo:"5 / 6 — Modelo do PV",
+        titulo:"6 / 7 — Modelo do PV",
         dica:"Poço de drenagem quadrado (SINAPI/SCO/EMOP, base da aba Custos). As dimensões internas crescem quando entram muitos tubos ou tubos muito próximos.",
         norma:"" },
       { sel:"button[onclick*=\"dimensionarPVs\"]",
-        titulo:"6 / 6 — Dimensionar PVs",
+        titulo:"7 / 7 — Dimensionar PVs",
         dica:"Escolhe o modelo e as dimensões de cada poço pelo número, diâmetro e ângulo dos tubos.",
         norma:"" }
     ]},
