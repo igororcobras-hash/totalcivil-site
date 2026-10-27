@@ -6008,8 +6008,9 @@ function gerCruzamentos(G, rs) {
   return J;
 }
 /* maior vazão que uma captação recebe sem passar dos limites da sarjeta e do dispositivo */
-function gerQlim(rua, S, modelo) {
-  const c = P.crit, g = geomSarjeta(rua, null), n = +c.nSarj || 0.016, Sp = S * 100;
+function gerQlim(rua, S, modelo, lado, dist) {
+  const c = P.crit, g = geomSarjeta(rua, lado ? {dist, lado, z: ''} : null),   // com lado: inclinação da pista medida na topografia
+    n = +c.nSarj || 0.016, Sp = S * 100;
   const bl = {a: 0.05, ga: 60}; aplicaModelo(Object.assign(bl, {modelo}));
   const Qadm = fatorSarjeta(Sp) * sarjQT(sarjTy(g.ymax, g), g, n, S), QT = sarjQT(c.Tmax, g, n, S);
   const ok = Q => { const y = sarjY(sarjT(Q, g, n, S), g); return Q <= bl.fr * blCapacidade(bl, Math.min(y, 0.5)).q; };
@@ -6044,7 +6045,21 @@ function gerProjeto(op) {
         const baixo = za >= zb ? b : a, dir = za >= zb ? -1 : 1;           // dir: sentido de montante a partir do ponto baixo
         const S = Math.max(Math.abs(za - zb) / Lr, 0.003);
         const Qlim = op.uso * gerQlim(r, S, op.modelo), qm = C * iMm * (w / 10000) / 360;   // m³/s por metro de sarjeta
-        const n = Math.ceil(Lr / Math.max(10, Math.min(Lr, Qlim / qm)) - 1e-6), Lcap = Lr / n;   // espaçamento igual dentro do trecho
+        let n = Math.ceil(Lr / Math.max(10, Math.min(Lr, Qlim / qm)) - 1e-6), Lcap = Lr / n;   // espaçamento igual dentro do trecho
+        // topografia do meio-fio digitada: a sarjeta de cada lado tem a sua declividade e a sua inclinação de pista;
+        // confere, lado a lado, a mesma conta que o cálculo fará (sarjeta × admissível) e aumenta o número de captações até atender
+        if (lados.some(l => topoTemMF(r.id, l))) {
+          const nMax = Math.max(n, Math.ceil(Lr / 5));   /* até uma caixa a cada 5 m */
+          for (; n <= nMax; n++) {
+            Lcap = Lr / n; let ok = true;
+            for (let i = 0; i < n && ok; i++) {
+              const sx = +(baixo + dir * i * Lcap).toFixed(1);
+              lados.forEach(l => { const Sl = Math.max(num(sarjDeclLado(r.id, sx, l)) || 0, 1e-4); /* declividade real, sem piso: sarjeta quase plana pede mais captações (e o cálculo avisa) */ if (qm * Lcap > op.uso * gerQlim(r, Sl, op.modelo, l, sx) * (1 - 1e-6)) ok = false; });
+            }
+            if (ok) break;
+          }
+          n = Math.min(n, nMax); Lcap = Lr / n;
+        }
         let prev = {};
         for (let i = 0; i < n; i++) {
           const s = +(baixo + dir * i * Lcap).toFixed(1), vao = Lcap, cur = {};
