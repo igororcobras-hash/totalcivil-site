@@ -43,6 +43,17 @@ service cloud.firestore {
       );
     }
 
+    // Programa com liberação própria (campo do painel Usuários): administrador, ou
+    // campo = true, sem recusa e dentro da validade.
+    function liberadoPrograma(campo) {
+      return admin() || (
+        logado() && temPerfil() &&
+        perfil()[campo] == true &&
+        perfil().recusado != true &&
+        (perfil().validade == null || perfil().validade > request.time)
+      );
+    }
+
     function falsoOuAusente(d, campo) {
       return !(campo in d) || d[campo] == false;
     }
@@ -113,6 +124,20 @@ service cloud.firestore {
                     && resource.data.uid == request.auth.uid
                     && request.resource.data.uid == request.auth.uid;
       allow delete: if liberado()
+                    && (resource.data.uid == request.auth.uid || admin());
+    }
+
+    // Obras do programa Serviços Públicos salvas na nuvem (sem as fotos): cada uma só do dono.
+    match /obrasServicos/{docId} {
+      allow read: if liberadoPrograma('manutencaoAtivo')
+                  && (resource.data.uid == request.auth.uid || admin());
+      allow create: if liberadoPrograma('manutencaoAtivo')
+                    && request.resource.data.uid == request.auth.uid
+                    && docId == request.auth.uid + '_' + request.resource.data.obraId;
+      allow update: if liberadoPrograma('manutencaoAtivo')
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == request.auth.uid;
+      allow delete: if liberadoPrograma('manutencaoAtivo')
                     && (resource.data.uid == request.auth.uid || admin());
     }
 
