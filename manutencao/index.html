@@ -468,12 +468,7 @@ function tExec(o){const dia=S.f.dia;const d=getDia(o,dia);const exs=o.execucoes.
  return `<div class="toolbar"><button class="btn" data-act="diaMov" data-v="-1" title="dia anterior">‹</button><label>Dia do RDO<input type="date" value="${dia}" data-chg="dia"></label><button class="btn" data-act="diaMov" data-v="1" title="próximo dia">›</button><button class="btn" data-act="relRDOdia">📄 RDO deste dia (PDF)</button><button class="btn" data-act="relRDOxlsDia">⬇ Excel do RDO</button><button class="btn" data-act="relFotoDia">📷 Fotográfico deste dia</button></div>
  <div class="alert" style="background:#eef4fb;border-color:#2563a8">O RDO é montado automaticamente a partir das execuções registradas na aba <b>Atendimento</b>. Aqui você só consulta cada dia e gera o PDF/Excel.</div>
  ${dias.length?`<div class="row gap" style="flex-wrap:wrap;margin:8px 0"><span class="small muted">Dias com registro:</span>${dias.slice(-30).reverse().map(x=>`<button class="btn sm ${x===dia?'pri':''}" data-act="diaIr" data-v="${x}">${fData(x).slice(0,5)}</button>`).join('')}</div>`:''}
- <div class="card"><h3>RDO — ${fData(dia)} (${diaSem(dia)})</h3>
- <div class="kpis" style="margin:8px 0"><div class="kpi"><div class="v">${exs.length}</div><div class="l">execuções no dia</div></div><div class="kpi"><div class="v">${ocs}</div><div class="l">ocorrências atendidas</div></div><div class="kpi"><div class="v">${fotos.length}</div><div class="l">fotos</div></div></div>
- <h4>Serviços executados</h4>${linhas.length?`<div class="tablewrap"><table><thead><tr><th>Ocorr.</th><th>Local</th><th>Serviço</th><th style="text-align:right">Quantidade</th><th>Conferência</th></tr></thead><tbody>${linhas.join('')}</tbody></table></div>`:'<p class="muted">Nenhuma execução registrada neste dia.</p>'}
- ${exs.some(e=>e.desc||e.descCampo)?`<h4 style="margin-top:12px">Descrição dos serviços</h4>${exs.filter(e=>e.desc||e.descCampo).map(e=>`<p class="small"><b>${esc(localEx(o,e).txt)}:</b> ${esc(e.desc||e.descCampo)}</p>`).join('')}`:''}
- ${(()=>{const r=resumoEf(o,dia);return (r.mo||r.dir||r.eq)?`<h4 style="margin-top:12px">Efetivo e equipamentos (automático)</h4>${r.mo?'<p class="small"><b>Mão de obra:</b> '+esc(r.mo)+'</p>':''}${r.dir?'<p class="small"><b>Fiscalização:</b> '+esc(r.dir)+'</p>':''}${r.eq?'<p class="small"><b>Equipamentos:</b> '+esc(r.eq)+'</p>':''}`:'<p class="small muted" style="margin-top:12px">Efetivo e equipamentos: informe em “＋ Funcionário / ＋ Equipamento” ao registrar a execução na aba Atendimento.</p>'})()}
- ${fotos.length?`<h4 style="margin-top:12px">Fotos do dia</h4>${thumbsMini(fotos)}`:''}</div>
+ <style>${RDOCSS}</style><div class="card" style="padding:8px;overflow:auto"><div style="min-width:640px;max-width:980px;margin:0 auto;background:#fff;color:#000">${exs.length||diaTemConteudo(o.diario[dia])?rdoTable(rdoSpec(o,dia,Math.max(1,dias.indexOf(dia)+1))):'<p class="muted" style="padding:16px">Nenhuma execução registrada neste dia. Registre na aba <b>Atendimento</b>.</p>'}</div>${fotos.length?`<h4 style="margin-top:12px">Fotos do dia</h4>${thumbsMini(fotos)}`:''}</div>
  <details class="card" ${comp?'open':''}><summary><b>Ajustes manuais do RDO (opcional)</b> <span class="muted small">— clima, jornada, observações e correção de efetivo/equipamentos (o que digitar aqui prevalece sobre o automático)</span></summary>
  <div class="g4" style="margin-top:8px"><label>Lotação<input value="${esc(d.lot)}" data-chg="diario" data-k="lot"></label><label>Nº D.O. <span class="muted small">(vazio = automático)</span><input value="${esc(d.dno)}" placeholder="ex.: 14/2026" data-chg="diario" data-k="dno"></label><label>Jornada — início<input type="time" value="${esc(d.ji)}" data-chg="diario" data-k="ji"></label><label>Jornada — fim<input type="time" value="${esc(d.jf)}" data-chg="diario" data-k="jf"></label></div>
  <div class="g3" style="margin-top:8px"><label>Clima — manhã${csel('M')}</label><label>Clima — tarde${csel('T')}</label><label>Clima — noite${csel('N')}</label></div>
@@ -838,15 +833,15 @@ function diaEf(o,dia){const d=JSON.parse(JSON.stringify(normDia(o.diario[dia]||n
 const resumoEf=(o,dia)=>{const d=diaEf(o,dia);const f=(a,L)=>a.map((v,i)=>(parseInt(v)>0?L[i]+' '+v:'')).filter(Boolean).join(', ');return {mo:f(d.ind,EF_IND),dir:f(d.dir,EF_DIR),eq:f(d.eqp,EQ_LIST)}};
 const HEAD=()=>S.settings.cab.head||IMG_HEAD,FOOT=()=>S.settings.cab.foot||IMG_FOOT;
 const RS={title:{sz:14,b:1,fill:'D9D9D9',col:'1F2F6B',bd:1},hdrimg:{al:'left',bd:1},obra:{sz:9,al:'left',bd:1,wrap:1},lab:{b:1,fill:'D9D9D9',col:'1F2F6B',bd:1},
- valL:{al:'left',bd:1},val:{bd:1},valb:{b:1,bd:1},sec:{b:1,fill:'D9D9D9',col:'1F2F6B',bd:1},hdr:{sz:8,bd:1},cl:{b:1,bd:1},greyc:{fill:'D9D9D9',bd:1},
- totl:{b:1,fill:'D9D9D9',col:'1F2F6B',bd:1},totv:{b:1,bd:1},txt:{al:'left',va:'top',bd:1},txtb:{al:'left',b:1,bd:1},sig:{b:1,va:'bottom',bd:1},footimg:{al:'right',bd:1},demo:{b:1,fill:'FDE68A',bd:1},eqn:{al:'left',bd:1,sz:8.5}};
+ valL:{al:'left',bd:1},val:{bd:1},valb:{b:1,bd:1},sec:{b:1,fill:'D9D9D9',col:'1F2F6B',bd:1},hdr:{sz:6.5,bd:1,nw:1},cl:{b:1,bd:1},greyc:{fill:'D9D9D9',bd:1},
+ totl:{b:1,fill:'D9D9D9',col:'1F2F6B',bd:1},totv:{b:1,bd:1},txt:{al:'left',va:'top',bd:1},txtb:{al:'left',b:1,bd:1},sig:{b:1,va:'bottom',bd:1},footimg:{al:'right',bd:1},demo:{b:1,fill:'FDE68A',bd:1},eqn:{al:'left',bd:1,sz:8,nw:1,wrap:false}};
 const RCOLW=[...Array(15).fill(9.5),20,11];
 function rdoSpec(o,dia,n){const d=diaEf(o,dia);const exs=o.execucoes.filter(e=>e.data===dia);const c=S.settings.cab;const rows=[];
  const R=(h,cells)=>rows.push({h,cells:cells||[]});const SP=()=>R(7);
  const lines=(t,w)=>String(t||'').split('\n').reduce((s,l)=>s+Math.max(1,Math.ceil(l.length/w)),0);
  R(24,[{a:1,b:17,v:'RELATÓRIO DIÁRIO DE MANUTENÇÃO '+fData(dia),s:'title'}]);
  if(o.demo)R(15,[{a:1,b:17,v:'DOCUMENTO DE DEMONSTRAÇÃO — SEM VALOR LEGAL',s:'demo'}]);
- R(66,[{a:1,b:6,img:'head',s:'hdrimg'},{a:7,b:17,s:'obra',v:o.nome+'\nContrato nº '+(o.contrato||'—')+(o.processo?' · Processo '+o.processo:'')+'\nContratada: '+(o.contratada||'—')+(o.cnpj?' — CNPJ '+o.cnpj:'')}]);
+ R(66,[{a:1,b:17,img:'head',s:'hdrimg'}]);
  R(16,[{a:1,b:2,v:'Lotação:',s:'lab'},{a:3,b:17,v:d.lot||'',s:'valL'}]);SP();
  const prazo=o.inicio&&o.fim?(diffDias(o.inicio,o.fim)+1)+' DIAS':'';
  R(16,[{a:1,b:2,v:'Início:',s:'lab'},{a:3,b:4,v:o.inicio?fData(o.inicio):'',s:'val'},{a:5,b:5,v:'Prazo',s:'lab'},{a:6,b:8,v:prazo,s:'val'},{a:12,b:13,v:'Dia:',s:'lab'},{a:14,b:15,v:fData(dia),s:'val'},{a:16,b:17,v:diaSem(dia),s:'val'}]);SP();
@@ -864,22 +859,19 @@ function rdoSpec(o,dia,n){const d=diaEf(o,dia);const exs=o.execucoes.filter(e=>e
   if(k<5){cells.push({a:3*k+1,b:3*k+2,v:nome,s:last?'totl':'eqn'},{a:3*k+3,v:q,s:last?'totv':'valb'})}else{cells.push({a:16,v:nome,s:last?'totl':'eqn'},{a:17,v:q,s:last?'totv':'valb'})}}
   R(15,cells)}
  SP();R(15,[{a:1,b:17,v:'SERVIÇOS EXECUTADOS',s:'sec'}]);
- R(15,[{a:1,b:5,v:'Local / ocorrência',s:'lab'},{a:6,b:14,v:'Serviço',s:'lab'},{a:15,v:'Un.',s:'lab'},{a:16,b:17,v:'Quantidade',s:'lab'}]);
- let nser=0;exs.forEach(e=>{const L=localEx(o,e);const it=e.itens.filter(i=>svcOf(o,i.servicoId));
-  const lt=L.txt+(L.oc?'\nOcorrência nº '+L.oc.num:'')+(L.lat!=null?'\n'+fN(L.lat,5)+', '+fN(L.lng,5):'');
-  if(!it.length){nser++;R(Math.max(15,lines(lt,40)*11+4),[{a:1,b:5,v:lt,s:'txt'},{a:6,b:17,v:'Sem quantidade lançada',s:'txt'}]);return}
-  it.forEach((i,k)=>{nser++;const s=svcOf(o,i.servicoId);const st=s.codigo+' — '+s.descricao;const h=Math.max(15,lines(st,75)*11+4,Math.ceil(lines(lt,40)/it.length)*11+4);
-   const cells=[];if(k===0)cells.push({a:1,b:5,rs:it.length,v:lt,s:'txt'});cells.push({a:6,b:14,v:st,s:'txt'},{a:15,v:s.unidade,s:'val'},{a:16,b:17,v:fN(i.qtd),s:'valb'});R(h,cells)})});
- if(!nser)R(15,[{a:1,b:17,v:'Nenhum serviço executado neste dia.',s:'txt'}]);
- const desc=exs.filter(e=>(e.desc||e.descCampo));
- if(desc.length){SP();R(15,[{a:1,b:17,v:'DESCRIÇÃO DAS ATIVIDADES',s:'sec'}]);desc.forEach(e=>{const L=localEx(o,e);const t=L.txt+': '+(e.desc||e.descCampo);R(Math.max(15,lines(t,170)*11+4),[{a:1,b:17,v:t,s:'txt'}])})}
- SP();R(15,[{a:1,b:17,v:'COMENTÁRIOS',s:'sec'}]);
- const com=[];exs.forEach(e=>{const L=localEx(o,e);const sv=e.itens.map(i=>{const s=svcOf(o,i.servicoId);return s?s.descricao:''}).filter(Boolean).join(' / ');com.push((sv?sv+' - ':'')+L.txt)});
+ const grp={};exs.forEach(e=>{const L=localEx(o,e);const its=e.itens.filter(i=>svcOf(o,i.servicoId));const loc=[e.local.rua||(L.oc&&L.oc.rua)||'',e.local.bairro||(L.oc&&L.oc.bairro)||''].filter(Boolean).join(' - ')||L.txt;
+  if(!its.length){const k='~'+loc+'|'+(e.desc||e.descCampo||'');(grp[k]=grp[k]||{sv:null,un:'',q:0,loc,n:0,txt:e.desc||e.descCampo||''}).n++;return}
+  its.forEach(i=>{const sv=svcOf(o,i.servicoId);const k=sv.id+'|'+loc;const g=grp[k]=grp[k]||{sv,un:sv.unidade,q:0,loc,n:0};g.q=r2(g.q+(+i.qtd||0));g.n++})});
+ const sl=Object.values(grp).map(g=>g.sv?'• '+g.sv.descricao+' — '+fN(g.q)+' '+g.un+' — '+g.loc+(g.n>1?' ('+g.n+' ocorrências)':''):'• '+(g.txt||'Serviço sem quantidade')+' — '+g.loc);
+ const com=[];const vistos=new Set();exs.forEach(e=>{const L=localEx(o,e);const sv=e.itens.map(i=>{const x=svcOf(o,i.servicoId);return x?x.descricao:''}).filter(Boolean).join(' / ');const t=(sv?sv+' - ':'')+[e.local.rua||(L.oc&&L.oc.rua)||'',e.local.bairro||(L.oc&&L.oc.bairro)||''].filter(Boolean).join(' - ');if(t&&!vistos.has(t)){vistos.add(t);com.push(t)}});
  String(d.obs||'').split('\n').filter(x=>x.trim()).forEach(x=>com.push(x));
- com.forEach(t=>R(Math.max(15,lines(t,190)*11+4),[{a:1,b:17,v:t,s:'txt'}]));R(15,[{a:1,b:17,v:'',s:'txt'}]);
+ const usado=rows.reduce((a,r)=>a+r.h,0);const nl=sl.reduce((a,t)=>a+lines(t,120),0)+1;const tail=15+Math.max(com.length,1)*13+15+84;
+ R(Math.max(nl*12+8,730-usado-tail),[{a:1,b:17,v:'SERVIÇO.:'+(sl.length?'\n'+sl.join('\n'):''),s:'txt'}]);
+ R(15,[{a:1,b:17,v:'COMENTÁRIOS',s:'sec'}]);
+ com.forEach(t=>R(Math.max(13,lines(t,190)*11+2),[{a:1,b:17,v:t,s:'txt'}]));R(13,[{a:1,b:17,v:'',s:'txt'}]);
  R(84,[{a:1,b:4,v:'\n'+(o.fiscal||'')+'\nFISCAL',s:'sig'},{a:5,b:8,v:'\n'+(o.gestor||'')+'\nSECRETÁRIO',s:'sig'},{a:9,b:17,img:'foot',s:'footimg'}]);
  return rows}
-function cssRS(s){const t=RS[s]||{};return 'font-size:'+((t.sz||9)*.75).toFixed(1)+'pt;text-align:'+(t.al||'center')+';vertical-align:'+(t.va==='top'?'top':t.va==='bottom'?'bottom':'middle')+(t.b?';font-weight:700':'')+(t.col?';color:#'+t.col:'')+(t.fill?';background:#'+t.fill:'')+(t.bd?';border:1px solid #000':'')}
+function cssRS(s){const t=RS[s]||{};return 'font-size:'+((t.sz||9)*.75).toFixed(1)+'pt;text-align:'+(t.al||'center')+';vertical-align:'+(t.va==='top'?'top':t.va==='bottom'?'bottom':'middle')+(t.nw?';white-space:normal;overflow-wrap:normal;word-break:keep-all;letter-spacing:-.25px;padding:1px 0;line-height:1.05':'')+(t.b?';font-weight:700':'')+(t.col?';color:#'+t.col:'')+(t.fill?';background:#'+t.fill:'')+(t.bd?';border:1px solid #000':'')}
 function rdoTable(rows){const tw=RCOLW.reduce((a,b)=>a+b,0);let h='<table class="rdo"><colgroup>'+RCOLW.map(w=>'<col style="width:'+(w/tw*100).toFixed(3)+'%">').join('')+'</colgroup>';const cov=Array(18).fill(0);
  rows.forEach(r=>{h+='<tr style="height:'+r.h+'pt">';let c=1;while(c<=17){if(cov[c]>0){cov[c]--;c++;continue}
   const x=r.cells.find(k=>k.a===c);if(x){const b=x.b||x.a,rs=x.rs||1;for(let j=x.a;j<=b;j++)cov[j]=rs-1;
