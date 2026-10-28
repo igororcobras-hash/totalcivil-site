@@ -1,0 +1,26 @@
+name: Publicar regras do Firestore
+
+# Publica o conteúdo de firestore.rules no Firebase. Só roda quando acionado à mão
+# (Actions › Publicar regras do Firestore › Run workflow). Usa o segredo FIREBASE_SERVICE_ACCOUNT.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regras:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar firebase-admin
+        run: npm install --no-save --no-package-lock firebase-admin@13
+      - name: Validar e publicar as regras
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: node scripts/publicar/regras.js
