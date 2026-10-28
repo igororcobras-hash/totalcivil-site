@@ -58,7 +58,7 @@ service cloud.firestore {
                          'usuario','email','nome','empresa','whatsapp',
                          'ativo','admin','recusado','validade','criadoEm',
                          'orcamentoSolicitado','orcamentoAtivo','intertravadoSolicitado','intertravadoAtivo',
-                         'drenagemSolicitado','drenagemAtivo','estruturaAtivo','visitasSolicitado','visitasAtivo',
+                         'drenagemSolicitado','drenagemAtivo','estruturaAtivo','visitasSolicitado','visitasAtivo','manutencaoSolicitado','manutencaoAtivo',
                          'programasPedidos','formaPagamento','plano','tipoPedido','pedidoEm','indicadoPor'])
                     && request.resource.data.ativo == false
                     && request.resource.data.admin == false
@@ -69,6 +69,7 @@ service cloud.firestore {
                     && falsoOuAusente(request.resource.data, 'drenagemAtivo')
                     && falsoOuAusente(request.resource.data, 'estruturaAtivo')
                     && falsoOuAusente(request.resource.data, 'visitasAtivo')
+                    && falsoOuAusente(request.resource.data, 'manutencaoAtivo')
                     && request.resource.data.email == request.auth.token.email;
 
       // Liberar programas, validade, recusa: somente administrador.
@@ -76,7 +77,7 @@ service cloud.firestore {
       allow update: if admin()
                     || (logado() && uid == request.auth.uid
                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                             'orcamentoSolicitado','intertravadoSolicitado','drenagemSolicitado','visitasSolicitado',
+                             'orcamentoSolicitado','intertravadoSolicitado','drenagemSolicitado','visitasSolicitado','manutencaoSolicitado',
                              'programasPedidos','formaPagamento','plano','tipoPedido','pedidoEm','indicadoPor','pagamentoAvisadoEm'])
                         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['orcamentoSolicitado'])
                             || request.resource.data.orcamentoSolicitado == true)
@@ -85,7 +86,9 @@ service cloud.firestore {
                         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['drenagemSolicitado'])
                             || request.resource.data.drenagemSolicitado == true)
                         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['visitasSolicitado'])
-                            || request.resource.data.visitasSolicitado == true));
+                            || request.resource.data.visitasSolicitado == true)
+                        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['manutencaoSolicitado'])
+                            || request.resource.data.manutencaoSolicitado == true));
       allow delete: if admin();
     }
 
@@ -146,7 +149,8 @@ service cloud.firestore {
         'intertravado': 'intertravadoAtivo',
         'drenagem': 'drenagemAtivo',
         'concreto': 'estruturaAtivo',
-        'visitas': 'visitasAtivo'
+        'visitas': 'visitasAtivo',
+        'manutencao': 'manutencaoAtivo'
       }.get(prog, '');
     }
     function podeUsar(prog) {

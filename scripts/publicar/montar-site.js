@@ -21,7 +21,8 @@ const PROGRAMAS = [
   {prog: 'intertravado', campo: 'intertravadoAtivo', pedido: 'intertravadoSolicitado', nome: 'Pavimento Intertravado'},
   {prog: 'drenagem',     campo: 'drenagemAtivo',     pedido: 'drenagemSolicitado',     nome: 'Drenagem Pluvial'},
   {prog: 'concreto',     campo: 'estruturaAtivo',    pedido: '',                       nome: 'Estrutura em Concreto Armado'},
-  {prog: 'visitas',      campo: 'visitasAtivo',      pedido: 'visitasSolicitado',      nome: 'Visitas Técnicas'}
+  {prog: 'visitas',      campo: 'visitasAtivo',      pedido: 'visitasSolicitado',      nome: 'Visitas Técnicas'},
+  {prog: 'manutencao',   campo: 'manutencaoAtivo',   pedido: 'manutencaoSolicitado',   nome: 'Serviços Públicos'}
 ];
 const PARTE = 900 * 1024;               // limite do Firestore: 1 MiB por documento
 const FORA_DO_SITE = new Set(['.git', '.github', 'scripts', 'node_modules', 'firestore.rules', 'README.md', '_site']);
