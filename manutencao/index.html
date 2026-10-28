@@ -99,8 +99,8 @@ table.tb input{margin:0;padding:5px 7px}
 .modal .box{max-width:880px;margin:0 auto;background:var(--card);border-radius:18px;box-shadow:0 20px 60px rgba(0,0,0,.4)}
 .mh{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid var(--line);position:sticky;top:0;background:var(--card);border-radius:18px 18px 0 0;z-index:2}
 .mh .x{border:0;background:none;font-size:28px;line-height:1;cursor:pointer;color:var(--muted)}
-.mb{padding:16px 20px}.mf{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;position:sticky;bottom:0;background:var(--card);border-radius:0 0 18px 18px}
-.pickmap,.mapbox{height:300px;border-radius:12px;border:1px solid var(--line);margin-top:10px;overflow:hidden}
+.mb{padding:16px 20px}.mf{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;position:sticky;bottom:0;z-index:5;flex-wrap:wrap;background:var(--card);border-radius:0 0 18px 18px}
+.pickmap,.mapbox{position:relative;z-index:0;height:300px;border-radius:12px;border:1px solid var(--line);margin-top:10px;overflow:hidden}
 .mapbox{height:calc(100vh - 330px);min-height:420px}
 .nomap{padding:20px;text-align:center;color:var(--muted)}
 .pin span{display:block;width:22px;height:22px;background:var(--accent);border:3px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 6px rgba(0,0,0,.45)}
@@ -427,6 +427,7 @@ function filtraOc(o){const f=S.f;let l=o.ocorrencias.slice();if(f.ocSt)l=l.filte
 function thumbsMini(fotos){return fotos.length?`<div class="mt">${fotos.slice(0,4).map(f=>`<img data-foto="${f.id}" data-act="zoom" alt="">`).join('')}</div>`:''}
 function tVistoria(o){const l=filtraOc(o);const f=S.f;
  return `<div class="toolbar"><button class="btn pri" data-act="ocNew" ${can('ocorr')?'':'disabled'}>＋ Nova ocorrência</button>
+ <button class="btn pri" data-act="ocRapido" ${can('ocorr')?'':'disabled'} title="Abre a ocorrência, pega a sua localização e já abre a câmera">📍 Minha localização · registro rápido</button>
  <label>Situação<select data-chg="flt" data-k="ocSt"><option value="">Todas</option>${Object.entries(ST).map(([k,v])=>`<option value="${k}" ${f.ocSt===k?'selected':''}>${v.l}</option>`).join('')}</select></label>
  <label>Prioridade<select data-chg="flt" data-k="ocPri"><option value="">Todas</option>${Object.entries(PRI).map(([k,v])=>`<option value="${k}" ${f.ocPri===k?'selected':''}>${v.l}</option>`).join('')}</select></label>
  <label style="flex:1;min-width:180px">Buscar<input id="busca" placeholder="rua, bairro, descrição, nº" value="${esc(f.ocQ)}" data-inp="fltq" data-k="ocQ"></label></div>
@@ -682,6 +683,14 @@ async function renovar(){const o=O();const g=id=>$(id).value;const er=m=>{$('#rn
  o.encerrada=true;o.encerradaEm=new Date().toISOString();o.renovadaPara={id:n.id,contrato:n.contrato};
  S.obras[n.id]=n;await saveObra(n);await saveObra(o);fecharModal(false);S.obraId=n.id;S.tab='cfg';resetF();render();toast('Contrato '+contrato+' criado. O contrato '+o.contrato+' foi encerrado e continua guardado. Ajuste a planilha de serviços e o valor na aba Obra & Config.',8000)}
 
+/* ===================== endereço automático e registro rápido ===================== */
+let _aeTok=0,_aeT=null;
+function autoEnd(lat,lng){clearTimeout(_aeT);const tok=++_aeTok;const st=()=>$('#oc-endst');if(st())st().textContent='Buscando o endereço…';
+ _aeT=setTimeout(()=>{revGeo(lat,lng).then(r=>{if(tok!==_aeTok||!M||M.t!=='oc')return;const a=r.address||{};const rua=a.road||a.pedestrian||a.footway||a.path||'';const b=a.suburb||a.neighbourhood||a.city_district||a.quarter||'';
+  const ri=$('#oc-rua'),bi=$('#oc-bairro');if(!ri)return;const full=rua?(a.house_number?rua+', '+a.house_number:rua):'';
+  if(full&&(!ri.value.trim()||ri.value===M.autoRua)){ri.value=full;M.autoRua=full}
+  if(b&&(!bi.value.trim()||bi.value===M.autoBai)){bi.value=b;M.autoBai=b}
+  if(st())st().textContent=full?'Endereço preenchido automaticamente pelo mapa — confira.':'Endereço não encontrado para este ponto. Digite a rua.'}).catch(()=>{if(st())st().textContent='Sem internet para buscar o endereço — digite a rua.'})},600)}
 /* ===================== modais ===================== */
 function abrirModal(html){$('#modalBody').innerHTML=html;$('#modal').classList.remove('hidden');document.body.classList.add('noscroll');$('#modal').scrollTop=0;hydrate($('#modalBody'))}
 function fecharModal(limpar){if(M&&limpar&&M.novas)M.novas.forEach(id=>{DB.del('fotos',id);fotoCache.delete(id)});if(M&&M.map){M.map.remove()}M=null;$('#modal').classList.add('hidden');document.body.classList.remove('noscroll')}
@@ -694,17 +703,17 @@ function modalOc(d,isNew){const o=O();const ed=can('ocorr');const dis=ed?'':'dis
  <fieldset><legend>1. Localização</legend><div class="g2"><label>Rua / endereço *<input id="oc-rua" value="${esc(d.rua)}" placeholder="Ex.: Rua das Flores, 120" ${dis}></label><label>Bairro<input id="oc-bairro" value="${esc(d.bairro)}" ${dis}></label></div>
  <label>Ponto de referência<input id="oc-ref" value="${esc(d.ref)}" ${dis}></label>
  <div class="g2"><label>Latitude<input id="oc-lat" inputmode="decimal" value="${inp(d.lat)}" placeholder="-22,52690" data-chg="coord" ${dis}></label><label>Longitude<input id="oc-lng" inputmode="decimal" value="${inp(d.lng)}" placeholder="-41,94560" data-chg="coord" ${dis}></label></div>
- <div class="row gap" style="margin-top:8px"><button class="btn sm" data-act="usarGPS" ${dis}>📍 Usar minha localização</button><button class="btn sm" data-act="buscarEnd" ${dis}>🔎 Buscar pelo endereço</button><button class="btn sm" data-act="revEnd" ${dis}>↻ Preencher endereço pelas coordenadas</button></div>
- <p class="small muted" id="oc-orig" style="margin:6px 0 0"></p><div id="geoRes"></div><p class="small muted" style="margin:6px 0 0">Você também pode clicar no mapa ou arrastar o pino para ajustar o ponto.</p><div id="pickMap" class="pickmap"></div></fieldset>
+ <div class="row gap" style="margin-top:8px"><button class="btn sm pri" data-act="usarGPS" ${dis}>📍 Minha localização</button><button class="btn sm" data-act="buscarEnd" ${dis}>🔎 Buscar pelo endereço</button><button class="btn sm" data-act="revEnd" ${dis}>↻ Preencher endereço pelas coordenadas</button></div>
+ <p class="small muted" id="oc-orig" style="margin:6px 0 0"></p><p class="small" id="oc-endst" style="margin:4px 0 0;color:#2563a8"></p><div id="geoRes"></div><p class="small muted" style="margin:6px 0 0">Você também pode clicar no mapa ou arrastar o pino para ajustar o ponto.</p><div id="pickMap" class="pickmap"></div></fieldset>
  <fieldset><legend>2. Fotos</legend><div class="row gap"><button class="btn" data-act="fotoCam" ${dis}>📷 Tirar foto</button><button class="btn" data-act="fotoGal" ${dis}>🖼 Escolher da galeria</button></div>
  <p class="small muted">Se a foto tiver coordenadas (EXIF) ou for tirada aqui com o GPS liberado, o ponto é preenchido automaticamente. Para melhor precisão, mantenha a localização da câmera ativada.</p><div id="fotosArea">${fotosArea(d.fotos,'oc')}</div></fieldset>
- <fieldset><legend>3. Problema identificado</legend><label>Descrição do problema *<textarea id="oc-desc" ${dis}>${esc(d.desc)}</textarea></label><label>Sugestão de correção<textarea id="oc-sug" ${dis}>${esc(d.sug)}</textarea></label>
+ <fieldset><legend>3. Problema identificado</legend><div class="row gap" style="margin:2px 0 6px">${["Buraco","Afundamento","Trinca / fissura","Desgaste do asfalto","Tampa de PV quebrada","Boca de lobo entupida","Falta de sinalização"].map(t=>`<button type="button" class="btn sm" data-act="ocPre" data-t="${t}" ${dis}>${t}</button>`).join("")}</div><label>Descrição do problema *<textarea id="oc-desc" ${dis}>${esc(d.desc)}</textarea></label><label>Sugestão de correção<textarea id="oc-sug" ${dis}>${esc(d.sug)}</textarea></label>
  <div class="g3"><label>Serviço sugerido<select id="oc-serv" ${dis}>${svcOptions(o,d.servSug,'— não definido —')}</select></label><label>Comprimento (m)<input id="oc-mc" inputmode="decimal" value="${inp(d.med&&d.med.c)}" ${dis}></label><label>Largura (m)<input id="oc-ml" inputmode="decimal" value="${inp(d.med&&d.med.l)}" ${dis}></label></div>
  <label>Prioridade sugerida pelo fiscal<div class="row gap" style="margin-top:6px">${Object.entries(PRI).map(([k,v])=>`<label class="chk" style="margin:0"><input type="radio" name="oc-pri" value="${k}" ${d.priF===k?'checked':''} ${dis}> <span class="chip" style="--c:${v.c}">${v.l}</span></label>`).join('')}</div></label></fieldset>
  ${d.hist.length?`<details><summary class="small">Histórico (${d.hist.length})</summary>${d.hist.map(h=>`<p class="small muted">${fDH(h.q)} · ${esc(h.quem)} · ${esc(h.acao)}</p>`).join('')}</details>`:''}</div>
- <div class="mf">${!isNew&&ed?'<button class="btn dan" data-act="ocDel">Excluir</button><span class="sp"></span>':''}<button class="btn" data-act="mCancel">Cancelar</button><button class="btn pri" data-act="ocSave" ${dis}>Salvar ocorrência</button></div>`}
+ <div class="mf">${!isNew&&ed?'<button class="btn dan" data-act="ocDel">Excluir</button><span class="sp"></span>':''}<button class="btn" data-act="mCancel">Cancelar</button><button class="btn pri" data-act="ocSave" ${dis}>Salvar ocorrência</button>${isNew&&ed?'<button class="btn pri" data-act="ocSaveNext" title="Salva e já abre a câmera para o próximo registro">Salvar e registrar a próxima ⚡</button>':''}</div>`}
 function origTxt(){const e=$('#oc-orig');if(e&&M)e.textContent=M.d.lat!=null&&M.d.origem?'Origem das coordenadas: '+ORIGEM[M.d.origem]:''}
-function setCoord(lat,lng,origem,opt){opt=opt||{};if(!M)return;M.d.lat=lat;M.d.lng=lng;M.d.origem=origem;const a=$('#oc-lat'),b=$('#oc-lng');if(a)a.value=inp(Number(lat.toFixed(6)));if(b)b.value=inp(Number(lng.toFixed(6)));origTxt();
+function setCoord(lat,lng,origem,opt){opt=opt||{};if(!M)return;M.d.lat=lat;M.d.lng=lng;M.d.origem=origem;if(!opt.noAuto&&origem!=='endereco'&&M.t==='oc')autoEnd(lat,lng);const a=$('#oc-lat'),b=$('#oc-lng');if(a)a.value=inp(Number(lat.toFixed(6)));if(b)b.value=inp(Number(lng.toFixed(6)));origTxt();
  if(M.map&&!opt.noMarker){putMarker(lat,lng);if(opt.fly)M.map.setView([lat,lng],17,{animate:false})}}
 function putMarker(lat,lng){if(!M||!M.map)return;if(M.mk)M.mk.setLatLng([lat,lng]);else{M.mk=L.marker([lat,lng],{draggable:true,icon:L.divIcon({className:'pin',html:'<span></span>',iconSize:[26,26],iconAnchor:[13,26]})}).addTo(M.map);M.mk.on('dragend',()=>{const p=M.mk.getLatLng();setCoord(p.lat,p.lng,'mapa',{noMarker:true})})}}
 function initPick(){const el=$('#pickMap');if(!el)return;if(typeof L==='undefined'){el.innerHTML='<div class="nomap">Mapa indisponível (sem internet). Digite as coordenadas.</div>';return}
@@ -1119,6 +1128,9 @@ const ACTS={
  mClose(){fecharModal(true)},mCancel(){fecharModal(true)},
  zoom(d,el){getFoto(el.dataset.foto).then(src=>{if(!src)return;$('#lb img').src=src;$('#lb').classList.remove('hidden')})},lbClose(){$('#lb').classList.add('hidden')},
  /* ocorrências */
+ ocRapido(){ACTS.ocNew();const c=$('#fileCam');if(c)c.click();ACTS.usarGPS()},
+ ocSaveNext(){const o=O(),antes=o.ocorrencias.length;ACTS.ocSave();if(O().ocorrencias.length>antes)ACTS.ocRapido()},
+ ocPre(d){const t=$('#oc-desc');t.value=t.value.trim()?t.value.trim().replace(/[.,;]$/,'')+', '+d.t.toLowerCase():d.t},
  ocNew(){const o=O();M={t:'oc',novas:[],novo:true,d:{id:'c'+uid(),num:0,criadoEm:new Date().toISOString(),criadoPor:quem(),rua:'',bairro:'',ref:'',lat:null,lng:null,origem:null,fotos:[],desc:'',sug:'',servSug:'',med:{c:0,l:0},priF:'media',priG:null,priConf:false,semana:'',servicoId:'',qtdPlan:0,solucao:'',obsG:'',status:'vistoriada',hist:[]}};abrirModal(modalOc(M.d,true));initPick()},
  ocEdit(d){const oc=O().ocorrencias.find(x=>x.id===d.id);if(!oc)return;M={t:'oc',novas:[],novo:false,orig:oc.fotos.map(f=>f.id),d:JSON.parse(JSON.stringify(oc))};abrirModal(modalOc(M.d,false));initPick()},
  ocSave(){const o=O(),d=M.d;d.rua=$('#oc-rua').value.trim();d.bairro=$('#oc-bairro').value.trim();d.ref=$('#oc-ref').value.trim();d.desc=$('#oc-desc').value.trim();d.sug=$('#oc-sug').value.trim();d.servSug=$('#oc-serv').value;d.med={c:num($('#oc-mc').value),l:num($('#oc-ml').value)};
