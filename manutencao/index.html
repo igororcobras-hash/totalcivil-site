@@ -118,6 +118,76 @@ body[data-amb=android] .btn,body[data-amb=ios] .btn{padding:12px 16px}
 body[data-amb=android] input,body[data-amb=android] select,body[data-amb=ios] input,body[data-amb=ios] select{padding:12px}
 @media(max-width:820px){.g2,.g3,.g4,.cols{grid-template-columns:1fr}.list{grid-template-columns:1fr}.wrap{padding:16px 12px 60px}.top{padding:8px 12px}h1{font-size:24px}.mapbox{height:60vh}.modal{padding:0}.modal .box{border-radius:0;min-height:100vh}.mh,.mf{border-radius:0}}
 </style>
+<script src="/assistente-abas.js" data-tabs="nav.tabs .tab" data-auxilio="gerar"></script>
+<script>
+/* Guia passo a passo de cada aba (usado pelo botão "Auxílio de preenchimento" do assistente-abas.js) */
+window.TC_GUIAS = {
+  painel: [
+    {sel:'.kpis', titulo:'1 / 3 — Indicadores da obra', dica:'Resumo das ocorrências: vistoriadas, aguardando prioridade do gestor, planejadas, em execução e executadas, além das execuções a conferir pelo fiscal. Aqui você só confere; o trabalho é feito nas próximas abas.'},
+    {sel:'.card .bar', titulo:'2 / 3 — Financeiro da obra', dica:'Compara o valor do contrato com o já medido e com o executado e conferido a medir. Valores truncados em 2 casas, como na medição.', norma:'Lei 14.133/2021 — acompanhamento da execução e medição do contrato.'},
+    {sel:'.card[style*="margin-top:16px"]', titulo:'3 / 3 — Pendências', dica:'Lista o que ainda trava o fluxo: ocorrências sem coordenadas, sem prioridade confirmada, execuções sem conferência e serviços sem preço no catálogo.'}
+  ],
+  vistoria: [
+    {sel:'[data-act=ocNew]', titulo:'1 / 4 — Nova ocorrência', dica:'O fiscal clica aqui para cadastrar cada rua/local com problema: endereço ou coordenadas (digitadas, pelo mapa ou pela foto georreferenciada), fotos, descrição e a prioridade sugerida (Alta, Média ou Baixa).'},
+    {sel:'[data-k=ocSt]', titulo:'2 / 4 — Filtro por situação', dica:'Mostra só as ocorrências na situação escolhida (vistoriada, planejada, em execução, executada ou medida).'},
+    {sel:'[data-k=ocPri]', titulo:'3 / 4 — Filtro por prioridade', dica:'Mostra só as ocorrências da prioridade escolhida. A prioridade final é confirmada pelo gestor na aba Planejamento.'},
+    {sel:'#busca', titulo:'4 / 4 — Buscar', dica:'Procure por rua, bairro, trecho da descrição ou número da ocorrência.'}
+  ],
+  plan: [
+    {sel:'[data-k=plF]', titulo:'1 / 5 — Quais ocorrências mostrar', dica:'Escolha entre as que aguardam confirmação de prioridade, as sem semana definida ou todas as abertas.'},
+    {sel:'.list .item', titulo:'2 / 5 — Cada ocorrência', dica:'Use “Planejar” para definir a forma de solução, o serviço do contrato, a quantidade prevista e a semana. “Confirmar prioridade” valida a prioridade sugerida pelo fiscal.'},
+    {sel:'#bulkDia', titulo:'3 / 5 — Semana para vários de uma vez', dica:'Marque as ocorrências, escolha qualquer dia da semana desejada e use “Atribuir semana aos selecionados”. Também dá para confirmar a prioridade de todos os marcados.'},
+    {sel:'input[data-chg=semDia]', titulo:'4 / 5 — Programação semanal', dica:'Escolha o dia para ver a semana programada, agrupada por serviço, com quantidades previstas. Use ◀ e ▶ para trocar de semana.'},
+    {sel:'[data-act=relProg]', titulo:'5 / 5 — Gerar a programação', dica:'Gera o PDF da programação semanal para enviar à empresa contratada.'}
+  ],
+  exec: [
+    {sel:'input[type=date][data-chg=dia]', titulo:'1 / 9 — Data do diário', dica:'Escolha o dia do RDO. As execuções registradas nesta data aparecem abaixo e alimentam os serviços do relatório.'},
+    {sel:'[data-act=exNew]', titulo:'2 / 9 — Registrar execução', dica:'A empresa informa o local, os serviços e as quantidades executadas e anexa as fotos (antes, durante e depois). O fiscal confere depois.'},
+    {sel:'input[data-k=lot]', titulo:'3 / 9 — Lotação e Nº do D.O.', dica:'Lotação do RDO e número do Diário de Obra. Deixe o Nº D.O. vazio para numeração automática.'},
+    {sel:'input[data-k=ji]', titulo:'4 / 9 — Jornada de trabalho', dica:'Horário de início e de fim da jornada do dia.'},
+    {sel:'select[data-k="clima.M"]', titulo:'5 / 9 — Clima', dica:'Condição do tempo na manhã, na tarde e na noite (sol, nublado ou chuva). Dias de chuva justificam paralisações no RDO.'},
+    {sel:'.efg', titulo:'6 / 9 — Efetivo (mão de obra)', dica:'Informe a quantidade de cada função em campo no dia. Deixe vazio o que não houve.'},
+    {sel:'details', titulo:'7 / 9 — Mão de obra direta', dica:'Abra para informar coordenador, fiscal e demais funções diretas, quando for o caso.'},
+    {sel:'textarea[data-k=obs]', titulo:'8 / 9 — Observações do dia', dica:'Uma linha por comentário: ocorrências, paralisações, visitas, orientações da fiscalização.'},
+    {sel:'[data-act=relRDOxlsDia]', titulo:'9 / 9 — Gerar o RDO', dica:'Gere o RDO deste dia em PDF ou o Excel no modelo oficial, e o relatório fotográfico do dia.'}
+  ],
+  mapa: [
+    {sel:'[data-k=mapSt]', titulo:'1 / 3 — Filtrar pela situação', dica:'Mostra no mapa só as ocorrências na situação escolhida.'},
+    {sel:'[data-act=mapFit]', titulo:'2 / 3 — Enquadrar todas', dica:'Ajusta o zoom para mostrar todas as ocorrências com coordenadas.'},
+    {sel:'#mapa', titulo:'3 / 3 — Mapa', dica:'A cor do marcador indica a prioridade (alta, média, baixa) e o verde indica executada ou medida. Clique em um marcador para abrir a ocorrência.'}
+  ],
+  med: [
+    {sel:'input[data-k=de]', titulo:'1 / 6 — Período da medição', dica:'Data inicial e final do período medido. Soma as quantidades das execuções conferidas nesse intervalo.'},
+    {sel:'input[data-k=conf]', titulo:'2 / 6 — Somente execuções conferidas', dica:'Deixe marcado: só entram na medição as execuções que o fiscal conferiu. As não conferidas ficam de fora.'},
+    {sel:'.tablewrap', titulo:'3 / 6 — Conferir a prévia', dica:'Confira quantidades, valores (truncados em 2 casas), acumulado anterior, contratado e saldo. Saldo negativo (⚠) indica serviço medido acima do contratado.', norma:'Lei 14.133/2021 — medição conforme o executado e o preço contratado.'},
+    {sel:'[data-act=medPrint]', titulo:'4 / 6 — Boletim e Excel', dica:'Gere o boletim em PDF/Word ou o Excel no modelo oficial (Boletim, Cronograma e Memória de cálculo).'},
+    {sel:'[data-act=bolImp]', titulo:'5 / 6 — Importar boletim anterior', dica:'Importe o Excel de uma medição anterior para continuar a numeração e os acumulados.'},
+    {sel:'[data-act=medFechar]', titulo:'6 / 6 — Fechar a medição', dica:'Só o gestor fecha. Depois de fechada, as execuções ficam vinculadas à medição e não entram em outra.'}
+  ],
+  crono: [
+    {sel:'input[data-chg=cronoN]', titulo:'1 / 4 — Número de meses', dica:'Prazo do cronograma em meses. O mês 1 corresponde à medição nº 1, e assim por diante.'},
+    {sel:'[data-act=cronoAuto]', titulo:'2 / 4 — Redistribuir saldo', dica:'Distribui o saldo ainda não medido entre os meses seguintes, fechando 100%.'},
+    {sel:'.tablewrap', titulo:'3 / 4 — % previsto por capítulo', dica:'Meses medidos (verde) vêm das medições. Nos demais, informe o % previsto de cada capítulo; o programa calcula os valores e confere se fecha 100%.'},
+    {sel:'[data-act=cronoXls]', titulo:'4 / 4 — Exportar', dica:'Exporta o cronograma físico-financeiro no modelo oficial.'}
+  ],
+  rel: [
+    {sel:'input[data-k=de]', titulo:'1 / 5 — Período dos relatórios', dica:'Datas “De” e “Até”. Valem para o RDO, o relatório fotográfico e o de vistoria.'},
+    {sel:'[data-act=relRDO]', titulo:'2 / 5 — RDO', dica:'Um RDO por dia do período, em PDF/impressão ou Excel no modelo oficial (uma aba por dia).'},
+    {sel:'[data-act=relFoto]', titulo:'3 / 5 — Relatório fotográfico', dica:'Fotos da execução por dia, com fase, local, coordenadas e data/hora.'},
+    {sel:'select[data-k=vPri]', titulo:'4 / 5 — Relatório de vistoria', dica:'Escolha prioridade e situação para listar as ocorrências desejadas.'},
+    {sel:'input[data-k=semDia]', titulo:'5 / 5 — Programação semanal', dica:'Escolha um dia da semana e gere a programação para a empresa.'}
+  ],
+  cfg: [
+    {sel:'[data-act=editObra]', titulo:'1 / 7 — Dados da obra', dica:'Nome, contrato, processo, contratada, valor, vigência, fiscal, gestor e BDI padrão. Só o gestor altera.'},
+    {sel:'[data-act=planImp]', titulo:'2 / 7 — Importar a planilha do contrato', dica:'Importe o Excel da obra e escolha quais colunas trazer (código, descrição, unidade, quantidade, preço e BDI).'},
+    {sel:'.tablewrap input', titulo:'3 / 7 — Itens da planilha', dica:'Confira código, unidade, quantidade contratada e preço de cada item. Serviço sem preço sai zerado na medição.'},
+    {sel:'input[data-k="cab.orgao"]', titulo:'4 / 7 — Cabeçalho dos relatórios', dica:'Órgão e secretaria que aparecem no topo de todos os relatórios.'},
+    {sel:'[data-act=logoUp]', titulo:'5 / 7 — Timbre, logotipo e rodapé', dica:'Envie as imagens do timbre, do logotipo da contratada e do rodapé usadas nos documentos.'},
+    {sel:'select[data-k="ia.prov"]', titulo:'6 / 7 — IA para descrições (opcional)', dica:'Escolha “Sem IA” para o texto padrão, ou informe a chave do Gemini/Meta. Só texto é enviado; revise sempre.'},
+    {sel:'[data-act=expBackup]', titulo:'7 / 7 — Backup', dica:'Exporte o arquivo .json da obra (com as fotos) e guarde uma cópia. Use “Importar backup” para restaurar.'}
+  ]
+};
+</script>
 </head>
 <body data-amb="">
 <header class="top" id="top"></header>
@@ -209,7 +279,7 @@ const defSettings=()=>({cab:{orgao:'Prefeitura Municipal de Rio das Ostras',secr
  ia:{prov:'local',gemKey:'',gemModel:'gemini-2.5-flash',metaUrl:'https://api.llama.com/compat/v1',metaKey:'',metaModel:'Llama-3.3-70B-Instruct'},
  mapa:{lat:-22.5269,lng:-41.9456,zoom:13}});
 function saveSettings(){DB.put('kv','settings',S.settings).catch(()=>toast('Não foi possível salvar as configurações.'))}
-function saveObra(o){return DB.put('kv','obra:'+o.id,o).catch(()=>toast('Não foi possível salvar no navegador (armazenamento cheio?). Faça um backup.'))}
+function saveObra(o){o._salvoEm=Date.now();nuvAgendar(o);return DB.put('kv','obra:'+o.id,o).catch(()=>toast('Não foi possível salvar no navegador (armazenamento cheio?). Faça um backup.'))}
 async function getFoto(id){if(fotoCache.has(id))return fotoCache.get(id);const r=await DB.get('fotos',id);const d=r&&r.data;if(d)fotoCache.set(id,d);return d||null}
 function idsFotos(o){const s=new Set();o.ocorrencias.forEach(x=>x.fotos.forEach(f=>s.add(f.id)));o.execucoes.forEach(x=>x.fotos.forEach(f=>s.add(f.id)));return [...s]}
 function hydrate(root){$$('img[data-foto]',root).forEach(async img=>{const d=await getFoto(img.dataset.foto);if(d)img.src=d})}
@@ -294,7 +364,7 @@ async function chamarIA(prompt){const ia=S.settings.ia;
 function promptDescricao(p){return 'Você é um engenheiro fiscal de obras públicas municipais no Brasil. Reescreva o texto de campo abaixo como descrição técnica do serviço executado, para constar em um Relatório Diário de Obras (RDO). Regras: português do Brasil; linguagem técnica e objetiva; terceira pessoa; verbos no passado; de 2 a 5 frases; NÃO invente quantidades, materiais, equipamentos, equipes ou fatos que não estejam nos dados; use exatamente as quantidades e unidades informadas; sem listas, sem markdown. Responda somente com o texto final.\n\nLOCAL: '+(p.local||'não informado')+'\nSERVIÇOS E QUANTIDADES: '+(p.itens.map(i=>i.desc+' — '+fN(i.qtd)+' '+i.un).join('; ')||'não informados')+'\nPROBLEMA ORIGINAL (vistoria): '+(p.probl||'não informado')+'\nSOLUÇÃO PLANEJADA: '+(p.solucao||'não informada')+'\nTEXTO DO CAMPO: '+(p.campo||'(vazio)')}
 
 /* ===================== telas ===================== */
-function resetF(){const h=hojeISO();S.f={ocSt:'',ocPri:'',ocQ:'',plF:'pend',semDia:h,dia:h,sel:{},med:{de:h.slice(0,8)+'01',ate:h,conf:true,rep:false},rel:{de:h.slice(0,8)+'01',ate:h,semDia:h,vPri:'',vSt:''},mapSt:''}}
+function resetF(){const h=hojeISO();S.f={ocSt:'',ocPri:'',ocQ:'',plF:'pend',semDia:h,dia:h,sel:{},med:{de:h.slice(0,8)+'01',ate:h,conf:true,rep:false},rel:{de:h.slice(0,8)+'01',ate:h,semDia:h,vPri:'',vSt:''},mapSt:'',plPri:'',plBai:'',plQ:'',plRaio:null}}
 let _rend=false,_again=false;
 function render(){if(_rend){_again=true;return}_rend=true;try{_render()}finally{_rend=false}if(_again){_again=false;render()}}
 function _render(){
@@ -309,6 +379,7 @@ function _render(){
 function renderTop(){$('#top').innerHTML=`<a class="brand" href="#" data-act="home"><span class="logo">▦</span><b>Total Civil</b></a><span class="prog">Serviços Públicos</span><span class="sp"></span>
  <input class="nm" placeholder="Seu nome" value="${esc(S.nome)}" data-chg="nome" title="Seu nome (registrado no histórico)">
  <select class="pf" data-chg="perfil" title="Perfil de uso (simula as permissões)">${Object.entries(PERFIL).map(([k,v])=>`<option value="${k}" ${S.perfil===k?'selected':''}>${v}</option>`).join('')}</select>
+ ${nuvChip()}${S.obraId&&O()?'<button class="btn sm" data-act="expBackup" title="Salvar como: grava um arquivo .json desta obra (com as fotos) no computador">💾 Salvar como…</button>':''}
  <button class="btn sm" data-act="tema">${S.settings.tema==='dark'?'☀ Claro':'🌙 Escuro'}</button>
  <button class="btn sm" data-act="trocaAmb">${AMB[S.amb]||'Ambiente'}</button>`}
 function telaAmbiente(){return `<section class="wrap"><div class="hero"><span class="pill">Total Civil</span><h1>Onde você vai usar?</h1><p>Escolha o ambiente para ajustar a tela. Você pode trocar depois no topo da página.</p></div>
@@ -365,17 +436,20 @@ function ocCard(o,oc,plan){const sv=svcOf(o,oc.servicoId||oc.servSug);
  <div class="chips">${chipP(priEf(oc))}${oc.priConf?'<span class="chip" style="--c:#2e7d4f">prioridade confirmada</span>':'<span class="chip" style="--c:#b7791f">aguardando gestor</span>'}${chipS(oc.status)}${oc.lat!=null?'<span class="chip" style="--c:#2e7d4f">📍 coordenadas</span>':'<span class="chip" style="--c:#b7791f">sem coordenadas</span>'}</div>
  <div class="small">${esc((oc.desc||'').slice(0,160))}${(oc.desc||'').length>160?'…':''}</div>
  ${sv?`<div class="small muted">Serviço: ${esc(sv.descricao)}</div>`:''}
+ ${plan&&DIST.has(oc.id)?`<div class="small"><span class="chip" style="--c:#2563a8">📏 a ${fDist(DIST.get(oc.id))} do ponto</span></div>`:''}
  ${oc.semana?`<div class="small muted">🗓 ${labSem(oc.semana)}${oc.qtdPlan?' · previsto '+fN(oc.qtdPlan)+' '+esc(sv?sv.unidade:''):''}</div>`:''}
  ${thumbsMini(oc.fotos)}
  <div class="row gap" style="margin-top:4px"><button class="btn sm" data-act="ocEdit" data-id="${oc.id}">${can('ocorr')?'Abrir / editar':'Abrir'}</button>${plan?`<button class="btn sm pri" data-act="planOpen" data-id="${oc.id}" ${can('plan')?'':'disabled'}>Planejar</button>${!oc.priConf?`<button class="btn sm" data-act="priConf" data-id="${oc.id}" ${can('plan')?'':'disabled'}>✓ Confirmar prioridade</button>`:''}`:''}</div></article>`}
 function tPlan(o){const f=S.f;const abertas=o.ocorrencias.filter(x=>x.status!=='medida'&&x.status!=='executada');
- let l=abertas;if(f.plF==='pend')l=l.filter(x=>!x.priConf);else if(f.plF==='sem')l=l.filter(x=>!x.semana);l=l.slice().sort(ordPri);
+ const l=planLista(o,abertas);
  const w=isoWeek(f.semDia);const doW=o.ocorrencias.filter(x=>x.semana===w&&x.status!=='medida');const grupos={};doW.forEach(x=>{const k=x.servicoId||'_';(grupos[k]=grupos[k]||[]).push(x)});
  return `${can('plan')?'':'<div class="alert">Somente o Gestor / Secretário confirma prioridades e programa as semanas. Troque o perfil no topo para testar.</div>'}
  <div class="card"><h3>1. Prioridades e programação</h3><p class="muted small">O gestor confirma a prioridade sugerida pelo fiscal (ou altera), escolhe a semana e a forma de solução.</p>
  <div class="toolbar"><label>Mostrar<select data-chg="flt" data-k="plF"><option value="pend" ${f.plF==='pend'?'selected':''}>Aguardando confirmação de prioridade</option><option value="sem" ${f.plF==='sem'?'selected':''}>Sem semana definida</option><option value="todas" ${f.plF==='todas'?'selected':''}>Todas as abertas</option></select></label>
  <label>Atribuir à semana (qualquer dia da semana)<input type="date" id="bulkDia" value="${f.semDia}"></label>
  <button class="btn" data-act="bulkSem" ${can('plan')?'':'disabled'}>🗓 Atribuir semana aos selecionados</button><button class="btn" data-act="bulkConf" ${can('plan')?'':'disabled'}>✓ Confirmar prioridade dos selecionados</button></div>
+ ${planFiltros(o)}
+ <div class="row gap" style="margin:6px 0"><span class="small muted"><b>${l.length}</b> ocorrência(s) na lista · <b>${Object.keys(f.sel).filter(k=>f.sel[k]).length}</b> selecionada(s)</span><span class="sp"></span><button class="btn sm" data-act="selTodos">☑ Selecionar todas da lista</button><button class="btn sm" data-act="selLimpar">☐ Limpar seleção</button></div>
  <div class="list">${l.map(oc=>ocCard(o,oc,true)).join('')||'<p class="muted">Nada pendente neste filtro.</p>'}</div></div>
  <div class="card" style="margin-top:16px"><h3>2. Programação semanal</h3>
  <div class="toolbar"><button class="btn sm" data-act="semMov" data-n="-7">◀</button><label>Dia da semana<input type="date" value="${f.semDia}" data-chg="semDia"></label><button class="btn sm" data-act="semMov" data-n="7">▶</button><b>${labSem(w)}</b><span class="sp"></span><button class="btn pri" data-act="relProg">📄 Gerar programação semanal (PDF)</button></div>
@@ -452,6 +526,104 @@ function tCfg(o){const c=S.settings,ia=c.ia;const tot=o.servicos.reduce((s,x)=>r
  ${ia.prov!=='local'?`<p class="small muted">⚠ A chave fica salva só neste navegador. Para vender o programa, a chamada à IA deve passar por um servidor seu, nunca pelo navegador do cliente.</p><button class="btn sm" data-act="iaTest">Testar conexão</button>`:''}</div></div>
  <div class="card" style="margin-top:16px"><h3>Backup desta obra</h3><p class="muted small">Gera um arquivo .json só desta obra (com as fotos). Guarde uma cópia: os dados ficam neste navegador.</p>
  <div class="row gap"><button class="btn" data-act="expBackup">⬇ Exportar backup</button><button class="btn" data-act="impBackup">📂 Importar backup</button><span class="sp"></span><button class="btn dan" data-act="delObra" ${g?'':'disabled'}>🗑 Excluir esta obra</button></div></div>`}
+
+/* ===================== NUVEM (login único do site) + SALVAR COMO ===================== */
+/* Cada obra é salva sozinha na nuvem (Firebase do site), ligada ao seu login, e continua salva no aparelho.
+   As FOTOS ficam só no aparelho e no backup .json (limite de tamanho do banco); o resto da obra vai para a nuvem. */
+const NUV={estado:'local',msg:'',hora:'',ad:null,timers:{},pend:new Set(),pronto:false};
+const NUV_COL='obrasServicos';
+function nuvSet(est,msg){NUV.estado=est;NUV.msg=msg||'';NUV.hora=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});try{renderTop()}catch(e){}}
+function nuvChip(){const t={local:['💾 Salvo no aparelho','#5a6075'],sync:['☁ Sincronizando…','#b7791f'],ok:['☁ Salvo na nuvem '+NUV.hora,'#2e7d4f'],erro:['⚠ Nuvem indisponível — salvo no aparelho','#b7791f']}[NUV.estado]||['💾 Salvo no aparelho','#5a6075'];return `<span class="chip" style="--c:${t[1]}" title="${esc(NUV.msg||'Os dados ficam salvos neste aparelho. Com o login do site, também são salvos na nuvem (sem as fotos).')}">${t[0]}</span>`}
+const _b64=buf=>{let s='';const u=new Uint8Array(buf);for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s)};
+const _deb64=s=>{const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u};
+async function nuvPack(txt){if(window.CompressionStream){const r=await new Response(new Blob([txt]).stream().pipeThrough(new CompressionStream('gzip'))).arrayBuffer();return {gz:true,s:_b64(r)}}return {gz:false,s:txt}}
+async function nuvUnpack(gz,s){if(!gz)return s;return await new Response(new Blob([_deb64(s)]).stream().pipeThrough(new DecompressionStream('gzip'))).text()}
+const NUV_PARTE=700000;
+/* adaptador real (Firestore); nos testes é trocado por window.TC_NUVEM_FAKE */
+async function nuvAdaptador(){
+ if(window.TC_NUVEM_FAKE)return window.TC_NUVEM_FAKE;
+ const cfg=window.FIREBASE_CONFIG;if(!cfg||!cfg.apiKey)return null;
+ const SDK='https://www.gstatic.com/firebasejs/12.19.0/';
+ const [A,Au,F]=await Promise.all([import(SDK+'firebase-app.js'),import(SDK+'firebase-auth.js'),import(SDK+'firebase-firestore.js')]);
+ const app=A.getApps().length?A.getApps()[0]:A.initializeApp(cfg);const a=Au.getAuth(app);let d;try{d=F.initializeFirestore(app,{experimentalAutoDetectLongPolling:true})}catch(_){d=F.getFirestore(app)}
+ const u=await new Promise(res=>{const off=Au.onAuthStateChanged(a,x=>{off();res(x)})});if(!u)return null;
+ return {uid:u.uid,
+  async list(){const q=await F.getDocs(F.query(F.collection(d,NUV_COL),F.where('uid','==',u.uid)));const out=[];for(const s of q.docs){const x=s.data();try{out.push({docId:s.id,obraId:x.obraId,atualizadoEm:x.atualizadoEm||0,texto:await nuvUnpack(x.gz,(x.partes||[]).join(''))})}catch(e){console.warn('Nuvem: obra ilegível',s.id,e)}}return out},
+  async put(o,txt){const p=await nuvPack(txt);const partes=[];for(let i=0;i<p.s.length;i+=NUV_PARTE)partes.push(p.s.slice(i,i+NUV_PARTE));if(partes.join('').length>900000)throw new Error('obra grande demais para a nuvem');await F.setDoc(F.doc(d,NUV_COL,u.uid+'_'+o.id),{uid:u.uid,obraId:o.id,nome:String(o.nome||'').slice(0,200),contrato:String(o.contrato||'').slice(0,60),atualizadoEm:o._salvoEm||Date.now(),gz:p.gz,partes,versao:1,gravadoEm:F.serverTimestamp()})},
+  async del(obraId){await F.deleteDoc(F.doc(d,NUV_COL,u.uid+'_'+obraId))}}}
+function nuvTexto(o){const c=Object.assign({},o);return JSON.stringify(c)}
+async function nuvEnviar(o){if(!NUV.ad)return;nuvSet('sync');try{if(!o._dono)o._dono=NUV.ad.uid;await NUV.ad.put(o,nuvTexto(o));nuvSet('ok')}catch(e){console.warn('Nuvem:',e);nuvSet('erro',String(e&&e.message||e))}}
+function nuvAgendar(o){if(!NUV.ad||!NUV.pronto)return;if(o._dono&&o._dono!==NUV.ad.uid)return;NUV.pend.add(o.id);clearTimeout(NUV.timers[o.id]);NUV.timers[o.id]=setTimeout(()=>nuvDescarga(o.id),4000)}
+function nuvDescarga(id){clearTimeout(NUV.timers[id]);if(!NUV.pend.has(id))return;NUV.pend.delete(id);const o=S.obras[id];if(o)nuvEnviar(o)}
+function nuvApagar(id){if(!NUV.ad)return;NUV.pend.delete(id);NUV.ad.del(id).catch(e=>console.warn('Nuvem:',e))}
+async function nuvIniciar(){
+ if(NUV.ad)return;
+ try{const ad=await nuvAdaptador();if(!ad){nuvSet('local');return}NUV.ad=ad;nuvSet('sync');
+  const nuv=await ad.list();let baixadas=0,enviadas=0;const vistas=new Set();
+  for(const x of nuv){vistas.add(x.obraId);let r;try{r=JSON.parse(x.texto)}catch(e){continue}const loc=S.obras[x.obraId];
+   if(!loc||(x.atualizadoEm||0)>(loc._salvoEm||0)+1000){r._salvoEm=x.atualizadoEm;r._dono=ad.uid;S.obras[r.id]=r;await DB.put('kv','obra:'+r.id,r);baixadas++}
+   else if((loc._salvoEm||0)>(x.atualizadoEm||0)+1000&&(!loc._dono||loc._dono===ad.uid)){await nuvEnviar(loc);enviadas++}}
+  for(const o of Object.values(S.obras)){if(vistas.has(o.id))continue;if(o._dono&&o._dono!==ad.uid)continue;if(!o._salvoEm)o._salvoEm=Date.now();await nuvEnviar(o);enviadas++}
+  NUV.pronto=true;nuvSet('ok',baixadas||enviadas?`${baixadas} obra(s) baixada(s) e ${enviadas} enviada(s) na sincronização inicial.`:'');
+  if(baixadas){toast(baixadas+' obra(s) atualizada(s) a partir da nuvem. As fotos ficam no aparelho onde foram tiradas.',6000);render()}
+ }catch(e){console.warn('Nuvem:',e);nuvSet('erro',String(e&&e.message||e))}}
+function nuvLigar(){if(window.TC_ACESSO==='liberado'||window.TC_NUVEM_FAKE)nuvIniciar();else document.addEventListener('tc-acesso-liberado',()=>nuvIniciar(),{once:true})}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')[...NUV.pend].forEach(nuvDescarga)});
+window.addEventListener('pagehide',()=>{[...NUV.pend].forEach(nuvDescarga)});
+/* Salvar como: abre a janela do sistema para escolher pasta e nome (Chrome/Edge); nos demais navegadores baixa o arquivo */
+async function salvarArquivo(nome,conteudo,mime){
+ if(window.showSaveFilePicker&&window.top===window){try{const h=await window.showSaveFilePicker({suggestedName:nome,types:[{description:'Backup da obra',accept:{[mime]:['.json']}}]});const w=await h.createWritable();await w.write(new Blob([conteudo],{type:mime}));await w.close();toast('Arquivo salvo: '+h.name);return}catch(e){if(e&&e.name==='AbortError')return}}
+ baixar(nome,conteudo,mime)}
+
+/* ===================== ocorrências próximas (raio no mapa) ===================== */
+const DIST=new Map();
+const distM=(a,b)=>{const R=6371000,r=x=>x*Math.PI/180,dl=r(b.lat-a.lat),dg=r(b.lng-a.lng);const h=Math.sin(dl/2)**2+Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dg/2)**2;return 2*R*Math.asin(Math.sqrt(h))};
+const fDist=m=>m<1000?Math.round(m)+' m':fN(m/1000,2)+' km';
+const norm=t=>String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase();
+const bairrosDe=o=>[...new Set(o.ocorrencias.map(x=>(x.bairro||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pt-BR'));
+/* lista do Planejamento: situação + prioridade + bairro + palavra-chave + raio */
+function planLista(o,abertas){const f=S.f;let l=abertas;
+ if(f.plF==='pend')l=l.filter(x=>!x.priConf);else if(f.plF==='sem')l=l.filter(x=>!x.semana);
+ if(f.plPri)l=l.filter(x=>priEf(x)===f.plPri);
+ if(f.plBai)l=l.filter(x=>norm(x.bairro)===norm(f.plBai));
+ if(f.plQ){const q=norm(f.plQ);l=l.filter(x=>norm([x.rua,x.bairro,x.desc,x.solucao,'#'+x.num].join(' ')).includes(q))}
+ DIST.clear();
+ if(f.plRaio){const c=f.plRaio;l=l.filter(x=>{if(x.lat==null)return false;const d=distM({lat:c.lat,lng:c.lng},{lat:x.lat,lng:x.lng});DIST.set(x.id,d);return d<=c.r});l.sort((a,b)=>DIST.get(a.id)-DIST.get(b.id))}
+ else l=l.slice().sort(ordPri);
+ return l}
+function planFiltros(o){const f=S.f;const bs=bairrosDe(o);
+ return `<div class="toolbar" style="margin-top:8px"><label>Prioridade<select data-chg="flt" data-k="plPri"><option value="">Todas</option>${Object.entries(PRI).map(([k,v])=>`<option value="${k}" ${f.plPri===k?'selected':''}>${v.l}</option>`).join('')}</select></label>
+ <label>Bairro<select data-chg="flt" data-k="plBai"><option value="">Todos</option>${bs.map(b=>`<option ${f.plBai===b?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
+ <label style="flex:1;min-width:180px">Palavra-chave<input id="plBusca" placeholder="rua, bairro, descrição, nº" value="${esc(f.plQ)}" data-inp="fltq" data-k="plQ"></label>
+ <button class="btn pri" data-act="proxAbrir">📍 Ocorrências próximas</button></div>
+ ${f.plRaio?`<div class="alert" style="background:#eef4fb;border-color:#2563a8">📍 Mostrando só as ocorrências a até <b>${fDist(f.plRaio.r)}</b> de <b>${esc(f.plRaio.label)}</b>, da mais próxima para a mais distante. <button class="btn sm" data-act="proxLimpar">✕ Limpar raio</button></div>`:''}`}
+function modalProx(){const o=O(),m=M;
+ return `<div class="mh"><h3>📍 Ocorrências próximas</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+ <p class="muted small">Escolha um ponto (uma ocorrência, um endereço, as coordenadas ou um clique no mapa) e o raio. O programa lista tudo que está dentro do círculo — para aproveitar a ida da equipe e dos caminhões e atender várias ocorrências na mesma região.</p>
+ <div class="g2"><label>Procurar a ocorrência-centro por palavra-chave<input id="px-q" placeholder="rua, bairro, descrição ou nº" autocomplete="off" data-inp="proxQ" value="${esc(m.q||'')}"></label>
+ <label>Ou pesquisar um endereço<div class="row gap"><input id="px-end" placeholder="rua, bairro" style="flex:1" value="${esc(m.end||'')}"><button class="btn" data-act="proxEnd">Buscar</button></div></label></div>
+ <div id="px-sug" class="geo"></div><div id="px-geo"></div>
+ <div class="g4" style="margin-top:6px"><label>Latitude<input id="px-lat" inputmode="decimal" data-inp="proxCoord" value="${m.c?inp(Number(m.c.lat.toFixed(6))):''}"></label><label>Longitude<input id="px-lng" inputmode="decimal" data-inp="proxCoord" value="${m.c?inp(Number(m.c.lng.toFixed(6))):''}"></label>
+ <label>Raio (metros)<input id="px-r" inputmode="numeric" data-inp="proxR" value="${m.r}"></label>
+ <label class="chk" style="align-self:end"><input type="checkbox" id="px-todas" ${m.todas?'checked':''} data-chg="proxTodas"> Incluir executadas e medidas</label></div>
+ <div class="row gap" style="margin:4px 0"><span class="small muted">Raio rápido:</span>${[200,500,1000,2000,5000].map(r=>`<button class="btn sm" data-act="proxRaio" data-r="${r}">${r>=1000?r/1000+' km':r+' m'}</button>`).join('')}<span class="sp"></span><span id="px-centro" class="small"></span></div>
+ <div id="pxMap" class="mapbox" style="height:300px"></div>
+ <h4 style="margin:12px 0 4px" id="px-tit"></h4><div id="px-lista" class="list"></div>
+ <div class="row gap" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mClose">Cancelar</button><button class="btn pri" data-act="proxUsar">Usar esta lista no Planejamento</button></div></div>`}
+function proxLista(){const o=O(),m=M;if(!m.c)return [];
+ return o.ocorrencias.filter(x=>x.lat!=null&&(m.todas||(x.status!=='medida'&&x.status!=='executada'))).map(x=>({oc:x,d:distM(m.c,{lat:x.lat,lng:x.lng})})).filter(x=>x.d<=m.r).sort((a,b)=>a.d-b.d)}
+function proxAtualiza(){if(!M||M.t!=='prox')return;const m=M,l=proxLista();m.achadas=l.map(x=>x.oc.id);if(!m.marc)m.marc={};
+ const cen=$('#px-centro');if(cen)cen.innerHTML=m.c?'Centro: <b>'+esc(m.c.label)+'</b>':'<span class="neg">Defina o ponto central.</span>';
+ const tit=$('#px-tit');if(tit)tit.textContent=m.c?l.length+' ocorrência(s) em até '+fDist(m.r)+' do ponto':'';
+ const box=$('#px-lista');if(box)box.innerHTML=!m.c?'<p class="muted small">Escolha o ponto central acima.</p>':(l.map(({oc,d})=>{if(m.marc[oc.id]===undefined)m.marc[oc.id]=true;return `<article class="item"><div class="hd"><div><span class="num">#${oc.num}</span> <b>${esc(ocLocal(oc))}</b></div><label class="chk" style="margin:0"><input type="checkbox" data-chg="proxChk" data-id="${oc.id}" ${m.marc[oc.id]?'checked':''}> usar</label></div><div class="chips">${chipP(priEf(oc))}${chipS(oc.status)}<span class="chip" style="--c:#2563a8">📏 ${fDist(d)}</span></div><div class="small">${esc((oc.desc||'').slice(0,140))}</div></article>`}).join('')||'<p class="muted small">Nenhuma ocorrência dentro deste raio.</p>');
+ if(m.map){if(m.circ){m.circ.setLatLng([m.c.lat,m.c.lng]);m.circ.setRadius(m.r)}else if(m.c){m.circ=L.circle([m.c.lat,m.c.lng],{radius:m.r,color:'#2563a8',fillOpacity:.08}).addTo(m.map)}
+  if(m.c){if(m.cm)m.cm.setLatLng([m.c.lat,m.c.lng]);else{m.cm=L.marker([m.c.lat,m.c.lng],{draggable:true}).addTo(m.map);m.cm.on('dragend',()=>{const p=m.cm.getLatLng();proxCentro(p.lat,p.lng,'Ponto no mapa')})}
+   try{m.map.fitBounds(m.circ.getBounds(),{padding:[20,20],animate:false})}catch(e){}}}}
+function proxCentro(lat,lng,label){if(!M||M.t!=='prox')return;M.c={lat,lng,label};const a=$('#px-lat'),b=$('#px-lng');if(a)a.value=inp(Number(lat.toFixed(6)));if(b)b.value=inp(Number(lng.toFixed(6)));proxAtualiza()}
+function proxMapa(){const el=$('#pxMap');if(!el)return;if(typeof L==='undefined'){el.innerHTML='<div class="nomap">Mapa indisponível (sem internet). Use a palavra-chave ou digite as coordenadas.</div>';return}
+ const c=S.settings.mapa,o=O();const map=L.map(el).setView(M.c?[M.c.lat,M.c.lng]:[c.lat,c.lng],M.c?15:c.zoom);L.tileLayer(OSM,{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);M.map=map;
+ o.ocorrencias.filter(x=>x.lat!=null).forEach(x=>L.circleMarker([x.lat,x.lng],{radius:6,color:'#fff',weight:2,fillColor:PRI[priEf(x)].c,fillOpacity:.95}).bindTooltip('#'+x.num+' '+ocLocal(x)).addTo(map));
+ map.on('click',e=>proxCentro(e.latlng.lat,e.latlng.lng,'Ponto no mapa'));setTimeout(()=>{if(M&&M.map===map){map.invalidateSize({animate:false});proxAtualiza()}},90)}
 
 /* ===================== modais ===================== */
 function abrirModal(html){$('#modalBody').innerHTML=html;$('#modal').classList.remove('hidden');document.body.classList.add('noscroll');$('#modal').scrollTop=0;hydrate($('#modalBody'))}
@@ -840,7 +1012,7 @@ async function criarReal078(quiet){const R=REAL078;const ja=Object.values(S.obra
   const todas=o.servicos.map((sv,i)=>({sid:sv.id,grupo:sv.grupo,item:sv.codigo,ref:sv.ref,desc:sv.descricao,un:sv.unidade,qtd:sv.qtd,preco:sv.preco,bdi:bdiP(o,sv),pbdi:pbdi(o,sv),pbdiFix:+sv.pbdi>0?1:0,anterior:0,qMed:(map[i]||{q:0}).q,valor:(map[i]||{v:0}).v}));
   o.medicoes.push({num:md.num,hist:true,de:md.de,ate:md.ate,fechadaEm:new Date().toISOString(),por:'importado do boletim oficial',somenteConf:false,linhas:[],memoria:[],total:0,antValor:0,acumValor:0,execIds:[],qtds,todas})});
  recomputeHist(o);o.crono={meses:12,pct:R.crono};o.logoEmp=REAL078_LOGO;
- S.obras[o.id]=o;await saveObra(o);if(quiet)return;S.obraId=o.id;S.tab='med';resetF();render();toast('Contrato 078/2026 carregado com as 3 primeiras medições. A próxima medição será a nº 4.',6000)}
+ o.id='o_078_2026';S.obras[o.id]=o;await saveObra(o);if(quiet){o._salvoEm=1;await DB.put('kv','obra:'+o.id,o);return};S.obraId=o.id;S.tab='med';resetF();render();toast('Contrato 078/2026 carregado com as 3 primeiras medições. A próxima medição será a nº 4.',6000)}
 /* ===================== relatórios (HTML) ===================== */
 function docWrap(t,b,land){return '<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>'+esc(t)+'</title><style>'+REPCSS+RDOCSS+'</style></head><body'+(land?' class="landbody"':'')+'>'+b+'</body></html>'}
 function cabDoc(o,titulo,sub){const c=S.settings.cab;return (o.demo?'<div class="demo">DOCUMENTO DE DEMONSTRAÇÃO — SEM VALOR LEGAL</div>':'')+`<div class="cab"><img src="${HEAD()}" style="height:64px"></div><h1>${esc(titulo)}</h1>${sub?`<div class="sub">${sub}</div>`:''}
@@ -886,7 +1058,7 @@ const ACTS={
  impBackup(){$('#fileJson').click()},
  expBackup(){expBackup(O())},
  delObra(){const o=O();if(!confirm('Excluir a obra "'+o.nome+'" e TODOS os seus dados e fotos? Isso não pode ser desfeito.\n\nJá fez o backup?'))return;if(!confirm('Confirma a exclusão definitiva?'))return;
-  idsFotos(o).forEach(id=>{DB.del('fotos',id);fotoCache.delete(id)});DB.del('kv','obra:'+o.id);delete S.obras[o.id];S.obraId=null;render();toast('Obra excluída.')},
+  idsFotos(o).forEach(id=>{DB.del('fotos',id);fotoCache.delete(id)});DB.del('kv','obra:'+o.id);nuvApagar(o.id);delete S.obras[o.id];S.obraId=null;render();toast('Obra excluída.')},
  mClose(){fecharModal(true)},mCancel(){fecharModal(true)},
  zoom(d,el){getFoto(el.dataset.foto).then(src=>{if(!src)return;$('#lb img').src=src;$('#lb').classList.remove('hidden')})},lbClose(){$('#lb').classList.add('hidden')},
  /* ocorrências */
@@ -918,6 +1090,14 @@ const ACTS={
   ids.forEach(id=>{const oc=o.ocorrencias.find(x=>x.id===id);if(!oc)return;oc.semana=w;log(oc,'Programada: '+labSem(w));recalcStatus(o,oc)});S.f.sel={};saveObra(o);render();toast(ids.length+' ocorrência(s) programadas para '+labSem(w)+'.')},
  bulkConf(){const ids=Object.keys(S.f.sel).filter(k=>S.f.sel[k]);if(!ids.length){toast('Selecione ocorrências.');return}const o=O();ids.forEach(id=>{const oc=o.ocorrencias.find(x=>x.id===id);if(!oc)return;oc.priG=oc.priG||oc.priF;oc.priConf=true;log(oc,'Prioridade '+PRI[oc.priG].l+' confirmada');recalcStatus(o,oc)});S.f.sel={};saveObra(o);render()},
  semMov(d){S.f.semDia=addDias(S.f.semDia,+d.n);render()},
+ selTodos(){const o=O();const abertas=o.ocorrencias.filter(x=>x.status!=='medida'&&x.status!=='executada');planLista(o,abertas).forEach(x=>S.f.sel[x.id]=true);render()},selLimpar(){S.f.sel={};render()},
+ proxLimpar(){S.f.plRaio=null;render()},
+ proxAbrir(){const c=S.f.plRaio;M={t:'prox',c:c?{lat:c.lat,lng:c.lng,label:c.label}:null,r:c?c.r:500,q:'',end:'',todas:false,marc:{},achadas:[]};abrirModal(modalProx());proxMapa();setTimeout(proxAtualiza,120)},
+ proxRaio(d){M.r=+d.r;const e=$('#px-r');if(e)e.value=M.r;if(M.circ)M.circ.setRadius(M.r);proxAtualiza()},
+ proxCentroOc(d){const oc=O().ocorrencias.find(x=>x.id===d.id);if(!oc||oc.lat==null){toast('Esta ocorrência não tem coordenadas.');return}proxCentro(oc.lat,oc.lng,'#'+oc.num+' '+ocLocal(oc))},
+ proxEnd(){const q=($('#px-end').value||'').trim();if(!q){toast('Digite o endereço.');return}toast('Buscando…');geocodificar(q+', '+(O().cidade||'')).then(r=>{if(!r.length){$('#px-geo').innerHTML='<p class="small muted">Nenhum resultado. Clique no mapa.</p>';return}M.geo=r;$('#px-geo').innerHTML='<div class="geo">'+r.map((x,i)=>`<button data-act="proxEndEsc" data-i="${i}">${esc(x.display_name.slice(0,110))}</button>`).join('')+'</div>'}).catch(()=>toast('Busca de endereço indisponível. Clique no mapa ou digite as coordenadas.'))},
+ proxEndEsc(d){const x=M.geo[+d.i];proxCentro(+x.lat,+x.lon,x.display_name.slice(0,60));$('#px-geo').innerHTML=''},
+ proxUsar(){if(!M.c){toast('Defina o ponto central.');return}const ids=(M.achadas||[]).filter(id=>M.marc[id]);S.f.plRaio={lat:M.c.lat,lng:M.c.lng,r:M.r,label:M.c.label};S.f.plF='todas';ids.forEach(id=>S.f.sel[id]=true);fecharModal(false);S.tab='plan';render();toast(ids.length+' ocorrência(s) selecionada(s) dentro de '+fDist(S.f.plRaio.r)+'. Atribua a semana e confirme as prioridades.',6000)},
  /* execução */
  exNew(){const o=O();M={t:'ex',novas:[],novo:true,d:{id:'x'+uid(),data:S.f.dia,ocorrenciaId:null,local:{rua:'',bairro:''},med:{c:0,l:0,e:0},itens:[],fotos:[],descCampo:'',desc:'',descOrigem:null,concluiu:false,conferida:false,conferidaPor:null,medicaoNum:null,criadoPor:quem(),criadoEm:new Date().toISOString()}};abrirModal(modalEx(M.d,true));INP.medidas()},
  exEdit(d){const e=O().execucoes.find(x=>x.id===d.id);M={t:'ex',novas:[],novo:false,orig:e.fotos.map(f=>f.id),d:JSON.parse(JSON.stringify(e))};abrirModal(modalEx(M.d,false));INP.medidas()},
@@ -968,6 +1148,7 @@ const ACTS={
  async iaTest(){try{const t=await chamarIA('Responda apenas com a palavra: ok');toast('Conexão OK: '+t.slice(0,40))}catch(e){toast('Falhou: '+e.message,5000)}}
 };
 const CHG={
+ proxTodas(el){M.todas=el.checked;proxAtualiza()},proxChk(el,d){M.marc[d.id]=el.checked},
  nome(el){S.nome=el.value.trim();lsSet('tc_nome',S.nome)},perfil(el){S.perfil=el.value;lsSet('tc_perfil',S.perfil);render()},
  flt(el,d){S.f[d.k]=el.value;render()},
  sel(el,d){S.f.sel[d.id]=el.checked},
@@ -988,6 +1169,9 @@ const CHG={
 };
 const INP={
  fltq(el,d){S.f[d.k]=el.value;render()},
+ proxQ(el){const q=norm(el.value);M.q=el.value;const box=$('#px-sug');if(!q){box.innerHTML='';return}const l=O().ocorrencias.filter(x=>norm([x.rua,x.bairro,x.desc,'#'+x.num].join(' ')).includes(q)).slice(0,8);box.innerHTML=l.map(x=>`<button data-act="proxCentroOc" data-id="${x.id}" ${x.lat==null?'disabled title="sem coordenadas"':''}>#${x.num} ${esc(ocLocal(x))}${x.lat==null?' (sem coordenadas)':''}</button>`).join('')||'<p class="small muted">Nenhuma ocorrência encontrada.</p>'},
+ proxCoord(){const la=num($('#px-lat').value),lo=num($('#px-lng').value);if(isFinite(la)&&isFinite(lo)&&$('#px-lat').value&&$('#px-lng').value&&Math.abs(la)<=90&&Math.abs(lo)<=180){M.c={lat:la,lng:lo,label:'Coordenadas '+fN(la,5)+', '+fN(lo,5)};proxAtualiza()}},
+ proxR(el){const r=Math.max(10,Math.min(50000,Math.round(num(el.value)||0)));if(!r)return;M.r=r;if(M.circ)M.circ.setRadius(r);proxAtualiza()},
  medidas(){const o=$('#medOut');if(!o)return;const m=medidasVals();o.textContent=(m.a||m.v)?'Área = '+fN(m.a)+' m²'+(m.v?' · Volume = '+fN(m.v)+' m³':''):''}
 };
 document.addEventListener('click',e=>{const el=e.target.closest('[data-act]');if(!el||el.disabled)return;const fn=ACTS[el.dataset.act];if(fn){e.preventDefault();fn(el.dataset,el,e)}});
@@ -1005,7 +1189,7 @@ $('#fileBol').addEventListener('change',async e=>{const f=e.target.files[0];e.ta
 $('#fileJson').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{const j=JSON.parse(await f.text());if(j.formato!=='totalcivil-manutencao-ruas'||!j.obra)throw 0;const ob=j.obra;
  if(S.obras[ob.id]&&!confirm('Já existe uma obra com este código neste navegador. Substituir os dados dela pelos do backup?'))return;
  for(const id of Object.keys(j.fotos||{})){await DB.put('fotos',id,{id,obraId:ob.id,data:j.fotos[id]});fotoCache.set(id,j.fotos[id])}S.obras[ob.id]=ob;await saveObra(ob);render();toast('Backup importado: '+ob.nome)}catch(err){toast('Arquivo de backup inválido.')}});
-async function expBackup(o){toast('Gerando backup…');const fotos={};for(const id of idsFotos(o)){const d=await getFoto(id);if(d)fotos[id]=d}baixar('backup_'+o.contrato.replace(/[^\w-]+/g,'_')+'_'+hojeISO()+'.json',JSON.stringify({formato:'totalcivil-manutencao-ruas',versao:1,exportadoEm:new Date().toISOString(),obra:o,fotos}),'application/json')}
+async function expBackup(o){toast('Gerando backup…');const fotos={};for(const id of idsFotos(o)){const d=await getFoto(id);if(d)fotos[id]=d}salvarArquivo('backup_'+o.contrato.replace(/[^\w-]+/g,'_')+'_'+hojeISO()+'.json',JSON.stringify({formato:'totalcivil-manutencao-ruas',versao:1,exportadoEm:new Date().toISOString(),obra:o,fotos}),'application/json')}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){if(!$('#lb').classList.contains('hidden'))ACTS.lbClose();else if(!$('#prev').classList.contains('hidden'))ACTS.prevClose();else if(M)fecharModal(true)}});
 
 /* ===================== demonstração ===================== */
@@ -1039,6 +1223,7 @@ async function criarDemo(){const h=hojeISO(),ont=addDias(h,-1);const o=novaObra(
  const keys=await DB.keys('kv');for(const k of keys){if(String(k).startsWith('obra:')){const o=await DB.get('kv',k);if(o&&o.id)S.obras[o.id]=o}}
  if(!lsGet('tc_demo_off','')){for(const o of Object.values(S.obras)){if(o.demo){idsFotos(o).forEach(id=>{DB.del('fotos',id);fotoCache.delete(id)});await DB.del('kv','obra:'+o.id);delete S.obras[o.id]}}lsSet('tc_demo_off','1')}
  if(!lsGet('tc_seed078','')){if(!Object.values(S.obras).some(x=>x.contrato===REAL078.contrato&&x.contratada===REAL078.contratada))await criarReal078(true);lsSet('tc_seed078','1')}
+ nuvLigar();
  if(!DB.ok)setTimeout(()=>toast('Atenção: este navegador não permite salvar dados (modo privado?). Os dados serão perdidos ao fechar.',7000),600);
  render()})();
 </script>
