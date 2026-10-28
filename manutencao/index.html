@@ -134,11 +134,12 @@ window.TC_GUIAS = {
     {sel:'#busca', titulo:'4 / 4 — Buscar', dica:'Procure por rua, bairro, trecho da descrição ou número da ocorrência.'}
   ],
   plan: [
-    {sel:'[data-k=plF]', titulo:'1 / 5 — Quais ocorrências mostrar', dica:'Escolha entre as que aguardam confirmação de prioridade, as sem semana definida ou todas as abertas.'},
-    {sel:'.list .item', titulo:'2 / 5 — Cada ocorrência', dica:'Use “Planejar” para definir a forma de solução, o serviço do contrato, a quantidade prevista e a semana. “Confirmar prioridade” valida a prioridade sugerida pelo fiscal.'},
-    {sel:'#bulkDia', titulo:'3 / 5 — Semana para vários de uma vez', dica:'Marque as ocorrências, escolha qualquer dia da semana desejada e use “Atribuir semana aos selecionados”. Também dá para confirmar a prioridade de todos os marcados.'},
-    {sel:'input[data-chg=semDia]', titulo:'4 / 5 — Programação semanal', dica:'Escolha o dia para ver a semana programada, agrupada por serviço, com quantidades previstas. Use ◀ e ▶ para trocar de semana.'},
-    {sel:'[data-act=relProg]', titulo:'5 / 5 — Gerar a programação', dica:'Gera o PDF da programação semanal para enviar à empresa contratada.'}
+    {sel:'.card .g4', titulo:'1 / 6 — Custo e saldo do contrato', dica:'Mostra o valor do contrato, o já medido, o conferido a medir e o programado para as próximas semanas. O custo só vira medição depois que o fiscal confere em campo (antes, depois e qualidade). Se a programação passar do saldo, aparece um alerta.'},
+    {sel:'[data-k=plF]', titulo:'2 / 6 — Quais ocorrências mostrar', dica:'Escolha entre as que aguardam confirmação de prioridade, as sem semana definida ou todas as abertas.'},
+    {sel:'.list .item', titulo:'3 / 6 — Cada ocorrência', dica:'Use “Planejar” para definir a forma de solução, o serviço do contrato, a quantidade prevista e a semana. “Confirmar prioridade” valida a prioridade sugerida pelo fiscal.'},
+    {sel:'#bulkDia', titulo:'4 / 6 — Semana para vários de uma vez', dica:'Marque as ocorrências, escolha qualquer dia da semana desejada e use “Atribuir semana aos selecionados”. Também dá para confirmar a prioridade de todos os marcados.'},
+    {sel:'input[data-chg=semDia]', titulo:'5 / 6 — Programação semanal', dica:'Escolha o dia para ver a semana programada, agrupada por serviço, com quantidades previstas. Use ◀ e ▶ para trocar de semana.'},
+    {sel:'[data-act=relProg]', titulo:'6 / 6 — Gerar a programação', dica:'Gera o PDF da programação semanal para enviar à empresa contratada.'}
   ],
   exec: [
     {sel:'input[type=date][data-chg=dia]', titulo:'1 / 9 — Data do diário', dica:'Escolha o dia do RDO. As execuções registradas nesta data aparecem abaixo e alimentam os serviços do relatório.'},
@@ -392,7 +393,7 @@ function telaHome(){const obras=Object.values(S.obras).sort((a,b)=>(a.criadaEm||
  <div class="row gap"><button class="btn" data-act="real078">↺ Recarregar modelo do Contrato 078/2026</button><button class="btn" data-act="impBackup">📂 Importar backup de obra</button></div>
  <div class="alert" style="margin-top:18px">Nesta versão de teste os dados ficam <b>neste navegador</b> (e neste aparelho). Use <b>Obra &amp; Config → Backup</b> para guardar uma cópia. O compartilhamento entre usuários virá com o login do site.</div></section>`}
 function cardObra(o){const n=o.ocorrencias.length,ex=o.ocorrencias.filter(x=>x.status==='executada'||x.status==='medida').length;const med=o.medicoes.reduce((s,m)=>r2(s+m.total),0);
- return `<button class="ocard" data-act="abrir" data-id="${o.id}"><div class="tp"><div class="ic">▤</div><span class="pill">${esc(TIPOS[o.tipo]||'Obra')}</span></div><h3>${esc(o.nome)}${o.demo?' <span class="chip" style="--c:#b7791f">DEMO</span>':''}</h3>
+ return `<button class="ocard" data-act="abrir" data-id="${o.id}"><div class="tp"><div class="ic">▤</div><span class="pill">${esc(TIPOS[o.tipo]||'Obra')}</span></div><h3>${esc(o.nome)}${o.demo?' <span class="chip" style="--c:#b7791f">DEMO</span>':''}${o.encerrada?' <span class="chip" style="--c:#5a6075">🔒 encerrado</span>':''}${o.renovacaoDe?' <span class="chip" style="--c:#2563a8">renovação</span>':''}</h3>
  <div class="ds">${esc(o.contratada||'Contratada não informada')}<br>Contrato nº ${esc(o.contrato||'—')}</div>
  <div class="pr">${n} <small>ocorrências · ${ex} executadas</small></div><div class="pr" style="font-size:15px">${fR(med)} <small>medido até hoje</small></div>
  <div class="ft"><span>${o.fiscal?'Fiscal: '+esc(o.fiscal):'Sem fiscal definido'}</span><b>Abrir →</b></div></button>`}
@@ -436,6 +437,7 @@ function ocCard(o,oc,plan){const sv=svcOf(o,oc.servicoId||oc.servSug);
  <div class="chips">${chipP(priEf(oc))}${oc.priConf?'<span class="chip" style="--c:#2e7d4f">prioridade confirmada</span>':'<span class="chip" style="--c:#b7791f">aguardando gestor</span>'}${chipS(oc.status)}${oc.lat!=null?'<span class="chip" style="--c:#2e7d4f">📍 coordenadas</span>':'<span class="chip" style="--c:#b7791f">sem coordenadas</span>'}</div>
  <div class="small">${esc((oc.desc||'').slice(0,160))}${(oc.desc||'').length>160?'…':''}</div>
  ${sv?`<div class="small muted">Serviço: ${esc(sv.descricao)}</div>`:''}
+ ${plan&&custoPlan(o,oc)?`<div class="small"><span class="chip" style="--c:#7b3fb0">💲 previsto ${fR(custoPlan(o,oc))}</span></div>`:''}
  ${plan&&DIST.has(oc.id)?`<div class="small"><span class="chip" style="--c:#2563a8">📏 a ${fDist(DIST.get(oc.id))} do ponto</span></div>`:''}
  ${oc.semana?`<div class="small muted">🗓 ${labSem(oc.semana)}${oc.qtdPlan?' · previsto '+fN(oc.qtdPlan)+' '+esc(sv?sv.unidade:''):''}</div>`:''}
  ${thumbsMini(oc.fotos)}
@@ -443,7 +445,7 @@ function ocCard(o,oc,plan){const sv=svcOf(o,oc.servicoId||oc.servSug);
 function tPlan(o){const f=S.f;const abertas=o.ocorrencias.filter(x=>x.status!=='medida'&&x.status!=='executada');
  const l=planLista(o,abertas);
  const w=isoWeek(f.semDia);const doW=o.ocorrencias.filter(x=>x.semana===w&&x.status!=='medida');const grupos={};doW.forEach(x=>{const k=x.servicoId||'_';(grupos[k]=grupos[k]||[]).push(x)});
- return `${can('plan')?'':'<div class="alert">Somente o Gestor / Secretário confirma prioridades e programa as semanas. Troque o perfil no topo para testar.</div>'}
+ return `${planSaldoCard(o)}<div style="height:16px"></div>${can('plan')?'':'<div class="alert">Somente o Gestor / Secretário confirma prioridades e programa as semanas. Troque o perfil no topo para testar.</div>'}
  <div class="card"><h3>1. Prioridades e programação</h3><p class="muted small">O gestor confirma a prioridade sugerida pelo fiscal (ou altera), escolhe a semana e a forma de solução.</p>
  <div class="toolbar"><label>Mostrar<select data-chg="flt" data-k="plF"><option value="pend" ${f.plF==='pend'?'selected':''}>Aguardando confirmação de prioridade</option><option value="sem" ${f.plF==='sem'?'selected':''}>Sem semana definida</option><option value="todas" ${f.plF==='todas'?'selected':''}>Todas as abertas</option></select></label>
  <label>Atribuir à semana (qualquer dia da semana)<input type="date" id="bulkDia" value="${f.semDia}"></label>
@@ -453,7 +455,7 @@ function tPlan(o){const f=S.f;const abertas=o.ocorrencias.filter(x=>x.status!=='
  <div class="list">${l.map(oc=>ocCard(o,oc,true)).join('')||'<p class="muted">Nada pendente neste filtro.</p>'}</div></div>
  <div class="card" style="margin-top:16px"><h3>2. Programação semanal</h3>
  <div class="toolbar"><button class="btn sm" data-act="semMov" data-n="-7">◀</button><label>Dia da semana<input type="date" value="${f.semDia}" data-chg="semDia"></label><button class="btn sm" data-act="semMov" data-n="7">▶</button><b>${labSem(w)}</b><span class="sp"></span><button class="btn pri" data-act="relProg">📄 Gerar programação semanal (PDF)</button></div>
- ${Object.keys(grupos).map(k=>{const sv=svcOf(o,k);const q=r2(grupos[k].reduce((s,x)=>s+(x.qtdPlan||0),0));return `<h4 style="margin-top:12px">${esc(sv?sv.descricao:'Sem serviço definido')} <span class="muted small">— ${grupos[k].length} local(is)${sv&&q?' · previsto '+fN(q)+' '+esc(sv.unidade):''}</span></h4>${grupos[k].sort(ordPri).map(x=>`<p class="small">${chipP(priEf(x))} #${x.num} ${esc(ocLocal(x))}${x.solucao?' — <span class="muted">'+esc(x.solucao.slice(0,90))+'</span>':''}</p>`).join('')}`}).join('')||'<p class="muted">Nenhuma ocorrência programada para esta semana.</p>'}</div>`}
+ ${Object.keys(grupos).map(k=>{const sv=svcOf(o,k);const q=r2(grupos[k].reduce((s,x)=>s+(x.qtdPlan||0),0));return `<h4 style="margin-top:12px">${esc(sv?sv.descricao:'Sem serviço definido')} <span class="muted small">— ${grupos[k].length} local(is)${sv&&q?' · previsto '+fN(q)+' '+esc(sv.unidade)+' · '+fR(t2(q*pbdi(o,sv))):''}</span></h4>${grupos[k].sort(ordPri).map(x=>`<p class="small">${chipP(priEf(x))} #${x.num} ${esc(ocLocal(x))}${x.solucao?' — <span class="muted">'+esc(x.solucao.slice(0,90))+'</span>':''}</p>`).join('')}`}).join('')||'<p class="muted">Nenhuma ocorrência programada para esta semana.</p>'}</div>`}
 function tExec(o){const dia=S.f.dia;const d=getDia(o,dia);const exs=o.execucoes.filter(e=>e.data===dia);const pend=o.execucoes.filter(e=>!e.conferida).sort((a,b)=>a.data.localeCompare(b.data));
  const grid=(k,lista)=>`<div class="efg">${lista.map((n,i)=>`<label class="efc"><span>${esc(n)}</span><input inputmode="numeric" placeholder="-" value="${d[k][i]?esc(d[k][i]):''}" data-chg="diario" data-k="${k}.${i}"></label>`).join('')}</div>`;
  const csel=(k)=>`<select data-chg="diario" data-k="clima.${k}">${[['','—'],['sol','Sol'],['nubl','Nublado'],['chuva','Chuva']].map(([v,l])=>`<option value="${v}" ${d.clima[k]===v?'selected':''}>${l}</option>`).join('')}</select>`;
@@ -469,10 +471,10 @@ function tExec(o){const dia=S.f.dia;const d=getDia(o,dia);const exs=o.execucoes.
  ${pend.length?`<h3 style="margin:22px 0 8px">Aguardando conferência do fiscal (${pend.length})</h3><div class="list">${pend.filter(e=>e.data!==dia).map(e=>exCard(o,e)).join('')}</div>`:''}`}
 function exCard(o,e){const L=localEx(o,e);const itens=e.itens.map(i=>{const s=svcOf(o,i.servicoId);return s?esc(s.descricao)+': <b>'+fN(i.qtd)+' '+esc(s.unidade)+'</b>':''}).join('<br>');
  return `<article class="item"><div class="hd"><div><span class="num">${fData(e.data)}</span> <b>${esc(L.txt)}</b></div></div>
- <div class="chips">${L.oc?`<span class="chip" style="--c:#2563a8">ocorrência #${L.oc.num}</span>`:'<span class="chip" style="--c:#5a6075">avulso</span>'}${e.conferida?'<span class="chip" style="--c:#2e7d4f">✔ conferida</span>':'<span class="chip" style="--c:#b7791f">a conferir</span>'}${e.medicaoNum?`<span class="chip" style="--c:#5a6075">medição nº ${e.medicaoNum}</span>`:''}${e.concluiu?'<span class="chip" style="--c:#2e7d4f">serviço concluído</span>':''}</div>
+ <div class="chips">${L.oc?`<span class="chip" style="--c:#2563a8">ocorrência #${L.oc.num}</span>`:'<span class="chip" style="--c:#5a6075">avulso</span>'}${e.conferida?'<span class="chip" style="--c:#2e7d4f">✔ conferida · qualidade aprovada</span>':e.qualidade==='reprovada'?'<span class="chip" style="--c:#c0392b" title="'+esc(e.parecer||'')+'">✖ reprovada — refazer</span>':'<span class="chip" style="--c:#b7791f">a conferir</span>'}${e.medicaoNum?`<span class="chip" style="--c:#5a6075">medição nº ${e.medicaoNum}</span>`:''}${e.concluiu?'<span class="chip" style="--c:#2e7d4f">serviço concluído</span>':''}</div>
  <div class="small">${itens||'<span class="muted">Sem quantidades</span>'}</div><div class="small muted">${esc((e.desc||e.descCampo||'').slice(0,170))}${(e.desc||e.descCampo||'').length>170?'…':''}</div>${thumbsMini(e.fotos)}
  <div class="row gap"><button class="btn sm" data-act="exEdit" data-id="${e.id}">${e.medicaoNum?'Ver':'Abrir / editar'}</button>
- <button class="btn sm" data-act="exConf" data-id="${e.id}" ${can('conferir')&&!e.medicaoNum?'':'disabled'}>${e.conferida?'↩ Desfazer conferência':'✔ Conferir'}</button></div></article>`}
+ <button class="btn sm" data-act="exConf" data-id="${e.id}" ${can('conferir')&&!e.medicaoNum?'':'disabled'}>${e.conferida?'↩ Desfazer conferência':'✔ Conferir em campo'}</button></div></article>`}
 function tMapa(o){const f=S.f;const n=o.ocorrencias.filter(x=>x.lat!=null).length;
  return `<div class="toolbar"><label>Situação<select data-chg="flt" data-k="mapSt"><option value="">Todas</option>${Object.entries(ST).map(([k,v])=>`<option value="${k}" ${f.mapSt===k?'selected':''}>${v.l}</option>`).join('')}</select></label><button class="btn" data-act="mapFit">⌖ Enquadrar todas</button><span class="muted small">${n} de ${o.ocorrencias.length} ocorrências com coordenadas</span></div>
  <div class="legend"><span><i style="background:${PRI.alta.c}"></i>Alta</span><span><i style="background:${PRI.media.c}"></i>Média</span><span><i style="background:${PRI.baixa.c}"></i>Baixa</span><span><i style="background:#2e7d4f;border:2px solid #fff;box-shadow:0 0 0 1px #2e7d4f"></i>Executada/medida</span></div><div id="mapa" class="mapbox"></div>`}
@@ -525,7 +527,7 @@ function tCfg(o){const c=S.settings,ia=c.ia;const tot=o.servicos.reduce((s,x)=>r
  ${ia.prov==='meta'?`<label>Endereço da API<input value="${esc(ia.metaUrl)}" data-chg="cfg" data-k="ia.metaUrl"></label><label>Chave da API<input type="password" autocomplete="off" value="${esc(ia.metaKey)}" data-chg="cfg" data-k="ia.metaKey"></label><label>Modelo<input value="${esc(ia.metaModel)}" data-chg="cfg" data-k="ia.metaModel"></label><p class="small muted">Pode exigir um servidor intermediário (CORS). Confira endereço e modelo na documentação do provedor.</p>`:''}
  ${ia.prov!=='local'?`<p class="small muted">⚠ A chave fica salva só neste navegador. Para vender o programa, a chamada à IA deve passar por um servidor seu, nunca pelo navegador do cliente.</p><button class="btn sm" data-act="iaTest">Testar conexão</button>`:''}</div></div>
  <div class="card" style="margin-top:16px"><h3>Backup desta obra</h3><p class="muted small">Gera um arquivo .json só desta obra (com as fotos). Guarde uma cópia: os dados ficam neste navegador.</p>
- <div class="row gap"><button class="btn" data-act="expBackup">⬇ Exportar backup</button><button class="btn" data-act="impBackup">📂 Importar backup</button><span class="sp"></span><button class="btn dan" data-act="delObra" ${g?'':'disabled'}>🗑 Excluir esta obra</button></div></div>`}
+ <div class="row gap"><button class="btn" data-act="expBackup">⬇ Exportar backup</button><button class="btn" data-act="impBackup">📂 Importar backup</button><span class="sp"></span><button class="btn" data-act="renovAbrir" ${g?'':'disabled'} title="Encerra este contrato e abre um novo ciclo com saldo zerado">🔁 Renovar contrato</button><button class="btn dan" data-act="delObra" ${g?'':'disabled'}>🗑 Excluir esta obra</button></div></div>`}
 
 /* ===================== NUVEM (login único do site) + SALVAR COMO ===================== */
 /* Cada obra é salva sozinha na nuvem (Firebase do site), ligada ao seu login, e continua salva no aparelho.
@@ -624,6 +626,61 @@ function proxMapa(){const el=$('#pxMap');if(!el)return;if(typeof L==='undefined'
  const c=S.settings.mapa,o=O();const map=L.map(el).setView(M.c?[M.c.lat,M.c.lng]:[c.lat,c.lng],M.c?15:c.zoom);L.tileLayer(OSM,{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);M.map=map;
  o.ocorrencias.filter(x=>x.lat!=null).forEach(x=>L.circleMarker([x.lat,x.lng],{radius:6,color:'#fff',weight:2,fillColor:PRI[priEf(x)].c,fillOpacity:.95}).bindTooltip('#'+x.num+' '+ocLocal(x)).addTo(map));
  map.on('click',e=>proxCentro(e.latlng.lat,e.latlng.lng,'Ponto no mapa'));setTimeout(()=>{if(M&&M.map===map){map.invalidateSize({animate:false});proxAtualiza()}},90)}
+
+/* ===================== conferência em campo, custo previsto/saldo e renovação ===================== */
+const custoPlan=(o,oc)=>{const sv=svcOf(o,oc.servicoId);return sv&&oc.qtdPlan?t2(oc.qtdPlan*pbdi(o,sv)):0};
+function saldoPlan(o){const base=o.valor>0?o.valor:o.servicos.reduce((s,x)=>r2(s+t2(x.qtd*pbdi(o,x))),0);
+ const medido=o.medicoes.reduce((s,m)=>r2(s+m.total),0);const R=calcMed(o,{de:'',ate:'',conf:true,rep:false});
+ let pend=0;o.execucoes.filter(e=>!e.conferida&&!e.medicaoNum).forEach(e=>e.itens.forEach(i=>{const sv=svcOf(o,i.servicoId);if(sv)pend=r2(pend+t2((num(i.qtd)||0)*pbdi(o,sv)))}));
+ const prog=o.ocorrencias.filter(x=>x.status!=='medida'&&x.status!=='executada'&&x.semana&&x.servicoId&&x.qtdPlan);
+ const progV=prog.reduce((s,x)=>r2(s+custoPlan(o,x)),0);
+ return {base,medido,aMedir:R.total,pend,prog:progV,nProg:prog.length,livre:r2(base-medido-R.total-pend-progV)}}
+function planSaldoCard(o){const s=saldoPlan(o);const pct=v=>s.base>0?Math.max(0,Math.min(100,v/s.base*100)):0;
+ const sem={};o.ocorrencias.filter(x=>x.status!=='medida'&&x.status!=='executada'&&x.semana&&custoPlan(o,x)).forEach(x=>{(sem[x.semana]=sem[x.semana]||{n:0,v:0});sem[x.semana].n++;sem[x.semana].v=r2(sem[x.semana].v+custoPlan(o,x))});
+ let acc=r2(s.base-s.medido-s.aMedir-s.pend);const linhas=Object.keys(sem).sort().map(w=>{acc=r2(acc-sem[w].v);return `<tr><td>${labSem(w)}</td><td class="r">${sem[w].n}</td><td class="r">${fN(sem[w].v)}</td><td class="r ${acc<0?'neg':''}">${fN(acc)}${acc<0?' ⚠':''}</td></tr>`}).join('');
+ return `<div class="card"><h3>💰 Custo e saldo do contrato</h3><p class="muted small">O custo só vira medição depois que a empresa executa e o <b>fiscal confere em campo</b> (fotos do antes e do depois + qualidade aprovada). Aqui você acompanha o que já foi medido, o que está a medir e o que está <b>programado</b> para as próximas semanas, para a programação não passar do saldo.</p>
+ <div class="g4"><p>Valor do contrato<br><b>${fR(s.base)}</b></p><p>Já medido<br><b>${fR(s.medido)}</b></p><p>Conferido a medir<br><b>${fR(s.aMedir)}</b></p><p>Executado, aguardando conferência<br><b>${fR(s.pend)}</b></p></div>
+ <div class="g4"><p>Programado (${s.nProg} ocorrência(s))<br><b>${fR(s.prog)}</b></p><p>Saldo livre após a programação<br><b class="${s.livre<0?'neg':''}">${fR(s.livre)}</b></p></div>
+ <div class="bar"><i style="width:${pct(s.medido+s.aMedir+s.pend+s.prog)}%;${s.livre<0?'background:#c0392b':''}"></i></div>
+ ${s.livre<0?`<div class="alert bad" style="margin-top:8px">⚠ A programação ultrapassa o saldo do contrato em ${fR(-s.livre)}. Reduza a programação ou renove o contrato (Obra &amp; Config → Renovar contrato).</div>`:''}
+ ${linhas?`<div class="tablewrap" style="margin-top:8px"><table class="tb"><thead><tr><th>Semana programada</th><th class="r">Ocorrências</th><th class="r">Custo previsto (R$)</th><th class="r">Saldo após a semana (R$)</th></tr></thead><tbody>${linhas}</tbody></table></div>`:'<p class="small muted">Nenhuma ocorrência programada com serviço e quantidade — o custo previsto aparece aqui.</p>'}</div>`}
+/* conferência em campo */
+function fotosConf(e,o){const oc=e.ocorrenciaId?o.ocorrencias.find(x=>x.id===e.ocorrenciaId):null;
+ const antes=[...(oc?oc.fotos:[]),...e.fotos].filter(f=>f.fase==='antes');const depois=e.fotos.filter(f=>f.fase==='depois');return {antes,depois}}
+function modalConf(e){const o=O(),L=localEx(o,e),F=fotosConf(e,o);
+ const th=l=>l.length?`<div class="thumbs">${l.map(f=>`<figure class="th"><img data-foto="${f.id}" data-act="zoom" alt=""></figure>`).join('')}</div>`:'<p class="small neg">Nenhuma foto.</p>';
+ const itens=e.itens.map(i=>{const s=svcOf(o,i.servicoId);return s?esc(s.descricao)+': <b>'+fN(i.qtd)+' '+esc(s.unidade)+'</b>':''}).filter(Boolean).join('<br>');
+ const pronto=F.antes.length&&F.depois.length;
+ return `<div class="mh"><h3>Conferência em campo — ${fData(e.data)}</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+ <p><b>${esc(L.txt)}</b></p><p class="small">${itens||'<span class="muted">Sem quantidades</span>'}</p>
+ <div class="cols"><div><h4>Antes ${F.antes.length?'<span class="chip" style="--c:#2e7d4f">✔</span>':'<span class="chip" style="--c:#c0392b">falta</span>'}</h4>${th(F.antes)}</div><div><h4>Depois ${F.depois.length?'<span class="chip" style="--c:#2e7d4f">✔</span>':'<span class="chip" style="--c:#c0392b">falta</span>'}</h4>${th(F.depois)}</div></div>
+ ${pronto?'':'<div class="alert bad" style="margin-top:8px">Para aprovar é preciso ter foto do <b>antes</b> e do <b>depois</b>. O “antes” pode vir da vistoria da ocorrência. Abra a execução e anexe a foto que falta (fase “depois” ou “antes”).</div>'}
+ <fieldset style="margin-top:10px"><legend>Parecer de qualidade</legend>
+ <label class="chk"><input type="radio" name="cf-q" value="aprovada" checked> ✔ Qualidade aprovada — o serviço pode ser medido</label>
+ <label class="chk"><input type="radio" name="cf-q" value="reprovada"> ✖ Reprovar — a empresa deve refazer/corrigir</label>
+ <label>Observações do fiscal <span class="muted small">(obrigatório se reprovar)</span><textarea id="cf-obs" placeholder="ex.: serviço conferido em campo, sem desnível, junta selada.">${esc(e.parecer||'')}</textarea></label>
+ <label class="chk"><input type="checkbox" id="cf-campo"> Conferi o serviço em campo, no local</label></fieldset>
+ <div class="row gap" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mClose">Cancelar</button><button class="btn" data-act="exEdit" data-id="${e.id}">📷 Abrir execução (anexar fotos)</button><button class="btn pri" data-act="confOk" data-id="${e.id}">Confirmar conferência</button></div></div>`}
+/* renovação do contrato */
+function modalRenovar(o){return `<div class="mh"><h3>🔁 Renovar contrato (novo ciclo)</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+ <p class="muted small">Cria uma <b>nova obra</b> para o contrato renovado, com saldo zerado e medições recomeçando na <b>1ª</b>. O contrato atual (nº ${esc(o.contrato)}) fica <b>encerrado</b>, guardado com todas as medições, fotos e relatórios.</p>
+ <div class="g2"><label>Novo nº do contrato *<input id="rn-contrato" value="${esc(o.contrato)}-RENOV"></label><label>Processo<input id="rn-proc" value="${esc(o.processo||'')}"></label></div>
+ <div class="g3"><label>Novo valor do contrato (R$) *<input id="rn-valor" inputmode="decimal" value="${inp(o.valor)}"></label><label>Início da vigência<input type="date" id="rn-ini" value="${hojeISO()}"></label><label>Fim da vigência<input type="date" id="rn-fim" value=""></label></div>
+ <label class="chk"><input type="checkbox" id="rn-oc" checked> Levar as ocorrências que ainda não foram executadas (com fotos)</label>
+ <label class="chk"><input type="checkbox" id="rn-sv" checked> Manter a planilha de serviços (quantidades e preços) para eu ajustar ou importar a nova</label>
+ <div id="rn-erro" class="neg small" style="min-height:18px"></div>
+ <div class="row gap" style="justify-content:flex-end"><button class="btn" data-act="mClose">Cancelar</button><button class="btn pri" data-act="renovOk">Renovar contrato</button></div></div>`}
+async function renovar(){const o=O();const g=id=>$(id).value;const er=m=>{$('#rn-erro').textContent=m};
+ const contrato=g('#rn-contrato').trim(),valor=num(g('#rn-valor'));if(!contrato){er('Informe o novo nº do contrato.');return}if(contrato===o.contrato){er('O novo contrato precisa ter outro número.');return}if(!(valor>0)){er('Informe o novo valor.');return}
+ const n=JSON.parse(JSON.stringify(o));n.id='o'+uid();n.criadaEm=new Date().toISOString();n.contrato=contrato;n.processo=g('#rn-proc').trim();n.valor=valor;n.inicio=g('#rn-ini');n.fim=g('#rn-fim');
+ n.medicoes=[];n.execucoes=[];n.diario={};n.crono=null;n._salvoEm=Date.now();delete n._dono;n.renovacaoDe={id:o.id,contrato:o.contrato,medicoes:o.medicoes.length,medido:o.medicoes.reduce((s,m)=>r2(s+m.total),0),em:new Date().toISOString()};
+ if(!$('#rn-sv').checked)n.servicos=[];
+ n.ocorrencias=[];n.seq=0;
+ if($('#rn-oc').checked){for(const x of o.ocorrencias.filter(x=>x.status!=='executada'&&x.status!=='medida')){const c=JSON.parse(JSON.stringify(x));c.id='c'+uid();c.num=++n.seq;c.hist=(c.hist||[]).concat([{q:new Date().toISOString(),quem:quem(),acao:'Ocorrência trazida do contrato '+o.contrato+' (nº '+x.num+') na renovação'}]);
+   for(const f of c.fotos||[]){const d=await getFoto(f.id);const id='f'+uid();if(d){await DB.put('fotos',id,{id,obraId:n.id,data:d});fotoCache.set(id,d)}f.id=id}
+   n.ocorrencias.push(c)}}
+ o.encerrada=true;o.encerradaEm=new Date().toISOString();o.renovadaPara={id:n.id,contrato:n.contrato};
+ S.obras[n.id]=n;await saveObra(n);await saveObra(o);fecharModal(false);S.obraId=n.id;S.tab='cfg';resetF();render();toast('Contrato '+contrato+' criado. O contrato '+o.contrato+' foi encerrado e continua guardado. Ajuste a planilha de serviços e o valor na aba Obra & Config.',8000)}
 
 /* ===================== modais ===================== */
 function abrirModal(html){$('#modalBody').innerHTML=html;$('#modal').classList.remove('hidden');document.body.classList.add('noscroll');$('#modal').scrollTop=0;hydrate($('#modalBody'))}
@@ -1118,7 +1175,12 @@ const ACTS={
   [antOc,d.ocorrenciaId].filter((v,i,a)=>v&&a.indexOf(v)===i).forEach(id=>{const oc=o.ocorrencias.find(x=>x.id===id);if(oc){log(oc,'Execução registrada em '+fData(d.data));recalcStatus(o,oc)}});
   M.novas=[];S.f.dia=d.data;saveObra(o);fecharModal();render()},
  exDel(){const o=O(),d=M.d;if(!confirm('Excluir esta execução?'))return;d.fotos.forEach(f=>{DB.del('fotos',f.id);fotoCache.delete(f.id)});o.execucoes=o.execucoes.filter(x=>x.id!==d.id);const oc=o.ocorrencias.find(x=>x.id===d.ocorrenciaId);recalcStatus(o,oc);M.novas=[];saveObra(o);fecharModal();render()},
- exConf(d){const o=O(),e=o.execucoes.find(x=>x.id===d.id);e.conferida=!e.conferida;e.conferidaPor=e.conferida?quem()+' em '+fDH(new Date().toISOString()):null;saveObra(o);render()},
+ exConf(d){const o=O(),e=o.execucoes.find(x=>x.id===d.id);if(e.conferida){e.conferida=false;e.conferidaPor=null;e.qualidade=null;saveObra(o);render();return}M={t:'conf',id:e.id};abrirModal(modalConf(e))},
+ confOk(d){const o=O(),e=o.execucoes.find(x=>x.id===d.id);if(!e)return;const F=fotosConf(e,o);const q=(document.querySelector('input[name=cf-q]:checked')||{}).value,obs=($('#cf-obs').value||'').trim();
+  if(q==='reprovada'){if(!obs){toast('Explique o motivo da reprovação.');return}e.conferida=false;e.qualidade='reprovada';e.parecer=obs;e.conferidaPor=null;const oc=e.ocorrenciaId&&o.ocorrencias.find(x=>x.id===e.ocorrenciaId);if(oc)log(oc,'Execução de '+fData(e.data)+' reprovada pelo fiscal: '+obs);saveObra(o);fecharModal(false);render();toast('Execução reprovada. A empresa deve refazer e o custo não entra na medição.',6000);return}
+  if(!F.antes.length||!F.depois.length){toast('Falta foto do antes e/ou do depois.');return}if(!$('#cf-campo').checked){toast('Marque que conferiu o serviço em campo.');return}
+  e.conferida=true;e.qualidade='aprovada';e.parecer=obs;e.conferidaPor=quem()+' em '+fDH(new Date().toISOString());e.conferidaEm=new Date().toISOString();const oc=e.ocorrenciaId&&o.ocorrencias.find(x=>x.id===e.ocorrenciaId);if(oc)log(oc,'Execução de '+fData(e.data)+' conferida em campo, qualidade aprovada');saveObra(o);fecharModal(false);render();toast('Conferência aprovada: o serviço entra na próxima medição.')},
+ renovAbrir(){M={t:'renov'};abrirModal(modalRenovar(O()))},renovOk(){renovar()},
  diaAdd(d){const x=getDia(O(),S.f.dia);x[d.k].push({f:'',q:1});saveObra(O());render()},diaDel(d){const x=getDia(O(),S.f.dia);x[d.k].splice(+d.i,1);saveObra(O());render()},
  mapFit(){if(S.mapObj&&S.mapPts&&S.mapPts.length)S.mapObj.fitBounds(S.mapPts,{padding:[40,40],maxZoom:17,animate:false})},
  /* medição */
