@@ -202,7 +202,7 @@ window.TC_GUIAS = {
 <input type="file" id="fileCam" accept="image/*" capture="environment" hidden>
 <input type="file" id="fileJson" accept=".json,application/json" hidden>
 <input type="file" id="fileLogo" accept="image/*" hidden>
-<input type="file" id="filePlan" accept=".xlsx,.xls,.csv" hidden><input type="file" id="fileBol" accept=".xlsx,.xls" hidden>
+<input type="file" id="fileOc" accept=".xlsx,.xls,.csv" hidden><input type="file" id="filePlan" accept=".xlsx,.xls,.csv" hidden><input type="file" id="fileBol" accept=".xlsx,.xls" hidden>
 <datalist id="dlFunc"><option>Encarregado</option><option>Servente</option><option>Pedreiro</option><option>Motorista</option><option>Operador de máquina</option><option>Rasteleiro</option><option>Auxiliar de topografia</option><option>Engenheiro responsável</option></datalist>
 <datalist id="dlEq"><option>Caminhão basculante</option><option>Retroescavadeira</option><option>Motoniveladora</option><option>Rolo compactador</option><option>Pá carregadeira</option><option>Escavadeira hidráulica</option><option>Caminhão pipa</option><option>Vibroacabadora</option><option>Compactador de placa</option><option>Fresadora</option></datalist>
 
@@ -430,6 +430,7 @@ function thumbsMini(fotos){return fotos.length?`<div class="mt">${fotos.slice(0,
 function tVistoria(o){const l=filtraOc(o);const f=S.f;
  return `<div class="toolbar"><button class="btn pri" data-act="ocNew" ${can('ocorr')?'':'disabled'}>＋ Nova ocorrência</button>
  <button class="btn pri" data-act="ocRapido" ${can('ocorr')?'':'disabled'} title="Abre a ocorrência, pega a sua localização e já abre a câmera">📍 Minha localização · registro rápido</button>
+ <button class="btn" data-act="ocImportar" ${can('ocorr')?'':'disabled'} title="Traz várias ocorrências de uma planilha Excel (ex.: mapa de ocorrências da prefeitura)">📥 Importar ocorrências (Excel)</button>
  <label>Situação<select data-chg="flt" data-k="ocSt"><option value="">Todas</option>${Object.entries(ST).map(([k,v])=>`<option value="${k}" ${f.ocSt===k?'selected':''}>${v.l}</option>`).join('')}</select></label>
  <label>Prioridade<select data-chg="flt" data-k="ocPri"><option value="">Todas</option>${Object.entries(PRI).map(([k,v])=>`<option value="${k}" ${f.ocPri===k?'selected':''}>${v.l}</option>`).join('')}</select></label>
  <label style="flex:1;min-width:180px">Buscar<input id="busca" placeholder="rua, bairro, descrição, nº" value="${esc(f.ocQ)}" data-inp="fltq" data-k="ocQ"></label></div>
@@ -740,6 +741,22 @@ function exNovo(oc){const d={id:'x'+uid(),data:S.f.dia,ocorrenciaId:null,local:{
  if(oc){d.ocorrenciaId=oc.id;d.local={rua:oc.rua||'',bairro:oc.bairro||''};if(oc.med)d.med={c:oc.med.c||0,l:oc.med.l||0,e:0};const sid=oc.servicoId||oc.servSug;if(sid)d.itens=[{servicoId:sid,qtd:oc.qtdPlan||''}]}
  M={t:'ex',novas:[],novo:true,d};abrirModal(modalEx(M.d,true));INP.medidas()}
 
+/* ===================== importar ocorrências de planilha ===================== */
+const _hk=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,'');
+const _dBR=v=>{if(v instanceof Date&&!isNaN(v))return v.toISOString().slice(0,10);const m=/^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(String(v||'').trim());if(m)return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');return /^\d{4}-\d\d-\d\d/.test(String(v||''))?String(v).slice(0,10):''};
+function ocLerPlanilha(wb){const ws=wb.Sheets[wb.SheetNames[0]];const rows=XLSX.utils.sheet_to_json(ws,{defval:'',raw:false,dateNF:'dd/mm/yyyy'});const out=[];
+ rows.forEach(r=>{const k={};Object.keys(r).forEach(h=>k[_hk(h)]=r[h]);const g=(...n)=>{for(const x of n)if(k[x]!==undefined&&String(k[x]).trim()!=='')return String(k[x]).trim();return ''};
+  const rua=g('rua','ruaelocal','endereco','logradouro'),bairro=g('bairro'),desc=g('descricao','ocorrencia','problema');if(!rua&&!bairro&&!desc)return;
+  const pr=_hk(g('prioridade'));const num=v=>{const n=parseFloat(String(v).replace(',','.'));return isFinite(n)?n:null};
+  out.push({ext:g('idexterno','id','codigo','nodomapa'),rua,bairro,ref:g('referencia','pontodereferencia','setor'),desc,data:_dBR(g('datadaocorrencia','data','primeirorelato')),pri:pr.startsWith('alta')?'alta':pr.startsWith('baixa')?'baixa':'media',lat:num(g('latitude','lat')),lng:num(g('longitude','long','lng'))})});
+ return out}
+function modalImpOc(m){const n=m.lista.length,ja=m.ja.length,at=m.atual.length,sr=m.lista.filter(x=>!x.rua).length;
+ return `<div class="mh"><h3>📥 Importar ocorrências</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+ <p class="small muted">Arquivo: <b>${esc(m.arq)}</b> — ${m.total} linha(s) lida(s).</p>
+ <div class="kpis"><div class="kpi"><div class="v">${n}</div><div class="l">novas a importar</div></div><div class="kpi"><div class="v">${ja}</div><div class="l">já existem (puladas)</div></div><div class="kpi"><div class="v">${at}</div><div class="l">com coordenadas atualizadas</div></div><div class="kpi"><div class="v">${sr}</div><div class="l">sem nome de rua</div></div></div>
+ <div class="alert" style="background:#eef4fb;border-color:#2563a8">As ocorrências entram como <b>Vistoriada</b>, sem fotos e sem coordenadas (se a planilha não trouxer). Complete pelo celular na aba Vistoria, usando o registro rápido, conforme for atendendo. Importar de novo o mesmo arquivo não duplica.</div>
+ <div class="tablewrap" style="max-height:34vh;overflow:auto"><table><thead><tr><th>ID</th><th>Rua / local</th><th>Bairro</th><th>Prioridade</th><th>Data</th></tr></thead><tbody>${m.lista.slice(0,60).map(x=>`<tr><td>${esc(x.ext)}</td><td>${esc(x.rua||'—')}</td><td>${esc(x.bairro||'—')}</td><td>${PRI[x.pri].l}</td><td>${x.data?fData(x.data):'—'}</td></tr>`).join('')}</tbody></table></div>${n>60?`<p class="small muted">… e mais ${n-60}.</p>`:''}
+ <div class="row gap" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mClose">Cancelar</button><button class="btn pri" data-act="ocImportOk" ${n||at?'':'disabled'}>Importar ${n} ocorrência(s)</button></div></div>`}
 /* ===================== modais ===================== */
 function abrirModal(html){$('#modalBody').innerHTML=html;$('#modal').classList.remove('hidden');document.body.classList.add('noscroll');$('#modal').scrollTop=0;hydrate($('#modalBody'))}
 function fecharModal(limpar){if(M&&limpar&&M.novas)M.novas.forEach(id=>{DB.del('fotos',id);fotoCache.delete(id)});if(M&&M.map){M.map.remove()}M=null;$('#modal').classList.add('hidden');document.body.classList.remove('noscroll')}
@@ -1222,6 +1239,11 @@ const ACTS={
  proxEndEsc(d){const x=M.geo[+d.i];proxCentro(+x.lat,+x.lon,x.display_name.slice(0,60));$('#px-geo').innerHTML=''},
  proxUsar(){if(!M.c){toast('Defina o ponto central.');return}const ids=(M.achadas||[]).filter(id=>M.marc[id]);S.f.plRaio={lat:M.c.lat,lng:M.c.lng,r:M.r,label:M.c.label};S.f.plF='todas';ids.forEach(id=>S.f.sel[id]=true);fecharModal(false);S.tab='plan';render();toast(ids.length+' ocorrência(s) selecionada(s) dentro de '+fDist(S.f.plRaio.r)+'. Atribua a semana e confirme as prioridades.',6000)},
  /* execução */
+ ocImportar(){$('#fileOc').click()},
+ ocImportOk(){const o=O(),m=M;const agora=new Date().toISOString();let n=0;
+  m.lista.forEach(x=>{const oc={id:'c'+uid(),num:++o.seq,ext:x.ext||null,criadoEm:x.data?x.data+'T08:00:00.000Z':agora,criadoPor:'Importado do mapa de ocorrências',rua:x.rua,bairro:x.bairro,ref:x.ref,lat:x.lat,lng:x.lng,origem:x.lat!=null?'importado':null,fotos:[],desc:x.desc,sug:'',servSug:'',med:{c:0,l:0},priF:x.pri,priG:null,priConf:false,semana:'',servicoId:'',qtdPlan:0,solucao:'',obsG:'',status:'vistoriada',hist:[]};log(oc,'Ocorrência importada de planilha ('+m.arq+')'+(x.ext?' — ID '+x.ext:''));o.ocorrencias.push(oc);n++});
+  m.atual.forEach(([oc,x])=>{oc.lat=x.lat;oc.lng=x.lng;oc.origem='importado';log(oc,'Coordenadas atualizadas pela planilha '+m.arq)});
+  saveObra(o);fecharModal(false);render();toast(n+' ocorrência(s) importada(s)'+(m.atual.length?' e '+m.atual.length+' com coordenadas atualizadas':'')+'.',6000)},
  exNew(){exNovo(null)},
  exDeOc(d){const oc=O().ocorrencias.find(x=>x.id===d.id);if(oc)exNovo(oc)},
  atSub(d){sxF().sub=d.v;render()},diaMov(d){S.f.dia=addDias(S.f.dia,+d.v);render()},diaIr(d){S.f.dia=d.v;render()},
@@ -1327,6 +1349,9 @@ $('#fileFoto').addEventListener('change',e=>{const f=[...e.target.files];e.targe
 $('#fileCam').addEventListener('change',e=>{const f=[...e.target.files];e.target.value='';if(f.length)addFotos(f,true)});
 $('#fileLogo').addEventListener('change',e=>{const f=e.target.files[0];e.target.value='';if(!f)return;const r=new FileReader();r.onload=()=>{if(S.upKey==='emp'){const o=O();o.logoEmp=r.result;saveObra(o)}else{S.settings.cab[S.upKey||'head']=r.result;saveSettings()}render()};r.readAsDataURL(f)});
 $('#filePlan').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{const wb=XLSX.read(await f.arrayBuffer());M={t:'imp',wb,arq:f.name,sheet:wb.SheetNames[0],modo:'subst',filtro:true};impCarrega();abrirModal(modalImp())}catch(err){console.error(err);toast('Não foi possível ler a planilha.')}});
+$('#fileOc').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{const wb=XLSX.read(await f.arrayBuffer(),{cellDates:true});const lin=ocLerPlanilha(wb);if(!lin.length){toast('Não encontrei ocorrências na planilha. Use as colunas: ID externo, Rua, Bairro, Referência, Descrição, Data da ocorrência, Prioridade, Latitude, Longitude.',7000);return}
+  const o=O();const ex=new Map(o.ocorrencias.filter(x=>x.ext).map(x=>[String(x.ext),x]));const novas=[],ja=[],atual=[];lin.forEach(x=>{const e=x.ext&&ex.get(String(x.ext));if(e){ja.push(x);if(e.lat==null&&x.lat!=null&&x.lng!=null)atual.push([e,x])}else novas.push(x)});
+  M={t:'impoc',arq:f.name,total:lin.length,lista:novas,ja,atual};abrirModal(modalImpOc(M))}catch(err){toast('Não consegui ler a planilha: '+err.message,7000)}});
 $('#fileBol').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{const wb=XLSX.read(await f.arrayBuffer());const B=parseBol(wb);B.arq0=f.name;M=Object.assign({t:'bol',dados:true},B);abrirModal(modalBol())}catch(err){console.error(err);toast(err.message||'Não foi possível ler o boletim.',6000)}});
 $('#fileJson').addEventListener('change',async e=>{const f=e.target.files[0];e.target.value='';if(!f)return;try{const j=JSON.parse(await f.text());if(j.formato!=='totalcivil-manutencao-ruas'||!j.obra)throw 0;const ob=j.obra;
  if(S.obras[ob.id]&&!confirm('Já existe uma obra com este código neste navegador. Substituir os dados dela pelos do backup?'))return;
