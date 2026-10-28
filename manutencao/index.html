@@ -141,16 +141,18 @@ window.TC_GUIAS = {
     {sel:'input[data-chg=semDia]', titulo:'5 / 6 — Programação semanal', dica:'Escolha o dia para ver a semana programada, agrupada por serviço, com quantidades previstas. Use ◀ e ▶ para trocar de semana.'},
     {sel:'[data-act=relProg]', titulo:'6 / 6 — Gerar a programação', dica:'Gera o PDF da programação semanal para enviar à empresa contratada.'}
   ],
+  atend: [
+    {sel:'input[type=date][data-chg=dia]', titulo:'1 / 5 — Data do atendimento', dica:'Dia em que o serviço foi executado. As execuções registradas nesta data alimentam o RDO e o relatório fotográfico automaticamente.'},
+    {sel:'[data-act=atSub][data-v=aat]', titulo:'2 / 5 — A atender e Atendidas', dica:'“A atender” lista as ocorrências que ainda faltam; “Atendidas” mostra as execuções já registradas, com a conferência do fiscal.'},
+    {sel:'#se-q', titulo:'3 / 5 — Filtrar a lista', dica:'Filtre por semana programada, bairro ou palavra-chave (rua, descrição, número). Em uma rua com muitos buracos, pesquise o nome da rua para ver todos.'},
+    {sel:'#se-lista', titulo:'4 / 5 — Registrar a execução', dica:'Toque em “Registrar execução” na ocorrência: rua, bairro, medidas e serviço planejado já vêm preenchidos. Anexe as fotos do depois e salve.'},
+    {sel:'[data-act=selExLote]', titulo:'5 / 5 — Registrar várias de uma vez', dica:'Marque as ocorrências e registre todas conforme o planejado (serviço e quantidade previstos). Depois anexe as fotos abrindo cada execução.'}
+  ],
   exec: [
-    {sel:'input[type=date][data-chg=dia]', titulo:'1 / 9 — Data do diário', dica:'Escolha o dia do RDO. As execuções registradas nesta data aparecem abaixo e alimentam os serviços do relatório.'},
-    {sel:'[data-act=exNew]', titulo:'2 / 9 — Registrar execução', dica:'A empresa informa o local, os serviços e as quantidades executadas e anexa as fotos (antes, durante e depois). O fiscal confere depois.'},
-    {sel:'input[data-k=lot]', titulo:'3 / 9 — Lotação e Nº do D.O.', dica:'Lotação do RDO e número do Diário de Obra. Deixe o Nº D.O. vazio para numeração automática.'},
-    {sel:'input[data-k=ji]', titulo:'4 / 9 — Jornada de trabalho', dica:'Horário de início e de fim da jornada do dia.'},
-    {sel:'select[data-k="clima.M"]', titulo:'5 / 9 — Clima', dica:'Condição do tempo na manhã, na tarde e na noite (sol, nublado ou chuva). Dias de chuva justificam paralisações no RDO.'},
-    {sel:'.efg', titulo:'6 / 9 — Efetivo (mão de obra)', dica:'Informe a quantidade de cada função em campo no dia. Deixe vazio o que não houve.'},
-    {sel:'details', titulo:'7 / 9 — Mão de obra direta', dica:'Abra para informar coordenador, fiscal e demais funções diretas, quando for o caso.'},
-    {sel:'textarea[data-k=obs]', titulo:'8 / 9 — Observações do dia', dica:'Uma linha por comentário: ocorrências, paralisações, visitas, orientações da fiscalização.'},
-    {sel:'[data-act=relRDOxlsDia]', titulo:'9 / 9 — Gerar o RDO', dica:'Gere o RDO deste dia em PDF ou o Excel no modelo oficial, e o relatório fotográfico do dia.'}
+    {sel:'input[type=date][data-chg=dia]', titulo:'1 / 4 — Dia do RDO', dica:'Escolha o dia (ou use ‹ e ›). O RDO já vem montado com as execuções registradas na aba Atendimento: você só confere.'},
+    {sel:'.card h3', titulo:'2 / 4 — RDO do dia', dica:'Resumo automático: execuções, ocorrências atendidas, serviços e quantidades, descrição e fotos do dia.'},
+    {sel:'details', titulo:'3 / 4 — Dados complementares (opcional)', dica:'Clima, efetivo, equipamentos, jornada e observações para o modelo oficial. Só preencha se quiser que saiam no RDO.'},
+    {sel:'[data-act=relRDOxlsDia]', titulo:'4 / 4 — Gerar o RDO', dica:'Gere o RDO deste dia em PDF ou o Excel no modelo oficial, e o relatório fotográfico do dia.'}
   ],
   mapa: [
     {sel:'[data-k=mapSt]', titulo:'1 / 3 — Filtrar pela situação', dica:'Mostra no mapa só as ocorrências na situação escolhida.'},
@@ -397,8 +399,8 @@ function cardObra(o){const n=o.ocorrencias.length,ex=o.ocorrencias.filter(x=>x.s
  <div class="ds">${esc(o.contratada||'Contratada não informada')}<br>Contrato nº ${esc(o.contrato||'—')}</div>
  <div class="pr">${n} <small>ocorrências · ${ex} executadas</small></div><div class="pr" style="font-size:15px">${fR(med)} <small>medido até hoje</small></div>
  <div class="ft"><span>${o.fiscal?'Fiscal: '+esc(o.fiscal):'Sem fiscal definido'}</span><b>Abrir →</b></div></button>`}
-const TABS=[['painel','Painel'],['vistoria','Vistoria'],['plan','Planejamento'],['exec','Execução / RDO'],['mapa','Mapa'],['med','Medição'],['crono','Cronograma'],['rel','Relatórios'],['cfg','Obra & Config']];
-function telaObra(o){const fn={painel:tPainel,vistoria:tVistoria,plan:tPlan,exec:tExec,mapa:tMapa,med:tMed,crono:tCrono,rel:tRel,cfg:tCfg}[S.tab]||tPainel;
+const TABS=[['painel','Painel'],['vistoria','Vistoria'],['plan','Planejamento'],['atend','Atendimento'],['exec','RDO (diário)'],['mapa','Mapa'],['med','Medição'],['crono','Cronograma'],['rel','Relatórios'],['cfg','Obra & Config']];
+function telaObra(o){const fn={painel:tPainel,vistoria:tVistoria,plan:tPlan,atend:tAtend,exec:tExec,mapa:tMapa,med:tMed,crono:tCrono,rel:tRel,cfg:tCfg}[S.tab]||tPainel;
  return `<section class="wrap"><div class="obrabar"><div><span class="lbl">OBRA ATIVA</span><b>${esc(o.nome)}</b><span class="muted"> · Contrato nº ${esc(o.contrato)} · ${esc(o.contratada)}</span> ${o.demo?'<span class="chip" style="--c:#b7791f">DEMO</span>':''}</div><button class="btn sm" data-act="home">⇄ Trocar obra</button></div>
  <nav class="tabs">${TABS.map(([k,l])=>`<button class="tab ${S.tab===k?'on':''}" data-act="tab" data-k="${k}">${l}</button>`).join('')}</nav>${fn(o)}</section>`}
 const chipP=p=>{const x=PRI[p]||PRI.media;return `<span class="chip" style="--c:${x.c}">${x.l}</span>`};
@@ -457,19 +459,28 @@ function tPlan(o){const f=S.f;const abertas=o.ocorrencias.filter(x=>x.status!=='
  <div class="card" style="margin-top:16px"><h3>2. Programação semanal</h3>
  <div class="toolbar"><button class="btn sm" data-act="semMov" data-n="-7">◀</button><label>Dia da semana<input type="date" value="${f.semDia}" data-chg="semDia"></label><button class="btn sm" data-act="semMov" data-n="7">▶</button><b>${labSem(w)}</b><span class="sp"></span><button class="btn pri" data-act="relProg">📄 Gerar programação semanal (PDF)</button></div>
  ${Object.keys(grupos).map(k=>{const sv=svcOf(o,k);const q=r2(grupos[k].reduce((s,x)=>s+(x.qtdPlan||0),0));return `<h4 style="margin-top:12px">${esc(sv?sv.descricao:'Sem serviço definido')} <span class="muted small">— ${grupos[k].length} local(is)${sv&&q?' · previsto '+fN(q)+' '+esc(sv.unidade)+' · '+fR(t2(q*pbdi(o,sv))):''}</span></h4>${grupos[k].sort(ordPri).map(x=>`<p class="small">${chipP(priEf(x))} #${x.num} ${esc(ocLocal(x))}${x.solucao?' — <span class="muted">'+esc(x.solucao.slice(0,90))+'</span>':''}</p>`).join('')}`}).join('')||'<p class="muted">Nenhuma ocorrência programada para esta semana.</p>'}</div>`}
-function tExec(o){const dia=S.f.dia;const d=getDia(o,dia);const exs=o.execucoes.filter(e=>e.data===dia);const pend=o.execucoes.filter(e=>!e.conferida).sort((a,b)=>a.data.localeCompare(b.data));
+function tExec(o){const dia=S.f.dia;const d=getDia(o,dia);const exs=o.execucoes.filter(e=>e.data===dia).sort((a,b)=>(a.criadoEm||'').localeCompare(b.criadoEm||''));const dias=diasComRegistro(o);
  const grid=(k,lista)=>`<div class="efg">${lista.map((n,i)=>`<label class="efc"><span>${esc(n)}</span><input inputmode="numeric" placeholder="-" value="${d[k][i]?esc(d[k][i]):''}" data-chg="diario" data-k="${k}.${i}"></label>`).join('')}</div>`;
  const csel=(k)=>`<select data-chg="diario" data-k="clima.${k}">${[['','—'],['sol','Sol'],['nubl','Nublado'],['chuva','Chuva']].map(([v,l])=>`<option value="${v}" ${d.clima[k]===v?'selected':''}>${l}</option>`).join('')}</select>`;
- return `<div class="toolbar"><label>Data<input type="date" value="${dia}" data-chg="dia"></label><button class="btn pri" data-act="exNew" ${can('exec')?'':'disabled'}>＋ Registrar execução</button><button class="btn" data-act="relRDOdia">📄 RDO deste dia</button><button class="btn" data-act="relRDOxlsDia">⬇ Excel do RDO</button><button class="btn" data-act="relFotoDia">📷 Fotográfico deste dia</button></div>
- <div class="card"><h3>Diário do dia — ${fData(dia)} (${diaSem(dia)})</h3><p class="muted small">Preenche o RDO no modelo oficial (clima, efetivo, equipamentos, jornada). Os serviços e quantidades vêm das execuções abaixo.</p>
- <div class="g4"><label>Lotação<input value="${esc(d.lot)}" data-chg="diario" data-k="lot"></label><label>Nº D.O. <span class="muted small">(vazio = automático)</span><input value="${esc(d.dno)}" placeholder="ex.: 14/2026" data-chg="diario" data-k="dno"></label><label>Jornada — início<input type="time" value="${esc(d.ji)}" data-chg="diario" data-k="ji"></label><label>Jornada — fim<input type="time" value="${esc(d.jf)}" data-chg="diario" data-k="jf"></label></div>
+ const fotos=exs.flatMap(e=>e.fotos);const ocs=new Set(exs.map(e=>e.ocorrenciaId).filter(Boolean)).size;
+ const linhas=exs.flatMap(e=>{const L=localEx(o,e);const its=e.itens.length?e.itens:[null];return its.map((i,k)=>{const sv=i&&svcOf(o,i.servicoId);return `<tr><td>${k?'':(L.oc?'#'+L.oc.num:'avulso')}</td><td>${k?'':esc(L.txt)}</td><td>${sv?esc(sv.descricao):'—'}</td><td style="text-align:right">${sv?fN(i.qtd)+' '+esc(sv.unidade):''}</td><td>${k?'':(e.conferida?'✔ conferida':e.qualidade==='reprovada'?'✖ reprovada':'a conferir')}</td></tr>`})});
+ const comp=somaV(d.dir)||d.lot||d.dno||d.ji||d.jf||d.obs||['M','T','N'].some(k=>d.clima[k]);
+ return `<div class="toolbar"><button class="btn" data-act="diaMov" data-v="-1" title="dia anterior">‹</button><label>Dia do RDO<input type="date" value="${dia}" data-chg="dia"></label><button class="btn" data-act="diaMov" data-v="1" title="próximo dia">›</button><button class="btn" data-act="relRDOdia">📄 RDO deste dia (PDF)</button><button class="btn" data-act="relRDOxlsDia">⬇ Excel do RDO</button><button class="btn" data-act="relFotoDia">📷 Fotográfico deste dia</button></div>
+ <div class="alert" style="background:#eef4fb;border-color:#2563a8">O RDO é montado automaticamente a partir das execuções registradas na aba <b>Atendimento</b>. Aqui você só consulta cada dia e gera o PDF/Excel.</div>
+ ${dias.length?`<div class="row gap" style="flex-wrap:wrap;margin:8px 0"><span class="small muted">Dias com registro:</span>${dias.slice(-30).reverse().map(x=>`<button class="btn sm ${x===dia?'pri':''}" data-act="diaIr" data-v="${x}">${fData(x).slice(0,5)}</button>`).join('')}</div>`:''}
+ <div class="card"><h3>RDO — ${fData(dia)} (${diaSem(dia)})</h3>
+ <div class="kpis" style="margin:8px 0"><div class="kpi"><div class="v">${exs.length}</div><div class="l">execuções no dia</div></div><div class="kpi"><div class="v">${ocs}</div><div class="l">ocorrências atendidas</div></div><div class="kpi"><div class="v">${fotos.length}</div><div class="l">fotos</div></div></div>
+ <h4>Serviços executados</h4>${linhas.length?`<div class="tablewrap"><table><thead><tr><th>Ocorr.</th><th>Local</th><th>Serviço</th><th style="text-align:right">Quantidade</th><th>Conferência</th></tr></thead><tbody>${linhas.join('')}</tbody></table></div>`:'<p class="muted">Nenhuma execução registrada neste dia.</p>'}
+ ${exs.some(e=>e.desc||e.descCampo)?`<h4 style="margin-top:12px">Descrição dos serviços</h4>${exs.filter(e=>e.desc||e.descCampo).map(e=>`<p class="small"><b>${esc(localEx(o,e).txt)}:</b> ${esc(e.desc||e.descCampo)}</p>`).join('')}`:''}
+ ${(()=>{const r=resumoEf(o,dia);return (r.mo||r.dir||r.eq)?`<h4 style="margin-top:12px">Efetivo e equipamentos (automático)</h4>${r.mo?'<p class="small"><b>Mão de obra:</b> '+esc(r.mo)+'</p>':''}${r.dir?'<p class="small"><b>Fiscalização:</b> '+esc(r.dir)+'</p>':''}${r.eq?'<p class="small"><b>Equipamentos:</b> '+esc(r.eq)+'</p>':''}`:'<p class="small muted" style="margin-top:12px">Efetivo e equipamentos: informe em “＋ Funcionário / ＋ Equipamento” ao registrar a execução na aba Atendimento.</p>'})()}
+ ${fotos.length?`<h4 style="margin-top:12px">Fotos do dia</h4>${thumbsMini(fotos)}`:''}</div>
+ <details class="card" ${comp?'open':''}><summary><b>Ajustes manuais do RDO (opcional)</b> <span class="muted small">— clima, jornada, observações e correção de efetivo/equipamentos (o que digitar aqui prevalece sobre o automático)</span></summary>
+ <div class="g4" style="margin-top:8px"><label>Lotação<input value="${esc(d.lot)}" data-chg="diario" data-k="lot"></label><label>Nº D.O. <span class="muted small">(vazio = automático)</span><input value="${esc(d.dno)}" placeholder="ex.: 14/2026" data-chg="diario" data-k="dno"></label><label>Jornada — início<input type="time" value="${esc(d.ji)}" data-chg="diario" data-k="ji"></label><label>Jornada — fim<input type="time" value="${esc(d.jf)}" data-chg="diario" data-k="jf"></label></div>
  <div class="g3" style="margin-top:8px"><label>Clima — manhã${csel('M')}</label><label>Clima — tarde${csel('T')}</label><label>Clima — noite${csel('N')}</label></div>
  <label style="margin-top:12px">Efetivo — mão de obra indireta (quantidade por função)</label>${grid('ind',EF_IND)}
- <details ${somaV(d.dir)?'open':''} style="margin-top:8px"><summary><b>Efetivo — mão de obra direta</b> <span class="muted small">(coordenador, fiscal, etc.)</span></summary>${grid('dir',EF_DIR)}</details>
+ <label style="margin-top:12px">Efetivo — mão de obra direta</label>${grid('dir',EF_DIR)}
  <label style="margin-top:12px">Equipamentos (quantidade em campo)</label>${grid('eqp',EQ_LIST)}
- <label style="margin-top:12px">Observações / comentários do dia (uma linha por comentário)<textarea data-chg="diario" data-k="obs">${esc(d.obs)}</textarea></label></div>
- <h3 style="margin:18px 0 8px">Execuções do dia (${exs.length})</h3><div class="list">${exs.map(e=>exCard(o,e)).join('')||'<p class="muted">Nenhuma execução registrada nesta data.</p>'}</div>
- ${pend.length?`<h3 style="margin:22px 0 8px">Aguardando conferência do fiscal (${pend.length})</h3><div class="list">${pend.filter(e=>e.data!==dia).map(e=>exCard(o,e)).join('')}</div>`:''}`}
+ <label style="margin-top:12px">Observações / comentários do dia (uma linha por comentário)<textarea data-chg="diario" data-k="obs">${esc(d.obs)}</textarea></label></details>`}
 function exCard(o,e){const L=localEx(o,e);const itens=e.itens.map(i=>{const s=svcOf(o,i.servicoId);return s?esc(s.descricao)+': <b>'+fN(i.qtd)+' '+esc(s.unidade)+'</b>':''}).join('<br>');
  return `<article class="item"><div class="hd"><div><span class="num">${fData(e.data)}</span> <b>${esc(L.txt)}</b></div></div>
  <div class="chips">${L.oc?`<span class="chip" style="--c:#2563a8">ocorrência #${L.oc.num}</span>`:'<span class="chip" style="--c:#5a6075">avulso</span>'}${e.conferida?'<span class="chip" style="--c:#2e7d4f">✔ conferida · qualidade aprovada</span>':e.qualidade==='reprovada'?'<span class="chip" style="--c:#c0392b" title="'+esc(e.parecer||'')+'">✖ reprovada — refazer</span>':'<span class="chip" style="--c:#b7791f">a conferir</span>'}${e.medicaoNum?`<span class="chip" style="--c:#5a6075">medição nº ${e.medicaoNum}</span>`:''}${e.concluiu?'<span class="chip" style="--c:#2e7d4f">serviço concluído</span>':''}</div>
@@ -691,6 +702,49 @@ function autoEnd(lat,lng){clearTimeout(_aeT);const tok=++_aeTok;const st=()=>$('
   if(full&&(!ri.value.trim()||ri.value===M.autoRua)){ri.value=full;M.autoRua=full}
   if(b&&(!bi.value.trim()||bi.value===M.autoBai)){bi.value=b;M.autoBai=b}
   if(st())st().textContent=full?'Endereço preenchido automaticamente pelo mapa — confira.':'Endereço não encontrado para este ponto. Digite a rua.'}).catch(()=>{if(st())st().textContent='Sem internet para buscar o endereço — digite a rua.'})},600)}
+/* ===================== aba Atendimento (ocorrências a atender / atendidas) ===================== */
+const SX={marc:{},vis:[]};
+const sxF=()=>{S.f.sx=S.f.sx||{sub:'aat',sit:'abertas',bai:'',q:'',atF:'todas'};return S.f.sx};
+function selExLista(o){const f=sxF();let l=o.ocorrencias.filter(x=>x.status!=='medida'&&x.status!=='executada');
+ if(f.sit==='prog')l=l.filter(x=>x.semana);
+ else if(f.sit==='sem'){const w=isoWeek(S.f.dia);l=l.filter(x=>x.semana===w)}
+ if(f.bai)l=l.filter(x=>norm(x.bairro)===norm(f.bai));
+ if(f.q){const q=norm(f.q);l=l.filter(x=>norm([x.rua,x.bairro,x.desc,x.solucao,'#'+x.num].join(' ')).includes(q))}
+ return l.sort((a,b)=>(a.semana||'9').localeCompare(b.semana||'9')||ordPri(a,b))}
+function atendidasLista(o){const f=sxF();let l=o.execucoes.slice();
+ if(f.atF==='conf')l=l.filter(e=>!e.conferida&&!e.medicaoNum);else if(f.atF==='ok')l=l.filter(e=>e.conferida||e.medicaoNum);
+ if(f.bai)l=l.filter(e=>norm((localEx(o,e).oc||{}).bairro||e.local.bairro)===norm(f.bai));
+ if(f.q){const q=norm(f.q);l=l.filter(e=>{const oc=localEx(o,e).oc||{};return norm([e.local.rua,e.local.bairro,e.desc,e.descCampo,oc.desc,oc.num?'#'+oc.num:''].join(' ')).includes(q)})}
+ return l.sort((a,b)=>b.data.localeCompare(a.data)||(b.criadoEm||'').localeCompare(a.criadoEm||''))}
+function atendItens(o){const f=sxF();
+ if(f.sub==='ate'){const l=atendidasLista(o);return {tit:l.length+' execução(ões) registrada(s)',html:l.slice(0,200).map(e=>exCard(o,e)).join('')+(l.length>200?'<p class="muted small">Mostrando as 200 mais recentes. Use os filtros para refinar.</p>':'')||'<p class="muted small" style="padding:8px">Nenhuma execução registrada com este filtro.</p>'}}
+ const l=selExLista(o);SX.vis=l.map(x=>x.id);
+ const feitoHoje=id=>o.execucoes.some(e=>e.ocorrenciaId===id&&e.data===S.f.dia);
+ return {tit:l.length+' ocorrência(s) a atender',html:l.map(x=>{const sv=svcOf(o,x.servicoId||x.servSug);const fh=feitoHoje(x.id);const n=o.execucoes.filter(e=>e.ocorrenciaId===x.id).length;
+  return `<article class="item" style="margin:6px 0"><div class="hd"><div><span class="num">#${x.num}</span> <b>${esc(ocLocal(x))}</b></div><label class="chk" style="margin:0"><input type="checkbox" data-chg="selExChk" data-id="${x.id}" ${SX.marc[x.id]?'checked':''}> marcar</label></div>
+  <div class="chips">${chipP(priEf(x))}${chipS(x.status)}${x.semana?`<span class="chip" style="--c:#2563a8">🗓 ${labSem(x.semana)}</span>`:''}${fh?'<span class="chip" style="--c:#2e7d4f">✔ registrada em '+fData(S.f.dia).slice(0,5)+'</span>':''}${n&&!fh?'<span class="chip" style="--c:#7b3fb0">'+n+' execução(ões)</span>':''}</div>
+  <div class="small">${esc((x.desc||'').slice(0,140))}</div>${sv?`<div class="small muted">Serviço: ${esc(sv.descricao)}${x.qtdPlan?' · previsto '+fN(x.qtdPlan)+' '+esc(sv.unidade):''}</div>`:''}
+  <div class="row gap" style="justify-content:flex-end"><button class="btn sm pri" data-act="exDeOc" data-id="${x.id}" ${can('exec')?'':'disabled'}>＋ Registrar execução</button></div></article>`}).join('')||'<p class="muted small" style="padding:8px">Nenhuma ocorrência a atender com este filtro.</p>'}}
+function selExAtualiza(){const o=O();if(!o||!$('#se-lista'))return;const r=atendItens(o);$('#se-tit').textContent=r.tit;$('#se-lista').innerHTML=r.html;hydrate($('#se-lista'));selExMarc()}
+function selExMarc(){const e=$('#se-marc');if(e)e.textContent=Object.values(SX.marc).filter(Boolean).length+' marcada(s)'}
+function tAtend(o){const f=sxF(),dia=S.f.dia;const nAat=o.ocorrencias.filter(x=>x.status!=='executada'&&x.status!=='medida').length;const nAte=o.ocorrencias.filter(x=>x.status==='executada'||x.status==='medida').length;const pend=o.execucoes.filter(e=>!e.conferida&&!e.medicaoNum).length;
+ const r=atendItens(o);const aat=f.sub!=='ate';
+ return `<div class="toolbar"><label>Data do atendimento<input type="date" value="${dia}" data-chg="dia"></label>
+ <button class="btn ${aat?'pri':''}" data-act="atSub" data-v="aat">A atender (${nAat})</button><button class="btn ${aat?'':'pri'}" data-act="atSub" data-v="ate">Atendidas (${nAte}) · ${pend} a conferir</button>
+ <button class="btn" data-act="exNew" ${can('exec')?'':'disabled'}>＋ Execução avulsa</button></div>
+ <div class="card"><p class="small muted">${aat?'Escolha a ocorrência e registre a execução: rua, bairro, medidas e serviço planejado já vêm preenchidos. O RDO do dia e o relatório fotográfico são montados sozinhos a partir do que for registrado aqui. Marque várias e use “Registrar marcadas conforme planejado” para uma rua com muitos buracos.':'Execuções já registradas, da mais recente para a mais antiga. O fiscal confere em campo (fotos do antes e do depois + qualidade); só execuções conferidas entram na medição.'}</p>
+ <div class="toolbar">${aat?`<label>Mostrar<select data-chg="selExF" data-k="sit"><option value="abertas" ${f.sit==='abertas'?'selected':''}>Todas a atender</option><option value="prog" ${f.sit==='prog'?'selected':''}>Programadas em alguma semana</option><option value="sem" ${f.sit==='sem'?'selected':''}>Programadas na semana do dia ${fData(dia).slice(0,5)}</option></select></label>`:`<label>Situação<select data-chg="selExF" data-k="atF"><option value="todas" ${f.atF==='todas'?'selected':''}>Todas</option><option value="conf" ${f.atF==='conf'?'selected':''}>A conferir pelo fiscal</option><option value="ok" ${f.atF==='ok'?'selected':''}>Conferidas</option></select></label>`}
+ <label>Bairro<select data-chg="selExF" data-k="bai"><option value="">Todos</option>${bairrosDe(o).map(b=>`<option ${f.bai===b?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
+ <label style="flex:1;min-width:160px">Palavra-chave<input id="se-q" placeholder="rua, bairro, descrição, nº" value="${esc(f.q)}" data-inp="selExQ" autocomplete="off"></label></div>
+ <div class="row gap" style="justify-content:space-between;align-items:center;margin:6px 0"><b id="se-tit">${r.tit}</b>${aat?'<span class="row gap"><button class="btn sm" data-act="selExTodas">☑ Marcar todas da lista</button><button class="btn sm" data-act="selExNenhuma">☐ Limpar</button></span>':''}</div>
+ <div id="se-lista" style="max-height:62vh;overflow:auto;border:1px solid var(--bd,#d9dde6);border-radius:8px;padding:6px">${r.html}</div>
+ ${aat?`<div class="row gap" style="justify-content:space-between;align-items:center;margin-top:10px"><span class="small muted" id="se-marc">${Object.values(SX.marc).filter(Boolean).length} marcada(s)</span><button class="btn pri" data-act="selExLote" ${can('exec')?'':'disabled'}>Registrar marcadas conforme planejado</button></div>`:''}</div>`}
+function autoDesc(o,d){const itens=d.itens.map(i=>{const s=svcOf(o,i.servicoId);return s?{desc:s.descricao,qtd:i.qtd,un:s.unidade}:null}).filter(Boolean);const oc=o.ocorrencias.find(x=>x.id===d.ocorrenciaId);
+ return textoLocal({local:oc?ocLocal(oc):[d.local.rua,d.local.bairro].filter(Boolean).join(' — '),itens,probl:oc?oc.desc:'',solucao:oc?oc.solucao:'',campo:d.descCampo||''})}
+function exNovo(oc){const d={id:'x'+uid(),data:S.f.dia,ocorrenciaId:null,local:{rua:'',bairro:''},med:{c:0,l:0,e:0},itens:[],fotos:[],descCampo:'',desc:'',descOrigem:null,concluiu:false,conferida:false,conferidaPor:null,medicaoNum:null,criadoPor:quem(),criadoEm:new Date().toISOString()};
+ if(oc){d.ocorrenciaId=oc.id;d.local={rua:oc.rua||'',bairro:oc.bairro||''};if(oc.med)d.med={c:oc.med.c||0,l:oc.med.l||0,e:0};const sid=oc.servicoId||oc.servSug;if(sid)d.itens=[{servicoId:sid,qtd:oc.qtdPlan||''}]}
+ M={t:'ex',novas:[],novo:true,d};abrirModal(modalEx(M.d,true));INP.medidas()}
+
 /* ===================== modais ===================== */
 function abrirModal(html){$('#modalBody').innerHTML=html;$('#modal').classList.remove('hidden');document.body.classList.add('noscroll');$('#modal').scrollTop=0;hydrate($('#modalBody'))}
 function fecharModal(limpar){if(M&&limpar&&M.novas)M.novas.forEach(id=>{DB.del('fotos',id);fotoCache.delete(id)});if(M&&M.map){M.map.remove()}M=null;$('#modal').classList.add('hidden');document.body.classList.remove('noscroll')}
@@ -728,6 +782,7 @@ function modalEx(d,isNew){const o=O();const abertas=o.ocorrencias.filter(x=>x.st
  <fieldset style="margin-top:12px"><legend>Serviços executados e quantidades</legend>
  <div class="g4"><label>Comprimento (m)<input id="ex-mc" inputmode="decimal" value="${inp(d.med.c)}" data-inp="medidas" ${dis}></label><label>Largura (m)<input id="ex-ml" inputmode="decimal" value="${inp(d.med.l)}" data-inp="medidas" ${dis}></label><label>Espessura (cm)<input id="ex-me" inputmode="decimal" value="${inp(d.med.e)}" data-inp="medidas" ${dis}></label><p class="small muted" id="medOut" style="margin-top:28px"></p></div>
  <div id="itens">${itens.map(i=>itemRow(o,i,dis)).join('')}</div><button class="btn sm" style="margin-top:8px" data-act="itemAdd" ${dis}>＋ outro serviço</button></fieldset>
+ <fieldset><legend>Equipe e equipamentos do dia (entram no RDO)</legend><div id="equipe">${(d.equipe||[]).map(eqRow).join('')}</div><div class="row gap" style="margin-top:8px"><button class="btn sm" data-act="eqAdd" ${dis}>＋ Funcionário</button><button class="btn sm" data-act="eqAdd" data-k="eqp" ${dis}>＋ Equipamento</button></div><p class="small muted">Escolha a função e digite a quantidade; para outra função, toque em ＋ de novo. Se a mesma equipe atender várias ocorrências no dia, o RDO conta uma vez (vale o maior valor).</p></fieldset>
  <fieldset><legend>Fotos da execução</legend><div class="row gap"><button class="btn" data-act="fotoCam" ${dis}>📷 Tirar foto</button><button class="btn" data-act="fotoGal" ${dis}>🖼 Escolher da galeria</button><label style="margin:0">Fase das novas fotos<select id="exFase" style="width:auto"><option value="antes">Antes</option><option value="durante">Durante</option><option value="depois" selected>Depois</option></select></label></div><div id="fotosArea">${fotosArea(d.fotos,'ex')}</div></fieldset>
  <fieldset><legend>Descrição para o RDO</legend><label>Anotação de campo (escreva do seu jeito)<textarea id="ex-dc" ${dis}>${esc(d.descCampo)}</textarea></label>
  <div class="row gap" style="margin-top:8px"><button class="btn" data-act="melhorarIA" ${dis}>✨ Melhorar descrição (${S.settings.ia.prov==='gemini'?'Gemini':S.settings.ia.prov==='meta'?'Meta':'texto padrão, sem IA'})</button><span class="small muted" id="iaStatus"></span></div>
@@ -774,12 +829,19 @@ function normDia(d){if(d._v2)return d;const n=newDia();
  (d.eq||[]).forEach(r=>{const k=_nk(r.f);let i=EQ_LIST.findIndex(x=>_nk(x)===k||(k.length>4&&(_nk(x).includes(k.slice(0,5))||k.includes(_nk(x).slice(0,5)))));if(i>=0)d.eqp[i]=(+r.q||0)+(d.eqp[i]||0)});
  d.mo=[];d.eq=[];d.obs=d.obs||'';d._v2=1;return d}
 const somaV=a=>(a||[]).reduce((s,x)=>s+(parseInt(x)||0),0);
+const EQP_OPTS=()=>'<optgroup label="Mão de obra (contratada)">'+EF_IND.map((n,i)=>`<option value="ind:${i}">${esc(n)}</option>`).join('')+'</optgroup><optgroup label="Fiscalização / coordenação">'+EF_DIR.map((n,i)=>(i===1||i===3)?`<option value="dir:${i}">${esc(n)}</option>`:'').join('')+'</optgroup><optgroup label="Equipamentos">'+EQ_LIST.map((n,i)=>`<option value="eqp:${i}">${esc(n)}</option>`).join('')+'</optgroup>';
+const eqRow=(r)=>`<div class="eqrow row gap" style="margin-top:6px;align-items:flex-end"><label style="flex:1;min-width:200px;margin:0">Função / equipamento<select class="eq-sel"><option value="">— escolha —</option>${EQP_OPTS().replace('value="'+(r&&r.k?r.k+':'+r.i:'~')+'"','value="'+(r&&r.k?r.k+':'+r.i:'~')+'" selected')}</select></label><label style="width:90px;margin:0">Quantidade<input class="eq-q" inputmode="numeric" value="${r&&r.q?r.q:''}"></label><button class="btn mini dan" data-act="eqDel">✕</button></div>`;
+/* efetivo e equipamentos do dia: soma por execução; no dia vale o maior valor entre as execuções (mesma equipe passando por várias ocorrências); valor digitado à mão no RDO prevalece */
+function diaEf(o,dia){const d=JSON.parse(JSON.stringify(normDia(o.diario[dia]||newDia())));const auto={ind:{},dir:{},eqp:{}};
+ o.execucoes.filter(e=>e.data===dia).forEach(e=>{const t={ind:{},dir:{},eqp:{}};(e.equipe||[]).forEach(r=>{if(t[r.k])t[r.k][r.i]=(t[r.k][r.i]||0)+(+r.q||0)});['ind','dir','eqp'].forEach(k=>Object.keys(t[k]).forEach(i=>{auto[k][i]=Math.max(auto[k][i]||0,t[k][i])}))});
+ ['ind','dir','eqp'].forEach(k=>Object.keys(auto[k]).forEach(i=>{if(!(parseInt(d[k][i])>0))d[k][i]=auto[k][i]}));return d}
+const resumoEf=(o,dia)=>{const d=diaEf(o,dia);const f=(a,L)=>a.map((v,i)=>(parseInt(v)>0?L[i]+' '+v:'')).filter(Boolean).join(', ');return {mo:f(d.ind,EF_IND),dir:f(d.dir,EF_DIR),eq:f(d.eqp,EQ_LIST)}};
 const HEAD=()=>S.settings.cab.head||IMG_HEAD,FOOT=()=>S.settings.cab.foot||IMG_FOOT;
 const RS={title:{sz:14,b:1,fill:'D9D9D9',col:'1F2F6B',bd:1},hdrimg:{al:'left',bd:1},obra:{sz:9,al:'left',bd:1,wrap:1},lab:{b:1,fill:'D9D9D9',col:'1F2F6B',bd:1},
  valL:{al:'left',bd:1},val:{bd:1},valb:{b:1,bd:1},sec:{b:1,fill:'D9D9D9',col:'1F2F6B',bd:1},hdr:{sz:8,bd:1},cl:{b:1,bd:1},greyc:{fill:'D9D9D9',bd:1},
  totl:{b:1,fill:'D9D9D9',col:'1F2F6B',bd:1},totv:{b:1,bd:1},txt:{al:'left',va:'top',bd:1},txtb:{al:'left',b:1,bd:1},sig:{b:1,va:'bottom',bd:1},footimg:{al:'right',bd:1},demo:{b:1,fill:'FDE68A',bd:1},eqn:{al:'left',bd:1,sz:8.5}};
 const RCOLW=[...Array(15).fill(9.5),20,11];
-function rdoSpec(o,dia,n){const d=normDia(o.diario[dia]||newDia());const exs=o.execucoes.filter(e=>e.data===dia);const c=S.settings.cab;const rows=[];
+function rdoSpec(o,dia,n){const d=diaEf(o,dia);const exs=o.execucoes.filter(e=>e.data===dia);const c=S.settings.cab;const rows=[];
  const R=(h,cells)=>rows.push({h,cells:cells||[]});const SP=()=>R(7);
  const lines=(t,w)=>String(t||'').split('\n').reduce((s,l)=>s+Math.max(1,Math.ceil(l.length/w)),0);
  R(24,[{a:1,b:17,v:'RELATÓRIO DIÁRIO DE MANUTENÇÃO '+fData(dia),s:'title'}]);
@@ -1168,8 +1230,19 @@ const ACTS={
  proxEndEsc(d){const x=M.geo[+d.i];proxCentro(+x.lat,+x.lon,x.display_name.slice(0,60));$('#px-geo').innerHTML=''},
  proxUsar(){if(!M.c){toast('Defina o ponto central.');return}const ids=(M.achadas||[]).filter(id=>M.marc[id]);S.f.plRaio={lat:M.c.lat,lng:M.c.lng,r:M.r,label:M.c.label};S.f.plF='todas';ids.forEach(id=>S.f.sel[id]=true);fecharModal(false);S.tab='plan';render();toast(ids.length+' ocorrência(s) selecionada(s) dentro de '+fDist(S.f.plRaio.r)+'. Atribua a semana e confirme as prioridades.',6000)},
  /* execução */
- exNew(){const o=O();M={t:'ex',novas:[],novo:true,d:{id:'x'+uid(),data:S.f.dia,ocorrenciaId:null,local:{rua:'',bairro:''},med:{c:0,l:0,e:0},itens:[],fotos:[],descCampo:'',desc:'',descOrigem:null,concluiu:false,conferida:false,conferidaPor:null,medicaoNum:null,criadoPor:quem(),criadoEm:new Date().toISOString()}};abrirModal(modalEx(M.d,true));INP.medidas()},
+ exNew(){exNovo(null)},
+ exDeOc(d){const oc=O().ocorrencias.find(x=>x.id===d.id);if(oc)exNovo(oc)},
+ atSub(d){sxF().sub=d.v;render()},diaMov(d){S.f.dia=addDias(S.f.dia,+d.v);render()},diaIr(d){S.f.dia=d.v;render()},
+ selExTodas(){(SX.vis||[]).forEach(id=>SX.marc[id]=true);selExAtualiza()},selExNenhuma(){SX.marc={};selExAtualiza()},
+ selExLote(){const o=O();const ids=Object.keys(SX.marc).filter(k=>SX.marc[k]);if(!ids.length){toast('Marque as ocorrências na lista.');return}
+  const ok=[],sem=[],ja=[];ids.forEach(id=>{const oc=o.ocorrencias.find(x=>x.id===id);if(!oc)return;const sid=oc.servicoId||oc.servSug,sv=svcOf(o,sid);if(o.execucoes.some(e=>e.ocorrenciaId===id&&e.data===S.f.dia)){ja.push(oc);return}if(!sv||!(oc.qtdPlan>0)){sem.push(oc);return}ok.push([oc,sv])});
+  if(!ok.length){toast((sem.length?sem.length+' sem serviço/quantidade planejados (use “Registrar execução”). ':'')+(ja.length?ja.length+' já registrada(s) neste dia.':''),6000);return}
+  if(!confirm('Registrar '+ok.length+' execução(ões) em '+fData(S.f.dia)+' com o serviço e a quantidade planejados, marcando o serviço como concluído? As fotos (antes/depois) podem ser anexadas depois, abrindo cada execução; o fiscal só aprova com as fotos.'))return;
+  ok.forEach(([oc,sv])=>{const q=t2(oc.qtdPlan);const e={id:'x'+uid(),data:S.f.dia,ocorrenciaId:oc.id,local:{rua:oc.rua||'',bairro:oc.bairro||''},med:{c:oc.med?oc.med.c||0:0,l:oc.med?oc.med.l||0:0,e:0},itens:[{servicoId:sv.id,qtd:q}],fotos:[],descCampo:'',desc:'',descOrigem:'padrao',concluiu:true,conferida:false,conferidaPor:null,medicaoNum:null,criadoPor:quem(),criadoEm:new Date().toISOString()};
+   e.desc=autoDesc(o,e);o.execucoes.push(e);log(oc,'Execução registrada em '+fData(e.data)+' (em lote, conforme planejado)');recalcStatus(o,oc);SX.marc[oc.id]=false});
+  saveObra(o);SX.marc={};render();toast(ok.length+' execução(ões) registrada(s)'+(sem.length?'; '+sem.length+' ficaram de fora por não ter serviço/quantidade planejados':'')+(ja.length?'; '+ja.length+' já tinham registro neste dia':'')+'.',7000)},
  exEdit(d){const e=O().execucoes.find(x=>x.id===d.id);M={t:'ex',novas:[],novo:false,orig:e.fotos.map(f=>f.id),d:JSON.parse(JSON.stringify(e))};abrirModal(modalEx(M.d,false));INP.medidas()},
+ eqAdd(d){$('#equipe').insertAdjacentHTML('beforeend',eqRow(null));const r=$$('.eqrow').pop();if(d.k==='eqp'){const sel=$('.eq-sel',r);const op=[...sel.options].find(x=>x.value.startsWith('eqp:'));if(op)sel.value=op.value}$('.eq-q',r).focus()},eqDel(d,el){el.closest('.eqrow').remove()},
  itemAdd(){$('#itens').insertAdjacentHTML('beforeend',itemRow(O(),{servicoId:'',qtd:''},''))},
  itemDel(d,el){const rows=$$('.itemrow');if(rows.length<=1){$('.it-qtd',rows[0]).value='';$('.it-svc',rows[0]).value='';$('.it-un',rows[0]).textContent='';return}el.closest('.itemrow').remove()},
  useMed(d,el){const m=medidasVals();const v=d.k==='a'?m.a:d.k==='v'?m.v:m.c;if(!v){toast('Preencha as medidas (comprimento, largura e espessura) acima.');return}$('.it-qtd',el.closest('.itemrow')).value=inp(t2(v))},
@@ -1181,8 +1254,9 @@ const ACTS={
   $('#ex-df').value=txt;M.d.descOrigem=origem;st.textContent=origem==='local'?'Texto padrão aplicado (sem IA). Revise.':'Gerado por '+(origem==='gemini'?'Gemini':'Meta')+'. Revise antes de salvar.'},
  exSave(){const o=O(),d=M.d;d.data=$('#ex-data').value;if(!d.data){toast('Informe a data.');return}const antOc=M.novo?null:(o.execucoes.find(x=>x.id===d.id)||{}).ocorrenciaId;
   d.ocorrenciaId=$('#ex-oc').value||null;d.local=Object.assign({},d.local,{rua:$('#ex-rua').value.trim(),bairro:$('#ex-bairro').value.trim()});d.med={c:num($('#ex-mc').value),l:num($('#ex-ml').value),e:num($('#ex-me').value)};
-  d.itens=$$('.itemrow').map(r=>({servicoId:$('.it-svc',r).value,qtd:t2(num($('.it-qtd',r).value))})).filter(i=>i.servicoId&&i.qtd>0);d.descCampo=$('#ex-dc').value.trim();d.desc=$('#ex-df').value.trim();d.concluiu=$('#ex-conc').checked;
+  d.itens=$$('.itemrow').map(r=>({servicoId:$('.it-svc',r).value,qtd:t2(num($('.it-qtd',r).value))})).filter(i=>i.servicoId&&i.qtd>0);d.descCampo=$('#ex-dc').value.trim();d.desc=$('#ex-df').value.trim();d.concluiu=$('#ex-conc').checked;d.equipe=$$('.eqrow').map(r=>{const v=$('.eq-sel',r).value.split(':');return {k:v[0],i:+v[1],q:parseInt($('.eq-q',r).value)||0}}).filter(x=>x.k&&x.q>0);
   if(!d.itens.length&&!d.desc&&!d.descCampo){toast('Lance ao menos um serviço com quantidade ou uma descrição.');return}
+  if(!d.desc){d.desc=autoDesc(o,d);d.descOrigem=d.descOrigem||'padrao'}
   if(!M.novo){const rem=(M.orig||[]).filter(id=>!d.fotos.some(f=>f.id===id));rem.forEach(id=>{DB.del('fotos',id);fotoCache.delete(id)});const i=o.execucoes.findIndex(x=>x.id===d.id);if(o.execucoes[i].conferida){d.conferida=false;d.conferidaPor=null;toast('Execução alterada: precisa ser conferida de novo pelo fiscal.',4500)}o.execucoes[i]=d}else o.execucoes.push(d);
   [antOc,d.ocorrenciaId].filter((v,i,a)=>v&&a.indexOf(v)===i).forEach(id=>{const oc=o.ocorrencias.find(x=>x.id===id);if(oc){log(oc,'Execução registrada em '+fData(d.data));recalcStatus(o,oc)}});
   M.novas=[];S.f.dia=d.data;saveObra(o);fecharModal();render()},
@@ -1222,6 +1296,7 @@ const ACTS={
  async iaTest(){try{const t=await chamarIA('Responda apenas com a palavra: ok');toast('Conexão OK: '+t.slice(0,40))}catch(e){toast('Falhou: '+e.message,5000)}}
 };
 const CHG={
+ selExF(el,d){sxF()[d.k]=el.value;selExAtualiza()},selExChk(el,d){SX.marc[d.id]=el.checked;selExMarc()},
  proxTodas(el){M.todas=el.checked;proxAtualiza()},proxChk(el,d){M.marc[d.id]=el.checked},
  nome(el){S.nome=el.value.trim();lsSet('tc_nome',S.nome)},perfil(el){S.perfil=el.value;lsSet('tc_perfil',S.perfil);render()},
  flt(el,d){S.f[d.k]=el.value;render()},
@@ -1243,6 +1318,7 @@ const CHG={
 };
 const INP={
  fltq(el,d){S.f[d.k]=el.value;render()},
+ selExQ(el){sxF().q=el.value;selExAtualiza()},
  proxQ(el){const q=norm(el.value);M.q=el.value;const box=$('#px-sug');if(!q){box.innerHTML='';return}const l=O().ocorrencias.filter(x=>norm([x.rua,x.bairro,x.desc,'#'+x.num].join(' ')).includes(q)).slice(0,8);box.innerHTML=l.map(x=>`<button data-act="proxCentroOc" data-id="${x.id}" ${x.lat==null?'disabled title="sem coordenadas"':''}>#${x.num} ${esc(ocLocal(x))}${x.lat==null?' (sem coordenadas)':''}</button>`).join('')||'<p class="small muted">Nenhuma ocorrência encontrada.</p>'},
  proxCoord(){const la=num($('#px-lat').value),lo=num($('#px-lng').value);if(isFinite(la)&&isFinite(lo)&&$('#px-lat').value&&$('#px-lng').value&&Math.abs(la)<=90&&Math.abs(lo)<=180){M.c={lat:la,lng:lo,label:'Coordenadas '+fN(la,5)+', '+fN(lo,5)};proxAtualiza()}},
  proxR(el){const r=Math.max(10,Math.min(50000,Math.round(num(el.value)||0)));if(!r)return;M.r=r;if(M.circ)M.circ.setRadius(r);proxAtualiza()},
