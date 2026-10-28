@@ -459,6 +459,9 @@ const PROGRAMAS = [
   {key:'estrutura',    campo:'estruturaAtivo',    solic:'estruturaSolicitado',    nome:'Estrutura em Concreto Armado', url:'/concreto/', disp:true,
    desc:'Dimensionamento de fundações e estruturas de concreto armado. Sapatas, estacas, radier, corrida. NBR 6118:2023 · NBR 6122:2022.',
    ico:'<path d="M10 6v34M36 6v34M4 14h38M4 32h38"/><circle cx="10" cy="14" r="1.6"/><circle cx="36" cy="14" r="1.6"/><circle cx="10" cy="32" r="1.6"/><circle cx="36" cy="32" r="1.6"/>'},
+  {key:'manutencao',   campo:'manutencaoAtivo',   solic:'manutencaoSolicitado',   nome:'Serviços Públicos',           url:'/manutencao/',   disp:true,
+   desc:'Planejamento de manutenção de ruas por obra/contrato: vistoria com fotos georreferenciadas, prioridades e semanas, execuções, RDO, relatório fotográfico e medição em Excel.',
+   ico:'<path d="M6 38 18 8h10l12 30"/><path d="M23 14v4M23 24v4M23 34v4"/>'},
   {key:'visitas',      campo:'visitasAtivo',      solic:'visitasSolicitado',      nome:'Visitas Técnicas',             url:'/visitas/',      disp:true,  preco:10,
    desc:'Gestão de visitas técnicas e inspeções de obra. Checklist, diário, fotos, RNC e relatório de vistoria.',
    ico:'<rect x="6" y="8" width="34" height="28" rx="3"/><path d="M6 16h34"/><circle cx="23" cy="28" r="5"/><path d="M20 28h6M23 25v6"/>'}
@@ -568,7 +571,7 @@ async function abrirPrograma(url){
 document.addEventListener('click', ev => {
   const a = ev.target.closest('a[href]'); if(!a) return;
   const href = a.getAttribute('href');
-  if(!/^\/(pavimento|orcamento|intertravado|drenagem|concreto|visitas)\/$/.test(href) || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+  if(!/^\/(pavimento|orcamento|intertravado|drenagem|concreto|visitas|manutencao)\/$/.test(href) || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
   ev.preventDefault(); a.style.opacity = '.6'; abrirPrograma(href);
 });
 
@@ -654,6 +657,7 @@ $('form-cadastro').addEventListener('submit', async ev => {
         orcamentoSolicitado: ks.includes('orcamento'), orcamentoAtivo: false,
         intertravadoSolicitado: ks.includes('intertravado'), intertravadoAtivo: false,
         visitasSolicitado: ks.includes('visitas'), visitasAtivo: false,
+        manutencaoSolicitado: ks.includes('manutencao'), manutencaoAtivo: false,
         drenagemSolicitado: ks.includes('drenagem'), drenagemAtivo: false,
         programasPedidos: ks, formaPagamento: pag, plano, tipoPedido, pedidoEm: fs.serverTimestamp()
       };
@@ -669,6 +673,7 @@ $('form-cadastro').addEventListener('submit', async ev => {
         orcamentoSolicitado: ks.includes('orcamento'), orcamentoAtivo: false,
         intertravadoSolicitado: ks.includes('intertravado'), intertravadoAtivo: false,
         visitasSolicitado: ks.includes('visitas'), visitasAtivo: false,
+        manutencaoSolicitado: ks.includes('manutencao'), manutencaoAtivo: false,
         drenagemSolicitado: ks.includes('drenagem'), drenagemAtivo: false,
         programasPedidos: ks, formaPagamento: pag, plano, tipoPedido, pedidoEm: fs.serverTimestamp()};
       if(indic && indic !== codigoDe(uid)) perfil.indicadoPor = indic;
@@ -683,6 +688,7 @@ $('form-cadastro').addEventListener('submit', async ev => {
       if(ks.includes('orcamento') && !eu.orcamentoSolicitado) upd.orcamentoSolicitado = true;
       if(ks.includes('intertravado') && !eu.intertravadoSolicitado) upd.intertravadoSolicitado = true;
       if(ks.includes('visitas') && !eu.visitasSolicitado) upd.visitasSolicitado = true;
+      if(ks.includes('manutencao') && !eu.manutencaoSolicitado) upd.manutencaoSolicitado = true;
       if(ks.includes('drenagem') && !eu.drenagemSolicitado) upd.drenagemSolicitado = true;
       if(indic && !eu.indicadoPor && indic !== codigoDe(uid)) upd.indicadoPor = indic;
       msg('cd-msg', 'Enviando pedido…', 'info');
