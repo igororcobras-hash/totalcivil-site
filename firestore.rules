@@ -150,6 +150,21 @@ service cloud.firestore {
                     && (resource.data.uid == request.auth.uid || admin());
     }
 
+    // Fotos das obras de Serviços Públicos (JPEG reduzido, ≈100–150 KB cada): mesmas pessoas da obra.
+    // O documento guarda obraDoc = idDoDono_idDaObra, que decide quem pode ler.
+    match /fotosServicos/{fotoId} {
+      allow read: if liberadoPrograma('manutencaoAtivo')
+                  && (resource.data.uid == request.auth.uid || admin() || membroObra(resource.data.obraDoc));
+      allow create: if liberadoPrograma('manutencaoAtivo')
+                    && request.resource.data.obraDoc == request.resource.data.uid + '_' + request.resource.data.obraId
+                    && request.resource.data.dados is string
+                    && request.resource.data.dados.size() < 900000
+                    && (request.resource.data.uid == request.auth.uid || admin() || membroObra(request.resource.data.obraDoc));
+      allow update: if false;
+      allow delete: if liberadoPrograma('manutencaoAtivo')
+                    && (resource.data.uid == request.auth.uid || admin() || membroObra(resource.data.obraDoc));
+    }
+
     // Pedidos de programa personalizado (quadro da página principal).
     match /solicitacoes/{id} {
       allow create: if request.resource.data.keys().hasOnly(['nome','contato','email','descricao','uid','criadoEm'])

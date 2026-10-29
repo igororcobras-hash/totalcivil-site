@@ -274,6 +274,8 @@ const S={settings:null,obras:{},obraId:null,tab:'painel',perfil:'gestor',nome:''
 const O=()=>S.obras[S.obraId];
 let M=null;
 const fotoCache=new Map();
+/* fotos: 1200 px no maior lado e JPEG 72% (≈100–150 KB): dá ≥300 dpi impressas em até 10×6 cm */
+const FOTO_MAX=1200,FOTO_Q=.72;
 const DB={ok:false,db:null,mem:{kv:new Map(),fotos:new Map()},
  async open(){try{this.db=await new Promise((res,rej)=>{const r=indexedDB.open('totalcivil_manutencao_ruas',1);r.onupgradeneeded=()=>{r.result.createObjectStore('kv');r.result.createObjectStore('fotos')};r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});this.ok=true}catch(e){this.ok=false}},
  _t(st,mode,fn){return new Promise((res,rej)=>{const t=this.db.transaction(st,mode);const q=fn(t.objectStore(st));t.oncomplete=()=>res(q?q.result:undefined);t.onerror=t.onabort=()=>rej(t.error)})},
@@ -286,7 +288,9 @@ const defSettings=()=>({cab:{orgao:'Prefeitura Municipal de Rio das Ostras',secr
  mapa:{lat:-22.5269,lng:-41.9456,zoom:13}});
 function saveSettings(){DB.put('kv','settings',S.settings).catch(()=>toast('Não foi possível salvar as configurações.'))}
 function saveObra(o){o._salvoEm=Date.now();nuvAgendar(o);return DB.put('kv','obra:'+o.id,o).catch(()=>toast('Não foi possível salvar no navegador (armazenamento cheio?). Faça um backup.'))}
-async function getFoto(id){if(fotoCache.has(id))return fotoCache.get(id);const r=await DB.get('fotos',id);const d=r&&r.data;if(d)fotoCache.set(id,d);return d||null}
+async function getFoto(id){if(fotoCache.has(id))return fotoCache.get(id);const r=await DB.get('fotos',id);let d=r&&r.data;
+ if(!d&&NUV&&NUV.ad&&NUV.ad.foto){try{d=await NUV.ad.foto(id);if(d){await DB.put('fotos',id,{id,obraId:S.obraId,data:d})}}catch(e){console.warn('Foto na nuvem:',id,e)}}
+ if(d)fotoCache.set(id,d);return d||null}
 function idsFotos(o){const s=new Set();o.ocorrencias.forEach(x=>x.fotos.forEach(f=>s.add(f.id)));o.execucoes.forEach(x=>x.fotos.forEach(f=>s.add(f.id)));return [...s]}
 function hydrate(root){$$('img[data-foto]',root).forEach(async img=>{const d=await getFoto(img.dataset.foto);if(d)img.src=d})}
 
@@ -338,9 +342,9 @@ function posicaoAtual(){if(G.pos&&G.st==='ok'&&Date.now()-G.pos.t<15000)return P
 async function processarFoto(file,camera){
  const buf=await file.arrayBuffer();let ex={};try{ex=lerExif(buf)}catch(e){}
  const url=URL.createObjectURL(new Blob([buf],{type:file.type||'image/jpeg'}));
- const img=await carregarImg(url);const mx=1600;let w=img.naturalWidth,h=img.naturalHeight;const k=Math.min(1,mx/Math.max(w,h));w=Math.round(w*k);h=Math.round(h*k);
+ const img=await carregarImg(url);const mx=FOTO_MAX;let w=img.naturalWidth,h=img.naturalHeight;const k=Math.min(1,mx/Math.max(w,h));w=Math.round(w*k);h=Math.round(h*k);
  const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);URL.revokeObjectURL(url);
- const data=c.toDataURL('image/jpeg',.8);
+ const data=c.toDataURL('image/jpeg',FOTO_Q);
  let lat=ex.lat,lng=ex.lng,origem=lat!=null?'exif':null;
  if(lat==null&&camera){try{const p=await posicaoAtual();lat=p.lat;lng=p.lng;origem='gps-aparelho'}catch(e){}}
  const id='f'+uid();await DB.put('fotos',id,{id,obraId:S.obraId,data});fotoCache.set(id,data);
@@ -613,6 +617,8 @@ async function nuvAdaptador(){
    }catch(e){throw e}
    return out},
   async get(docId){const s=await F.getDoc(F.doc(d,NUV_COL,docId));return s.exists()?await item(s):null},
+  async foto(id){const s=await F.getDoc(F.doc(d,'fotosServicos',id));return s.exists()?s.data().dados:null},
+  async fotoPut(id,o,dados,w,h){const dono=o._dono||u.uid;await F.setDoc(F.doc(d,'fotosServicos',id),{uid:dono,obraId:o.id,obraDoc:dono+'_'+o.id,fotoId:id,dados,w,h,em:Date.now()})},
   async put(o,txt,esperado){const p=await nuvPack(txt);const partes=[];for(let i=0;i<p.s.length;i+=NUV_PARTE)partes.push(p.s.slice(i,i+NUV_PARTE));if(partes.join('').length>900000)throw new Error('obra grande demais para a nuvem');const dono=o._dono||u.uid;const ref=F.doc(d,NUV_COL,dono+'_'+o.id);const dados={uid:dono,obraId:o.id,nome:String(o.nome||'').slice(0,200),contrato:String(o.contrato||'').slice(0,60),atualizadoEm:o._salvoEm||Date.now(),gz:p.gz,partes,versao:1,gravadoEm:F.serverTimestamp()};await F.runTransaction(d,async tx=>{const sn=await tx.get(ref);if(esperado!==undefined&&sn.exists()&&(sn.data().atualizadoEm||0)!==esperado){const er=new Error('conflito');er.conflito=true;throw er}tx.set(ref,dados)})},
   async del(obraId,dono){await F.deleteDoc(F.doc(d,NUV_COL,(dono||u.uid)+'_'+obraId))}}}
 /* mescla de 3 vias (base = última versão sincronizada; l = local; r = nuvem): preserva o que cada pessoa mudou em registros diferentes */
@@ -651,8 +657,19 @@ async function nuvEnviar(o,tent){const ad=NUV.ad;if(!ad)return;if(!nuvPode(o))re
     if(M&&typeof M==='object'){M.seq=Math.max(+L.seq||0,+R.seq||0,...(M.ocorrencias||[]).map(z=>+z.num||0));M._dono=o._dono;mudou=!_eq(M,L);nuvAplica(o,Object.assign({},M,{_baseEm:o._baseEm}))}}}}
   if(!o._salvoEm||ad.get)o._salvoEm=Math.max(Date.now(),visto+1);
   const txt=nuvTexto(o),t=o._salvoEm;await ad.put(o,txt,visto);o._baseEm=t;await DB.put('kv','obra:'+o.id,o);await DB.put('kv','base:'+o.id,txt);
-  nuvSet('ok');if(mudou){toast('Alterações de outros usuários foram incorporadas a esta obra.',4000);render()}
+  nuvSet('ok');nuvSobeFotos(o);if(mudou){toast('Alterações de outros usuários foram incorporadas a esta obra.',4000);render()}
  }catch(e){if(e&&e.conflito&&tent<4){return nuvEnviar(o,tent+1)}console.warn('Nuvem:',e);nuvSet('erro',String(e&&e.message||e))}}
+/* reduz uma foto já guardada (ex.: antigas de 1600 px) para o padrão da nuvem */
+async function fotoReduz(data){return new Promise(res=>{const im=new Image();im.onload=()=>{const k=Math.min(1,FOTO_MAX/Math.max(im.naturalWidth,im.naturalHeight));if(k>=1&&data.length<260000){res({dados:data,w:im.naturalWidth,h:im.naturalHeight});return}
+ const w=Math.round(im.naturalWidth*k),h=Math.round(im.naturalHeight*k);const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(im,0,0,w,h);res({dados:c.toDataURL('image/jpeg',FOTO_Q),w,h})};im.onerror=()=>res(null);im.src=data})}
+async function nuvSobeFotos(o){const ad=NUV.ad;if(!ad||!ad.fotoPut||!nuvPode(o)||NUV.subindo)return;NUV.subindo=true;
+ try{let enviadas=[];try{enviadas=(await DB.get('kv','fotosup:'+o.id))||[]}catch(_){}const ja=new Set(enviadas);let n=0;
+  for(const id of idsFotos(o)){if(ja.has(id))continue;const r=await DB.get('fotos',id);const d=r&&r.data;if(!d)continue;
+   const p=await fotoReduz(d);if(!p||p.dados.length>800000)continue;
+   await ad.fotoPut(id,o,p.dados,p.w,p.h);ja.add(id);n++;if(p.dados!==d){await DB.put('fotos',id,{id,obraId:o.id,data:p.dados});fotoCache.set(id,p.dados)}
+   if(n%5===0)await DB.put('kv','fotosup:'+o.id,[...ja])}
+  if(n)await DB.put('kv','fotosup:'+o.id,[...ja])}
+ catch(e){console.warn('Fotos na nuvem:',e)}finally{NUV.subindo=false}}
 function nuvAgendar(o){if(!NUV.ad||!NUV.pronto)return;if(!nuvPode(o))return;NUV.pend.add(o.id);clearTimeout(NUV.timers[o.id]);NUV.timers[o.id]=setTimeout(()=>nuvDescarga(o.id),4000)}
 function nuvDescarga(id){clearTimeout(NUV.timers[id]);if(!NUV.pend.has(id))return;NUV.pend.delete(id);const o=S.obras[id];if(o)nuvEnviar(o)}
 function nuvApagar(o){if(typeof o==='string')o=S.obras[o]||{id:o};if(!NUV.ad||!o)return;NUV.pend.delete(o.id);const U=window.TC_USUARIO;if(o._dono&&o._dono!==NUV.ad.uid&&!(U&&U.admin))return;NUV.ad.del(o.id,o._dono).catch(e=>console.warn('Nuvem:',e))}
@@ -675,6 +692,7 @@ async function nuvIniciar(){
   if(!S.trava)for(const o of Object.values(S.obras)){if(vistas.has(o.id))continue;if(o._dono&&o._dono!==ad.uid)continue;if(!o._salvoEm)o._salvoEm=Date.now();await nuvEnviar(o);enviadas++}
   NUV.pronto=true;nuvSet('ok',baixadas||enviadas?`${baixadas} obra(s) baixada(s) e ${enviadas} enviada(s) na sincronização inicial.`:'');
   if(baixadas){toast(baixadas+' obra(s) atualizada(s) a partir da nuvem. As fotos ficam no aparelho onde foram tiradas.',6000);render()}
+  (async()=>{for(const o of Object.values(S.obras)){if(nuvPode(o))await nuvSobeFotos(o)}})();
   setInterval(nuvPuxar,60000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')nuvPuxar()})
  }catch(e){console.warn('Nuvem:',e);nuvSet('erro',String(e&&e.message||e))}}
 function nuvLigar(){if(window.TC_ACESSO==='liberado'||window.TC_NUVEM_FAKE)nuvIniciar();else document.addEventListener('tc-acesso-liberado',()=>nuvIniciar(),{once:true})}
