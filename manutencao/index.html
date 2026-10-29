@@ -245,6 +245,7 @@ const ST={vistoriada:{l:'Vistoriada',c:'#2563a8'},planejada:{l:'Planejada',c:'#b
 const PERFIL={fiscal:'Fiscal',gestor:'Gestor / Secretário',empresa:'Empresa contratada'};
 const PERM={fiscal:['ocorr','exec','conferir'],gestor:['ocorr','exec','conferir','plan','medicao','config'],empresa:['exec']};
 const can=a=>PERM[S.perfil].includes(a);
+const canPI=()=>{if(S.perfil==='gestor')return true;const o=O();return !!(o&&o.liberaPI&&o.liberaPI[S.perfil])};
 const AMB={pc:'💻 Computador',android:'🤖 Android',ios:'📱 iPhone/iPad'};
 const ORIGEM={exif:'da foto (EXIF)','gps-aparelho':'GPS do aparelho',mapa:'marcado no mapa',endereco:'pela busca de endereço',manual:'digitadas'};
 const TIPOS={asfalto:'Pavimentação asfáltica',naopav:'Ruas não pavimentadas',drenagem:'Drenagem',intertravado:'Pavimento intertravado',enroc:'Enrocamento / proteção costeira',outro:'Outro'};
@@ -410,16 +411,27 @@ function tPainel(o){const oc=o.ocorrencias;const c=f=>oc.filter(f).length;const 
  const pct=o.valor>0?Math.min(100,(medido+R.total)/o.valor*100):0;
  const semAtual=isoWeek(hojeISO());const semanas={};aberta.filter(x=>x.semana&&x.semana>=semAtual).forEach(x=>{semanas[x.semana]=(semanas[x.semana]||0)+1});
  const bp=p=>{const n=aberta.filter(x=>priEf(x)===p).length;return `<div class="b"><span>${PRI[p].l}</span><div class="bar"><i style="width:${aberta.length?n/aberta.length*100:0}%;background:${PRI[p].c}"></i></div><b>${n}</b></div>`};
+ const SP=saldoPlan(o);const bs=SP.base,pc=v=>bs>0?v/bs*100:0,exec=r2(SP.medido+SP.aMedir+SP.pend),saldoAtual=r2(bs-exec);
+ const kp=(n,l,den,cor)=>`<div class="kpi"><div class="v">${n}</div><div class="l">${l}</div><div class="bar" style="margin-top:8px" title="${den>0?fN(n/den*100,1)+'%':''}"><i style="width:${den>0?Math.min(100,n/den*100):0}%;background:${cor}"></i></div></div>`;
+ const bv=(rot,v,p,cor,neg,forte)=>`<div style="margin:${forte?'12px':'8px'} 0"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;${forte?'font-size:15px;':''}"><span>${rot}</span><b class="${neg?'neg':''}">${fR(v)} <span class="muted small">· ${fN(p,1)}%</span></b></div><div class="bar" style="height:${forte?14:10}px"><i style="width:${Math.max(0,Math.min(100,p))}%;background:${cor}"></i></div></div>`;
+ const nEx=o.execucoes.length;
  return `<div class="kpis">
- <div class="kpi"><div class="v">${oc.length}</div><div class="l">ocorrências vistoriadas</div></div>
- <div class="kpi"><div class="v">${c(x=>!x.priConf&&x.status==='vistoriada')}</div><div class="l">aguardando prioridade do gestor</div></div>
- <div class="kpi"><div class="v">${c(x=>x.status==='planejada')}</div><div class="l">planejadas</div></div>
- <div class="kpi"><div class="v">${c(x=>x.status==='em_execucao')}</div><div class="l">em execução</div></div>
- <div class="kpi"><div class="v">${c(x=>x.status==='executada'||x.status==='medida')}</div><div class="l">executadas</div></div>
- <div class="kpi"><div class="v">${pend}</div><div class="l">execuções a conferir (fiscal)</div></div></div>
- <div class="cols"><div class="card"><h3>Financeiro da obra</h3><p class="muted small">Valores truncados em 2 casas, conforme a medição.</p>
- <p>Valor do contrato: <b>${fR(o.valor)}</b></p><p>Já medido: <b>${fR(medido)}</b></p><p>Executado e conferido a medir: <b>${fR(R.total)}</b></p>
- <div class="bar"><i style="width:${pct}%"></i></div><p class="small muted">${fN(pct,1)}% do valor do contrato (medido + a medir)</p></div>
+ ${kp(oc.length,'ocorrências vistoriadas',oc.length,'#2563a8')}
+ ${kp(c(x=>!x.priConf&&x.status==='vistoriada'),'aguardando prioridade do gestor',oc.length,'#d98a00')}
+ ${kp(c(x=>x.status==='planejada'),'planejadas',oc.length,'#6a4fb3')}
+ ${kp(c(x=>x.status==='em_execucao'),'em execução',oc.length,'#d98a00')}
+ ${kp(c(x=>x.status==='executada'||x.status==='medida'),'executadas',oc.length,'#2e8b57')}
+ ${kp(pend,'execuções a conferir (fiscal)',nEx,'#c0392b')}</div>
+ <div class="cols"><div class="card"><h3>💰 Financeiro da obra</h3><p class="muted small">Cada barra mostra o valor e o percentual do valor total do contrato. Valores truncados em 2 casas, conforme a medição.</p>
+ ${bv('Valor total do contrato',bs,bs>0?100:0,'#2563a8',false,true)}
+ ${bv('Total executado (medido + a medir + a conferir)',exec,pc(exec),'#d98a00',false,true)}
+ ${bv('&nbsp;&nbsp;↳ Já medido',SP.medido,pc(SP.medido),'#2e8b57')}
+ ${bv('&nbsp;&nbsp;↳ Executado e conferido, a medir',SP.aMedir,pc(SP.aMedir),'#6a4fb3')}
+ ${bv('&nbsp;&nbsp;↳ Executado, aguardando conferência',SP.pend,pc(SP.pend),'#c0392b')}
+ ${bv('Saldo do contrato (valor total − executado)',saldoAtual,pc(saldoAtual),saldoAtual<0?'#c0392b':'#2e8b57',saldoAtual<0,true)}
+ ${bv('Programado para as próximas semanas',SP.prog,pc(SP.prog),'#6a4fb3')}
+ ${bv('Saldo livre após a programação',SP.livre,pc(SP.livre),SP.livre<0?'#c0392b':'#2e8b57',SP.livre<0,true)}
+ ${SP.livre<0?'<div class="alert bad" style="margin-top:8px">⚠ A programação ultrapassa o saldo do contrato.</div>':''}</div>
  <div class="card"><h3>Ocorrências abertas por prioridade</h3><div class="bars">${bp('alta')}${bp('media')}${bp('baixa')}</div>
  <h4 style="margin-top:14px">Programação das próximas semanas</h4>${Object.keys(semanas).sort().map(w=>`<p>${labSem(w)}: <b>${semanas[w]}</b> ocorrência(s)</p>`).join('')||'<p class="muted small">Nenhuma semana programada.</p>'}</div></div>
  <div class="card" style="margin-top:16px"><h3>Pendências</h3>
@@ -516,7 +528,9 @@ function tRel(o){const r=S.f.rel;const w=isoWeek(r.semDia);
  <p class="small muted" style="margin-top:12px">Para PDF: abra o relatório e clique em <b>Imprimir / Salvar PDF</b> (escolha “Salvar como PDF”). O Word só está disponível para relatórios sem fotos.</p></div>`}
 function tCfg(o){const c=S.settings,ia=c.ia;const tot=o.servicos.reduce((s,x)=>r2(s+t2(x.qtd*pbdi(o,x))),0);const g=can('config');
  return `${g?'':'<div class="alert">Somente o Gestor altera dados da obra e configurações.</div>'}
- <div class="card"><div class="row"><h3>Dados da obra</h3><span class="sp"></span><button class="btn sm" data-act="editObra" ${g?'':'disabled'}>Editar dados</button></div>
+ <div class="card"><h3>🧭 Planejamento instruído</h3><p class="muted small">Por padrão, só o Gestor / Secretário usa o planejamento instruído. Marque abaixo os perfis que também poderão usá-lo nesta obra.</p>
+ <div class="row gap"><label class="chk"><input type="checkbox" data-chg="liberaPI" data-k="fiscal" ${o.liberaPI&&o.liberaPI.fiscal?'checked':''} ${g?'':'disabled'}> Liberar para o Fiscal</label><label class="chk"><input type="checkbox" data-chg="liberaPI" data-k="empresa" ${o.liberaPI&&o.liberaPI.empresa?'checked':''} ${g?'':'disabled'}> Liberar para a Empresa contratada</label></div></div>
+ <div class="card" style="margin-top:16px"><div class="row"><h3>Dados da obra</h3><span class="sp"></span><button class="btn sm" data-act="editObra" ${g?'':'disabled'}>Editar dados</button></div>
  <div class="g2"><p><b>Obra:</b> ${esc(o.nome)}</p><p><b>Contrato nº:</b> ${esc(o.contrato)}</p><p><b>Contratada:</b> ${esc(o.contratada)} ${o.cnpj?'· '+esc(o.cnpj):''}</p><p><b>Processo:</b> ${esc(o.processo||'—')}</p><p><b>Tipo:</b> ${esc(TIPOS[o.tipo])}</p><p><b>Valor do contrato:</b> ${fR(o.valor)}</p><p><b>Vigência:</b> ${fData(o.inicio)} a ${fData(o.fim)}</p><p><b>Fiscal:</b> ${esc(o.fiscal||'—')} · <b>Gestor:</b> ${esc(o.gestor||'—')}</p><p><b>Resp. técnico da contratada:</b> ${esc(o.rt||'—')}</p><p><b>Cidade:</b> ${esc(o.cidade||'—')}</p></div><p><b>Objeto:</b> ${esc(o.objeto||'—')}</p></div>
  <div class="card" style="margin-top:16px"><div class="row gap"><h3>Planilha de serviços do contrato</h3><span class="sp"></span><button class="btn sm" data-act="planImp" ${g?'':'disabled'}>📥 Importar do Excel</button><button class="btn sm" data-act="svcAdd" ${g?'':'disabled'}>＋ Serviço</button></div>
  <p class="muted small">Cadastre os itens com os <b>códigos, unidades, quantidades e preços do contrato</b> — os itens iniciais são só um modelo editável. Ao importar o Excel da obra (.xlsx, .xls ou .csv) você escolhe a aba, a linha dos títulos e <b>quais colunas</b> usar.</p>
@@ -606,7 +620,7 @@ function planFiltros(o){const f=S.f;const bs=bairrosDe(o);
  return `<div class="toolbar" style="margin-top:8px"><label>Prioridade<select data-chg="flt" data-k="plPri"><option value="">Todas</option>${Object.entries(PRI).map(([k,v])=>`<option value="${k}" ${f.plPri===k?'selected':''}>${v.l}</option>`).join('')}</select></label>
  <label>Bairro<select data-chg="flt" data-k="plBai"><option value="">Todos</option>${bs.map(b=>`<option ${f.plBai===b?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
  <label style="flex:1;min-width:180px">Palavra-chave<input id="plBusca" placeholder="rua, bairro, descrição, nº" value="${esc(f.plQ)}" data-inp="fltq" data-k="plQ"></label>
- <button class="btn pri" data-act="proxAbrir">📍 Ocorrências próximas</button></div>
+ <button class="btn pri" data-act="proxAbrir">📍 Ocorrências próximas</button>${canPI()?'<button class="btn pri" data-act="piAbrir" title="Distribui as ocorrências por dia, semana ou mês conforme prioridade, raio e carga dos caminhões">🧭 Planejamento instruído</button>':''}</div>
  ${f.plRaio?`<div class="alert" style="background:#eef4fb;border-color:#2563a8">📍 Mostrando só as ocorrências a até <b>${fDist(f.plRaio.r)}</b> de <b>${esc(f.plRaio.label)}</b>, da mais próxima para a mais distante. <button class="btn sm" data-act="proxLimpar">✕ Limpar raio</button></div>`:''}`}
 function modalProx(){const o=O(),m=M;
  return `<div class="mh"><h3>📍 Ocorrências próximas</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
@@ -636,6 +650,62 @@ function proxMapa(){const el=$('#pxMap');if(!el)return;if(typeof L==='undefined'
  o.ocorrencias.filter(x=>x.lat!=null).forEach(x=>L.circleMarker([x.lat,x.lng],{radius:6,color:'#fff',weight:2,fillColor:PRI[priEf(x)].c,fillOpacity:.95}).bindTooltip('#'+x.num+' '+ocLocal(x)).addTo(map));
  map.on('click',e=>proxCentro(e.latlng.lat,e.latlng.lng,'Ponto no mapa'));setTimeout(()=>{if(M&&M.map===map){map.invalidateSize({animate:false});proxAtualiza()}},90)}
 
+/* ===================== planejamento instruído (somente gestor) ===================== */
+const piDef=()=>({ordem:'pri',pris:{alta:true,media:true,baixa:true},soSem:true,soConf:false,bairros:[],raioKm:1,dens:2.5,carga:10,camDia:2,qtdPad:1,esp:5,unid:'semana',n:4,inicio:addDias(hojeISO(),1),limSaldo:true});
+function piVol(o,oc,P){const sv=svcOf(o,oc.servicoId||oc.servSug);const un=sv?String(sv.unidade||'').toLowerCase().replace('³','3').replace('²','2').trim():'';
+ const assum=!(oc.qtdPlan>0);const q=assum?P.qtdPad:oc.qtdPlan;let m3,t,ok=!!sv;
+ if(assum){m3=q;t=m3*P.dens;ok=ok&&un==='m3'}
+ else if(un==='t'||un==='ton'){t=q;m3=q/P.dens}
+ else if(un==='m2'){m3=q*P.esp/100;t=m3*P.dens}
+ else{m3=q;t=m3*P.dens}
+ return {q,m3,t,assum,custo:ok?t2(q*pbdi(o,sv)):0,custoOk:ok}}
+function modalPI(){const P=M.p;const n=(k,l,extra)=>`<label>${l}<input inputmode="decimal" value="${inp(P[k])}" data-inp="piN" data-k="${k}" ${extra||''}></label>`;
+ return `<div class="mh"><h3>🧭 Planejamento instruído</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+ <p class="muted small">O programa distribui as ocorrências abertas por dia, semana ou mês, respeitando a ordem de prioridade, a carga dos caminhões e (se quiser) um raio em km para agrupar ruas próximas. Com raio, cada dia parte da ocorrência de maior prioridade e completa a carga com as mais próximas. Nada é gravado até você tocar em <b>Aplicar ao planejamento</b>; ao aplicar, o gestor também confirma a prioridade das ocorrências programadas.</p>
+ <h4>1. Ordem e filtros</h4>
+ <div class="g2"><label>Ordem de atendimento<select data-chg="piP" data-k="ordem"><option value="pri" ${P.ordem==='pri'?'selected':''}>Prioridade (alta → baixa); mais antigas primeiro</option><option value="antig" ${P.ordem==='antig'?'selected':''}>Mais antigas primeiro</option><option value="vol" ${P.ordem==='vol'?'selected':''}>Maior volume primeiro</option></select></label>
+ <div><div class="small muted">Prioridades incluídas</div><div class="row gap">${Object.entries(PRI).map(([k,v])=>`<label class="chk"><input type="checkbox" data-chg="piP" data-k="pri.${k}" ${P.pris[k]?'checked':''}> ${v.l}</label>`).join('')}</div></div></div>
+ <div style="margin:8px 0"><label>Bairros — digite para procurar e toque no bairro para somar à seleção<input id="pi-bq" placeholder="ex.: Nova Cidade" autocomplete="off" data-inp="piBq"></label><div id="pi-bsug" class="geo"></div>
+ <label>Bairros selecionados (vazio = todos os bairros)<input id="pi-bsel" readonly value="${esc((P.bairros||[]).join('; '))}" placeholder="Todos os bairros"></label>
+ <div class="row gap" style="margin-top:4px"><button class="btn sm" data-act="piBTodos">Todos os bairros</button><button class="btn sm" data-act="piBLimpar">✕ Limpar seleção</button></div></div>
+ <div class="row gap"><label class="chk"><input type="checkbox" data-chg="piP" data-k="soSem" ${P.soSem?'checked':''}> Só ocorrências ainda sem semana definida</label><label class="chk"><input type="checkbox" data-chg="piP" data-k="soConf" ${P.soConf?'checked':''}> Só com prioridade já confirmada</label></div>
+ <h4 style="margin-top:12px">2. Raio e caminhões</h4>
+ <div class="g4">${n('raioKm','Raio para agrupar (km) — 0 = sem agrupar')}${n('dens','Peso específico do asfalto (t/m³)')}${n('carga','Carga de cada caminhão (t)')}${n('camDia','Caminhões por dia')}</div>
+ <div class="g4">${n('qtdPad','Volume quando não informado (m³)')}${n('esp','Espessura p/ serviços em m² (cm)')}</div>
+ <h4 style="margin-top:12px">3. Período</h4>
+ <div class="g4"><label>Começar em<input type="date" value="${P.inicio}" data-chg="piP" data-k="inicio"></label>${n('n','Planejar para quantos')}<label>Unidade<select data-chg="piP" data-k="unid"><option value="dia" ${P.unid==='dia'?'selected':''}>dia(s) útil(eis)</option><option value="semana" ${P.unid==='semana'?'selected':''}>semana(s)</option><option value="mes" ${P.unid==='mes'?'selected':''}>mês(es)</option></select></label><label class="chk" style="align-self:end"><input type="checkbox" data-chg="piP" data-k="limSaldo" ${P.limSaldo?'checked':''}> Parar quando acabar o saldo livre</label></div>
+ <div class="row gap" style="margin:10px 0"><button class="btn pri" data-act="piCalc">Calcular</button><span class="sp"></span></div>
+ <div id="pi-res"></div>
+ <div class="row gap" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mClose">Fechar</button><button class="btn pri" data-act="piAplicar" id="pi-ap" disabled>Aplicar ao planejamento</button></div></div>`}
+function piBSel(){const e=$('#pi-bsel');if(e)e.value=(M.p.bairros||[]).join('; ');if(M.res)piCalc()}
+function piCalc(){const o=O(),P=M.p,SP=saldoPlan(o);const cap=P.camDia*P.carga;
+ if(!(cap>0)||!(P.dens>0)||!(P.n>=1)){toast('Informe carga, caminhões por dia, peso específico e o período.');return}
+ const cmp=P.ordem==='antig'?(a,b)=>(a.oc.criadoEm||'').localeCompare(b.oc.criadoEm||'')||a.oc.num-b.oc.num:P.ordem==='vol'?(a,b)=>b.v.m3-a.v.m3||a.oc.num-b.oc.num:(a,b)=>(PRI[priEf(a.oc)].o-PRI[priEf(b.oc)].o)||(a.oc.criadoEm||'').localeCompare(b.oc.criadoEm||'')||a.oc.num-b.oc.num;
+ let pool=o.ocorrencias.filter(x=>x.status!=='medida'&&x.status!=='executada'&&P.pris[priEf(x)]&&(!(P.bairros||[]).length||P.bairros.includes((x.bairro||'').trim()))&&(!P.soSem||!x.semana)&&(!P.soConf||x.priConf)).map(x=>({oc:x,v:piVol(o,x,P)}));pool.sort(cmp);
+ const nTot=pool.length;const nd=P.unid==='dia'?P.n:P.unid==='semana'?P.n*5:P.n*22;const R=Math.max(0,P.raioKm)*1000;const budget=P.limSaldo?SP.livre:Infinity;let gasto=0,dia=P.inicio,cnt=0;const dias=[];
+ let guard=0;while(cnt<nd&&pool.length&&guard++<4000){const wd=pd(dia).getUTCDay();if(wd===0||wd===6){dia=addDias(dia,1);continue}
+  let used=0,custo=0,anchor=null;const items=[];
+  for(;;){const i=pool.findIndex(p=>{if(items.length&&used+p.v.t>cap+1e-9)return false;if(gasto+p.v.custo>budget+1e-9)return false;if(anchor&&R>0&&p.oc.lat!=null&&distM(anchor,{lat:p.oc.lat,lng:p.oc.lng})>R)return false;return true});
+   if(i<0)break;const p=pool.splice(i,1)[0];items.push(p);used+=p.v.t;custo=r2(custo+p.v.custo);gasto=r2(gasto+p.v.custo);if(!anchor&&p.oc.lat!=null)anchor={lat:p.oc.lat,lng:p.oc.lng}}
+  if(!items.length)break;dias.push({dia,items,t:used,m3:items.reduce((s,p)=>s+p.v.m3,0),cargas:Math.ceil(used/P.carga-1e-9),custo});cnt++;dia=addDias(dia,1)}
+ M.res={dias,resto:pool,nTot,cap,SP};piMostra()}
+function piMostra(){const {dias,resto,nTot,cap,SP}=M.res,P=M.p,box=$('#pi-res'),bt=$('#pi-ap');if(!box)return;
+ const mesN=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+ const chave=d=>P.unid==='dia'?d:P.unid==='semana'?isoWeek(d):d.slice(0,7);const rot=(k)=>P.unid==='dia'?fData(k):P.unid==='semana'?labSem(k):mesN[+k.slice(5)-1]+'/'+k.slice(0,4);
+ const gr=new Map();dias.forEach(d=>{const k=chave(d.dia);if(!gr.has(k))gr.set(k,[]);gr.get(k).push(d)});
+ let acc=SP.livre;const tot={n:0,m3:0,t:0,c:0,cu:0};
+ const linhas=[...gr.entries()].map(([k,ds])=>{const n=ds.reduce((s,d)=>s+d.items.length,0),m3=ds.reduce((s,d)=>s+d.m3,0),t=ds.reduce((s,d)=>s+d.t,0),c=ds.reduce((s,d)=>s+d.cargas,0),cu=ds.reduce((s,d)=>r2(s+d.custo),0);acc=r2(acc-cu);tot.n+=n;tot.m3+=m3;tot.t+=t;tot.c+=c;tot.cu=r2(tot.cu+cu);
+  const ruas=ds.map(d=>{const m=new Map();d.items.forEach(({oc,v})=>{const kk=(oc.rua||'(sem nome da rua)')+(oc.bairro?' — '+oc.bairro:'');const e=m.get(kk)||{n:0,m3:0,sc:0};e.n++;e.m3+=v.m3;if(oc.lat==null)e.sc++;m.set(kk,e)});
+   return `<p class="small" style="margin:3px 0"><b>${fData(d.dia).slice(0,5)}</b> · ${fN(d.t,1)} t · ${d.cargas} carga(s): ${[...m.entries()].map(([r,e])=>esc(r)+' <span class="muted">('+e.n+' ocorr., '+fN(e.m3)+' m³'+(e.sc?', sem coordenada':'')+')</span>').join('; ')}</p>`}).join('');
+  return `<tr><td><b>${esc(rot(k))}</b></td><td class="r">${n}</td><td class="r">${fN(m3)}</td><td class="r">${fN(t,1)}</td><td class="r">${c}</td><td class="r">${fN(cu)}</td><td class="r ${acc<0?'neg':''}">${fN(acc)}</td></tr><tr><td colspan="7" style="background:var(--bg,#f6f7f9)">${ruas}</td></tr>`}).join('');
+ const sem=resto.length;const nAss=dias.reduce((s,d)=>s+d.items.filter(p=>p.v.assum).length,0);
+ box.innerHTML=`<div class="alert" style="background:#eef4fb;border-color:#2563a8">Capacidade por dia: <b>${P.camDia}</b> caminhão(ões) × <b>${fN(P.carga,1)} t</b> = <b>${fN(cap,1)} t</b> ≈ <b>${fN(cap/P.dens)} m³</b> de massa asfáltica (peso específico ${fN(P.dens)} t/m³). Saldo livre atual: <b>${fR(SP.livre)}</b>.</div>
+ ${dias.length?`<div class="tablewrap"><table class="tb"><thead><tr><th>Período</th><th class="r">Ocorr.</th><th class="r">m³</th><th class="r">Toneladas</th><th class="r">Cargas</th><th class="r">Custo (R$)</th><th class="r">Saldo após (R$)</th></tr></thead><tbody>${linhas}</tbody><tfoot><tr><td><b>Total</b></td><td class="r"><b>${tot.n}</b></td><td class="r"><b>${fN(tot.m3)}</b></td><td class="r"><b>${fN(tot.t,1)}</b></td><td class="r"><b>${tot.c}</b></td><td class="r"><b>${fN(tot.cu)}</b></td><td></td></tr></tfoot></table></div>`:'<p class="muted">Nenhuma ocorrência coube nos critérios escolhidos.</p>'}
+ <p class="small" style="margin-top:8px">${tot.n} de ${nTot} ocorrência(s) distribuída(s).${sem?` <b>${sem}</b> ficam para depois (fora do período ou do saldo).`:''}${nAss?` <span class="muted">Em ${nAss} delas não havia volume informado: foi usado ${fN(P.qtdPad)} m³ por ocorrência.</span>`:''}</p>`;
+ if(bt)bt.disabled=!dias.length}
+function piAplicar(){if(!canPI()){toast('Sem permissão para aplicar o planejamento instruído.');return}const o=O();if(!M.res||!M.res.dias.length){toast('Calcule antes de aplicar.');return}
+ let n=0;M.res.dias.forEach(d=>d.items.forEach(({oc,v})=>{if(S.perfil==='gestor'&&!oc.priConf){oc.priG=priEf(oc);oc.priConf=true}oc.semana=isoWeek(d.dia);oc.diaPlan=d.dia;if(!oc.servicoId&&oc.servSug)oc.servicoId=oc.servSug;if(!(oc.qtdPlan>0)&&oc.servicoId&&v.assum&&v.custoOk)oc.qtdPlan=v.q;log(oc,'Programada pelo planejamento instruído: '+fData(d.dia)+' ('+labSem(oc.semana)+')');recalcStatus(o,oc);n++}));
+ saveObra(o);fecharModal(false);S.tab='plan';render();toast(n+' ocorrência(s) programadas pelo planejamento instruído.',6000)}
 /* ===================== conferência em campo, custo previsto/saldo e renovação ===================== */
 const custoPlan=(o,oc)=>{const sv=svcOf(o,oc.servicoId);return sv&&oc.qtdPlan?t2(oc.qtdPlan*pbdi(o,sv)):0};
 function saldoPlan(o){const base=o.valor>0?o.valor:o.servicos.reduce((s,x)=>r2(s+t2(x.qtd*pbdi(o,x))),0);
@@ -1258,6 +1328,9 @@ const ACTS={
  semMov(d){S.f.semDia=addDias(S.f.semDia,+d.n);render()},
  selTodos(){const o=O();const abertas=o.ocorrencias.filter(x=>x.status!=='medida'&&x.status!=='executada');planLista(o,abertas).forEach(x=>S.f.sel[x.id]=true);render()},selLimpar(){S.f.sel={};render()},
  proxLimpar(){S.f.plRaio=null;render()},
+ piAbrir(){if(!canPI()){toast('O planejamento instruído é do Gestor / Secretário. Ele pode liberar o uso para o seu perfil em Obra & Config.');return}if(!S.f.pi)S.f.pi=piDef();M={t:'pi',p:S.f.pi,res:null};abrirModal(modalPI())},piCalc(){if(M&&M.t==='pi')piCalc()},
+ piBAdd(d){const P=M.p;P.bairros=P.bairros||[];if(!P.bairros.includes(d.b))P.bairros.push(d.b);$('#pi-bq').value='';$('#pi-bsug').innerHTML='';piBSel()},
+ piBTodos(){M.p.bairros=[];piBSel()},piBLimpar(){M.p.bairros=[];piBSel()},piAplicar(){if(M&&M.t==='pi')piAplicar()},
  proxAbrir(){const c=S.f.plRaio;M={t:'prox',c:c?{lat:c.lat,lng:c.lng,label:c.label}:null,r:c?c.r:500,q:'',end:'',todas:false,marc:{},achadas:[]};abrirModal(modalProx());proxMapa();setTimeout(proxAtualiza,120)},
  proxRaio(d){M.r=+d.r;const e=$('#px-r');if(e)e.value=M.r;if(M.circ)M.circ.setRadius(M.r);proxAtualiza()},
  proxCentroOc(d){const oc=O().ocorrencias.find(x=>x.id===d.id);if(!oc||oc.lat==null){toast('Esta ocorrência não tem coordenadas.');return}proxCentro(oc.lat,oc.lng,'#'+oc.num+' '+ocLocal(oc))},
@@ -1343,6 +1416,8 @@ const ACTS={
 const CHG={
  mapExt(el){S.f.mapExt=el.checked;render()},kmlGrp(el,d){M.sel[d.k]=el.checked},
  selExF(el,d){sxF()[d.k]=el.value;selExAtualiza()},selExChk(el,d){SX.marc[d.id]=el.checked;selExMarc()},
+ liberaPI(el,d){if(!can('config'))return;const o=O();o.liberaPI=o.liberaPI||{};o.liberaPI[d.k]=el.checked;saveObra(o);toast(el.checked?'Planejamento instruído liberado para '+PERFIL[d.k]+'.':'Planejamento instruído bloqueado para '+PERFIL[d.k]+'.')},
+ piP(el,d){const p=M.p,k=d.k;if(k.startsWith('pri.'))p.pris[k.slice(4)]=el.checked;else if(el.type==='checkbox')p[k]=el.checked;else p[k]=el.value;if(M.res)piCalc()},
  proxTodas(el){M.todas=el.checked;proxAtualiza()},proxChk(el,d){M.marc[d.id]=el.checked},
  nome(el){S.nome=el.value.trim();lsSet('tc_nome',S.nome)},perfil(el){S.perfil=el.value;lsSet('tc_perfil',S.perfil);render()},
  flt(el,d){S.f[d.k]=el.value;render()},
@@ -1367,6 +1442,9 @@ const INP={
  selExQ(el){sxF().q=el.value;selExAtualiza()},
  proxQ(el){const q=norm(el.value);M.q=el.value;const box=$('#px-sug');if(!q){box.innerHTML='';return}const l=O().ocorrencias.filter(x=>norm([x.rua,x.bairro,x.desc,'#'+x.num].join(' ')).includes(q)).slice(0,8);box.innerHTML=l.map(x=>`<button data-act="proxCentroOc" data-id="${x.id}" ${x.lat==null?'disabled title="sem coordenadas"':''}>#${x.num} ${esc(ocLocal(x))}${x.lat==null?' (sem coordenadas)':''}</button>`).join('')||'<p class="small muted">Nenhuma ocorrência encontrada.</p>'},
  proxCoord(){const la=num($('#px-lat').value),lo=num($('#px-lng').value);if(isFinite(la)&&isFinite(lo)&&$('#px-lat').value&&$('#px-lng').value&&Math.abs(la)<=90&&Math.abs(lo)<=180){M.c={lat:la,lng:lo,label:'Coordenadas '+fN(la,5)+', '+fN(lo,5)};proxAtualiza()}},
+ piBq(el){const q=norm(el.value),P=M.p,box=$('#pi-bsug');if(!q){box.innerHTML='';return}const sel=new Set(P.bairros||[]);const cont={};O().ocorrencias.forEach(x=>{if(x.bairro)cont[x.bairro]=(cont[x.bairro]||0)+1});
+  const l=bairrosDe(O()).filter(b=>!sel.has(b)&&norm(b).includes(q)).slice(0,10);box.innerHTML=l.length?l.map(b=>`<button class="btn sm" data-act="piBAdd" data-b="${esc(b)}">＋ ${esc(b)} (${cont[b]||0})</button>`).join(' '):'<span class="small muted">Nenhum bairro encontrado.</span>'},
+ piN(el,d){const v=num(el.value);if(isFinite(v))M.p[d.k]=Math.max(0,v)},
  proxR(el){const r=Math.max(10,Math.min(50000,Math.round(num(el.value)||0)));if(!r)return;M.r=r;if(M.circ)M.circ.setRadius(r);proxAtualiza()},
  medidas(){const o=$('#medOut');if(!o)return;const m=medidasVals();o.textContent=(m.a||m.v)?'Área = '+fN(m.a)+' m²'+(m.v?' · Volume = '+fN(m.v)+' m³':''):''}
 };
