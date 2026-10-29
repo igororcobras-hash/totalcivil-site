@@ -102,6 +102,7 @@ table.tb input{margin:0;padding:5px 7px}
 .mb{padding:16px 20px}.mf{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;position:sticky;bottom:0;z-index:5;flex-wrap:wrap;background:var(--card);border-radius:0 0 18px 18px}
 .pickmap,.mapbox{position:relative;z-index:0;height:300px;border-radius:12px;border:1px solid var(--line);margin-top:10px;overflow:hidden}
 .mapbox{height:calc(100vh - 330px);min-height:420px}
+.pi-n{background:transparent!important;border:0!important;box-shadow:none!important;color:#fff!important;font-weight:800;font-size:11px;padding:0!important}.pi-n:before{display:none!important}
 .nomap{padding:20px;text-align:center;color:var(--muted)}
 .pin span{display:block;width:22px;height:22px;background:var(--accent);border:3px solid #fff;border-radius:50% 50% 50% 0;transform:rotate(-45deg);box-shadow:0 2px 6px rgba(0,0,0,.45)}
 .geo{border:1px solid var(--line);border-radius:10px;margin-top:8px}
@@ -304,7 +305,35 @@ function lerTiff(v,base){const le=v.getUint16(base)===0x4949;const u16=o=>v.getU
  try{if(i0[0x8825]){const g=ifd(u32(i0[0x8825].v));if(g[2]&&g[4]){const dms=a=>a[0]+a[1]/60+a[2]/3600;let la=dms(val(g[2])),ln=dms(val(g[4]));if(g[1]&&val(g[1])==='S')la=-la;if(g[3]&&val(g[3])==='W')ln=-ln;if(isFinite(la)&&isFinite(ln)&&(la||ln)){out.lat=la;out.lng=ln}}}}catch(e){}
  return out}
 function carregarImg(url){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=()=>rej(new Error('Imagem inválida'));i.src=url})}
-function posicaoAtual(){return new Promise((res,rej)=>{if(!navigator.geolocation)return rej(new Error('Sem GPS'));navigator.geolocation.getCurrentPosition(p=>res({lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy}),e=>rej(e),{enableHighAccuracy:true,timeout:12000,maximumAge:5000})})}
+/* ===================== GPS do celular: sempre ligado, com aviso para ativar ===================== */
+const G={st:'parado',pos:null,watch:null,avisou:false};
+const gpsMovel=()=>S.amb==='android'||S.amb==='ios';
+function gpsIniciar(forcar){if(!navigator.geolocation){G.st='semsuporte';gpsChipAtualiza();return}if(G.watch!=null&&!forcar)return;
+ if(G.watch!=null){try{navigator.geolocation.clearWatch(G.watch)}catch(e){}G.watch=null}
+ if(G.st!=='ok')G.st='busca';gpsChipAtualiza();
+ G.watch=navigator.geolocation.watchPosition(p=>{const novo=G.st!=='ok';G.pos={lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy,t:Date.now()};G.st='ok';gpsChipAtualiza();if(novo&&M&&M.t==='gps'){fecharModal(false);toast('GPS ligado (precisão ≈ '+Math.round(G.pos.acc)+' m).')}},
+  e=>{if(e&&e.code===3){if(!G.pos)G.st='busca';gpsChipAtualiza();return}G.st=e&&e.code===1?'negado':'desligado';gpsChipAtualiza()},{enableHighAccuracy:true,maximumAge:10000,timeout:25000})}
+function gpsChip(){const c={ok:['#2e8b57','📍 GPS '+(G.pos?'±'+Math.round(G.pos.acc)+' m':'ligado')],busca:['#d98a00','📍 Procurando GPS…'],negado:['#c0392b','📍 GPS bloqueado'],desligado:['#c0392b','📍 Ligar o GPS'],semsuporte:['#7a8396','📍 Sem GPS'],parado:['#7a8396','📍 Usar GPS']}[G.st]||['#7a8396','📍 GPS'];
+ return `<button class="btn sm" id="gpsChip" data-act="gpsChip" style="border-color:${c[0]};color:${c[0]};font-weight:700" title="Localização do aparelho">${c[1]}</button>`}
+function gpsBar(){const sem=G.st==='negado'||G.st==='desligado'||(G.st==='semsuporte'&&gpsMovel());if(!sem)return '<div id="gpsBar" style="display:none"></div>';
+ return `<div id="gpsBar" data-act="gpsChip" style="flex-basis:100%;order:99;font-size:12px;color:#c0392b;cursor:pointer;padding:2px 0">⚠ Sem georreferenciamento: ${G.st==='negado'?'a localização está bloqueada no navegador':G.st==='semsuporte'?'este aparelho não informa a localização':'o GPS do aparelho está desligado'}. Os registros ficam sem coordenadas. <u>Toque aqui para ver como ligar.</u></div>`}
+function gpsChipAtualiza(){const e=$('#gpsChip');if(e)e.outerHTML=gpsChip();const b=$('#gpsBar');if(b)b.outerHTML=gpsBar()}
+function gpsAviso(forcar){if(G.st==='ok')return;if(G.avisou&&!forcar)return;G.avisou=true;
+ if(M&&M.t!=='gps'){toast(G.st==='negado'?'O navegador bloqueou a localização. Toque em “📍 GPS bloqueado” no topo para ver como liberar.':'O GPS está desligado. Toque em “📍 Ligar o GPS” no topo para ver como ligar.',8000);return}
+ M={t:'gps'};abrirModal(modalGPS())}
+function modalGPS(){const ios=S.amb==='ios';const neg=G.st==='negado';
+ const passos=neg?(ios?['Abra <b>Ajustes</b> › <b>Privacidade e Segurança</b> › <b>Serviços de Localização</b> e confira que está ligado.','Na mesma tela, toque no navegador (<b>Safari</b> ou <b>Chrome</b>) e escolha <b>Durante o Uso</b>, com <b>Localização Precisa</b> ligada.','No Safari: toque em <b>aA</b> ao lado do endereço › <b>Ajustes do Site</b> › <b>Localização</b> › <b>Permitir</b>.','Volte para esta página e toque em <b>Tentar de novo</b>.']
+   :['Toque no <b>cadeado</b> (ou no ícone de ajustes) ao lado do endereço do site.','Toque em <b>Permissões</b> › <b>Localização</b> › <b>Permitir</b>.','Se não aparecer: <b>Configurações</b> do celular › <b>Apps</b> › <b>Chrome</b> › <b>Permissões</b> › <b>Localização</b> › <b>Permitir durante o uso</b>.','Volte para esta página e toque em <b>Tentar de novo</b>.'])
+  :(ios?['Abra <b>Ajustes</b> › <b>Privacidade e Segurança</b> › <b>Serviços de Localização</b> e ligue.','Confira que o navegador está em <b>Durante o Uso</b> com <b>Localização Precisa</b> ligada.','Volte para esta página e toque em <b>Tentar de novo</b>.']
+   :['Puxe a barra do topo da tela (notificações) para baixo.','Toque no ícone <b>Localização</b> (📍) para ligar. Se não estiver lá: <b>Configurações</b> › <b>Localização</b> › <b>Usar localização</b>.','Deixe ligada a <b>Precisão de local do Google</b> (melhora a precisão).','Volte para esta página e toque em <b>Tentar de novo</b>.']);
+ return `<div class="mh"><h3>📍 ${neg?'Libere a localização para este site':'Ligue o GPS do celular'}</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+ <p>O programa usa o GPS para marcar onde está cada ocorrência e cada serviço executado. ${neg?'O navegador está <b>bloqueando</b> a localização deste site.':'O GPS (localização) do aparelho está <b>desligado</b> ou sem sinal.'}</p>
+ <p class="small muted">Por segurança, uma página da internet não consegue ligar o GPS sozinha: é preciso ligar no celular, uma vez.</p>
+ <ol style="margin:10px 0 0 18px;line-height:1.6">${passos.map(x=>'<li>'+x+'</li>').join('')}</ol>
+ <div class="row gap" style="justify-content:flex-end;margin-top:14px"><button class="btn" data-act="mClose">Agora não</button><button class="btn pri" data-act="gpsRetry">Tentar de novo</button></div></div>`}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&gpsMovel()&&G.st!=='ok'&&G.watch!=null)gpsIniciar(true)});
+function posicaoAtual(){if(G.pos&&G.st==='ok'&&Date.now()-G.pos.t<15000)return Promise.resolve({lat:G.pos.lat,lng:G.pos.lng,acc:G.pos.acc});
+ return new Promise((res,rej)=>{if(!navigator.geolocation){G.st='semsuporte';gpsChipAtualiza();return rej(new Error('Sem GPS'))}navigator.geolocation.getCurrentPosition(p=>{G.pos={lat:p.coords.latitude,lng:p.coords.longitude,acc:p.coords.accuracy,t:Date.now()};G.st='ok';gpsChipAtualiza();res({lat:G.pos.lat,lng:G.pos.lng,acc:G.pos.acc})},e=>{if(e&&e.code!==3){G.st=e.code===1?'negado':'desligado';gpsChipAtualiza()}rej(e)},{enableHighAccuracy:true,timeout:12000,maximumAge:5000})})}
 async function processarFoto(file,camera){
  const buf=await file.arrayBuffer();let ex={};try{ex=lerExif(buf)}catch(e){}
  const url=URL.createObjectURL(new Blob([buf],{type:file.type||'image/jpeg'}));
@@ -374,7 +403,7 @@ function render(){if(_rend){_again=true;return}_rend=true;try{_render()}finally{
 function _render(){
  const ae=document.activeElement,aid=ae&&ae.id,as=ae&&ae.selectionStart,y=window.scrollY;
  if(S.mapObj){S.mapObj.remove();S.mapObj=null}
- document.body.dataset.amb=S.amb||'';document.documentElement.dataset.theme=S.settings.tema||'light';
+ document.body.dataset.amb=S.amb||'';if(gpsMovel()&&G.watch==null)setTimeout(()=>gpsIniciar(),0);document.documentElement.dataset.theme=S.settings.tema||'light';
  renderTop();const app=$('#app');
  if(!S.amb)app.innerHTML=telaAmbiente();else if(!S.obraId||!O())app.innerHTML=telaHome();else app.innerHTML=telaObra(O());
  hydrate(app);if(S.obraId&&S.tab==='mapa'&&O())setTimeout(initMapa,30);
@@ -383,7 +412,7 @@ function _render(){
 function renderTop(){$('#top').innerHTML=`<a class="brand" href="#" data-act="home"><span class="logo">▦</span><b>Total Civil</b></a><span class="prog">Serviços Públicos</span><span class="sp"></span>
  <input class="nm" placeholder="Seu nome" value="${esc(S.nome)}" data-chg="nome" title="Seu nome (registrado no histórico)">
  <select class="pf" data-chg="perfil" title="Perfil de uso (simula as permissões)">${Object.entries(PERFIL).map(([k,v])=>`<option value="${k}" ${S.perfil===k?'selected':''}>${v}</option>`).join('')}</select>
- ${nuvChip()}${S.obraId&&O()?'<button class="btn sm" data-act="expBackup" title="Salvar como: grava um arquivo .json desta obra (com as fotos) no computador">💾 Salvar como…</button>':''}
+ ${gpsChip()}${nuvChip()}${gpsBar()}${S.obraId&&O()?'<button class="btn sm" data-act="expBackup" title="Salvar como: grava um arquivo .json desta obra (com as fotos) no computador">💾 Salvar como…</button>':''}
  <button class="btn sm" data-act="tema">${S.settings.tema==='dark'?'☀ Claro':'🌙 Escuro'}</button>
  <button class="btn sm" data-act="trocaAmb">${AMB[S.amb]||'Ambiente'}</button>`}
 function telaAmbiente(){return `<section class="wrap"><div class="hero"><span class="pill">Total Civil</span><h1>Onde você vai usar?</h1><p>Escolha o ambiente para ajustar a tela. Você pode trocar depois no topo da página.</p></div>
@@ -435,7 +464,7 @@ function tPainel(o){const oc=o.ocorrencias;const c=f=>oc.filter(f).length;const 
  <div class="card"><h3>Ocorrências abertas por prioridade</h3><div class="bars">${bp('alta')}${bp('media')}${bp('baixa')}</div>
  <h4 style="margin-top:14px">Programação das próximas semanas</h4>${Object.keys(semanas).sort().map(w=>`<p>${labSem(w)}: <b>${semanas[w]}</b> ocorrência(s)</p>`).join('')||'<p class="muted small">Nenhuma semana programada.</p>'}</div></div>
  <div class="card" style="margin-top:16px"><h3>Pendências</h3>
- <p>📍 Ocorrências sem coordenadas: <b>${c(x=>x.lat==null)}</b></p><p>⚖ Sem prioridade confirmada pelo gestor: <b>${c(x=>!x.priConf&&x.status!=='medida')}</b></p><p>✔ Execuções aguardando conferência do fiscal: <b>${pend}</b></p>
+ <p>👷 Aguardando atendimento (vistoria) do fiscal: <b>${c(x=>!x.vistFiscal&&x.status!=='executada'&&x.status!=='medida')}</b></p><p>📍 Ocorrências sem coordenadas: <b>${c(x=>x.lat==null)}</b></p><p>⚖ Sem prioridade confirmada pelo gestor: <b>${c(x=>!x.priConf&&x.status!=='medida')}</b></p><p>✔ Execuções aguardando conferência do fiscal: <b>${pend}</b></p>
  <p>💲 Serviços sem preço unitário no catálogo: <b>${o.servicos.filter(s=>!s.preco).length}</b></p></div>`}
 function filtraOc(o){const f=S.f;let l=o.ocorrencias.slice();if(f.ocSt)l=l.filter(x=>x.status===f.ocSt);if(f.ocPri)l=l.filter(x=>priEf(x)===f.ocPri);if(f.ocQ){const q=f.ocQ.toLowerCase();l=l.filter(x=>(x.rua+' '+x.bairro+' '+x.desc+' #'+x.num).toLowerCase().includes(q))}return l.sort(ordPri)}
 function thumbsMini(fotos){return fotos.length?`<div class="mt">${fotos.slice(0,4).map(f=>`<img data-foto="${f.id}" data-act="zoom" alt="">`).join('')}</div>`:''}
@@ -450,14 +479,14 @@ function tVistoria(o){const l=filtraOc(o);const f=S.f;
  <div class="list">${l.map(oc=>ocCard(o,oc)).join('')||'<p class="muted">Nenhuma ocorrência encontrada.</p>'}</div>`}
 function ocCard(o,oc,plan){const sv=svcOf(o,oc.servicoId||oc.servSug);
  return `<article class="item"><div class="hd"><div><span class="num">#${oc.num}</span> <b>${esc(ocLocal(oc))}</b></div>${plan?`<input type="checkbox" data-chg="sel" data-id="${oc.id}" ${S.f.sel[oc.id]?'checked':''} title="Selecionar">`:''}</div>
- <div class="chips">${chipP(priEf(oc))}${oc.priConf?'<span class="chip" style="--c:#2e7d4f">prioridade confirmada</span>':'<span class="chip" style="--c:#b7791f">aguardando gestor</span>'}${chipS(oc.status)}${oc.lat!=null?'<span class="chip" style="--c:#2e7d4f">📍 coordenadas</span>':'<span class="chip" style="--c:#b7791f">sem coordenadas</span>'}</div>
+ <div class="chips">${chipP(priEf(oc))}${oc.priConf?'<span class="chip" style="--c:#2e7d4f">prioridade confirmada</span>':'<span class="chip" style="--c:#b7791f">aguardando gestor</span>'}${chipS(oc.status)}${oc.lat!=null?'<span class="chip" style="--c:#2e7d4f">📍 coordenadas</span>':'<span class="chip" style="--c:#b7791f">sem coordenadas</span>'}${vfChip(oc)}</div>
  <div class="small">${esc((oc.desc||'').slice(0,160))}${(oc.desc||'').length>160?'…':''}</div>
  ${sv?`<div class="small muted">Serviço: ${esc(sv.descricao)}</div>`:''}
  ${plan&&custoPlan(o,oc)?`<div class="small"><span class="chip" style="--c:#7b3fb0">💲 previsto ${fR(custoPlan(o,oc))}</span></div>`:''}
  ${plan&&DIST.has(oc.id)?`<div class="small"><span class="chip" style="--c:#2563a8">📏 a ${fDist(DIST.get(oc.id))} do ponto</span></div>`:''}
  ${oc.semana?`<div class="small muted">🗓 ${labSem(oc.semana)}${oc.qtdPlan?' · previsto '+fN(oc.qtdPlan)+' '+esc(sv?sv.unidade:''):''}</div>`:''}
- ${thumbsMini(oc.fotos)}
- <div class="row gap" style="margin-top:4px"><button class="btn sm" data-act="ocEdit" data-id="${oc.id}">${can('ocorr')?'Abrir / editar':'Abrir'}</button>${plan?`<button class="btn sm pri" data-act="planOpen" data-id="${oc.id}" ${can('plan')?'':'disabled'}>Planejar</button>${!oc.priConf?`<button class="btn sm" data-act="priConf" data-id="${oc.id}" ${can('plan')?'':'disabled'}>✓ Confirmar prioridade</button>`:''}`:''}</div></article>`}
+ ${vfMed(oc)}${thumbsMini(oc.fotos)}
+ <div class="row gap" style="margin-top:4px">${can('ocorr')&&oc.status!=='executada'&&oc.status!=='medida'?`<button class="btn sm ${oc.vistFiscal?'':'pri'}" data-act="vfAbrir" data-id="${oc.id}">👷 ${oc.vistFiscal?'Rever vistoria do fiscal':'Atendimento do fiscal'}</button>`:''}<button class="btn sm" data-act="ocEdit" data-id="${oc.id}">${can('ocorr')?'Abrir / editar':'Abrir'}</button>${plan?`<button class="btn sm pri" data-act="planOpen" data-id="${oc.id}" ${can('plan')?'':'disabled'}>Planejar</button>${!oc.priConf?`<button class="btn sm" data-act="priConf" data-id="${oc.id}" ${can('plan')?'':'disabled'}>✓ Confirmar prioridade</button>`:''}`:''}</div></article>`}
 function tPlan(o){const f=S.f;const abertas=o.ocorrencias.filter(x=>x.status!=='medida'&&x.status!=='executada');
  const l=planLista(o,abertas);
  const w=isoWeek(f.semDia);const doW=o.ocorrencias.filter(x=>x.semana===w&&x.status!=='medida');const grupos={};doW.forEach(x=>{const k=x.servicoId||'_';(grupos[k]=grupos[k]||[]).push(x)});
@@ -650,15 +679,71 @@ function proxMapa(){const el=$('#pxMap');if(!el)return;if(typeof L==='undefined'
  o.ocorrencias.filter(x=>x.lat!=null).forEach(x=>L.circleMarker([x.lat,x.lng],{radius:6,color:'#fff',weight:2,fillColor:PRI[priEf(x)].c,fillOpacity:.95}).bindTooltip('#'+x.num+' '+ocLocal(x)).addTo(map));
  map.on('click',e=>proxCentro(e.latlng.lat,e.latlng.lng,'Ponto no mapa'));setTimeout(()=>{if(M&&M.map===map){map.invalidateSize({animate:false});proxAtualiza()}},90)}
 
+/* ===================== atendimento do fiscal (vistoria técnica da ocorrência) ===================== */
+const VF_TIPOS=['Buraco','Afundamento','Trinca / fissura','Desgaste do asfalto','Remendo deteriorado','Base comprometida (com água)','Outro'];
+function vfChip(oc){return oc.vistFiscal?`<span class="chip" style="--c:#2e7d4f">👷 vistoriada pelo fiscal ${fData(oc.vistFiscal.em.slice(0,10)).slice(0,5)}</span>`:(oc.status==='executada'||oc.status==='medida'?'':'<span class="chip" style="--c:#c0392b">👷 aguardando fiscal</span>')}
+function vfMed(oc){const m=oc.med||{};if(!oc.vistFiscal||!(m.c&&m.l))return '';const sv=svcOf(O(),oc.servSug);return `<div class="small">📐 ${m.n>1?m.n+' × ':''}${fN(m.c)} × ${fN(m.l)} m${m.e?' × '+fN(m.e,0)+' cm':''}${oc.qtdFiscal?' · <b>'+fN(oc.qtdFiscal)+' '+esc(sv?sv.unidade:'')+'</b> levantado pelo fiscal':''}${oc.tipo?' · '+esc(oc.tipo):''}</div>`}
+const AF=()=>S.f.af||(S.f.af={sit:'pend',bai:'',q:'',perto:false});
+function tAtendFis(o){const f=AF();let l=o.ocorrencias.filter(x=>x.status!=='executada'&&x.status!=='medida');
+ if(f.sit==='pend')l=l.filter(x=>!x.vistFiscal);else if(f.sit==='feitas')l=l.filter(x=>x.vistFiscal);
+ if(f.bai)l=l.filter(x=>norm(x.bairro)===norm(f.bai));if(f.q){const q=norm(f.q);l=l.filter(x=>norm([x.rua,x.bairro,x.desc,x.ref,'#'+x.num].join(' ')).includes(q))}
+ const aqui=f.perto&&G.pos?G.pos:null;const dd=x=>aqui&&x.lat!=null?distM(aqui,x):null;
+ l=aqui?l.slice().sort((a,b)=>(dd(a)??1e12)-(dd(b)??1e12)):l.slice().sort(ordPri);
+ return `<div class="card"><p class="small muted">O fiscal vai ao local das ocorrências recebidas por ligação, e-mail ou pelo mapa, tira as <b>fotos do antes</b> e informa as <b>características e as dimensões</b>. O volume levantado aqui é o que o Planejamento instruído e a execução da empresa usam.</p>
+ <div class="toolbar"><label>Mostrar<select data-chg="afF" data-k="sit"><option value="pend" ${f.sit==='pend'?'selected':''}>Aguardando atendimento do fiscal</option><option value="feitas" ${f.sit==='feitas'?'selected':''}>Já vistoriadas pelo fiscal</option><option value="todas" ${f.sit==='todas'?'selected':''}>Todas em aberto</option></select></label>
+ <label>Bairro<select data-chg="afF" data-k="bai"><option value="">Todos</option>${bairrosDe(o).map(b=>`<option ${f.bai===b?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
+ <label style="flex:1;min-width:160px">Palavra-chave<input placeholder="rua, bairro, descrição, nº" value="${esc(f.q)}" data-chg="afF" data-k="q"></label>
+ <label class="chk" style="align-self:end"><input type="checkbox" data-chg="afF" data-k="perto" ${f.perto?'checked':''}> 📍 Mais próximas de mim</label></div>
+ ${f.perto&&!G.pos?'<div class="alert">Sem posição do GPS ainda. Toque no 📍 do topo para ligar o GPS.</div>':''}
+ <b>${l.length} ocorrência(s)</b>
+ <div class="list" style="margin-top:8px">${l.slice(0,300).map(x=>{const d=dd(x);return `<article class="item"><div class="hd"><div><span class="num">#${x.num}</span> <b>${esc(ocLocal(x))}</b></div></div>
+  <div class="chips">${chipP(priEf(x))}${vfChip(x)}${x.lat!=null?'':'<span class="chip" style="--c:#b7791f">sem coordenadas</span>'}${d!=null?`<span class="chip" style="--c:#2563a8">📏 ${fDist(d)}</span>`:''}</div>
+  <div class="small">${esc((x.desc||'').slice(0,160))}</div>${x.ref?`<div class="small muted">Ref.: ${esc(x.ref)}</div>`:''}${vfMed(x)}${thumbsMini(x.fotos)}
+  <div class="row gap" style="justify-content:flex-end;margin-top:6px">${x.lat!=null?`<a class="btn sm" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${x.lat},${x.lng}">🧭 Ir até o local</a>`:''}<button class="btn sm pri" data-act="vfAbrir" data-id="${x.id}" ${can('ocorr')?'':'disabled'}>👷 ${x.vistFiscal?'Rever atendimento':'Fazer atendimento'}</button></div></article>`}).join('')||'<p class="muted small">Nenhuma ocorrência neste filtro.</p>'}</div></div>`}
+function vfAbrirOc(id){const o=O(),oc=o.ocorrencias.find(x=>x.id===id);if(!oc)return;const m=oc.med||{};
+ const d={id:oc.id,num:oc.num,rua:oc.rua||'',bairro:oc.bairro||'',ref:oc.ref||'',lat:oc.lat,lng:oc.lng,origem:oc.origem,fotos:oc.fotos.map(f=>Object.assign({},f)),desc:oc.desc||'',constat:oc.constat||'',tipo:oc.tipo||'',
+  c:m.c||'',l:m.l||'',e:m.e||'',n:m.n||1,servSug:oc.servSug||'',qtd:oc.qtdFiscal||'',priF:oc.priF||'media',criadoEm:oc.criadoEm};
+ if(!d.servSug){const sp=o.servicos.find(x=>/m3|m³/i.test(x.unidade||'')&&/buraco/i.test(x.descricao||''))||o.servicos.find(x=>/m3|m³/i.test(x.unidade||''));if(sp)d.servSug=sp.id}
+ M={t:'vf',novas:[],d,qEdit:!!oc.qtdFiscal};abrirModal(modalVF(d));
+ if(d.lat==null&&G.st==='ok'&&G.pos){d.lat=G.pos.lat;d.lng=G.pos.lng;d.origem='gps-aparelho';toast('Ponto preenchido com a sua posição do GPS.')}
+ vfLocTxt();vfCalc()}
+function modalVF(d){const o=O(),dis=can('ocorr')?'':'disabled';const n=(id,l,v)=>`<label>${l}<input id="${id}" inputmode="decimal" value="${inp(v)}" data-inp="vfCalc" ${dis}></label>`;
+ return `<div class="mh"><h3>👷 Atendimento do fiscal — Ocorrência nº ${d.num}</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+ <fieldset><legend>1. Local</legend><div class="g2"><label>Rua / endereço<input id="vf-rua" value="${esc(d.rua)}" ${dis}></label><label>Bairro<input id="vf-bairro" value="${esc(d.bairro)}" ${dis}></label></div>
+ <label>Ponto de referência<input id="vf-ref" value="${esc(d.ref)}" ${dis}></label>
+ <p class="small" id="vf-loc"></p><div class="row gap"><button class="btn sm pri" data-act="vfGPS" ${dis}>📍 Usar minha posição atual</button></div></fieldset>
+ <fieldset><legend>2. Relato recebido (munícipe / e-mail)</legend><p class="small">${esc(d.desc)||'<span class="muted">—</span>'}</p><p class="small muted">Registrada em ${fData((d.criadoEm||'').slice(0,10))}</p></fieldset>
+ <fieldset><legend>3. Fotos do antes</legend><div class="row gap"><button class="btn" data-act="fotoCam" ${dis}>📷 Tirar foto</button><button class="btn" data-act="fotoGal" ${dis}>🖼 Escolher da galeria</button></div><select id="exFase" style="display:none"><option value="antes" selected>antes</option></select>
+ <div id="fotosArea">${fotosArea(d.fotos,'vf')}</div></fieldset>
+ <fieldset><legend>4. Características</legend><div class="row gap" style="margin-bottom:6px">${VF_TIPOS.map(t=>`<button type="button" class="btn sm ${d.tipo===t?'pri':''}" data-act="vfTipo" data-t="${t}" ${dis}>${t}</button>`).join('')}</div>
+ <label>Constatação do fiscal<textarea id="vf-const" placeholder="ex.: buraco com base comprometida, água acumulada, bordas soltas…" ${dis}>${esc(d.constat)}</textarea></label></fieldset>
+ <fieldset><legend>5. Dimensões do reparo</legend><div class="g4">${n('vf-c','Comprimento (m)',d.c)}${n('vf-l','Largura (m)',d.l)}${n('vf-e','Espessura / profundidade (cm)',d.e)}${n('vf-n','Quantidade de buracos iguais',d.n)}</div>
+ <p class="small" id="vf-res" style="color:#2563a8"></p>
+ <div class="g2"><label>Serviço sugerido<select id="vf-serv" data-chg="vfServ" ${dis}>${svcOptions(o,d.servSug,'— não definido —')}</select></label><label>Quantidade levantada (na unidade do serviço)<input id="vf-qtd" inputmode="decimal" value="${inp(d.qtd)}" data-inp="vfQtd" ${dis}></label></div></fieldset>
+ <fieldset><legend>6. Prioridade sugerida</legend><div class="row gap">${Object.entries(PRI).map(([k,v])=>`<label class="chk" style="margin:0"><input type="radio" name="vf-pri" value="${k}" ${d.priF===k?'checked':''} ${dis}> <span class="chip" style="--c:${v.c}">${v.l}</span></label>`).join('')}</div></fieldset></div>
+ <div class="mf"><button class="btn" data-act="mCancel">Cancelar</button><button class="btn pri" data-act="vfSalvar" ${dis}>Salvar atendimento do fiscal</button></div>`}
+function vfLocTxt(){const e=$('#vf-loc');if(!e||!M||M.t!=='vf')return;const d=M.d;
+ e.innerHTML=d.lat!=null?`📍 ${fN(d.lat,5)}, ${fN(d.lng,5)}${d.origem?' <span class="muted">('+esc(ORIGEM[d.origem]||d.origem)+')</span>':''}${G.pos&&G.st==='ok'?' · você está a <b>'+fDist(distM(G.pos,d))+'</b> deste ponto':''}`:'<span class="neg">Sem coordenadas: toque em “Usar minha posição atual” no local.</span>'}
+function vfVals(){const g=id=>num(($('#'+id)||{}).value);const c=g('vf-c')||0,l=g('vf-l')||0,e=g('vf-e')||0,n=Math.max(1,Math.round(g('vf-n')||1));const a=c*l*n,v=a*e/100;return {c,l,e,n,a,v}}
+function vfCalc(){if(!M||M.t!=='vf')return;const x=vfVals(),dens=(S.f.pi&&S.f.pi.dens)||2.5;const r=$('#vf-res');
+ if(r)r.innerHTML=x.a?`Área total <b>${fN(x.a)} m²</b>${x.v?` · volume <b>${fN(x.v,3)} m³</b> · massa asfáltica ≈ <b>${fN(x.v*dens,2)} t</b> (${fN(dens)} t/m³)`:' · informe a espessura para calcular o volume'}`:'Informe comprimento e largura.';
+ if(!M.qEdit){const sv=svcOf(O(),$('#vf-serv').value);const un=sv?String(sv.unidade||'').toLowerCase().replace('³','3').replace('²','2'):'m3';const q=un==='m2'?x.a:(un==='t'||un==='ton')?x.v*dens:x.v;const el=$('#vf-qtd');if(el)el.value=q?inp(Math.round(q*1000)/1000):''}}
+function vfSalvar(){if(!can('ocorr'))return;const o=O(),d=M.d,oc=o.ocorrencias.find(x=>x.id===d.id);if(!oc)return;const x=vfVals();
+ oc.rua=$('#vf-rua').value.trim();oc.bairro=$('#vf-bairro').value.trim();oc.ref=$('#vf-ref').value.trim();if(d.lat!=null){oc.lat=d.lat;oc.lng=d.lng;oc.origem=d.origem||oc.origem}
+ const ids=new Set(d.fotos.map(f=>f.id));oc.fotos.filter(f=>!ids.has(f.id)).forEach(f=>{DB.del('fotos',f.id);fotoCache.delete(f.id)});oc.fotos=d.fotos;
+ oc.constat=$('#vf-const').value.trim();oc.tipo=d.tipo;oc.med={c:x.c,l:x.l,e:x.e,n:x.n};oc.servSug=$('#vf-serv').value;oc.qtdFiscal=t2(num($('#vf-qtd').value)||0);
+ const pr=$('input[name=vf-pri]:checked');if(pr)oc.priF=pr.value;oc.vistFiscal={em:new Date().toISOString(),por:quem()};
+ log(oc,'Atendimento do fiscal: '+(oc.tipo||'vistoria')+(x.a?' · '+fN(x.c)+'×'+fN(x.l)+' m'+(x.e?'×'+fN(x.e,0)+' cm':'')+(x.n>1?' ×'+x.n:''):'')+(oc.qtdFiscal?' · '+fN(oc.qtdFiscal):'')+' · '+oc.fotos.length+' foto(s)');
+ M.novas=[];saveObra(o);fecharModal(false);render();toast('Atendimento do fiscal salvo'+(oc.fotos.length?'':' (sem fotos do antes — lembre de fotografar)')+'.',5000)}
 /* ===================== planejamento instruído (somente gestor) ===================== */
-const piDef=()=>({ordem:'pri',pris:{alta:true,media:true,baixa:true},soSem:true,soConf:false,bairros:[],raioKm:1,dens:2.5,carga:10,camDia:2,qtdPad:1,esp:5,unid:'semana',n:4,inicio:addDias(hojeISO(),1),limSaldo:true});
-function piVol(o,oc,P){const sv=svcOf(o,oc.servicoId||oc.servSug);const un=sv?String(sv.unidade||'').toLowerCase().replace('³','3').replace('²','2').trim():'';
- const assum=!(oc.qtdPlan>0);const q=assum?P.qtdPad:oc.qtdPlan;let m3,t,ok=!!sv;
+const piDef=()=>({ordem:'pri',pris:{alta:true,media:true,baixa:true},soSem:true,soConf:false,bairros:[],soVist:true,kmh:25,minM3:20,minFix:10,ini:'09:00',fim:'17:00',almIni:'12:00',almFim:'13:00',relPor:'dia',raioKm:1,dens:2.5,carga:10,camDia:2,qtdPad:1,esp:5,unid:'semana',n:4,inicio:addDias(hojeISO(),1),limSaldo:true});
+function piVol(o,oc,P){const sv=svcOf(o,oc.servicoId||oc.servSug||P.svcPad);const un=sv?String(sv.unidade||'').toLowerCase().replace('³','3').replace('²','2').trim():'';
+ const qv=oc.qtdPlan>0?oc.qtdPlan:(oc.qtdFiscal>0?oc.qtdFiscal:0);const fonte=oc.qtdPlan>0?'gestor':oc.qtdFiscal>0?'fiscal':'estimado';const assum=!(qv>0);const q=assum?P.qtdPad:qv;let m3,t,ok=!!sv;
  if(assum){m3=q;t=m3*P.dens;ok=ok&&un==='m3'}
  else if(un==='t'||un==='ton'){t=q;m3=q/P.dens}
  else if(un==='m2'){m3=q*P.esp/100;t=m3*P.dens}
  else{m3=q;t=m3*P.dens}
- return {q,m3,t,assum,custo:ok?t2(q*pbdi(o,sv)):0,custoOk:ok}}
+ return {q,m3,t,assum,fonte,custo:ok?t2(q*pbdi(o,sv)):0,custoOk:ok}}
 function modalPI(){const P=M.p;const n=(k,l,extra)=>`<label>${l}<input inputmode="decimal" value="${inp(P[k])}" data-inp="piN" data-k="${k}" ${extra||''}></label>`;
  return `<div class="mh"><h3>🧭 Planejamento instruído</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
  <p class="muted small">O programa distribui as ocorrências abertas por dia, semana ou mês, respeitando a ordem de prioridade, a carga dos caminhões e (se quiser) um raio em km para agrupar ruas próximas. Com raio, cada dia parte da ocorrência de maior prioridade e completa a carga com as mais próximas. Nada é gravado até você tocar em <b>Aplicar ao planejamento</b>; ao aplicar, o gestor também confirma a prioridade das ocorrências programadas.</p>
@@ -668,28 +753,34 @@ function modalPI(){const P=M.p;const n=(k,l,extra)=>`<label>${l}<input inputmode
  <div style="margin:8px 0"><label>Bairros — digite para procurar e toque no bairro para somar à seleção<input id="pi-bq" placeholder="ex.: Nova Cidade" autocomplete="off" data-inp="piBq"></label><div id="pi-bsug" class="geo"></div>
  <label>Bairros selecionados (vazio = todos os bairros)<input id="pi-bsel" readonly value="${esc((P.bairros||[]).join('; '))}" placeholder="Todos os bairros"></label>
  <div class="row gap" style="margin-top:4px"><button class="btn sm" data-act="piBTodos">Todos os bairros</button><button class="btn sm" data-act="piBLimpar">✕ Limpar seleção</button></div></div>
- <div class="row gap"><label class="chk"><input type="checkbox" data-chg="piP" data-k="soSem" ${P.soSem?'checked':''}> Só ocorrências ainda sem semana definida</label><label class="chk"><input type="checkbox" data-chg="piP" data-k="soConf" ${P.soConf?'checked':''}> Só com prioridade já confirmada</label></div>
+ <div class="row gap"><label class="chk"><input type="checkbox" data-chg="piP" data-k="soSem" ${P.soSem?'checked':''}> Só ocorrências ainda sem semana definida</label><label class="chk"><input type="checkbox" data-chg="piP" data-k="soVist" ${P.soVist?'checked':''}> Só ocorrências já vistoriadas pelo fiscal (com medidas)</label><label class="chk"><input type="checkbox" data-chg="piP" data-k="soConf" ${P.soConf?'checked':''}> Só com prioridade já confirmada</label></div>
  <h4 style="margin-top:12px">2. Raio e caminhões</h4>
  <div class="g4">${n('raioKm','Raio para agrupar (km) — 0 = sem agrupar')}${n('dens','Peso específico do asfalto (t/m³)')}${n('carga','Carga de cada caminhão (t)')}${n('camDia','Caminhões por dia')}</div>
+ <label>Serviço padrão (para ocorrências ainda sem serviço definido)<select data-chg="piP" data-k="svcPad"><option value="">— nenhum (custo fica zerado) —</option>${O().servicos.map(x=>`<option value="${x.id}" ${P.svcPad===x.id?'selected':''}>${esc((x.codigo?x.codigo+' — ':'')+x.descricao.slice(0,90))} (${esc(x.unidade)})</option>`).join('')}</select></label>
  <div class="g4">${n('qtdPad','Volume quando não informado (m³)')}${n('esp','Espessura p/ serviços em m² (cm)')}</div>
  <h4 style="margin-top:12px">3. Período</h4>
  <div class="g4"><label>Começar em<input type="date" value="${P.inicio}" data-chg="piP" data-k="inicio"></label>${n('n','Planejar para quantos')}<label>Unidade<select data-chg="piP" data-k="unid"><option value="dia" ${P.unid==='dia'?'selected':''}>dia(s) útil(eis)</option><option value="semana" ${P.unid==='semana'?'selected':''}>semana(s)</option><option value="mes" ${P.unid==='mes'?'selected':''}>mês(es)</option></select></label><label class="chk" style="align-self:end"><input type="checkbox" data-chg="piP" data-k="limSaldo" ${P.limSaldo?'checked':''}> Parar quando acabar o saldo livre</label></div>
- <div class="row gap" style="margin:10px 0"><button class="btn pri" data-act="piCalc">Calcular</button><span class="sp"></span></div>
+ <h4 style="margin-top:12px">4. Rotas e horários</h4>
+ <div class="g4">${n('kmh','Velocidade média no trânsito (km/h)')}${n('minFix','Tempo fixo por ocorrência (min)')}${n('minM3','Tempo de serviço por m³ (min)')}<label>Relatório por<select data-chg="piP" data-k="relPor"><option value="dia" ${P.relPor!=='bai'?'selected':''}>Dia / frente de trabalho</option><option value="bai" ${P.relPor==='bai'?'selected':''}>Bairro</option></select></label></div>
+ <div class="g4"><label>Início da jornada<input type="time" value="${P.ini}" data-chg="piP" data-k="ini"></label><label>Fim da jornada<input type="time" value="${P.fim}" data-chg="piP" data-k="fim"></label><label>Almoço de<input type="time" value="${P.almIni}" data-chg="piP" data-k="almIni"></label><label>Almoço até<input type="time" value="${P.almFim}" data-chg="piP" data-k="almFim"></label></div>
+ <p class="small muted">Início sugerido às 09:00 e fim às 17:00 para fugir dos picos (7h–9h e 17h–19h). O programa não tem trânsito em tempo real: use o link “Abrir no Google Maps” do relatório no dia.</p>
+ <div class="row gap" style="margin:10px 0"><button class="btn pri" data-act="piCalc">Calcular</button><button class="btn" data-act="piRel" id="pi-rel" disabled>📄 Relatório de planejamento (PDF)</button><span class="sp"></span></div>
  <div id="pi-res"></div>
  <div class="row gap" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mClose">Fechar</button><button class="btn pri" data-act="piAplicar" id="pi-ap" disabled>Aplicar ao planejamento</button></div></div>`}
 function piBSel(){const e=$('#pi-bsel');if(e)e.value=(M.p.bairros||[]).join('; ');if(M.res)piCalc()}
 function piCalc(){const o=O(),P=M.p,SP=saldoPlan(o);const cap=P.camDia*P.carga;
  if(!(cap>0)||!(P.dens>0)||!(P.n>=1)){toast('Informe carga, caminhões por dia, peso específico e o período.');return}
  const cmp=P.ordem==='antig'?(a,b)=>(a.oc.criadoEm||'').localeCompare(b.oc.criadoEm||'')||a.oc.num-b.oc.num:P.ordem==='vol'?(a,b)=>b.v.m3-a.v.m3||a.oc.num-b.oc.num:(a,b)=>(PRI[priEf(a.oc)].o-PRI[priEf(b.oc)].o)||(a.oc.criadoEm||'').localeCompare(b.oc.criadoEm||'')||a.oc.num-b.oc.num;
- let pool=o.ocorrencias.filter(x=>x.status!=='medida'&&x.status!=='executada'&&P.pris[priEf(x)]&&(!(P.bairros||[]).length||P.bairros.includes((x.bairro||'').trim()))&&(!P.soSem||!x.semana)&&(!P.soConf||x.priConf)).map(x=>({oc:x,v:piVol(o,x,P)}));pool.sort(cmp);
+ let pool=o.ocorrencias.filter(x=>x.status!=='medida'&&x.status!=='executada'&&P.pris[priEf(x)]&&(!P.soVist||x.vistFiscal)&&(!(P.bairros||[]).length||P.bairros.includes((x.bairro||'').trim()))&&(!P.soSem||!x.semana)&&(!P.soConf||x.priConf)).map(x=>({oc:x,v:piVol(o,x,P)}));pool.sort(cmp);
  const nTot=pool.length;const nd=P.unid==='dia'?P.n:P.unid==='semana'?P.n*5:P.n*22;const R=Math.max(0,P.raioKm)*1000;const budget=P.limSaldo?SP.livre:Infinity;let gasto=0,dia=P.inicio,cnt=0;const dias=[];
  let guard=0;while(cnt<nd&&pool.length&&guard++<4000){const wd=pd(dia).getUTCDay();if(wd===0||wd===6){dia=addDias(dia,1);continue}
   let used=0,custo=0,anchor=null;const items=[];
   for(;;){const i=pool.findIndex(p=>{if(items.length&&used+p.v.t>cap+1e-9)return false;if(gasto+p.v.custo>budget+1e-9)return false;if(anchor&&R>0&&p.oc.lat!=null&&distM(anchor,{lat:p.oc.lat,lng:p.oc.lng})>R)return false;return true});
    if(i<0)break;const p=pool.splice(i,1)[0];items.push(p);used+=p.v.t;custo=r2(custo+p.v.custo);gasto=r2(gasto+p.v.custo);if(!anchor&&p.oc.lat!=null)anchor={lat:p.oc.lat,lng:p.oc.lng}}
-  if(!items.length)break;dias.push({dia,items,t:used,m3:items.reduce((s,p)=>s+p.v.m3,0),cargas:Math.ceil(used/P.carga-1e-9),custo});cnt++;dia=addDias(dia,1)}
+  if(!items.length)break;dias.push({dia,items,anchor,t:used,m3:items.reduce((s,p)=>s+p.v.m3,0),cargas:Math.ceil(used/P.carga-1e-9),custo});cnt++;dia=addDias(dia,1)}
+ dias.forEach(d=>{d.rota=piRota(d.items);d.hor=piHoras(P,d.rota)});
  M.res={dias,resto:pool,nTot,cap,SP};piMostra()}
-function piMostra(){const {dias,resto,nTot,cap,SP}=M.res,P=M.p,box=$('#pi-res'),bt=$('#pi-ap');if(!box)return;
+function piMostra(){const {dias,resto,nTot,cap,SP}=M.res,P=M.p,box=$('#pi-res'),bt=$('#pi-ap');if(!box)return;if(M.map){M.map.remove();M.map=null}
  const mesN=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
  const chave=d=>P.unid==='dia'?d:P.unid==='semana'?isoWeek(d):d.slice(0,7);const rot=(k)=>P.unid==='dia'?fData(k):P.unid==='semana'?labSem(k):mesN[+k.slice(5)-1]+'/'+k.slice(0,4);
  const gr=new Map();dias.forEach(d=>{const k=chave(d.dia);if(!gr.has(k))gr.set(k,[]);gr.get(k).push(d)});
@@ -700,11 +791,72 @@ function piMostra(){const {dias,resto,nTot,cap,SP}=M.res,P=M.p,box=$('#pi-res'),
   return `<tr><td><b>${esc(rot(k))}</b></td><td class="r">${n}</td><td class="r">${fN(m3)}</td><td class="r">${fN(t,1)}</td><td class="r">${c}</td><td class="r">${fN(cu)}</td><td class="r ${acc<0?'neg':''}">${fN(acc)}</td></tr><tr><td colspan="7" style="background:var(--bg,#f6f7f9)">${ruas}</td></tr>`}).join('');
  const sem=resto.length;const nAss=dias.reduce((s,d)=>s+d.items.filter(p=>p.v.assum).length,0);
  box.innerHTML=`<div class="alert" style="background:#eef4fb;border-color:#2563a8">Capacidade por dia: <b>${P.camDia}</b> caminhão(ões) × <b>${fN(P.carga,1)} t</b> = <b>${fN(cap,1)} t</b> ≈ <b>${fN(cap/P.dens)} m³</b> de massa asfáltica (peso específico ${fN(P.dens)} t/m³). Saldo livre atual: <b>${fR(SP.livre)}</b>.</div>
- ${dias.length?`<div class="tablewrap"><table class="tb"><thead><tr><th>Período</th><th class="r">Ocorr.</th><th class="r">m³</th><th class="r">Toneladas</th><th class="r">Cargas</th><th class="r">Custo (R$)</th><th class="r">Saldo após (R$)</th></tr></thead><tbody>${linhas}</tbody><tfoot><tr><td><b>Total</b></td><td class="r"><b>${tot.n}</b></td><td class="r"><b>${fN(tot.m3)}</b></td><td class="r"><b>${fN(tot.t,1)}</b></td><td class="r"><b>${tot.c}</b></td><td class="r"><b>${fN(tot.cu)}</b></td><td></td></tr></tfoot></table></div>`:'<p class="muted">Nenhuma ocorrência coube nos critérios escolhidos.</p>'}
- <p class="small" style="margin-top:8px">${tot.n} de ${nTot} ocorrência(s) distribuída(s).${sem?` <b>${sem}</b> ficam para depois (fora do período ou do saldo).`:''}${nAss?` <span class="muted">Em ${nAss} delas não havia volume informado: foi usado ${fN(P.qtdPad)} m³ por ocorrência.</span>`:''}</p>`;
- if(bt)bt.disabled=!dias.length}
+ ${dias.length?`<div class="tablewrap"><table class="tb"><thead><tr><th>Período</th><th class="r">Ocorr.</th><th class="r">m³</th><th class="r">Toneladas</th><th class="r">Cargas</th><th class="r">Custo (R$)</th><th class="r">Saldo após (R$)</th></tr></thead><tbody>${linhas}</tbody><tfoot><tr><td><b>Total</b></td><td class="r"><b>${tot.n}</b></td><td class="r"><b>${fN(tot.m3)}</b></td><td class="r"><b>${fN(tot.t,1)}</b></td><td class="r"><b>${tot.c}</b></td><td class="r"><b>${fN(tot.cu)}</b></td><td></td></tr></tfoot></table></div>`:`<p class="muted">Nenhuma ocorrência coube nos critérios escolhidos.${P.soVist&&!O().ocorrencias.some(x=>x.vistFiscal)?' Ainda não há ocorrências vistoriadas pelo fiscal: faça o Atendimento do fiscal ou desmarque “Só ocorrências já vistoriadas pelo fiscal” para planejar com volume estimado.':''}</p>`}
+ ${dias.length?`<h4 style="margin-top:12px">🗺 Mapa dos grupos de atendimento</h4><div class="row gap"><label style="margin:0">Colorir por<select data-chg="piMapaModo"><option value="per" ${M.mapModo!=='bai'?'selected':''}>Período (${P.unid==='dia'?'dia':P.unid==='semana'?'semana':'mês'}) — cada círculo é a frente de trabalho do dia</option><option value="bai" ${M.mapModo==='bai'?'selected':''}>Bairro</option></select></label></div><div id="pi-leg" class="row gap" style="flex-wrap:wrap;margin:6px 0"></div><div id="pi-mapa" class="mapbox" style="height:420px"></div><p class="small muted">Cada círculo tracejado mostra o raio de ${fN(P.raioKm)} km a partir da ocorrência de partida do dia: é o grupo que as equipes e os caminhões atendem juntos. Ocorrências sem coordenada não aparecem no mapa.</p>`:''}
+ <p class="small" style="margin-top:8px">${tot.n} de ${nTot} ocorrência(s) distribuída(s).${sem?` <b>${sem}</b> ficam para depois (fora do período ou do saldo).`:''}${(()=>{const fo={gestor:0,fiscal:0,estimado:0};dias.forEach(d=>d.items.forEach(p=>fo[p.v.fonte]++));return ` <span class="muted">Origem do volume: ${fo.fiscal} medido(s) pelo fiscal · ${fo.gestor} definido(s) pelo gestor · ${fo.estimado} estimado(s) (${fN(P.qtdPad)} m³ cada).</span>`})()}</p>`;
+ if(bt)bt.disabled=!dias.length;const br=$('#pi-rel');if(br)br.disabled=!dias.length;if(dias.length){M.mapF=null;piMapa()}}
+const PI_COR=['#2563a8','#c0392b','#2e8b57','#d98a00','#6a4fb3','#0f8b8d','#b5179e','#7a5c00','#e4572e','#3d5a80','#6b8e00','#555555'];
+const PI_MES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
+function piMapa(){const el=$('#pi-mapa');if(!el||!M.res)return;if(typeof L==='undefined'){el.innerHTML='<div class="nomap">Mapa indisponível (sem internet). A lista acima continua valendo.</div>';return}
+ const c=S.settings.mapa;const map=L.map(el).setView([c.lat,c.lng],c.zoom);L.tileLayer(OSM,{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);M.map=map;M.pl=L.layerGroup().addTo(map);piMapaDesenha(true);
+ setTimeout(()=>{if(M&&M.map===map){map.invalidateSize({animate:false});piMapaDesenha(true)}},120)}
+function piMapaDesenha(fit){if(!M||!M.map||!M.res)return;const P=M.p,modo=M.mapModo||'per',R=Math.max(0,P.raioKm)*1000;M.pl.clearLayers();
+ const kper=d=>P.unid==='dia'?d:P.unid==='semana'?isoWeek(d):d.slice(0,7);const rper=k=>P.unid==='dia'?fData(k):P.unid==='semana'?labSem(k):PI_MES[+k.slice(5)-1]+'/'+k.slice(0,4);
+ const g=new Map();const pts=[];
+ M.res.dias.forEach(d=>{const kd=kper(d.dia);d.items.forEach(({oc})=>{const k=modo==='bai'?((oc.bairro||'').trim()||'(sem bairro)'):kd;if(!g.has(k))g.set(k,{cor:PI_COR[g.size%PI_COR.length],n:0,sc:0,lab:modo==='bai'?k:rper(k)});const e=g.get(k);e.n++;if(oc.lat==null)e.sc++})});
+ const leg=$('#pi-leg');if(leg)leg.innerHTML=`<button class="btn sm ${M.mapF?'':'pri'}" data-act="piMapaF" data-k="">Todos</button>`+[...g.entries()].map(([k,e])=>`<button class="btn sm ${M.mapF===k?'pri':''}" data-act="piMapaF" data-k="${esc(k)}" style="border-left:8px solid ${e.cor}">${esc(e.lab)} · ${e.n}</button>`).join('');
+ M.res.dias.forEach(d=>{const kd=kper(d.dia);
+  if(modo==='per'&&R>0&&d.anchor&&(!M.mapF||M.mapF===kd)){const e=g.get(kd);L.circle([d.anchor.lat,d.anchor.lng],{radius:R,color:e.cor,weight:2,dashArray:'6 6',fillColor:e.cor,fillOpacity:.06}).bindTooltip('Frente de trabalho de '+fData(d.dia)).addTo(M.pl)}
+  if(modo==='per'&&d.rota&&(!M.mapF||M.mapF===kd)){const pl=d.rota.ord.filter(p=>p.oc.lat!=null).map(p=>[p.oc.lat,p.oc.lng]);if(pl.length>1)L.polyline(pl,{color:g.get(kd).cor,weight:3,opacity:.8}).addTo(M.pl)}
+  d.items.forEach(p=>{const oc=p.oc;if(oc.lat==null)return;const k=modo==='bai'?((oc.bairro||'').trim()||'(sem bairro)'):kd;if(M.mapF&&M.mapF!==k)return;const e=g.get(k);const ordn=d.rota?d.rota.ord.indexOf(p)+1:0;
+   const mk=L.circleMarker([oc.lat,oc.lng],{radius:M.mapF&&modo==='per'?10:7,color:'#fff',weight:2,fillColor:e.cor,fillOpacity:.95}).bindTooltip((ordn&&modo==='per'?'Parada '+ordn+' · ':'')+'#'+oc.num+' '+ocLocal(oc)+' · '+fData(d.dia).slice(0,5)).addTo(M.pl);
+   if(M.mapF&&modo==='per'&&ordn)mk.bindTooltip(String(ordn),{permanent:true,direction:'center',className:'pi-n'});pts.push([oc.lat,oc.lng])})});
+ if(fit&&pts.length){try{M.map.fitBounds(pts,{padding:[30,30],animate:false,maxZoom:16})}catch(e){}}}
+/* rotas, horários e relatório do planejamento instruído */
+const piMin=s=>{const [h,m]=String(s||'0:0').split(':').map(Number);return (h||0)*60+(m||0)};
+const piHM=m=>{m=Math.round(m);return String(Math.floor(m/60)%24).padStart(2,'0')+':'+String(m%60).padStart(2,'0')};
+function piRota(its){const com=its.filter(p=>p.oc.lat!=null),sem=its.filter(p=>p.oc.lat==null);const d=(a,b)=>distM(a.oc,b.oc);let ord=[];
+ if(com.length){ord=[com[0]];const rest=com.slice(1);while(rest.length){const l=ord[ord.length-1];let bi=0,bd=Infinity;rest.forEach((p,i)=>{const x=d(l,p);if(x<bd){bd=x;bi=i}});ord.push(rest.splice(bi,1)[0])}
+  let mel=true,it=0;while(mel&&it++<60){mel=false;for(let i=1;i<ord.length;i++)for(let j=i+1;j<ord.length;j++){const a=ord[i-1],b=ord[i],c=ord[j],e=ord[j+1];const antes=d(a,b)+(e?d(c,e):0),depois=d(a,c)+(e?d(b,e):0);if(depois<antes-1){ord=ord.slice(0,i).concat(ord.slice(i,j+1).reverse(),ord.slice(j+1));mel=true}}}}
+ const tr=ord.map((p,i)=>i?d(ord[i-1],p)*1.3:0);return {ord:ord.concat(sem),nCom:ord.length,tr:tr.concat(sem.map(()=>0)),km:tr.reduce((s,x)=>s+x,0)/1000}}
+function piHoras(P,r){let t=piMin(P.ini);const fim=piMin(P.fim),a1=piMin(P.almIni),a2=piMin(P.almFim);let alm=false,pico=false,serv=0,desl=0;const L=[];
+ r.ord.forEach((p,i)=>{const dm=r.tr[i]/1000/Math.max(1,P.kmh)*60;if(dm>0){if((t>=420&&t<540)||(t>=1020&&t<1140))pico=true;t+=dm;desl+=dm}
+  if(!alm&&t>=a1&&a2>a1){t=Math.max(t,a2);alm=true}const dur=P.minFix+p.v.m3*P.minM3;L.push({ini:t,fim:t+dur});t+=dur;serv+=dur});
+ return {L,fimDia:t,passa:t>fim,pico,serv,desl}}
+function piLinks(r){const pts=r.ord.filter(p=>p.oc.lat!=null).map(p=>p.oc.lat.toFixed(6)+','+p.oc.lng.toFixed(6));const out=[];if(pts.length===1)return ['https://www.google.com/maps/search/?api=1&query='+pts[0]];for(let i=0;i<pts.length-1;i+=9)out.push('https://www.google.com/maps/dir/'+pts.slice(i,i+10).join('/'));return out}
+function piSvg(r){const pts=r.ord.filter(p=>p.oc.lat!=null);if(!pts.length)return '';const W=360,H=230,m=22;const lat0=pts.reduce((s,p)=>s+p.oc.lat,0)/pts.length,k=Math.cos(lat0*Math.PI/180);
+ const X=pts.map(p=>p.oc.lng*k),Y=pts.map(p=>-p.oc.lat);const x0=Math.min(...X),x1=Math.max(...X),y0=Math.min(...Y),y1=Math.max(...Y);const dx=x1-x0,dy=y1-y0;const sc=(dx||dy)?Math.min((W-2*m)/(dx||1e-12),(H-2*m)/(dy||1e-12)):0;
+ const px=i=>m+(W-2*m)/2+(X[i]-x0-dx/2)*sc,py=i=>m+(H-2*m)/2+(Y[i]-y0-dy/2)*sc;
+ return `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="border:1px solid #ccd;background:#f4f6f8"><polyline fill="none" stroke="#2563a8" stroke-width="2" points="${pts.map((p,i)=>px(i).toFixed(1)+','+py(i).toFixed(1)).join(' ')}"/>${pts.map((p,i)=>`<circle cx="${px(i).toFixed(1)}" cy="${py(i).toFixed(1)}" r="9" fill="${i?'#c0392b':'#2e8b57'}"/><text x="${px(i).toFixed(1)}" y="${(py(i)+3.5).toFixed(1)}" font-size="10" font-weight="700" fill="#fff" text-anchor="middle">${i+1}</text>`).join('')}</svg>`}
+function piRelatorio(){const o=O(),P=M.p,Rz=M.res;if(!Rz||!Rz.dias.length){toast('Calcule antes de gerar o relatório.');return}
+ const dow=['dom','seg','ter','qua','qui','sex','sáb'];const dd=d=>fData(d).slice(0,5)+' ('+dow[pd(d).getUTCDay()]+')';
+ const kper=d=>P.unid==='dia'?d:P.unid==='semana'?isoWeek(d):d.slice(0,7);const rper=k=>P.unid==='dia'?fData(k):P.unid==='semana'?labSem(k):PI_MES[+k.slice(5)-1]+'/'+k.slice(0,4);
+ const gp=new Map();Rz.dias.forEach(d=>{const k=kper(d.dia);if(!gp.has(k))gp.set(k,[]);gp.get(k).push(d)});let acc=Rz.SP.livre;const tot={n:0,m3:0,t:0,c:0,km:0,cu:0};
+ const resumo=[...gp.entries()].map(([k,ds])=>{const n=ds.reduce((s,d)=>s+d.items.length,0),m3=ds.reduce((s,d)=>s+d.m3,0),t=ds.reduce((s,d)=>s+d.t,0),c=ds.reduce((s,d)=>s+d.cargas,0),km=ds.reduce((s,d)=>s+d.rota.km,0),cu=ds.reduce((s,d)=>r2(s+d.custo),0);acc=r2(acc-cu);tot.n+=n;tot.m3+=m3;tot.t+=t;tot.c+=c;tot.km+=km;tot.cu=r2(tot.cu+cu);
+  return `<tr><td>${esc(rper(k))}</td><td class="r">${n}</td><td class="r">${fN(m3)}</td><td class="r">${fN(t,1)}</td><td class="r">${c}</td><td class="r">${fN(km,1)}</td><td class="r">${fN(cu)}</td><td class="r">${fN(acc)}</td></tr>`}).join('');
+ let grupos;if(P.relPor==='bai'){const m=new Map();Rz.dias.forEach(d=>d.items.forEach(p=>{const b=(p.oc.bairro||'').trim()||'(sem bairro)';if(!m.has(b))m.set(b,[]);m.get(b).push(Object.assign({},p,{dia:d.dia}))}));
+  grupos=[...m.entries()].sort((a,b)=>a[0].localeCompare(b[0],'pt-BR')).map(([b,its])=>{const r=piRota(its);return {tit:'Bairro '+b,its,r,h:piHoras(P,r),dias:[...new Set(its.map(p=>p.dia))].sort(),bai:true}})}
+ else grupos=Rz.dias.map(d=>({tit:'Dia '+dd(d.dia),its:d.items,r:d.rota,h:d.hor,dias:[d.dia],bai:false,d}));
+ const blocos=grupos.map(g=>{const r=g.r,h=g.h;const m3=g.its.reduce((s,p)=>s+p.v.m3,0),t=g.its.reduce((s,p)=>s+p.v.t,0),cu=g.its.reduce((s,p)=>r2(s+p.v.custo),0);
+  const bs=[...new Set(g.its.map(p=>(p.oc.bairro||'').trim()||'(sem bairro)'))].join('; ');
+  const lk=piLinks(r).map((u,i)=>`<a href="${u}">Abrir no Google Maps${piLinks(r).length>1?' (trecho '+(i+1)+')':''}</a>`).join(' · ');
+  const linhas=r.ord.map((p,i)=>`<tr><td>${i+1}</td><td>${piHM(h.L[i].ini)}–${piHM(h.L[i].fim)}</td>${g.bai?'<td>'+dd(p.dia)+'</td>':''}<td>#${p.oc.num} ${esc(p.oc.rua||'(sem nome da rua)')}${p.oc.lat==null?' <small>(sem coordenada — confirmar em campo)</small>':''}</td><td>${esc((p.oc.bairro||'').trim())}</td><td class="r">${fN(p.v.m3)}${p.v.fonte==='estimado'?'*':p.v.fonte==='fiscal'?'ᶠ':''}</td><td class="r">${i&&p.oc.lat!=null?fN(r.tr[i]/1000,2):'—'}</td></tr>`).join('');
+  return `<div style="page-break-inside:avoid;margin-top:14px"><h2>${esc(g.tit)} — ${g.its.length} ocorrência(s)</h2>
+  <p class="small">Bairro(s): ${esc(bs)} · ${fN(m3)} m³ · ${fN(t,1)} t · ${Math.ceil(t/P.carga-1e-9)} carga(s) de caminhão · custo previsto R$ ${fN(cu)}</p>
+  <table><tr><th>Ordem</th><th>Horário previsto</th>${g.bai?'<th>Dia</th>':''}<th>Local</th><th>Bairro</th><th class="r">m³</th><th class="r">Trecho (km)</th></tr>${linhas}</table>
+  <p class="small"><b>Rota:</b> ${fN(r.km,1)} km estimados · deslocamento ${Math.round(h.desl)} min · serviço ${Math.round(h.serv)} min · término previsto <b>${piHM(h.fimDia)}</b>${h.passa&&!g.bai?' <b style="color:#c0392b">— passa do fim da jornada ('+esc(P.fim)+'): reduza ocorrências ou aumente as equipes</b>':''}${h.pico?' · <b>há deslocamento em horário de pico</b>':''}${g.bai?' · <i>equivale a cerca de '+fN(h.fimDia-piMin(P.ini)>0?(h.serv+h.desl)/Math.max(60,piMin(P.fim)-piMin(P.ini)-(piMin(P.almFim)-piMin(P.almIni))):0,1)+' dia(s) de jornada</i>':''}</p>
+  <div style="display:flex;gap:14px;align-items:flex-start">${piSvg(r)}<p class="small">${lk||'—'}<br><br>Os números do croqui seguem a ordem da tabela. Verde = primeira parada.</p></div></div>`}).join('');
+ const resto=Rz.resto.length;
+ const html=docWrap('Planejamento de atendimentos — '+o.nome,`<section class="pg">${cabDoc(o,'PLANEJAMENTO DE ATENDIMENTOS (INSTRUÍDO)','<b>A partir de '+fData(P.inicio)+' · '+P.n+' '+(P.unid==='dia'?'dia(s) útil(eis)':P.unid==='semana'?'semana(s)':'mês(es)')+'</b>')}
+ <h2>1. Parâmetros</h2><p class="small">Ordem: ${P.ordem==='pri'?'prioridade (alta → baixa), mais antigas primeiro':P.ordem==='antig'?'mais antigas primeiro':'maior volume primeiro'} · Prioridades: ${Object.entries(PRI).filter(([k])=>P.pris[k]).map(([,v])=>v.l).join(', ')} · Bairros: ${(P.bairros||[]).length?esc(P.bairros.join('; ')):'todos'} · Raio de agrupamento: ${P.raioKm>0?fN(P.raioKm)+' km':'sem agrupar'}<br>Caminhões: ${P.camDia}/dia × ${fN(P.carga,1)} t · peso específico ${fN(P.dens)} t/m³ → ${fN(Rz.cap,1)} t/dia ≈ ${fN(Rz.cap/P.dens)} m³/dia · Jornada ${esc(P.ini)}–${esc(P.fim)} (almoço ${esc(P.almIni)}–${esc(P.almFim)}) · ${fN(P.kmh,0)} km/h</p>
+ <h2>2. Resumo por ${P.unid==='dia'?'dia':P.unid==='semana'?'semana':'mês'}</h2>
+ <table><tr><th>Período</th><th class="r">Ocorr.</th><th class="r">m³</th><th class="r">Toneladas</th><th class="r">Cargas</th><th class="r">Rota (km)</th><th class="r">Custo (R$)</th><th class="r">Saldo após (R$)</th></tr>${resumo}<tr class="tot"><td>Total</td><td class="r">${tot.n}</td><td class="r">${fN(tot.m3)}</td><td class="r">${fN(tot.t,1)}</td><td class="r">${tot.c}</td><td class="r">${fN(tot.km,1)}</td><td class="r">${fN(tot.cu)}</td><td></td></tr></table>
+ <p class="small">${resto?resto+' ocorrência(s) ficaram para depois (fora do período ou do saldo). ':''}Saldo livre antes do planejamento: R$ ${fN(Rz.SP.livre)}.</p>
+ <h2>3. Roteiro ${P.relPor==='bai'?'por bairro':'por dia / frente de trabalho'}</h2>${blocos}
+ <p class="small" style="margin-top:12px"><b>Como ler:</b> a ordem das paradas é a de menor distância (vizinho mais próximo com ajuste 2-opt), partindo da ocorrência de maior prioridade. As distâncias são em linha reta × 1,3 (aproximação de ruas) e os horários consideram ${fN(P.kmh,0)} km/h, ${fN(P.minFix,0)} min fixos + ${fN(P.minM3,0)} min por m³. O programa <b>não usa trânsito em tempo real</b>: a sugestão de jornada (${esc(P.ini)}–${esc(P.fim)}) evita os picos de 7h–9h e 17h–19h, e o link do Google Maps mostra o trânsito do momento. Volumes: ᶠ = medido pelo fiscal no atendimento; sem marca = definido pelo gestor; * = estimado (${fN(P.qtdPad)} m³), pois a ocorrência ainda não teve atendimento do fiscal.</p></section>`);
+ abrirPreview('Planejamento de atendimentos',html,true)}
 function piAplicar(){if(!canPI()){toast('Sem permissão para aplicar o planejamento instruído.');return}const o=O();if(!M.res||!M.res.dias.length){toast('Calcule antes de aplicar.');return}
- let n=0;M.res.dias.forEach(d=>d.items.forEach(({oc,v})=>{if(S.perfil==='gestor'&&!oc.priConf){oc.priG=priEf(oc);oc.priConf=true}oc.semana=isoWeek(d.dia);oc.diaPlan=d.dia;if(!oc.servicoId&&oc.servSug)oc.servicoId=oc.servSug;if(!(oc.qtdPlan>0)&&oc.servicoId&&v.assum&&v.custoOk)oc.qtdPlan=v.q;log(oc,'Programada pelo planejamento instruído: '+fData(d.dia)+' ('+labSem(oc.semana)+')');recalcStatus(o,oc);n++}));
+ let n=0;M.res.dias.forEach(d=>d.items.forEach(({oc,v})=>{if(S.perfil==='gestor'&&!oc.priConf){oc.priG=priEf(oc);oc.priConf=true}oc.semana=isoWeek(d.dia);oc.diaPlan=d.dia;if(!oc.servicoId)oc.servicoId=oc.servSug||M.p.svcPad||'';if(!(oc.qtdPlan>0)&&oc.qtdFiscal>0)oc.qtdPlan=oc.qtdFiscal;else if(!(oc.qtdPlan>0)&&oc.servicoId&&v.assum&&v.custoOk)oc.qtdPlan=v.q;log(oc,'Programada pelo planejamento instruído: '+fData(d.dia)+' ('+labSem(oc.semana)+')');recalcStatus(o,oc);n++}));
  saveObra(o);fecharModal(false);S.tab='plan';render();toast(n+' ocorrência(s) programadas pelo planejamento instruído.',6000)}
 /* ===================== conferência em campo, custo previsto/saldo e renovação ===================== */
 const custoPlan=(o,oc)=>{const sv=svcOf(o,oc.servicoId);return sv&&oc.qtdPlan?t2(oc.qtdPlan*pbdi(o,sv)):0};
@@ -725,7 +877,7 @@ function planSaldoCard(o){const s=saldoPlan(o);const pct=v=>s.base>0?Math.max(0,
  ${linhas?`<div class="tablewrap" style="margin-top:8px"><table class="tb"><thead><tr><th>Semana programada</th><th class="r">Ocorrências</th><th class="r">Custo previsto (R$)</th><th class="r">Saldo após a semana (R$)</th></tr></thead><tbody>${linhas}</tbody></table></div>`:'<p class="small muted">Nenhuma ocorrência programada com serviço e quantidade — o custo previsto aparece aqui.</p>'}</div>`}
 /* conferência em campo */
 function fotosConf(e,o){const oc=e.ocorrenciaId?o.ocorrencias.find(x=>x.id===e.ocorrenciaId):null;
- const antes=[...(oc?oc.fotos:[]),...e.fotos].filter(f=>f.fase==='antes');const depois=e.fotos.filter(f=>f.fase==='depois');return {antes,depois}}
+ const antes=[...(oc?oc.fotos:[]),...e.fotos.filter(f=>f.fase==='antes')];const depois=e.fotos.filter(f=>f.fase==='depois');return {antes,depois}}
 function modalConf(e){const o=O(),L=localEx(o,e),F=fotosConf(e,o);
  const th=l=>l.length?`<div class="thumbs">${l.map(f=>`<figure class="th"><img data-foto="${f.id}" data-act="zoom" alt=""></figure>`).join('')}</div>`:'<p class="small neg">Nenhuma foto.</p>';
  const itens=e.itens.map(i=>{const s=svcOf(o,i.servicoId);return s?esc(s.descricao)+': <b>'+fN(i.qtd)+' '+esc(s.unidade)+'</b>':''}).filter(Boolean).join('<br>');
@@ -773,7 +925,7 @@ function autoEnd(lat,lng){clearTimeout(_aeT);const tok=++_aeTok;const st=()=>$('
 const SX={marc:{},vis:[]};
 const sxF=()=>{S.f.sx=S.f.sx||{sub:'aat',sit:'abertas',bai:'',q:'',atF:'todas'};return S.f.sx};
 function selExLista(o){const f=sxF();let l=o.ocorrencias.filter(x=>x.status!=='medida'&&x.status!=='executada');
- if(f.sit==='prog')l=l.filter(x=>x.semana);
+ if(f.sit==='prog')l=l.filter(x=>x.semana);else if(f.sit==='vist')l=l.filter(x=>x.vistFiscal);
  else if(f.sit==='sem'){const w=isoWeek(S.f.dia);l=l.filter(x=>x.semana===w)}
  if(f.bai)l=l.filter(x=>norm(x.bairro)===norm(f.bai));
  if(f.q){const q=norm(f.q);l=l.filter(x=>norm([x.rua,x.bairro,x.desc,x.solucao,'#'+x.num].join(' ')).includes(q))}
@@ -789,18 +941,21 @@ function atendItens(o){const f=sxF();
  const feitoHoje=id=>o.execucoes.some(e=>e.ocorrenciaId===id&&e.data===S.f.dia);
  return {tit:l.length+' ocorrência(s) a atender',html:l.map(x=>{const sv=svcOf(o,x.servicoId||x.servSug);const fh=feitoHoje(x.id);const n=o.execucoes.filter(e=>e.ocorrenciaId===x.id).length;
   return `<article class="item" style="margin:6px 0"><div class="hd"><div><span class="num">#${x.num}</span> <b>${esc(ocLocal(x))}</b></div><label class="chk" style="margin:0"><input type="checkbox" data-chg="selExChk" data-id="${x.id}" ${SX.marc[x.id]?'checked':''}> marcar</label></div>
-  <div class="chips">${chipP(priEf(x))}${chipS(x.status)}${x.semana?`<span class="chip" style="--c:#2563a8">🗓 ${labSem(x.semana)}</span>`:''}${fh?'<span class="chip" style="--c:#2e7d4f">✔ registrada em '+fData(S.f.dia).slice(0,5)+'</span>':''}${n&&!fh?'<span class="chip" style="--c:#7b3fb0">'+n+' execução(ões)</span>':''}</div>
-  <div class="small">${esc((x.desc||'').slice(0,140))}</div>${sv?`<div class="small muted">Serviço: ${esc(sv.descricao)}${x.qtdPlan?' · previsto '+fN(x.qtdPlan)+' '+esc(sv.unidade):''}</div>`:''}
+  <div class="chips">${chipP(priEf(x))}${chipS(x.status)}${x.semana?`<span class="chip" style="--c:#2563a8">🗓 ${labSem(x.semana)}</span>`:''}${vfChip(x)}${fh?'<span class="chip" style="--c:#2e7d4f">✔ registrada em '+fData(S.f.dia).slice(0,5)+'</span>':''}${n&&!fh?'<span class="chip" style="--c:#7b3fb0">'+n+' execução(ões)</span>':''}</div>
+  <div class="small">${esc((x.desc||'').slice(0,140))}</div>${sv?`<div class="small muted">Serviço: ${esc(sv.descricao)}${(x.qtdPlan||x.qtdFiscal)?' · previsto '+fN(x.qtdPlan||x.qtdFiscal)+' '+esc(sv.unidade):''}</div>`:''}${vfMed(x)}
   <div class="row gap" style="justify-content:flex-end"><button class="btn sm pri" data-act="exDeOc" data-id="${x.id}" ${can('exec')?'':'disabled'}>＋ Registrar execução</button></div></article>`}).join('')||'<p class="muted small" style="padding:8px">Nenhuma ocorrência a atender com este filtro.</p>'}}
 function selExAtualiza(){const o=O();if(!o||!$('#se-lista'))return;const r=atendItens(o);$('#se-tit').textContent=r.tit;$('#se-lista').innerHTML=r.html;hydrate($('#se-lista'));selExMarc()}
 function selExMarc(){const e=$('#se-marc');if(e)e.textContent=Object.values(SX.marc).filter(Boolean).length+' marcada(s)'}
-function tAtend(o){const f=sxF(),dia=S.f.dia;const nAat=o.ocorrencias.filter(x=>x.status!=='executada'&&x.status!=='medida').length;const nAte=o.ocorrencias.filter(x=>x.status==='executada'||x.status==='medida').length;const pend=o.execucoes.filter(e=>!e.conferida&&!e.medicaoNum).length;
+function tAtend(o){if(!S.f.atM)S.f.atM=S.perfil==='empresa'?'emp':'fis';const nVF=o.ocorrencias.filter(x=>!x.vistFiscal&&x.status!=='executada'&&x.status!=='medida').length;
+ const modo=`<div class="row gap" style="margin-bottom:12px"><button class="btn ${S.f.atM==='fis'?'pri':''}" data-act="atModo" data-v="fis" style="flex:1;min-width:200px;padding:14px">👷 Atendimento do fiscal<br><small>vistoria técnica: fotos do antes e dimensões · ${nVF} aguardando</small></button><button class="btn ${S.f.atM==='emp'?'pri':''}" data-act="atModo" data-v="emp" style="flex:1;min-width:200px;padding:14px">🚧 Atendimento do contratado<br><small>execução do serviço e conferência</small></button></div>`;
+ if(S.f.atM==='fis')return modo+tAtendFis(o);
+ const f=sxF(),dia=S.f.dia;const nAat=o.ocorrencias.filter(x=>x.status!=='executada'&&x.status!=='medida').length;const nAte=o.ocorrencias.filter(x=>x.status==='executada'||x.status==='medida').length;const pend=o.execucoes.filter(e=>!e.conferida&&!e.medicaoNum).length;
  const r=atendItens(o);const aat=f.sub!=='ate';
- return `<div class="toolbar"><label>Data do atendimento<input type="date" value="${dia}" data-chg="dia"></label>
+ return modo+`<div class="toolbar"><label>Data do atendimento<input type="date" value="${dia}" data-chg="dia"></label>
  <button class="btn ${aat?'pri':''}" data-act="atSub" data-v="aat">A atender (${nAat})</button><button class="btn ${aat?'':'pri'}" data-act="atSub" data-v="ate">Atendidas (${nAte}) · ${pend} a conferir</button>
  <button class="btn" data-act="exNew" ${can('exec')?'':'disabled'}>＋ Execução avulsa</button></div>
  <div class="card"><p class="small muted">${aat?'Escolha a ocorrência e registre a execução: rua, bairro, medidas e serviço planejado já vêm preenchidos. O RDO do dia e o relatório fotográfico são montados sozinhos a partir do que for registrado aqui. Marque várias e use “Registrar marcadas conforme planejado” para uma rua com muitos buracos.':'Execuções já registradas, da mais recente para a mais antiga. O fiscal confere em campo (fotos do antes e do depois + qualidade); só execuções conferidas entram na medição.'}</p>
- <div class="toolbar">${aat?`<label>Mostrar<select data-chg="selExF" data-k="sit"><option value="abertas" ${f.sit==='abertas'?'selected':''}>Todas a atender</option><option value="prog" ${f.sit==='prog'?'selected':''}>Programadas em alguma semana</option><option value="sem" ${f.sit==='sem'?'selected':''}>Programadas na semana do dia ${fData(dia).slice(0,5)}</option></select></label>`:`<label>Situação<select data-chg="selExF" data-k="atF"><option value="todas" ${f.atF==='todas'?'selected':''}>Todas</option><option value="conf" ${f.atF==='conf'?'selected':''}>A conferir pelo fiscal</option><option value="ok" ${f.atF==='ok'?'selected':''}>Conferidas</option></select></label>`}
+ <div class="toolbar">${aat?`<label>Mostrar<select data-chg="selExF" data-k="sit"><option value="abertas" ${f.sit==='abertas'?'selected':''}>Todas a atender</option><option value="vist" ${f.sit==='vist'?'selected':''}>Já vistoriadas pelo fiscal</option><option value="prog" ${f.sit==='prog'?'selected':''}>Programadas em alguma semana</option><option value="sem" ${f.sit==='sem'?'selected':''}>Programadas na semana do dia ${fData(dia).slice(0,5)}</option></select></label>`:`<label>Situação<select data-chg="selExF" data-k="atF"><option value="todas" ${f.atF==='todas'?'selected':''}>Todas</option><option value="conf" ${f.atF==='conf'?'selected':''}>A conferir pelo fiscal</option><option value="ok" ${f.atF==='ok'?'selected':''}>Conferidas</option></select></label>`}
  <label>Bairro<select data-chg="selExF" data-k="bai"><option value="">Todos</option>${bairrosDe(o).map(b=>`<option ${f.bai===b?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
  <label style="flex:1;min-width:160px">Palavra-chave<input id="se-q" placeholder="rua, bairro, descrição, nº" value="${esc(f.q)}" data-inp="selExQ" autocomplete="off"></label></div>
  <div class="row gap" style="justify-content:space-between;align-items:center;margin:6px 0"><b id="se-tit">${r.tit}</b>${aat?'<span class="row gap"><button class="btn sm" data-act="selExTodas">☑ Marcar todas da lista</button><button class="btn sm" data-act="selExNenhuma">☐ Limpar</button></span>':''}</div>
@@ -809,7 +964,7 @@ function tAtend(o){const f=sxF(),dia=S.f.dia;const nAat=o.ocorrencias.filter(x=>
 function autoDesc(o,d){const itens=d.itens.map(i=>{const s=svcOf(o,i.servicoId);return s?{desc:s.descricao,qtd:i.qtd,un:s.unidade}:null}).filter(Boolean);const oc=o.ocorrencias.find(x=>x.id===d.ocorrenciaId);
  return textoLocal({local:oc?ocLocal(oc):[d.local.rua,d.local.bairro].filter(Boolean).join(' — '),itens,probl:oc?oc.desc:'',solucao:oc?oc.solucao:'',campo:d.descCampo||''})}
 function exNovo(oc){const d={id:'x'+uid(),data:S.f.dia,ocorrenciaId:null,local:{rua:'',bairro:''},med:{c:0,l:0,e:0},itens:[],fotos:[],descCampo:'',desc:'',descOrigem:null,concluiu:false,conferida:false,conferidaPor:null,medicaoNum:null,criadoPor:quem(),criadoEm:new Date().toISOString()};
- if(oc){d.ocorrenciaId=oc.id;d.local={rua:oc.rua||'',bairro:oc.bairro||''};if(oc.med)d.med={c:oc.med.c||0,l:oc.med.l||0,e:0};const sid=oc.servicoId||oc.servSug;if(sid)d.itens=[{servicoId:sid,qtd:oc.qtdPlan||''}]}
+ if(oc){d.ocorrenciaId=oc.id;d.local={rua:oc.rua||'',bairro:oc.bairro||''};if(oc.med)d.med={c:oc.med.c||0,l:oc.med.l||0,e:oc.med.e||0};const sid=oc.servicoId||oc.servSug;if(sid)d.itens=[{servicoId:sid,qtd:oc.qtdPlan||oc.qtdFiscal||''}]}
  M={t:'ex',novas:[],novo:true,d};abrirModal(modalEx(M.d,true));INP.medidas()}
 
 /* ===================== ocorrências do Mapa de Ocorrências (28/10/2026) — Contrato 078/2026 ===================== */
@@ -903,7 +1058,7 @@ function modalPlan(oc){const o=O();const sel=oc.priG||oc.priF;return `<div class
  <p><b>${esc(ocLocal(oc))}</b></p><p class="small">${esc(oc.desc)}</p><p class="small muted">Sugestão do fiscal: ${esc(oc.sug||'—')} · Prioridade sugerida: ${PRI[oc.priF].l}</p>${thumbsMini(oc.fotos)}
  <fieldset style="margin-top:12px"><legend>Decisão do gestor</legend><label>Prioridade<div class="row gap" style="margin-top:6px">${Object.entries(PRI).map(([k,v])=>`<label class="chk" style="margin:0"><input type="radio" name="pl-pri" value="${k}" ${sel===k?'checked':''}> <span class="chip" style="--c:${v.c}">${v.l}</span></label>`).join('')}</div></label>
  <div class="g2"><label>Semana de execução (informe qualquer dia da semana)<input type="date" id="pl-dia" value="${oc.semana?weekRange(oc.semana)[0]:''}" data-chg="plDia"></label><p class="small muted" id="pl-lab" style="margin-top:30px">${oc.semana?labSem(oc.semana):'Sem semana definida'}</p></div>
- <div class="g2"><label>Serviço (item do contrato)<select id="pl-serv">${svcOptions(o,oc.servicoId||oc.servSug)}</select></label><label>Quantidade prevista<input id="pl-qtd" inputmode="decimal" value="${inp(oc.qtdPlan)}"></label></div>
+ <div class="g2"><label>Serviço (item do contrato)<select id="pl-serv">${svcOptions(o,oc.servicoId||oc.servSug)}</select></label><label>Quantidade prevista<input id="pl-qtd" inputmode="decimal" value="${inp(oc.qtdPlan||oc.qtdFiscal)}">${oc.qtdFiscal?`<small class="muted">Fiscal mediu ${fN(oc.qtdFiscal)} no atendimento</small>`:''}</label></div>
  <label>Forma de solução / método a empregar<textarea id="pl-sol">${esc(oc.solucao||oc.sug||'')}</textarea></label><label>Observações do gestor<textarea id="pl-obs">${esc(oc.obsG||'')}</textarea></label></fieldset></div>
  <div class="mf"><button class="btn" data-act="mCancel">Cancelar</button><button class="btn pri" data-act="planSave">Salvar planejamento</button></div>`}
 function modalObra(d,isNew){return `<div class="mh"><h3>${isNew?'Cadastrar obra (contrato)':'Dados da obra'}</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
@@ -1275,6 +1430,11 @@ const medAtual=o=>{const f=S.f.med;return calcMed(o,f)};
 const ACTS={
  home(){S.obraId=null;render()},
  amb(d){S.amb=d.v;lsSet('tc_amb',d.v);render()},
+ gpsChip(){if(G.st==='ok'){toast('GPS ligado: '+fN(G.pos.lat,5)+', '+fN(G.pos.lng,5)+' (precisão ≈ '+Math.round(G.pos.acc)+' m).');return}if(G.watch==null){gpsIniciar();return}gpsAviso(true)},
+ gpsRetry(){fecharModal(false);G.avisou=false;toast('Procurando o GPS…');gpsIniciar(true)},
+ atModo(d){S.f.atM=d.v;render()},vfAbrir(d){vfAbrirOc(d.id)},vfSalvar(){if(M&&M.t==='vf')vfSalvar()},
+ vfGPS(){posicaoAtual().then(p=>{if(!M||M.t!=='vf')return;M.d.lat=p.lat;M.d.lng=p.lng;M.d.origem='gps-aparelho';vfLocTxt();toast('Ponto atualizado com o GPS (precisão ≈ '+Math.round(p.acc)+' m).')}).catch(()=>{})},
+ vfTipo(d){if(!M||M.t!=='vf')return;M.d.tipo=M.d.tipo===d.t?'':d.t;document.querySelectorAll('[data-act=vfTipo]').forEach(b=>b.classList.toggle('pri',b.dataset.t===M.d.tipo))},
  trocaAmb(){S.amb=null;render()},
  tema(){S.settings.tema=S.settings.tema==='dark'?'light':'dark';lsSet('tc_tema',S.settings.tema);render()},
  tab(d){S.tab=d.k;render()},
@@ -1328,7 +1488,9 @@ const ACTS={
  semMov(d){S.f.semDia=addDias(S.f.semDia,+d.n);render()},
  selTodos(){const o=O();const abertas=o.ocorrencias.filter(x=>x.status!=='medida'&&x.status!=='executada');planLista(o,abertas).forEach(x=>S.f.sel[x.id]=true);render()},selLimpar(){S.f.sel={};render()},
  proxLimpar(){S.f.plRaio=null;render()},
- piAbrir(){if(!canPI()){toast('O planejamento instruído é do Gestor / Secretário. Ele pode liberar o uso para o seu perfil em Obra & Config.');return}if(!S.f.pi)S.f.pi=piDef();M={t:'pi',p:S.f.pi,res:null};abrirModal(modalPI())},piCalc(){if(M&&M.t==='pi')piCalc()},
+ piAbrir(){if(!canPI()){toast('O planejamento instruído é do Gestor / Secretário. Ele pode liberar o uso para o seu perfil em Obra & Config.');return}if(!S.f.pi)S.f.pi=piDef();{const o=O(),P=S.f.pi;if(!P.svcPad||!svcOf(o,P.svcPad)){const m3=o.servicos.find(x=>/m3|m³/i.test(x.unidade||'')&&x.preco>0&&/buraco/i.test(x.descricao||''))||o.servicos.find(x=>/m3|m³/i.test(x.unidade||'')&&x.preco>0);P.svcPad=m3?m3.id:''}}M={t:'pi',p:S.f.pi,res:null};abrirModal(modalPI())},piCalc(){if(M&&M.t==='pi')piCalc()},
+ piMapaF(d){M.mapF=d.k||null;piMapaDesenha(true);const l=$('#pi-leg');if(!l)return;[...l.querySelectorAll('button')].forEach(b=>b.classList.toggle('pri',(b.dataset.k||null)===M.mapF))},
+ piRel(){if(M&&M.t==='pi'){piCalc();piRelatorio()}},
  piBAdd(d){const P=M.p;P.bairros=P.bairros||[];if(!P.bairros.includes(d.b))P.bairros.push(d.b);$('#pi-bq').value='';$('#pi-bsug').innerHTML='';piBSel()},
  piBTodos(){M.p.bairros=[];piBSel()},piBLimpar(){M.p.bairros=[];piBSel()},piAplicar(){if(M&&M.t==='pi')piAplicar()},
  proxAbrir(){const c=S.f.plRaio;M={t:'prox',c:c?{lat:c.lat,lng:c.lng,label:c.label}:null,r:c?c.r:500,q:'',end:'',todas:false,marc:{},achadas:[]};abrirModal(modalProx());proxMapa();setTimeout(proxAtualiza,120)},
@@ -1417,6 +1579,8 @@ const CHG={
  mapExt(el){S.f.mapExt=el.checked;render()},kmlGrp(el,d){M.sel[d.k]=el.checked},
  selExF(el,d){sxF()[d.k]=el.value;selExAtualiza()},selExChk(el,d){SX.marc[d.id]=el.checked;selExMarc()},
  liberaPI(el,d){if(!can('config'))return;const o=O();o.liberaPI=o.liberaPI||{};o.liberaPI[d.k]=el.checked;saveObra(o);toast(el.checked?'Planejamento instruído liberado para '+PERFIL[d.k]+'.':'Planejamento instruído bloqueado para '+PERFIL[d.k]+'.')},
+ afF(el,d){const f=AF();f[d.k]=el.type==='checkbox'?el.checked:el.value;if(d.k==='perto'&&el.checked&&!G.pos)gpsIniciar();render()},vfServ(){if(M&&M.t==='vf'){M.qEdit=false;vfCalc()}},
+ piMapaModo(el){M.mapModo=el.value;M.mapF=null;piMapaDesenha(true)},
  piP(el,d){const p=M.p,k=d.k;if(k.startsWith('pri.'))p.pris[k.slice(4)]=el.checked;else if(el.type==='checkbox')p[k]=el.checked;else p[k]=el.value;if(M.res)piCalc()},
  proxTodas(el){M.todas=el.checked;proxAtualiza()},proxChk(el,d){M.marc[d.id]=el.checked},
  nome(el){S.nome=el.value.trim();lsSet('tc_nome',S.nome)},perfil(el){S.perfil=el.value;lsSet('tc_perfil',S.perfil);render()},
@@ -1442,6 +1606,7 @@ const INP={
  selExQ(el){sxF().q=el.value;selExAtualiza()},
  proxQ(el){const q=norm(el.value);M.q=el.value;const box=$('#px-sug');if(!q){box.innerHTML='';return}const l=O().ocorrencias.filter(x=>norm([x.rua,x.bairro,x.desc,'#'+x.num].join(' ')).includes(q)).slice(0,8);box.innerHTML=l.map(x=>`<button data-act="proxCentroOc" data-id="${x.id}" ${x.lat==null?'disabled title="sem coordenadas"':''}>#${x.num} ${esc(ocLocal(x))}${x.lat==null?' (sem coordenadas)':''}</button>`).join('')||'<p class="small muted">Nenhuma ocorrência encontrada.</p>'},
  proxCoord(){const la=num($('#px-lat').value),lo=num($('#px-lng').value);if(isFinite(la)&&isFinite(lo)&&$('#px-lat').value&&$('#px-lng').value&&Math.abs(la)<=90&&Math.abs(lo)<=180){M.c={lat:la,lng:lo,label:'Coordenadas '+fN(la,5)+', '+fN(lo,5)};proxAtualiza()}},
+ vfCalc(){vfCalc()},vfQtd(){if(M&&M.t==='vf')M.qEdit=true},
  piBq(el){const q=norm(el.value),P=M.p,box=$('#pi-bsug');if(!q){box.innerHTML='';return}const sel=new Set(P.bairros||[]);const cont={};O().ocorrencias.forEach(x=>{if(x.bairro)cont[x.bairro]=(cont[x.bairro]||0)+1});
   const l=bairrosDe(O()).filter(b=>!sel.has(b)&&norm(b).includes(q)).slice(0,10);box.innerHTML=l.length?l.map(b=>`<button class="btn sm" data-act="piBAdd" data-b="${esc(b)}">＋ ${esc(b)} (${cont[b]||0})</button>`).join(' '):'<span class="small muted">Nenhum bairro encontrado.</span>'},
  piN(el,d){const v=num(el.value);if(isFinite(v))M.p[d.k]=Math.max(0,v)},
@@ -1451,9 +1616,9 @@ const INP={
 document.addEventListener('click',e=>{const el=e.target.closest('[data-act]');if(!el||el.disabled)return;const fn=ACTS[el.dataset.act];if(fn){e.preventDefault();fn(el.dataset,el,e)}});
 document.addEventListener('change',e=>{const el=e.target.closest('[data-chg]');if(!el)return;const fn=CHG[el.dataset.chg];if(fn)fn(el,el.dataset)});
 document.addEventListener('input',e=>{const el=e.target.closest('[data-inp]');if(!el)return;const fn=INP[el.dataset.inp];if(fn)fn(el,el.dataset)});
-async function addFotos(files,camera){if(!M||!M.d||!M.d.fotos){toast('Abra uma ocorrência ou execução primeiro.');return}toast('Processando '+files.length+' foto(s)…');const fase=$('#exFase')?$('#exFase').value:'depois';let semGps=0;
+async function addFotos(files,camera){if(!M||!M.d||!M.d.fotos){toast('Abra uma ocorrência ou execução primeiro.');return}toast('Processando '+files.length+' foto(s)…');const fase=$('#exFase')?$('#exFase').value:(M.t==='oc'||M.t==='vf'?'antes':'depois');let semGps=0;
  for(const f of files){try{const r=await processarFoto(f,camera);r.fase=fase;M.d.fotos.push(r);M.novas.push(r.id);if(r.lat==null)semGps++;
-  if(r.lat!=null){if(M.t==='oc'&&M.d.lat==null)setCoord(r.lat,r.lng,r.origem==='exif'?'exif':'gps-aparelho',{fly:true});if(M.t==='ex'&&M.d.local.lat==null){M.d.local.lat=r.lat;M.d.local.lng=r.lng}}}catch(e){toast('Não foi possível ler uma das imagens.')}}
+  if(r.lat!=null){if(M.t==='oc'&&M.d.lat==null)setCoord(r.lat,r.lng,r.origem==='exif'?'exif':'gps-aparelho',{fly:true});if(M.t==='ex'&&M.d.local.lat==null){M.d.local.lat=r.lat;M.d.local.lng=r.lng}if(M.t==='vf'&&M.d.lat==null){M.d.lat=r.lat;M.d.lng=r.lng;M.d.origem=r.origem==='exif'?'exif':'gps-aparelho';vfLocTxt()}}}catch(e){toast('Não foi possível ler uma das imagens.')}}
  refreshFotos();toast(semGps?semGps+' foto(s) sem coordenadas. Use “Usar minha localização” ou marque no mapa.':'Fotos adicionadas.')}
 $('#fileFoto').addEventListener('change',e=>{const f=[...e.target.files];e.target.value='';if(f.length)addFotos(f,false)});
 $('#fileCam').addEventListener('change',e=>{const f=[...e.target.files];e.target.value='';if(f.length)addFotos(f,true)});
