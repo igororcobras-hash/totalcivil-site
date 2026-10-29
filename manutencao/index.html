@@ -411,7 +411,7 @@ function _render(){
  window.scrollTo(0,y)}
 function renderTop(){$('#top').innerHTML=`<a class="brand" href="#" data-act="home"><span class="logo">▦</span><b>Total Civil</b></a><span class="prog">Serviços Públicos</span><span class="sp"></span>
  <input class="nm" placeholder="Seu nome" value="${esc(S.nome)}" data-chg="nome" title="Seu nome (registrado no histórico)">
- <select class="pf" data-chg="perfil" title="Perfil de uso (simula as permissões)">${Object.entries(PERFIL).map(([k,v])=>`<option value="${k}" ${S.perfil===k?'selected':''}>${v}</option>`).join('')}</select>
+ ${S.trava?`<span class="pf" title="Perfil definido pelo administrador do site">${PERFIL[S.perfil]}</span>`:`<select class="pf" data-chg="perfil" title="Perfil de uso (simula as permissões)">${Object.entries(PERFIL).map(([k,v])=>`<option value="${k}" ${S.perfil===k?'selected':''}>${v}</option>`).join('')}</select>`}
  ${gpsChip()}${nuvChip()}${gpsBar()}${S.obraId&&O()?'<button class="btn sm" data-act="expBackup" title="Salvar como: grava um arquivo .json desta obra (com as fotos) no computador">💾 Salvar como…</button>':''}
  <button class="btn sm" data-act="tema">${S.settings.tema==='dark'?'☀ Claro':'🌙 Escuro'}</button>
  <button class="btn sm" data-act="trocaAmb">${AMB[S.amb]||'Ambiente'}</button>`}
@@ -1583,7 +1583,7 @@ const CHG={
  piMapaModo(el){M.mapModo=el.value;M.mapF=null;piMapaDesenha(true)},
  piP(el,d){const p=M.p,k=d.k;if(k.startsWith('pri.'))p.pris[k.slice(4)]=el.checked;else if(el.type==='checkbox')p[k]=el.checked;else p[k]=el.value;if(M.res)piCalc()},
  proxTodas(el){M.todas=el.checked;proxAtualiza()},proxChk(el,d){M.marc[d.id]=el.checked},
- nome(el){S.nome=el.value.trim();lsSet('tc_nome',S.nome)},perfil(el){S.perfil=el.value;lsSet('tc_perfil',S.perfil);render()},
+ nome(el){S.nome=el.value.trim();lsSet('tc_nome',S.nome)},perfil(el){if(S.trava)return;S.perfil=el.value;if(!(window.TC_USUARIO&&window.TC_USUARIO.admin))lsSet('tc_perfil',S.perfil);render()},
  flt(el,d){S.f[d.k]=el.value;render()},
  sel(el,d){S.f.sel[d.id]=el.checked},
  semDia(el){if(el.value){S.f.semDia=el.value;render()}},dia(el){if(el.value){S.f.dia=el.value;render()}},
@@ -1671,7 +1671,12 @@ async function criarDemo(){const h=hojeISO(),ont=addDias(h,-1);const o=novaObra(
  const keys=await DB.keys('kv');for(const k of keys){if(String(k).startsWith('obra:')){const o=await DB.get('kv',k);if(o&&o.id)S.obras[o.id]=o}}
  if(!lsGet('tc_demo_off','')){for(const o of Object.values(S.obras)){if(o.demo){idsFotos(o).forEach(id=>{DB.del('fotos',id);fotoCache.delete(id)});await DB.del('kv','obra:'+o.id);delete S.obras[o.id]}}lsSet('tc_demo_off','1')}
  if(!lsGet('tc_seed078','')){if(!Object.values(S.obras).some(x=>x.contrato===REAL078.contrato&&x.contratada===REAL078.contratada))await criarReal078(true);lsSet('tc_seed078','1')}
- nuvLigar();
+ function aplicaUsuario(){const u=window.TC_USUARIO;if(!u)return;
+ if(u.admin){S.perfil='gestor';S.trava=false}
+ else{S.perfil=PERM[u.perfil]?u.perfil:'fiscal';S.trava=true}
+ render()}
+if(window.TC_USUARIO)aplicaUsuario();else document.addEventListener('tc-acesso-liberado',aplicaUsuario,{once:true});
+nuvLigar();
  if(!DB.ok)setTimeout(()=>toast('Atenção: este navegador não permite salvar dados (modo privado?). Os dados serão perdidos ao fechar.',7000),600);
  render()})();
 </script>
