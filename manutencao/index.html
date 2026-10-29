@@ -865,7 +865,7 @@ function modalPI(){const P=M.p;const n=(k,l,extra)=>`<label>${l}<input inputmode
  <div class="g2"><label>Ordem de atendimento<select data-chg="piP" data-k="ordem"><option value="pri" ${P.ordem==='pri'?'selected':''}>Prioridade (alta → baixa); mais antigas primeiro</option><option value="antig" ${P.ordem==='antig'?'selected':''}>Mais antigas primeiro</option><option value="vol" ${P.ordem==='vol'?'selected':''}>Maior volume primeiro</option></select></label>
  <div><div class="small muted">Prioridades incluídas</div><div class="row gap">${Object.entries(PRI).map(([k,v])=>`<label class="chk"><input type="checkbox" data-chg="piP" data-k="pri.${k}" ${P.pris[k]?'checked':''}> ${v.l}</label>`).join('')}</div></div></div>
  <div style="margin:8px 0"><label>Bairros — digite para procurar e toque no bairro para somar à seleção<input id="pi-bq" placeholder="ex.: Nova Cidade" autocomplete="off" data-inp="piBq"></label><div id="pi-bsug" class="geo"></div>
- <label>Bairros selecionados (vazio = todos os bairros)<input id="pi-bsel" readonly value="${esc((P.bairros||[]).join('; '))}" placeholder="Todos os bairros"></label>
+ <label>Bairros selecionados (vazio = todos) — toque na seta para ver a lista de todos os bairros<select id="pi-bsel" data-chg="piBPick">${piBOpts(P)}</select></label>
  <div class="row gap" style="margin-top:4px"><button class="btn sm" data-act="piBTodos">Todos os bairros</button><button class="btn sm" data-act="piBLimpar">✕ Limpar seleção</button></div></div>
  <div class="row gap"><label class="chk"><input type="checkbox" data-chg="piP" data-k="soSem" ${P.soSem?'checked':''}> Só ocorrências ainda sem semana definida</label><label class="chk"><input type="checkbox" data-chg="piP" data-k="soVist" ${P.soVist?'checked':''}> Só ocorrências já vistoriadas pelo fiscal (com medidas)</label><label class="chk"><input type="checkbox" data-chg="piP" data-k="soConf" ${P.soConf?'checked':''}> Só com prioridade já confirmada</label></div>
  <h4 style="margin-top:12px">2. Raio e caminhões</h4>
@@ -882,7 +882,9 @@ function modalPI(){const P=M.p;const n=(k,l,extra)=>`<label>${l}<input inputmode
  
  <div id="pi-res"></div>
  <div class="row gap" style="justify-content:flex-end;margin-top:12px"><button class="btn pri" data-act="piCalc">Calcular</button><button class="btn" data-act="piRel" id="pi-rel" disabled>📄 Relatório (PDF)</button><span class="sp"></span><button class="btn" data-act="mClose">Fechar</button><button class="btn pri" data-act="piAplicar" id="pi-ap" disabled>Aplicar ao planejamento</button></div></div>`}
-function piBSel(){const e=$('#pi-bsel');if(e)e.value=(M.p.bairros||[]).join('; ');if(M.res)piCalc()}
+function piBOpts(P){const sel=new Set(P.bairros||[]);const cont={};O().ocorrencias.forEach(x=>{if(x.bairro)cont[x.bairro]=(cont[x.bairro]||0)+1});
+ return `<option value="">${esc(sel.size?[...sel].join('; '):'Todos os bairros')}</option>`+bairrosDe(O()).map(b=>`<option value="${esc(b)}">${sel.has(b)?'✓ ':''}${esc(b)} (${cont[b]||0})${sel.has(b)?' — toque para tirar':''}</option>`).join('')}
+function piBSel(){const e=$('#pi-bsel');if(e){e.innerHTML=piBOpts(M.p);e.selectedIndex=0}if(M.res)piCalc()}
 function piCalc(){const o=O(),P=M.p,SP=saldoPlan(o);const cap=P.camDia*P.carga;
  if(!(cap>0)||!(P.dens>0)||!(P.n>=1)){toast('Informe carga, caminhões por dia, peso específico e o período.');return}
  const cmp=P.ordem==='antig'?(a,b)=>(a.oc.criadoEm||'').localeCompare(b.oc.criadoEm||'')||a.oc.num-b.oc.num:P.ordem==='vol'?(a,b)=>b.v.m3-a.v.m3||a.oc.num-b.oc.num:(a,b)=>(PRI[priEf(a.oc)].o-PRI[priEf(b.oc)].o)||(a.oc.criadoEm||'').localeCompare(b.oc.criadoEm||'')||a.oc.num-b.oc.num;
@@ -1701,6 +1703,7 @@ const CHG={
  liberaPI(el,d){if(!can('config'))return;const o=O();o.liberaPI=o.liberaPI||{};o.liberaPI[d.k]=el.checked;saveObra(o);toast(el.checked?'Planejamento instruído liberado para '+PERFIL[d.k]+'.':'Planejamento instruído bloqueado para '+PERFIL[d.k]+'.')},
  afF(el,d){const f=AF();f[d.k]=el.type==='checkbox'?el.checked:el.value;if(d.k==='perto'&&el.checked&&!G.pos)gpsIniciar();render()},vfServ(){if(M&&M.t==='vf'){M.qEdit=false;vfCalc()}},
  piMapaModo(el){M.mapModo=el.value;M.mapF=null;piMapaDesenha(true)},
+ piBPick(el){const b=el.value;if(!b)return;const P=M.p;P.bairros=P.bairros||[];const i=P.bairros.indexOf(b);if(i>=0)P.bairros.splice(i,1);else P.bairros.push(b);piBSel()},
  piGrp(el){const p=M.p;p.svcGrp=el.value;const o=O();if(p.svcPad&&p.svcGrp&&!o.servicos.some(x=>x.id===p.svcPad&&piGrpKey(x)===p.svcGrp)){const f=o.servicos.find(x=>piGrpKey(x)===p.svcGrp&&x.preco>0);p.svcPad=f?f.id:''}const e=$('#pi-svc');if(e)e.innerHTML=piSvcOpts(o,p);if(M.res)piCalc()},
  piP(el,d){const p=M.p,k=d.k;if(k.startsWith('pri.'))p.pris[k.slice(4)]=el.checked;else if(el.type==='checkbox')p[k]=el.checked;else p[k]=el.value;if(M.res)piCalc()},
  proxTodas(el){M.todas=el.checked;proxAtualiza()},proxChk(el,d){M.marc[d.id]=el.checked},
