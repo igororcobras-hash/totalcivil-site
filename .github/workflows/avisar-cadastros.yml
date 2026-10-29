@@ -1,0 +1,36 @@
+name: Avisar novos cadastros
+
+# Verifica a cada ~10 minutos se há cadastro, pedido de acesso teste/pacote ou aviso de pagamento novos
+# e manda WhatsApp (CallMeBot) e notificação (ntfy) ao administrador.
+# Segredos: FIREBASE_SERVICE_ACCOUNT (já existe), CALLMEBOT_FONE, CALLMEBOT_CHAVE, NTFY_TOPICO.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: avisar-cadastros
+  cancel-in-progress: false
+
+jobs:
+  avisar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar firebase-admin
+        run: npm install --no-save --no-package-lock firebase-admin@13
+      - name: Avisar
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          CALLMEBOT_FONE: ${{ secrets.CALLMEBOT_FONE }}
+          CALLMEBOT_CHAVE: ${{ secrets.CALLMEBOT_CHAVE }}
+          NTFY_TOPICO: ${{ secrets.NTFY_TOPICO }}
+        run: node scripts/avisos/avisar.js
