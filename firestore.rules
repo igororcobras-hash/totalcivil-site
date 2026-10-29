@@ -43,6 +43,12 @@ service cloud.firestore {
       );
     }
 
+    // Obra liberada para esta pessoa pelo administrador (manutencaoObras: {idDoDocumento: 'gestor'|'fiscal'|'empresa'}).
+    function membroObra(docId) {
+      return logado() && temPerfil() &&
+        perfil().get('manutencaoObras', {}).get(docId, '') in ['gestor', 'fiscal', 'empresa'];
+    }
+
     // Programa com liberação própria (campo do painel Usuários): administrador, ou
     // campo = true, sem recusa e dentro da validade.
     function liberadoPrograma(campo) {
@@ -127,16 +133,19 @@ service cloud.firestore {
                     && (resource.data.uid == request.auth.uid || admin());
     }
 
-    // Obras do programa Serviços Públicos salvas na nuvem (sem as fotos): cada uma só do dono.
+    // Obras do programa Serviços Públicos salvas na nuvem (sem as fotos).
+    // Cada obra é do dono (quem a criou) e do administrador; os demais só entram se o
+    // administrador liberar a obra no cadastro da pessoa (campo manutencaoObras: {idDoDocumento: perfil}).
     match /obrasServicos/{docId} {
       allow read: if liberadoPrograma('manutencaoAtivo')
-                  && (resource.data.uid == request.auth.uid || admin());
+                  && (resource.data.uid == request.auth.uid || admin() || membroObra(docId));
       allow create: if liberadoPrograma('manutencaoAtivo')
                     && request.resource.data.uid == request.auth.uid
                     && docId == request.auth.uid + '_' + request.resource.data.obraId;
       allow update: if liberadoPrograma('manutencaoAtivo')
-                    && resource.data.uid == request.auth.uid
-                    && request.resource.data.uid == request.auth.uid;
+                    && (resource.data.uid == request.auth.uid || admin() || membroObra(docId))
+                    && request.resource.data.uid == resource.data.uid
+                    && request.resource.data.obraId == resource.data.obraId;
       allow delete: if liberadoPrograma('manutencaoAtivo')
                     && (resource.data.uid == request.auth.uid || admin());
     }

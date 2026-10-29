@@ -180,7 +180,7 @@ table.us td{padding:8px; border-bottom:1px solid var(--line); vertical-align:top
 table.us tr.pend td{background:var(--warn-bg)}
 table.us input[type=text],table.us input[type=date]{padding:5px 7px; border:1px solid var(--line); background:var(--field); border-radius:6px; font-size:.82rem; width:120px}
 .progsd{margin:0 0 4px 22px}.progsd>summary{cursor:pointer;font-size:.8rem;font-weight:700;color:var(--accent)}
-.progsd .perf{margin-top:6px;display:flex;flex-direction:column;gap:2px;font-size:.78rem;white-space:normal}
+.progsd .perf{margin-top:8px;display:flex;flex-direction:column;gap:2px;font-size:.78rem;white-space:normal}
 .progs{display:flex; flex-direction:column; gap:3px; white-space:nowrap}
 .progs label{display:flex; align-items:center; gap:6px; cursor:pointer}
 .progs input{accent-color:var(--accent)}
@@ -943,12 +943,24 @@ function mostrarAba(a){
 }
 function maisDias(n){ const d = new Date(); d.setDate(d.getDate() + n); return dataISO(d); }
 
-/* funções liberadas dentro de cada programa (abre abaixo do programa; recolher/expandir) */
-function funcoesProg(u, i, e){
-  const pf = ['gestor', 'fiscal', 'empresa'], pfn = {gestor: 'Gestor', fiscal: 'Fiscal', empresa: 'Empresa contratada'};
-  const at = pf.indexOf(u.manutencaoPerfil) >= 0 ? u.manutencaoPerfil : 'fiscal';
-  return '<details class="progsd"' + (e === 'pen' ? ' open' : '') + '><summary>Funções liberadas</summary><div class="perf"><label for="pf' + i + '">Perfil em Serviços Públicos</label>' +
-    '<select id="pf' + i + '" data-i="' + i + '" data-campo="manutencaoPerfil">' + pf.map(k => '<option value="' + k + '"' + (k === at ? ' selected' : '') + '>' + pfn[k] + '</option>').join('') + '</select></div></details>';
+/* obras de Serviços Públicos na nuvem (o administrador lê todas) */
+async function listarObrasServicos(){
+  const q = await fb.fs.getDocs(fb.fs.collection(fb.d, 'obrasServicos'));
+  return q.docs.map(x => { const v = x.data(); return {id: x.id, nome: v.nome || '(sem nome)', contrato: v.contrato || '', uid: v.uid}; })
+    .sort((a, b) => (a.nome + a.contrato).localeCompare(b.nome + b.contrato));
+}
+/* acesso por obra, com o perfil da pessoa em cada uma (abre abaixo do programa; recolher/expandir) */
+function funcoesProg(u, i, e, obras, donos){
+  const pfn = {gestor: 'Gestor', fiscal: 'Fiscal', empresa: 'Empresa contratada'};
+  const mapa = u.manutencaoObras || {};
+  if(!obras) return '<div class="mini progsd">Obras indisponíveis agora (recarregue o painel).</div>';
+  const n = obras.filter(o => pfn[mapa[o.id]]).length;
+  const linhas = obras.length ? obras.map(o => '<div class="perf"><label for="ob' + i + '_' + esc(o.id) + '">' + esc(o.nome) + (o.contrato ? ' · ' + esc(o.contrato) : '') +
+      (donos[o.uid] ? ' <span class="mini">(dono: ' + esc(donos[o.uid]) + ')</span>' : '') + '</label>' +
+      '<select id="ob' + i + '_' + esc(o.id) + '" data-i="' + i + '" data-obra="' + esc(o.id) + '"><option value="">Sem acesso</option>' +
+      Object.keys(pfn).map(k => '<option value="' + k + '"' + (mapa[o.id] === k ? ' selected' : '') + '>' + pfn[k] + '</option>').join('') + '</select></div>').join('')
+    : '<div class="mini">Nenhuma obra na nuvem ainda. Crie a obra no programa, e ela aparece aqui.</div>';
+  return '<details class="progsd"' + (e === 'pen' ? ' open' : '') + '><summary>Obras liberadas (' + n + ' de ' + obras.length + ')</summary>' + linhas + '</details>';
 }
 
 async function renderUsuarios(){
@@ -959,6 +971,9 @@ async function renderUsuarios(){
   try{ lista = await listarUsuarios(); }catch(e){ corpo.innerHTML = '<div class="msg erro">' + esc(traduzir(e, 'Falha ao carregar')) + '</div>'; return; }
   const ordem = {adm: -1, pen: 0, ven: 1, ok: 2, rec: 3};
   lista.sort((x, y) => ordem[estado(x)] - ordem[estado(y)] || String(x.nome || x.email).localeCompare(String(y.nome || y.email)));
+  let obras = null;
+  try{ obras = await listarObrasServicos(); }catch(err){ console.warn('obras:', err); }
+  const donos = {}; lista.forEach(u => { if(u.uid) donos[u.uid] = u.nome || u.email; });
   const indicacoes = {};
   /* só conta indicação de quem já contratou (tem algum programa liberado) */
   lista.forEach(u => { if(u.indicadoPor && PROGRAMAS.some(p => u[p.campo])) indicacoes[u.indicadoPor] = (indicacoes[u.indicadoPor] || 0) + 1; });
@@ -980,7 +995,7 @@ async function renderUsuarios(){
         const pd = pediu(u, p) && !u[p.campo];
         const marc = u[p.campo] || (e === 'pen' && pd);
         return '<label><input type="checkbox" data-i="' + i + '" data-prog="' + k + '"' + (marc ? ' checked' : '') + '> ' + esc(p.nome) +
-          (p.disp ? '' : ' <span class="tag breve">em breve</span>') + (pd ? ' <span class="tag pediu">pediu</span>' : '') + '</label>' + (p.key === 'manutencao' ? funcoesProg(u, i, e) : '');
+          (p.disp ? '' : ' <span class="tag breve">em breve</span>') + (pd ? ' <span class="tag pediu">pediu</span>' : '') + '</label>' + (p.key === 'manutencao' ? funcoesProg(u, i, e, obras, donos) : '');
       }).join('') + '</div>';
     }
     const plano = u.plano === 'anual' ? 'anual' : 'mensal';
@@ -1023,8 +1038,11 @@ async function renderUsuarios(){
     if(ac === 'renovar'){ formPagamento(u, indicacoes); return; }
     const val = c => { const el = corpo.querySelector('[data-i="' + i + '"][data-campo="' + c + '"]'); return el ? el.value : ''; };
     const campos = {nome: val('nome').slice(0, 120), empresa: val('empresa').slice(0, 120)};
-    const pfEl = corpo.querySelector('select[data-i="' + i + '"][data-campo="manutencaoPerfil"]');
-    if(pfEl) campos.manutencaoPerfil = pfEl.value;
+    if(obras){
+      const mo = {};
+      corpo.querySelectorAll('select[data-i="' + i + '"][data-obra]').forEach(sel => { if(sel.value) mo[sel.dataset.obra] = sel.value; });
+      campos.manutencaoObras = mo;
+    }
     const marcados = {};
     PROGRAMAS.forEach((p, k) => { const cb = corpo.querySelector('input[data-i="' + i + '"][data-prog="' + k + '"]'); if(cb) marcados[p.campo] = cb.checked; });
     const algumMarcado = Object.values(marcados).some(Boolean);
