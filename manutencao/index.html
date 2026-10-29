@@ -791,6 +791,13 @@ function proxMapa(){const el=$('#pxMap');if(!el)return;if(typeof L==='undefined'
  map.on('click',e=>proxCentro(e.latlng.lat,e.latlng.lng,'Ponto no mapa'));setTimeout(()=>{if(M&&M.map===map){map.invalidateSize({animate:false});proxAtualiza()}},90)}
 
 /* ===================== atendimento do fiscal (vistoria técnica da ocorrência) ===================== */
+/* tipos de serviço do atendimento do fiscal = títulos da planilha do contrato (sem canteiro/preliminares e administração) */
+function vfTipos(o){const m=new Map();(o.servicos||[]).forEach(x=>{if(!x.grupo||x.grupo.c==null)return;const t=String(x.grupo.d||'').trim();if(!t||/canteiro|preliminar|administra/i.test(t))return;const k=String(x.grupo.c);if(!m.has(k))m.set(k,{k,t,n:0});m.get(k).n++});
+ const l=[...m.values()].sort((a,b)=>a.k.localeCompare(b.k,'pt-BR',{numeric:true}));if(!l.length)return VF_TIPOS.map(t=>({k:t,t,n:0}));
+ return l.map(g=>{const baixo=g.t.toLowerCase();let lab=baixo.charAt(0).toUpperCase()+baixo.slice(1);lab=lab.replace(/\bcbuq\b/gi,'CBUQ').replace(/\bpmf\b/gi,'PMF');return {k:g.k,t:g.t,n:g.n,lab:lab.length>56?lab.slice(0,54)+'…':lab}})}
+function vfSvcOpts(o,d){const g=vfTipos(o).find(x=>x.t===d.tipo&&x.n);const l=g?o.servicos.filter(x=>x.grupo&&String(x.grupo.c)===g.k):o.servicos;
+ const cur=d.servSug&&!l.some(x=>x.id===d.servSug)?o.servicos.find(x=>x.id===d.servSug):null;
+ return `<option value="">— não definido —</option>`+(cur?`<option value="${cur.id}" selected>${esc(cur.codigo)} · ${esc(cur.descricao)} (${esc(cur.unidade)})</option>`:'')+l.map(x=>`<option value="${x.id}" ${d.servSug===x.id?'selected':''}>${esc(x.codigo)} · ${esc(x.descricao)} (${esc(x.unidade)})</option>`).join('')}
 const VF_TIPOS=['Buraco','Afundamento','Trinca / fissura','Desgaste do asfalto','Remendo deteriorado','Base comprometida (com água)','Outro'];
 function vfChip(oc){return oc.vistFiscal?`<span class="chip" style="--c:#2e7d4f">👷 vistoriada pelo fiscal ${fData(oc.vistFiscal.em.slice(0,10)).slice(0,5)}</span>`:(oc.status==='executada'||oc.status==='medida'?'':'<span class="chip" style="--c:#c0392b">👷 aguardando fiscal</span>')}
 /* o gestor vê tudo o que o fiscal levantou e o que a empresa executou nesta ocorrência */
@@ -829,11 +836,11 @@ function modalVF(d){const o=O(),dis=can('ocorr')?'':'disabled';const n=(id,l,v)=
  <fieldset><legend>2. Relato recebido (munícipe / e-mail)</legend><p class="small">${esc(d.desc)||'<span class="muted">—</span>'}</p><p class="small muted">Registrada em ${fData((d.criadoEm||'').slice(0,10))}</p></fieldset>
  <fieldset><legend>3. Fotos do antes</legend><div class="row gap"><button class="btn" data-act="fotoCam" ${dis}>📷 Tirar foto</button><button class="btn" data-act="fotoGal" ${dis}>🖼 Escolher da galeria</button></div><select id="exFase" style="display:none"><option value="antes" selected>antes</option></select>
  <div id="fotosArea">${fotosArea(d.fotos,'vf')}</div></fieldset>
- <fieldset><legend>4. Características</legend><div class="row gap" style="margin-bottom:6px">${VF_TIPOS.map(t=>`<button type="button" class="btn sm ${d.tipo===t?'pri':''}" data-act="vfTipo" data-t="${t}" ${dis}>${t}</button>`).join('')}</div>
+ <fieldset><legend>4. Características</legend><div class="row gap" style="margin-bottom:6px">${vfTipos(o).map(g=>`<button type="button" class="btn sm ${d.tipo===g.t?'pri':''}" data-act="vfTipo" data-t="${esc(g.t)}" title="${esc(g.t)}" ${dis}>${esc(g.lab||g.t)}</button>`).join('')}</div>
  <label>Constatação do fiscal<textarea id="vf-const" placeholder="ex.: buraco com base comprometida, água acumulada, bordas soltas…" ${dis}>${esc(d.constat)}</textarea></label></fieldset>
  <fieldset><legend>5. Dimensões do reparo</legend><div class="g4">${n('vf-c','Comprimento (m)',d.c)}${n('vf-l','Largura (m)',d.l)}${n('vf-e','Espessura / profundidade (cm)',d.e)}${n('vf-n','Quantidade de buracos iguais',d.n)}</div>
  <p class="small" id="vf-res" style="color:#2563a8"></p>
- <div class="g2"><label>Serviço sugerido<select id="vf-serv" data-chg="vfServ" ${dis}>${svcOptions(o,d.servSug,'— não definido —')}</select></label><label>Quantidade levantada (na unidade do serviço)<input id="vf-qtd" inputmode="decimal" value="${inp(d.qtd)}" data-inp="vfQtd" ${dis}></label></div></fieldset>
+ <div class="g2"><label>Serviço sugerido<select id="vf-serv" data-chg="vfServ" ${dis}>${vfSvcOpts(o,d)}</select></label><label>Quantidade levantada (na unidade do serviço)<input id="vf-qtd" inputmode="decimal" value="${inp(d.qtd)}" data-inp="vfQtd" ${dis}></label></div></fieldset>
  <fieldset><legend>6. Prioridade sugerida</legend><div class="row gap">${Object.entries(PRI).map(([k,v])=>`<label class="chk" style="margin:0"><input type="radio" name="vf-pri" value="${k}" ${d.priF===k?'checked':''} ${dis}> <span class="chip" style="--c:${v.c}">${v.l}</span></label>`).join('')}</div></fieldset></div>
  <div class="mf"><button class="btn" data-act="mCancel">Cancelar</button><button class="btn pri" data-act="vfSalvar" ${dis}>Salvar atendimento do fiscal</button></div>`}
 function vfLocTxt(){const e=$('#vf-loc');if(!e||!M||M.t!=='vf')return;const d=M.d;
@@ -1559,7 +1566,8 @@ const ACTS={
  gpsRetry(){fecharModal(false);G.avisou=false;toast('Procurando o GPS…');gpsIniciar(true)},
  atModo(d){S.f.atM=d.v;render()},vfAbrir(d){vfAbrirOc(d.id)},vfSalvar(){if(M&&M.t==='vf')vfSalvar()},
  vfGPS(){posicaoAtual().then(p=>{if(!M||M.t!=='vf')return;M.d.lat=p.lat;M.d.lng=p.lng;M.d.origem='gps-aparelho';vfLocTxt();toast('Ponto atualizado com o GPS (precisão ≈ '+Math.round(p.acc)+' m).')}).catch(()=>{})},
- vfTipo(d){if(!M||M.t!=='vf')return;M.d.tipo=M.d.tipo===d.t?'':d.t;document.querySelectorAll('[data-act=vfTipo]').forEach(b=>b.classList.toggle('pri',b.dataset.t===M.d.tipo))},
+ vfTipo(d){if(!M||M.t!=='vf')return;M.d.tipo=M.d.tipo===d.t?'':d.t;document.querySelectorAll('[data-act=vfTipo]').forEach(b=>b.classList.toggle('pri',b.dataset.t===M.d.tipo));
+  const e=$('#vf-serv');if(e){M.d.servSug=e.value;const o=O();e.innerHTML=vfSvcOpts(o,M.d);const g=vfTipos(o).find(x=>x.t===M.d.tipo&&x.n);if(g&&!o.servicos.some(x=>x.id===e.value&&x.grupo&&String(x.grupo.c)===g.k)){const p=o.servicos.find(x=>x.grupo&&String(x.grupo.c)===g.k&&x.preco>0)||o.servicos.find(x=>x.grupo&&String(x.grupo.c)===g.k);e.value=p?p.id:'';M.d.servSug=e.value}vfCalc()}},
  trocaAmb(){S.amb=null;render()},
  tema(){S.settings.tema=S.settings.tema==='dark'?'light':'dark';lsSet('tc_tema',S.settings.tema);render()},
  tab(d){S.tab=d.k;render()},
