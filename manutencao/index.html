@@ -401,7 +401,7 @@ function promptDescricao(p){return 'Você é um engenheiro fiscal de obras públ
 function resetF(){const h=hojeISO();S.f={ocSt:'',ocPri:'',ocQ:'',plF:'pend',semDia:h,dia:h,sel:{},med:{de:h.slice(0,8)+'01',ate:h,conf:true,rep:false},rel:{de:h.slice(0,8)+'01',ate:h,semDia:h,vPri:'',vSt:''},mapSt:'',plPri:'',plBai:'',plQ:'',plRaio:null}}
 let _rend=false,_again=false;
 function render(){if(_rend){_again=true;return}_rend=true;try{_render()}finally{_rend=false}if(_again){_again=false;render()}}
-function _render(){
+function _render(){if(S.trava){if(S.obraId&&!(S.acessos&&S.acessos[S.obraId]))S.obraId=null;if(S.obraId)S.perfil=S.acessos[S.obraId].perfil}
  const ae=document.activeElement,aid=ae&&ae.id,as=ae&&ae.selectionStart,y=window.scrollY;
  if(S.mapObj){S.mapObj.remove();S.mapObj=null}
  document.body.dataset.amb=S.amb||'';if(gpsMovel()&&G.watch==null)setTimeout(()=>gpsIniciar(),0);document.documentElement.dataset.theme=S.settings.tema||'light';
@@ -412,19 +412,19 @@ function _render(){
  window.scrollTo(0,y)}
 function renderTop(){$('#top').innerHTML=`<a class="brand" href="#" data-act="home"><span class="logo">▦</span><b>Total Civil</b></a><span class="prog">Serviços Públicos</span><span class="sp"></span>
  <input class="nm" placeholder="Seu nome" value="${esc(S.nome)}" data-chg="nome" title="Seu nome (registrado no histórico)">
- ${S.trava?`<span class="pf" title="Perfil definido pelo administrador do site">${PERFIL[S.perfil]}</span>`:`<select class="pf" data-chg="perfil" title="Perfil de uso (simula as permissões)">${Object.entries(PERFIL).map(([k,v])=>`<option value="${k}" ${S.perfil===k?'selected':''}>${v}</option>`).join('')}</select>`}
- ${gpsChip()}${nuvChip()}${gpsBar()}${S.obraId&&O()?'<button class="btn sm" data-act="expBackup" title="Salvar como: grava um arquivo .json desta obra (com as fotos) no computador">💾 Salvar como…</button>':''}
+ ${S.trava?(S.obraId?`<span class="pf" title="Seu perfil nesta obra, definido pelo administrador">${PERFIL[S.perfil]}</span>`:''):`<select class="pf" data-chg="perfil" title="Perfil de uso (simula as permissões)">${Object.entries(PERFIL).map(([k,v])=>`<option value="${k}" ${S.perfil===k?'selected':''}>${v}</option>`).join('')}</select>`}
+ ${S.admin?'<a class="btn sm" href="/#usuarios" title="Painel de usuários do site: liberar obras e perfis">👥 Usuários</a>':''}${gpsChip()}${nuvChip()}${gpsBar()}${S.obraId&&O()?'<button class="btn sm" data-act="expBackup" title="Salvar como: grava um arquivo .json desta obra (com as fotos) no computador">💾 Salvar como…</button>':''}
  <button class="btn sm" data-act="tema">${S.settings.tema==='dark'?'☀ Claro':'🌙 Escuro'}</button>
  <button class="btn sm" data-act="trocaAmb">${AMB[S.amb]||'Ambiente'}</button>`}
 function telaAmbiente(){return `<section class="wrap"><div class="hero"><span class="pill">Total Civil</span><h1>Onde você vai usar?</h1><p>Escolha o ambiente para ajustar a tela. Você pode trocar depois no topo da página.</p></div>
  <div class="cards">${Object.entries(AMB).map(([k,v])=>`<button class="ocard" data-act="amb" data-v="${k}"><div class="ic">${v.split(' ')[0]}</div><h3>${v.split(' ').slice(1).join(' ')}</h3><div class="ds">${k==='pc'?'Gestão, planejamento, medição e relatórios.':k==='android'?'Vistoria em campo com câmera e GPS do aparelho.':'Vistoria em campo com câmera e GPS do aparelho.'}</div><div class="ft"><span></span><b>Abrir →</b></div></button>`).join('')}</div></section>`}
-function telaHome(){const obras=Object.values(S.obras).sort((a,b)=>(a.criadaEm||'').localeCompare(b.criadaEm||''));
+function telaHome(){const obras=Object.values(S.obras).filter(o=>!S.trava||(S.acessos&&S.acessos[o.id])).sort((a,b)=>(a.criadaEm||'').localeCompare(b.criadaEm||''));
  return `<section class="wrap"><div class="hero"><span class="pill">No seu pacote</span><h1>Planejamento de Manutenções de Ruas</h1>
  <p>O fiscal vistoria e localiza os problemas com fotos georreferenciadas; o gestor define prioridade, semana e forma de solução; a empresa registra a execução e o programa gera o RDO, o relatório fotográfico e a medição.</p></div>
  <h2 class="sec">Escolha a obra (contrato)</h2><p class="muted">Cada obra tem seus próprios dados, fotos, execuções, medições e relatórios. Nada se mistura entre contratos.</p>
- <div class="cards">${obras.map(cardObra).join('')}<button class="ocard add" data-act="novaObra"><div style="font-size:34px">＋</div>Cadastrar nova obra<span class="muted small" style="font-weight:500">contrato de manutenção ou obra</span></button></div>
- <div class="row gap"><button class="btn" data-act="real078">↺ Recarregar modelo do Contrato 078/2026</button><button class="btn" data-act="impBackup">📂 Importar backup de obra</button></div>
- <div class="alert" style="margin-top:18px">Nesta versão de teste os dados ficam <b>neste navegador</b> (e neste aparelho). Use <b>Obra &amp; Config → Backup</b> para guardar uma cópia. O compartilhamento entre usuários virá com o login do site.</div></section>`}
+ <div class="cards">${obras.map(cardObra).join('')}${S.trava?'':`<button class="ocard add" data-act="novaObra"><div style="font-size:34px">＋</div>Cadastrar nova obra<span class="muted small" style="font-weight:500">contrato de manutenção ou obra</span></button>`}</div>
+ ${S.trava?`<div class="alert" style="margin-top:18px">${obras.length?'Você vê apenas as obras liberadas para você pelo administrador, cada uma no seu perfil de acesso.':'Nenhuma obra foi liberada para você ainda. Peça ao administrador para liberar o acesso à obra no painel de Usuários.'}</div></section>`:`<div class="row gap"><button class="btn" data-act="real078">↺ Recarregar modelo do Contrato 078/2026</button><button class="btn" data-act="impBackup">📂 Importar backup de obra</button></div>
+ <div class="alert" style="margin-top:18px">Nesta versão de teste os dados ficam <b>neste navegador</b> (e neste aparelho). Use <b>Obra &amp; Config → Backup</b> para guardar uma cópia. O acesso de cada pessoa a cada obra é liberado pelo administrador no painel de Usuários do site.</div></section>`}`}
 function cardObra(o){const n=o.ocorrencias.length,ex=o.ocorrencias.filter(x=>x.status==='executada'||x.status==='medida').length;const med=o.medicoes.reduce((s,m)=>r2(s+m.total),0);
  return `<button class="ocard" data-act="abrir" data-id="${o.id}"><div class="tp"><div class="ic">▤</div><span class="pill">${esc(TIPOS[o.tipo]||'Obra')}</span></div><h3>${esc(o.nome)}${o.demo?' <span class="chip" style="--c:#b7791f">DEMO</span>':''}${o.encerrada?' <span class="chip" style="--c:#5a6075">🔒 encerrado</span>':''}${o.renovacaoDe?' <span class="chip" style="--c:#2563a8">renovação</span>':''}</h3>
  <div class="ds">${esc(o.contratada||'Contratada não informada')}<br>Contrato nº ${esc(o.contrato||'—')}</div>
@@ -602,25 +602,80 @@ async function nuvAdaptador(){
  const [A,Au,F]=await Promise.all([import(SDK+'firebase-app.js'),import(SDK+'firebase-auth.js'),import(SDK+'firebase-firestore.js')]);
  const app=A.getApps().length?A.getApps()[0]:A.initializeApp(cfg);const a=Au.getAuth(app);let d;try{d=F.initializeFirestore(app,{experimentalAutoDetectLongPolling:true})}catch(_){d=F.getFirestore(app)}
  const u=await new Promise(res=>{const off=Au.onAuthStateChanged(a,x=>{off();res(x)})});if(!u)return null;
+ const item=async s=>{const x=s.data();return {docId:s.id,obraId:x.obraId,dono:x.uid,atualizadoEm:x.atualizadoEm||0,texto:await nuvUnpack(x.gz,(x.partes||[]).join(''))}};
  return {uid:u.uid,
-  async list(){const q=await F.getDocs(F.query(F.collection(d,NUV_COL),F.where('uid','==',u.uid)));const out=[];for(const s of q.docs){const x=s.data();try{out.push({docId:s.id,obraId:x.obraId,atualizadoEm:x.atualizadoEm||0,texto:await nuvUnpack(x.gz,(x.partes||[]).join(''))})}catch(e){console.warn('Nuvem: obra ilegível',s.id,e)}}return out},
-  async put(o,txt){const p=await nuvPack(txt);const partes=[];for(let i=0;i<p.s.length;i+=NUV_PARTE)partes.push(p.s.slice(i,i+NUV_PARTE));if(partes.join('').length>900000)throw new Error('obra grande demais para a nuvem');await F.setDoc(F.doc(d,NUV_COL,u.uid+'_'+o.id),{uid:u.uid,obraId:o.id,nome:String(o.nome||'').slice(0,200),contrato:String(o.contrato||'').slice(0,60),atualizadoEm:o._salvoEm||Date.now(),gz:p.gz,partes,versao:1,gravadoEm:F.serverTimestamp()})},
-  async del(obraId){await F.deleteDoc(F.doc(d,NUV_COL,u.uid+'_'+obraId))}}}
-function nuvTexto(o){const c=Object.assign({},o);return JSON.stringify(c)}
-async function nuvEnviar(o){if(!NUV.ad)return;nuvSet('sync');try{if(!o._dono)o._dono=NUV.ad.uid;await NUV.ad.put(o,nuvTexto(o));nuvSet('ok')}catch(e){console.warn('Nuvem:',e);nuvSet('erro',String(e&&e.message||e))}}
-function nuvAgendar(o){if(!NUV.ad||!NUV.pronto)return;if(o._dono&&o._dono!==NUV.ad.uid)return;NUV.pend.add(o.id);clearTimeout(NUV.timers[o.id]);NUV.timers[o.id]=setTimeout(()=>nuvDescarga(o.id),4000)}
+  async list(){const U=window.TC_USUARIO||{};const out=[];
+   try{
+    if(U.admin){const q=await F.getDocs(F.collection(d,NUV_COL));for(const s of q.docs){try{out.push(await item(s))}catch(e){console.warn('Nuvem: obra ilegível',s.id,e)}}}
+    else{
+     const q=await F.getDocs(F.query(F.collection(d,NUV_COL),F.where('uid','==',u.uid)));for(const s of q.docs){try{out.push(await item(s))}catch(e){console.warn('Nuvem: obra ilegível',s.id,e)}}
+     for(const k of Object.keys(U.obras||{})){if(out.some(x=>x.docId===k))continue;try{const s=await F.getDoc(F.doc(d,NUV_COL,k));if(s.exists())out.push(await item(s))}catch(e){console.warn('Nuvem: obra sem acesso',k,e)}}}
+   }catch(e){throw e}
+   return out},
+  async get(docId){const s=await F.getDoc(F.doc(d,NUV_COL,docId));return s.exists()?await item(s):null},
+  async put(o,txt,esperado){const p=await nuvPack(txt);const partes=[];for(let i=0;i<p.s.length;i+=NUV_PARTE)partes.push(p.s.slice(i,i+NUV_PARTE));if(partes.join('').length>900000)throw new Error('obra grande demais para a nuvem');const dono=o._dono||u.uid;const ref=F.doc(d,NUV_COL,dono+'_'+o.id);const dados={uid:dono,obraId:o.id,nome:String(o.nome||'').slice(0,200),contrato:String(o.contrato||'').slice(0,60),atualizadoEm:o._salvoEm||Date.now(),gz:p.gz,partes,versao:1,gravadoEm:F.serverTimestamp()};await F.runTransaction(d,async tx=>{const sn=await tx.get(ref);if(esperado!==undefined&&sn.exists()&&(sn.data().atualizadoEm||0)!==esperado){const er=new Error('conflito');er.conflito=true;throw er}tx.set(ref,dados)})},
+  async del(obraId,dono){await F.deleteDoc(F.doc(d,NUV_COL,(dono||u.uid)+'_'+obraId))}}}
+/* mescla de 3 vias (base = última versão sincronizada; l = local; r = nuvem): preserva o que cada pessoa mudou em registros diferentes */
+const _eq=(x,y)=>JSON.stringify(x)===JSON.stringify(y);
+const _isO=v=>v&&typeof v==='object'&&!Array.isArray(v);
+const _idArr=a=>Array.isArray(a)&&a.every(x=>_isO(x)&&x.id!=null);
+function merge3(b,l,r){
+ if(_eq(l,r))return l;
+ if(b!==undefined&&_eq(l,b))return r;
+ if(b!==undefined&&_eq(r,b))return l;
+ if(_isO(l)&&_isO(r)){const bb=_isO(b)?b:{};const out={};
+  for(const k of new Set([...Object.keys(l),...Object.keys(r)])){
+   if(!(k in l)){if(k in bb&&_eq(bb[k],r[k]))continue;out[k]=r[k];continue}
+   if(!(k in r)){if(k in bb&&_eq(bb[k],l[k]))continue;out[k]=l[k];continue}
+   out[k]=merge3(bb[k],l[k],r[k])}
+  return out}
+ if(_idArr(l)&&_idArr(r)){const B=new Map((_idArr(b)?b:[]).map(x=>[x.id,x]));const R=new Map(r.map(x=>[x.id,x]));const out=[],seen=new Set();
+  for(const x of l){seen.add(x.id);const y=R.get(x.id);if(!y){if(B.has(x.id)&&_eq(B.get(x.id),x))continue;out.push(x);continue}out.push(merge3(B.get(x.id),x,y))}
+  for(const y of r){if(seen.has(y.id))continue;if(B.has(y.id)&&_eq(B.get(y.id),y))continue;out.push(y)}
+  return out}
+ return l}
+function nuvLimpa(o){const c=Object.assign({},o);delete c._baseEm;return c}
+function nuvTexto(o){return JSON.stringify(nuvLimpa(o))}
+function nuvPode(o){const ad=NUV.ad;if(!ad)return false;const U=window.TC_USUARIO;if(U&&U.admin)return true;if(!o._dono||o._dono===ad.uid)return !S.trava;return !!(S.acessos&&S.acessos[o.id])}
+function nuvAplica(o,n){/* troca o conteúdo mantendo a mesma referência do objeto */Object.keys(o).forEach(k=>{if(!(k in n))delete o[k]});Object.assign(o,n)}
+async function nuvAdota(o,x,existente){const r=JSON.parse(x.texto);r._salvoEm=x.atualizadoEm;r._dono=x.dono||NUV.ad.uid;r._baseEm=x.atualizadoEm;
+ let alvo=r;if(existente){nuvAplica(existente,r);alvo=existente}else S.obras[r.id]=r;
+ await DB.put('kv','obra:'+r.id,alvo);await DB.put('kv','base:'+r.id,x.texto);return alvo}
+async function nuvEnviar(o,tent){const ad=NUV.ad;if(!ad)return;if(!nuvPode(o))return;tent=tent||0;nuvSet('sync');
+ try{if(!o._dono)o._dono=ad.uid;let mudou=false,visto=0;
+  if(ad.get){const x=await ad.get(o._dono+'_'+o.id);
+   if(x){visto=x.atualizadoEm||0;
+   if(visto!==(o._baseEm||0)){
+    const R=JSON.parse(x.texto);delete R._baseEm;const bt=await DB.get('kv','base:'+o.id);let B;try{B=bt?JSON.parse(bt):undefined}catch(_){B=undefined}
+    const L=nuvLimpa(o);const M=merge3(B,L,R);
+    if(M&&typeof M==='object'){M.seq=Math.max(+L.seq||0,+R.seq||0,...(M.ocorrencias||[]).map(z=>+z.num||0));M._dono=o._dono;mudou=!_eq(M,L);nuvAplica(o,Object.assign({},M,{_baseEm:o._baseEm}))}}}}
+  if(!o._salvoEm||ad.get)o._salvoEm=Math.max(Date.now(),visto+1);
+  const txt=nuvTexto(o),t=o._salvoEm;await ad.put(o,txt,visto);o._baseEm=t;await DB.put('kv','obra:'+o.id,o);await DB.put('kv','base:'+o.id,txt);
+  nuvSet('ok');if(mudou){toast('Alterações de outros usuários foram incorporadas a esta obra.',4000);render()}
+ }catch(e){if(e&&e.conflito&&tent<4){return nuvEnviar(o,tent+1)}console.warn('Nuvem:',e);nuvSet('erro',String(e&&e.message||e))}}
+function nuvAgendar(o){if(!NUV.ad||!NUV.pronto)return;if(!nuvPode(o))return;NUV.pend.add(o.id);clearTimeout(NUV.timers[o.id]);NUV.timers[o.id]=setTimeout(()=>nuvDescarga(o.id),4000)}
 function nuvDescarga(id){clearTimeout(NUV.timers[id]);if(!NUV.pend.has(id))return;NUV.pend.delete(id);const o=S.obras[id];if(o)nuvEnviar(o)}
-function nuvApagar(id){if(!NUV.ad)return;NUV.pend.delete(id);NUV.ad.del(id).catch(e=>console.warn('Nuvem:',e))}
+function nuvApagar(o){if(typeof o==='string')o=S.obras[o]||{id:o};if(!NUV.ad||!o)return;NUV.pend.delete(o.id);const U=window.TC_USUARIO;if(o._dono&&o._dono!==NUV.ad.uid&&!(U&&U.admin))return;NUV.ad.del(o.id,o._dono).catch(e=>console.warn('Nuvem:',e))}
+/* busca mudanças de outros usuários nas obras liberadas (ao voltar para a aba e a cada minuto) */
+async function nuvPuxar(){const ad=NUV.ad;if(!ad||!ad.get||!NUV.pronto||NUV.puxando)return;NUV.puxando=true;
+ try{let mud=0;for(const o of Object.values(S.obras)){if(!o._baseEm||!nuvPode(o))continue;
+   const x=await ad.get((o._dono||ad.uid)+'_'+o.id);if(!x||(x.atualizadoEm||0)===o._baseEm)continue;
+   if(NUV.pend.has(o.id)||(o._salvoEm||0)>o._baseEm+1000){await nuvEnviar(o);mud++}else{await nuvAdota(o,x,o);mud++}}
+  if(mud)render()}catch(e){console.warn('Nuvem:',e)}finally{NUV.puxando=false}}
 async function nuvIniciar(){
  if(NUV.ad)return;
  try{const ad=await nuvAdaptador();if(!ad){nuvSet('local');return}NUV.ad=ad;nuvSet('sync');
   const nuv=await ad.list();let baixadas=0,enviadas=0;const vistas=new Set();
-  for(const x of nuv){vistas.add(x.obraId);let r;try{r=JSON.parse(x.texto)}catch(e){continue}const loc=S.obras[x.obraId];
-   if(!loc||(x.atualizadoEm||0)>(loc._salvoEm||0)+1000){r._salvoEm=x.atualizadoEm;r._dono=ad.uid;S.obras[r.id]=r;await DB.put('kv','obra:'+r.id,r);baixadas++}
-   else if((loc._salvoEm||0)>(x.atualizadoEm||0)+1000&&(!loc._dono||loc._dono===ad.uid)){await nuvEnviar(loc);enviadas++}}
-  for(const o of Object.values(S.obras)){if(vistas.has(o.id))continue;if(o._dono&&o._dono!==ad.uid)continue;if(!o._salvoEm)o._salvoEm=Date.now();await nuvEnviar(o);enviadas++}
+  for(const x of nuv){vistas.add(x.obraId);const loc=S.obras[x.obraId];const dono=x.dono||ad.uid;
+   if(!loc){let r;try{JSON.parse(x.texto)}catch(e){continue}await nuvAdota(null,x,null);baixadas++;continue}
+   const be=loc._baseEm||0,rt=x.atualizadoEm||0;
+   if(!be){if(rt>(loc._salvoEm||0)+1000){await nuvAdota(null,x,loc);baixadas++}else if((loc._salvoEm||0)>rt+1000&&(!loc._dono||loc._dono===dono||nuvPode(loc))){loc._dono=loc._dono||dono;await nuvEnviar(loc);enviadas++}else{loc._baseEm=rt;loc._dono=loc._dono||dono;await DB.put('kv','base:'+loc.id,x.texto);await DB.put('kv','obra:'+loc.id,loc)}continue}
+   if(rt!==be){if((loc._salvoEm||0)>be+1000&&nuvPode(loc)){await nuvEnviar(loc);enviadas++}else{await nuvAdota(null,x,loc);baixadas++}}
+   else if((loc._salvoEm||0)>be+1000&&nuvPode(loc)){await nuvEnviar(loc);enviadas++}}
+  if(!S.trava)for(const o of Object.values(S.obras)){if(vistas.has(o.id))continue;if(o._dono&&o._dono!==ad.uid)continue;if(!o._salvoEm)o._salvoEm=Date.now();await nuvEnviar(o);enviadas++}
   NUV.pronto=true;nuvSet('ok',baixadas||enviadas?`${baixadas} obra(s) baixada(s) e ${enviadas} enviada(s) na sincronização inicial.`:'');
   if(baixadas){toast(baixadas+' obra(s) atualizada(s) a partir da nuvem. As fotos ficam no aparelho onde foram tiradas.',6000);render()}
+  setInterval(nuvPuxar,60000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')nuvPuxar()})
  }catch(e){console.warn('Nuvem:',e);nuvSet('erro',String(e&&e.message||e))}}
 function nuvLigar(){if(window.TC_ACESSO==='liberado'||window.TC_NUVEM_FAKE)nuvIniciar();else document.addEventListener('tc-acesso-liberado',()=>nuvIniciar(),{once:true})}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')[...NUV.pend].forEach(nuvDescarga)});
@@ -1460,7 +1515,7 @@ const ACTS={
  impBackup(){$('#fileJson').click()},
  expBackup(){expBackup(O())},
  delObra(){const o=O();if(!confirm('Excluir a obra "'+o.nome+'" e TODOS os seus dados e fotos? Isso não pode ser desfeito.\n\nJá fez o backup?'))return;if(!confirm('Confirma a exclusão definitiva?'))return;
-  idsFotos(o).forEach(id=>{DB.del('fotos',id);fotoCache.delete(id)});DB.del('kv','obra:'+o.id);nuvApagar(o.id);delete S.obras[o.id];S.obraId=null;render();toast('Obra excluída.')},
+  idsFotos(o).forEach(id=>{DB.del('fotos',id);fotoCache.delete(id)});DB.del('kv','obra:'+o.id);nuvApagar(o);delete S.obras[o.id];S.obraId=null;render();toast('Obra excluída.')},
  mClose(){fecharModal(true)},mCancel(){fecharModal(true)},
  zoom(d,el){getFoto(el.dataset.foto).then(src=>{if(!src)return;$('#lb img').src=src;$('#lb').classList.remove('hidden')})},lbClose(){$('#lb').classList.add('hidden')},
  /* ocorrências */
@@ -1682,8 +1737,9 @@ async function criarDemo(){const h=hojeISO(),ont=addDias(h,-1);const o=novaObra(
  if(!lsGet('tc_demo_off','')){for(const o of Object.values(S.obras)){if(o.demo){idsFotos(o).forEach(id=>{DB.del('fotos',id);fotoCache.delete(id)});await DB.del('kv','obra:'+o.id);delete S.obras[o.id]}}lsSet('tc_demo_off','1')}
  if(!lsGet('tc_seed078','')){if(!Object.values(S.obras).some(x=>x.contrato===REAL078.contrato&&x.contratada===REAL078.contratada))await criarReal078(true);lsSet('tc_seed078','1')}
  function aplicaUsuario(){const u=window.TC_USUARIO;if(!u)return;
- if(u.admin){S.perfil='gestor';S.trava=false}
- else{S.perfil=PERM[u.perfil]?u.perfil:'fiscal';S.trava=true}
+ S.admin=!!u.admin;
+ if(u.admin){S.perfil='gestor';S.trava=false;S.acessos={}}
+ else{S.trava=true;S.acessos={};Object.entries(u.obras||{}).forEach(([k,v])=>{const i=k.indexOf('_');if(i>0&&PERM[v])S.acessos[k.slice(i+1)]={perfil:v,doc:k,dono:k.slice(0,i)}});S.perfil='fiscal'}
  render()}
 if(window.TC_USUARIO)aplicaUsuario();else document.addEventListener('tc-acesso-liberado',aplicaUsuario,{once:true});
 nuvLigar();

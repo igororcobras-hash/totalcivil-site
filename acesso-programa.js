@@ -57,8 +57,8 @@
     }
     document.body ? por() : document.addEventListener('DOMContentLoaded', por);
   }
-  function liberar(adm, perfil){
-    window.TC_USUARIO = {admin: !!adm, perfil: perfil || ''};
+  function liberar(adm, obras, uid){
+    window.TC_USUARIO = {admin: !!adm, obras: (obras && typeof obras === 'object') ? obras : {}, uid: uid || ''};
     raiz.classList.remove('tc-trava');
     if(quadro) quadro.remove();
     window.TC_ACESSO = 'liberado';
@@ -98,7 +98,7 @@
           var p = snap.exists() ? (snap.data() || {}) : null;
           var venc = p && paraData(p.validade);
           var vencida = !!(venc && venc.getTime() < Date.now());
-          if(ehAdmin || (p && p.admin === true) || (p && p[CAMPO] === true && p.recusado !== true && !vencida)){ liberar(ehAdmin || !!(p && p.admin === true), p && p.manutencaoPerfil); return; }
+          if(ehAdmin || (p && p.admin === true) || (p && p[CAMPO] === true && p.recusado !== true && !vencida)){ liberar(ehAdmin || !!(p && p.admin === true), p && p.manutencaoObras, u.uid); return; }
           if(!p){
             tela('Cadastro não encontrado', 'Termine seu cadastro e contrate ' + esc(NOME) + ' na página principal.', BT_PRINCIPAL + BT_SAIR);
             return;
