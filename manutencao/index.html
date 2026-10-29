@@ -723,10 +723,10 @@ function planFiltros(o){const f=S.f;const bs=bairrosDe(o);
  return `<div class="toolbar" style="margin-top:8px"><label>Prioridade<select data-chg="flt" data-k="plPri"><option value="">Todas</option>${Object.entries(PRI).map(([k,v])=>`<option value="${k}" ${f.plPri===k?'selected':''}>${v.l}</option>`).join('')}</select></label>
  <label>Bairro<select data-chg="flt" data-k="plBai"><option value="">Todos</option>${bs.map(b=>`<option ${f.plBai===b?'selected':''}>${esc(b)}</option>`).join('')}</select></label>
  <label style="flex:1;min-width:180px">Palavra-chave<input id="plBusca" placeholder="rua, bairro, descrição, nº" value="${esc(f.plQ)}" data-inp="fltq" data-k="plQ"></label>
- <button class="btn pri" data-act="proxAbrir">📍 Ocorrências próximas</button>${canPI()?'<button class="btn pri" data-act="piAbrir" title="Distribui as ocorrências por dia, semana ou mês conforme prioridade, raio e carga dos caminhões">🧭 Planejamento instruído</button>':''}</div>
- ${f.plRaio?`<div class="alert" style="background:#eef4fb;border-color:#2563a8">📍 Mostrando só as ocorrências a até <b>${fDist(f.plRaio.r)}</b> de <b>${esc(f.plRaio.label)}</b>, da mais próxima para a mais distante. <button class="btn sm" data-act="proxLimpar">✕ Limpar raio</button></div>`:''}`}
+ <button class="btn pri" data-act="gpxAbrir" title="Usa o GPS do aparelho: você só digita o raio">📍 Ocorrências próximas</button><button class="btn" data-act="proxAbrir" title="Escolha um ponto por palavra-chave, endereço, coordenadas ou no mapa">🔎 Pesquisa de ocorrências</button>${canPI()?'<button class="btn pri" data-act="piAbrir" title="Distribui as ocorrências por dia, semana ou mês conforme prioridade, raio e carga dos caminhões">🧭 Planejamento instruído</button>':''}</div>
+ ${f.plRaio?`<div class="alert" style="background:#eef4fb;border-color:#2563a8">📍 Mostrando só as ocorrências a até <b>${fDist(f.plRaio.r)}</b> de <b>${esc(f.plRaio.label)}</b>, da mais próxima para a mais distante. ${f.plRaio.gps?'<button class="btn sm" data-act="gpxAtualiza">🔄 Atualizar minha posição</button> ':''}<button class="btn sm" data-act="proxLimpar">✕ Limpar raio</button></div>`:''}`}
 function modalProx(){const o=O(),m=M;
- return `<div class="mh"><h3>📍 Ocorrências próximas</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+ return `<div class="mh"><h3>🔎 Pesquisa de ocorrências</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
  <p class="muted small">Escolha um ponto (uma ocorrência, um endereço, as coordenadas ou um clique no mapa) e o raio. O programa lista tudo que está dentro do círculo — para aproveitar a ida da equipe e dos caminhões e atender várias ocorrências na mesma região.</p>
  <div class="g2"><label>Procurar a ocorrência-centro por palavra-chave<input id="px-q" placeholder="rua, bairro, descrição ou nº" autocomplete="off" data-inp="proxQ" value="${esc(m.q||'')}"></label>
  <label>Ou pesquisar um endereço<div class="row gap"><input id="px-end" placeholder="rua, bairro" style="flex:1" value="${esc(m.end||'')}"><button class="btn" data-act="proxEnd">Buscar</button></div></label></div>
@@ -738,6 +738,15 @@ function modalProx(){const o=O(),m=M;
  <div id="pxMap" class="mapbox" style="height:300px"></div>
  <h4 style="margin:12px 0 4px" id="px-tit"></h4><div id="px-lista" class="list"></div>
  <div class="row gap" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mClose">Cancelar</button><button class="btn pri" data-act="proxUsar">Usar esta lista no Planejamento</button></div></div>`}
+/* ocorrências próximas de mim: só o raio; o centro é a posição do GPS do aparelho */
+function modalGProx(){const m=M;return `<div class="mh"><h3>📍 Ocorrências próximas de mim</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+ <p class="muted small">Digite o raio. O programa usa a posição do GPS do seu aparelho agora e mostra no Planejamento só as ocorrências dentro desse raio, da mais próxima para a mais distante.</p>
+ <label>Raio (km)<input id="gpx-r" inputmode="decimal" value="${inp(m.r)}" autocomplete="off"></label>
+ <div class="row gap" style="margin:8px 0"><span class="small muted">Raio rápido:</span>${[0.2,0.5,1,2,5,10].map(r=>`<button class="btn sm" data-act="gpxRaio" data-r="${r}">${r<1?r*1000+' m':r+' km'}</button>`).join('')}</div>
+ <div class="row gap" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mClose">Cancelar</button><button class="btn pri" data-act="gpxBuscar">Ver ocorrências perto de mim</button></div></div>`}
+async function gpxAplica(km,todas){const r=Math.round(km*1000);if(!(r>=10)){toast('Digite um raio válido (ex.: 0,5 ou 2).');return false}
+ let p;try{p=await posicaoAtual()}catch(e){gpsAviso(true);return false}
+ S.f.plRaio={lat:p.lat,lng:p.lng,r,label:'sua localização (GPS'+(p.acc?', ±'+Math.round(p.acc)+' m':'')+')',gps:true,km,todas:!!todas};S.f.plF='todas';S.tab='plan';return true}
 function proxLista(){const o=O(),m=M;if(!m.c)return [];
  return o.ocorrencias.filter(x=>x.lat!=null&&(m.todas||(x.status!=='medida'&&x.status!=='executada'))).map(x=>({oc:x,d:distM(m.c,{lat:x.lat,lng:x.lng})})).filter(x=>x.d<=m.r).sort((a,b)=>a.d-b.d)}
 function proxAtualiza(){if(!M||M.t!=='prox')return;const m=M,l=proxLista();m.achadas=l.map(x=>x.oc.id);if(!m.marc)m.marc={};
@@ -1575,6 +1584,10 @@ const ACTS={
  piRel(){if(M&&M.t==='pi'){piCalc();piRelatorio()}},
  piBAdd(d){const P=M.p;P.bairros=P.bairros||[];if(!P.bairros.includes(d.b))P.bairros.push(d.b);$('#pi-bq').value='';$('#pi-bsug').innerHTML='';piBSel()},
  piBTodos(){M.p.bairros=[];piBSel()},piBLimpar(){M.p.bairros=[];piBSel()},piAplicar(){if(M&&M.t==='pi')piAplicar()},
+ gpxAbrir(){const c=S.f.plRaio;M={t:'gprox',r:c&&c.gps?c.km:1};abrirModal(modalGProx())},
+ gpxRaio(d){const e=$('#gpx-r');if(e)e.value=inp(+d.r)},
+ async gpxBuscar(){const km=num($('#gpx-r').value),td=false;if(await gpxAplica(km,td)){fecharModal(false);render();toast('Ocorrências a até '+fDist(S.f.plRaio.r)+' da sua posição, da mais próxima para a mais distante.',5000)}},
+ async gpxAtualiza(){const c=S.f.plRaio;if(!c||!c.gps)return;G.pos=null;if(await gpxAplica(c.km,c.todas)){render();toast('Posição atualizada.',2500)}},
  proxAbrir(){const c=S.f.plRaio;M={t:'prox',c:c?{lat:c.lat,lng:c.lng,label:c.label}:null,r:c?c.r:500,q:'',end:'',todas:false,marc:{},achadas:[]};abrirModal(modalProx());proxMapa();setTimeout(proxAtualiza,120)},
  proxRaio(d){M.r=+d.r;const e=$('#px-r');if(e)e.value=M.r;if(M.circ)M.circ.setRadius(M.r);proxAtualiza()},
  proxCentroOc(d){const oc=O().ocorrencias.find(x=>x.id===d.id);if(!oc||oc.lat==null){toast('Esta ocorrência não tem coordenadas.');return}proxCentro(oc.lat,oc.lng,'#'+oc.num+' '+ocLocal(oc))},
