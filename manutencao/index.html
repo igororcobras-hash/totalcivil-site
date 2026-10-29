@@ -38,6 +38,7 @@ p{margin:6px 0}
 .btn[disabled]{opacity:.45;cursor:not-allowed}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--shadow);padding:20px}
 .pill{display:inline-block;background:var(--soft);color:var(--accent);font-weight:700;font-size:12px;letter-spacing:.04em;text-transform:uppercase;padding:5px 12px;border-radius:999px}
+.chip.rota{cursor:pointer;font-family:inherit;text-decoration:underline;text-underline-offset:2px}.chip.rota:active{opacity:.7}
 .chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:2px 10px;border-radius:999px;border:1px solid var(--c,#888);color:var(--c,#888);background:color-mix(in srgb,var(--c,#888) 10%,transparent);white-space:nowrap}
 .hero{padding:10px 0 18px}.hero p{max-width:760px;color:var(--muted);font-size:16px}
 .sec{margin:26px 0 4px}
@@ -488,7 +489,7 @@ function ocCard(o,oc,plan){const sv=svcOf(o,oc.servicoId||oc.servSug);
  <div class="small">${esc((oc.desc||'').slice(0,160))}${(oc.desc||'').length>160?'…':''}</div>
  ${sv?`<div class="small muted">Serviço: ${esc(sv.descricao)}</div>`:''}
  ${plan&&custoPlan(o,oc)?`<div class="small"><span class="chip" style="--c:#7b3fb0">💲 previsto ${fR(custoPlan(o,oc))}</span></div>`:''}
- ${plan&&DIST.has(oc.id)?`<div class="small"><span class="chip" style="--c:#2563a8">📏 a ${fDist(DIST.get(oc.id))} do ponto</span></div>`:''}
+ ${plan&&DIST.has(oc.id)?`<div class="small"><button type="button" class="chip rota" style="--c:#2563a8" data-act="rotaOc" data-id="${oc.id}" title="Abrir o mapa com a rota até a ocorrência">📏 a ${fDist(DIST.get(oc.id))} ${S.f.plRaio&&S.f.plRaio.gps?'de você':'do ponto'} · 🧭 rota</button></div>`:''}
  ${oc.semana?`<div class="small muted">🗓 ${labSem(oc.semana)}${oc.qtdPlan?' · previsto '+fN(oc.qtdPlan)+' '+esc(sv?sv.unidade:''):''}</div>`:''}
  ${vfMed(oc)}${thumbsMini(oc.fotos)}
  <div class="row gap" style="margin-top:4px">${can('ocorr')&&oc.status!=='executada'&&oc.status!=='medida'?`<button class="btn sm ${oc.vistFiscal?'':'pri'}" data-act="vfAbrir" data-id="${oc.id}">👷 ${oc.vistFiscal?'Rever vistoria do fiscal':'Atendimento do fiscal'}</button>`:''}<button class="btn sm" data-act="ocEdit" data-id="${oc.id}">${can('ocorr')?'Abrir / editar':'Abrir'}</button>${plan?`<button class="btn sm pri" data-act="planOpen" data-id="${oc.id}" ${can('plan')?'':'disabled'}>Planejar</button>${!oc.priConf?`<button class="btn sm" data-act="priConf" data-id="${oc.id}" ${can('plan')?'':'disabled'}>✓ Confirmar prioridade</button>`:''}`:''}</div></article>`}
@@ -745,8 +746,31 @@ function modalGProx(){const m=M;return `<div class="mh"><h3>📍 Ocorrências pr
  <div class="row gap" style="margin:8px 0"><span class="small muted">Raio rápido:</span>${[0.2,0.5,1,2,5,10].map(r=>`<button class="btn sm" data-act="gpxRaio" data-r="${r}">${r<1?r*1000+' m':r+' km'}</button>`).join('')}</div>
  <div class="row gap" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mClose">Cancelar</button><button class="btn pri" data-act="gpxBuscar">Ver ocorrências perto de mim</button></div></div>`}
 async function gpxAplica(km,todas){const r=Math.round(km*1000);if(!(r>=10)){toast('Digite um raio válido (ex.: 0,5 ou 2).');return false}
- let p;try{p=await posicaoAtual()}catch(e){gpsAviso(true);return false}
+ let p;try{p=await posicaoAtual()}catch(e){if(G.pos)p=G.pos;else{gpsAviso(true);return false}}
  S.f.plRaio={lat:p.lat,lng:p.lng,r,label:'sua localização (GPS'+(p.acc?', ±'+Math.round(p.acc)+' m':'')+')',gps:true,km,todas:!!todas};S.f.plF='todas';S.tab='plan';return true}
+/* rota até a ocorrência: mapa com a minha posição (GPS) e o local; abre o navegador de rotas do aparelho */
+function rotaLinks(x){const d=x.lat+','+x.lng;return {gm:'https://www.google.com/maps/dir/?api=1&destination='+d+'&travelmode=driving',gp:'https://www.google.com/maps/dir/?api=1&destination='+d+'&travelmode=walking',wz:'https://waze.com/ul?ll='+d+'&navigate=yes',ap:'https://maps.apple.com/?daddr='+d+'&dirflg=d'}}
+function modalRota(){const x=M.oc,lk=rotaLinks(x);const ios=S.amb==='ios';
+ return `<div class="mh"><h3>🧭 Como chegar · #${x.num}</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+ <p style="margin:0 0 6px"><b>${esc(ocLocal(x))}</b>${x.ref?'<br><span class="muted small">Ref.: '+esc(x.ref)+'</span>':''}</p>
+ <p id="rt-info" class="small" style="margin:0 0 8px"></p>
+ <div id="rtMap" style="height:300px;border-radius:12px;overflow:hidden;border:1px solid var(--line)"></div>
+ <p class="muted small" style="margin:6px 0">A linha tracejada é a distância em linha reta. Para a rota pelas ruas, com trânsito e voz, use os botões abaixo: o aplicativo abre já com o GPS do aparelho como ponto de partida.</p>
+ <div class="row gap"><a class="btn pri" target="_blank" rel="noopener" href="${lk.gm}">🧭 Rota no Google Maps</a><a class="btn" target="_blank" rel="noopener" href="${lk.wz}">Waze</a>${ios?`<a class="btn" target="_blank" rel="noopener" href="${lk.ap}">Apple Maps</a>`:''}<a class="btn" target="_blank" rel="noopener" href="${lk.gp}">🚶 A pé</a></div>
+ <div class="row gap" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mClose">Fechar</button></div></div>`}
+function rotaAtualiza(){if(!M||M.t!=='rota')return;const x=M.oc,p=G.pos;const info=$('#rt-info');
+ if(!p){if(info)info.innerHTML='<span style="color:#c0392b">⚠ Sem posição do GPS ainda. Toque no 📍 do topo para ligar o GPS; o mapa mostra só a ocorrência.</span>';return}
+ const d=distM(p,x);if(info)info.innerHTML='📏 Você está a <b>'+fDist(d)+'</b> da ocorrência (em linha reta) · precisão do GPS ±'+Math.round(p.acc||0)+' m';
+ if(M.map&&typeof L!=='undefined'){if(M.me)M.me.setLatLng([p.lat,p.lng]);else M.me=L.circleMarker([p.lat,p.lng],{radius:8,color:'#fff',weight:3,fillColor:'#2563a8',fillOpacity:1}).addTo(M.map).bindTooltip('Você');
+  if(M.ln)M.ln.setLatLngs([[p.lat,p.lng],[x.lat,x.lng]]);else M.ln=L.polyline([[p.lat,p.lng],[x.lat,x.lng]],{color:'#2563a8',weight:3,dashArray:'6 8'}).addTo(M.map);
+  if(!M.enq){M.enq=true;M.map.fitBounds([[p.lat,p.lng],[x.lat,x.lng]],{padding:[30,30],maxZoom:18})}}}
+function rotaAbrir(oc){if(oc.lat==null){toast('Esta ocorrência não tem coordenadas.');return}
+ M={t:'rota',oc};abrirModal(modalRota());const el=$('#rtMap');
+ if(typeof L==='undefined'){el.innerHTML='<div class="nomap">Mapa indisponível (sem internet). Use os botões de rota abaixo.</div>'}
+ else{const map=L.map(el).setView([oc.lat,oc.lng],17);L.tileLayer(OSM,{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);M.map=map;
+  L.circleMarker([oc.lat,oc.lng],{radius:9,color:'#fff',weight:3,fillColor:PRI[priEf(oc)].c,fillOpacity:1}).addTo(map).bindTooltip('#'+oc.num+' '+ocLocal(oc),{permanent:true,direction:'top'});
+  setTimeout(()=>{if(M&&M.map===map)map.invalidateSize({animate:false})},90)}
+ if(!G.pos)gpsIniciar();rotaAtualiza();M.tm=setInterval(rotaAtualiza,3000)}
 function proxLista(){const o=O(),m=M;if(!m.c)return [];
  return o.ocorrencias.filter(x=>x.lat!=null&&(m.todas||(x.status!=='medida'&&x.status!=='executada'))).map(x=>({oc:x,d:distM(m.c,{lat:x.lat,lng:x.lng})})).filter(x=>x.d<=m.r).sort((a,b)=>a.d-b.d)}
 function proxAtualiza(){if(!M||M.t!=='prox')return;const m=M,l=proxLista();m.achadas=l.map(x=>x.oc.id);if(!m.marc)m.marc={};
@@ -780,7 +804,7 @@ function tAtendFis(o){const f=AF();let l=o.ocorrencias.filter(x=>x.status!=='exe
  ${f.perto&&!G.pos?'<div class="alert">Sem posição do GPS ainda. Toque no 📍 do topo para ligar o GPS.</div>':''}
  <b>${l.length} ocorrência(s)</b>
  <div class="list" style="margin-top:8px">${l.slice(0,300).map(x=>{const d=dd(x);return `<article class="item"><div class="hd"><div><span class="num">#${x.num}</span> <b>${esc(ocLocal(x))}</b></div></div>
-  <div class="chips">${chipP(priEf(x))}${vfChip(x)}${x.lat!=null?'':'<span class="chip" style="--c:#b7791f">sem coordenadas</span>'}${d!=null?`<span class="chip" style="--c:#2563a8">📏 ${fDist(d)}</span>`:''}</div>
+  <div class="chips">${chipP(priEf(x))}${vfChip(x)}${x.lat!=null?'':'<span class="chip" style="--c:#b7791f">sem coordenadas</span>'}${d!=null?`<button type="button" class="chip rota" style="--c:#2563a8" data-act="rotaOc" data-id="${x.id}" title="Abrir o mapa com a rota até a ocorrência">📏 ${fDist(d)} · 🧭 rota</button>`:''}</div>
   <div class="small">${esc((x.desc||'').slice(0,160))}</div>${x.ref?`<div class="small muted">Ref.: ${esc(x.ref)}</div>`:''}${vfMed(x)}${thumbsMini(x.fotos)}
   <div class="row gap" style="justify-content:flex-end;margin-top:6px">${x.lat!=null?`<a class="btn sm" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${x.lat},${x.lng}">🧭 Ir até o local</a>`:''}<button class="btn sm pri" data-act="vfAbrir" data-id="${x.id}" ${can('ocorr')?'':'disabled'}>👷 ${x.vistFiscal?'Rever atendimento':'Fazer atendimento'}</button></div></article>`}).join('')||'<p class="muted small">Nenhuma ocorrência neste filtro.</p>'}</div></div>`}
 function vfAbrirOc(id){const o=O(),oc=o.ocorrencias.find(x=>x.id===id);if(!oc)return;const m=oc.med||{};
@@ -1101,7 +1125,7 @@ function modalImpOc(m){const n=m.lista.length,ja=m.ja.length,at=m.atual.length,s
  <div class="row gap" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mClose">Cancelar</button><button class="btn pri" data-act="ocImportOk" ${n||at?'':'disabled'}>Importar ${n} ocorrência(s)</button></div></div>`}
 /* ===================== modais ===================== */
 function abrirModal(html){$('#modalBody').innerHTML=html;$('#modal').classList.remove('hidden');document.body.classList.add('noscroll');$('#modal').scrollTop=0;hydrate($('#modalBody'));const fb=[...$('#modalBody').querySelectorAll('[data-act=mClose]')].pop();const rw=fb&&fb.closest('.row');if(rw)rw.classList.add('mbar')}
-function fecharModal(limpar){if(M&&limpar&&M.novas)M.novas.forEach(id=>{DB.del('fotos',id);fotoCache.delete(id)});if(M&&M.map){M.map.remove()}M=null;$('#modal').classList.add('hidden');document.body.classList.remove('noscroll')}
+function fecharModal(limpar){if(M&&M.tm)clearInterval(M.tm);if(M&&limpar&&M.novas)M.novas.forEach(id=>{DB.del('fotos',id);fotoCache.delete(id)});if(M&&M.map){M.map.remove()}M=null;$('#modal').classList.add('hidden');document.body.classList.remove('noscroll')}
 function fotosArea(fotos,kind){if(!fotos.length)return '<p class="muted small">Nenhuma foto ainda.</p>';
  return `<div class="thumbs">${fotos.map((f,i)=>`<figure class="th"><img data-foto="${f.id}" data-act="zoom" alt=""><figcaption>${kind==='ex'?`<select data-chg="fotoFase" data-i="${i}">${['antes','durante','depois'].map(x=>`<option value="${x}" ${f.fase===x?'selected':''}>${cap(x)}</option>`).join('')}</select>`:''}<input placeholder="Legenda" value="${esc(f.legenda||'')}" data-chg="fotoLeg" data-i="${i}"><span class="gpsbadge ${f.lat!=null?'ok':'no'}" title="${f.origem?ORIGEM[f.origem]:''}">${f.lat!=null?'📍 '+fN(f.lat,5)+', '+fN(f.lng,5):'sem coordenada'}</span><button class="btn mini dan" data-act="fotoDel" data-i="${i}">remover</button></figcaption></figure>`).join('')}</div>`}
 function refreshFotos(){const a=$('#fotosArea');if(a){a.innerHTML=fotosArea(M.d.fotos,M.t);hydrate(a)}}
@@ -1584,10 +1608,11 @@ const ACTS={
  piRel(){if(M&&M.t==='pi'){piCalc();piRelatorio()}},
  piBAdd(d){const P=M.p;P.bairros=P.bairros||[];if(!P.bairros.includes(d.b))P.bairros.push(d.b);$('#pi-bq').value='';$('#pi-bsug').innerHTML='';piBSel()},
  piBTodos(){M.p.bairros=[];piBSel()},piBLimpar(){M.p.bairros=[];piBSel()},piAplicar(){if(M&&M.t==='pi')piAplicar()},
+ rotaOc(d){const oc=O().ocorrencias.find(x=>x.id===d.id);if(oc)rotaAbrir(oc)},
  gpxAbrir(){const c=S.f.plRaio;M={t:'gprox',r:c&&c.gps?c.km:1};abrirModal(modalGProx())},
  gpxRaio(d){const e=$('#gpx-r');if(e)e.value=inp(+d.r)},
- async gpxBuscar(){const km=num($('#gpx-r').value),td=false;if(await gpxAplica(km,td)){fecharModal(false);render();toast('Ocorrências a até '+fDist(S.f.plRaio.r)+' da sua posição, da mais próxima para a mais distante.',5000)}},
- async gpxAtualiza(){const c=S.f.plRaio;if(!c||!c.gps)return;G.pos=null;if(await gpxAplica(c.km,c.todas)){render();toast('Posição atualizada.',2500)}},
+ async gpxBuscar(){const km=num($('#gpx-r').value),td=false;toast('Obtendo sua posição…',2500);if(await gpxAplica(km,td)){fecharModal(false);render();toast('Ocorrências a até '+fDist(S.f.plRaio.r)+' da sua posição, da mais próxima para a mais distante.',5000)}},
+ async gpxAtualiza(){const c=S.f.plRaio;if(!c||!c.gps)return;if(await gpxAplica(c.km,c.todas)){render();toast('Posição atualizada.',2500)}},
  proxAbrir(){const c=S.f.plRaio;M={t:'prox',c:c?{lat:c.lat,lng:c.lng,label:c.label}:null,r:c?c.r:500,q:'',end:'',todas:false,marc:{},achadas:[]};abrirModal(modalProx());proxMapa();setTimeout(proxAtualiza,120)},
  proxRaio(d){M.r=+d.r;const e=$('#px-r');if(e)e.value=M.r;if(M.circ)M.circ.setRadius(M.r);proxAtualiza()},
  proxCentroOc(d){const oc=O().ocorrencias.find(x=>x.id===d.id);if(!oc||oc.lat==null){toast('Esta ocorrência não tem coordenadas.');return}proxCentro(oc.lat,oc.lng,'#'+oc.num+' '+ocLocal(oc))},
