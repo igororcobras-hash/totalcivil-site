@@ -737,6 +737,11 @@ function vfSalvar(){if(!can('ocorr'))return;const o=O(),d=M.d,oc=o.ocorrencias.f
  M.novas=[];saveObra(o);fecharModal(false);render();toast('Atendimento do fiscal salvo'+(oc.fotos.length?'':' (sem fotos do antes — lembre de fotografar)')+'.',5000)}
 /* ===================== planejamento instruído (somente gestor) ===================== */
 const piDef=()=>({ordem:'pri',pris:{alta:true,media:true,baixa:true},soSem:true,soConf:false,bairros:[],soVist:true,kmh:25,minM3:20,minFix:10,ini:'09:00',fim:'17:00',almIni:'12:00',almFim:'13:00',relPor:'dia',raioKm:1,dens:2.5,carga:10,camDia:2,qtdPad:1,esp:5,unid:'semana',n:4,inicio:addDias(hojeISO(),1),limSaldo:true});
+function piGrpKey(x){return x.grupo&&x.grupo.c!=null&&String(x.grupo.c)!==''?String(x.grupo.c):'_'}
+function piGrpOpts(o,P){const m=new Map();o.servicos.forEach(x=>{const k=piGrpKey(x);if(!m.has(k))m.set(k,{k,d:k==='_'?'Sem título':(x.grupo.c+' — '+(x.grupo.d||'')),n:0});m.get(k).n++});
+ return `<option value="">Todos os títulos (${o.servicos.length} itens)</option>`+[...m.values()].map(g=>`<option value="${esc(g.k)}" ${P.svcGrp===g.k?'selected':''}>${esc(g.d.slice(0,80))} (${g.n})</option>`).join('')}
+function piSvcOpts(o,P){const l=o.servicos.filter(x=>!P.svcGrp||piGrpKey(x)===P.svcGrp);
+ return '<option value="">— nenhum (custo fica zerado) —</option>'+l.map(x=>`<option value="${x.id}" ${P.svcPad===x.id?'selected':''}>${esc((x.codigo?x.codigo+' — ':'')+x.descricao.slice(0,90))} (${esc(x.unidade)})</option>`).join('')}
 function piVol(o,oc,P){const sv=svcOf(o,oc.servicoId||oc.servSug||P.svcPad);const un=sv?String(sv.unidade||'').toLowerCase().replace('³','3').replace('²','2').trim():'';
  const qv=oc.qtdPlan>0?oc.qtdPlan:(oc.qtdFiscal>0?oc.qtdFiscal:0);const fonte=oc.qtdPlan>0?'gestor':oc.qtdFiscal>0?'fiscal':'estimado';const assum=!(qv>0);const q=assum?P.qtdPad:qv;let m3,t,ok=!!sv;
  if(assum){m3=q;t=m3*P.dens;ok=ok&&un==='m3'}
@@ -756,7 +761,8 @@ function modalPI(){const P=M.p;const n=(k,l,extra)=>`<label>${l}<input inputmode
  <div class="row gap"><label class="chk"><input type="checkbox" data-chg="piP" data-k="soSem" ${P.soSem?'checked':''}> Só ocorrências ainda sem semana definida</label><label class="chk"><input type="checkbox" data-chg="piP" data-k="soVist" ${P.soVist?'checked':''}> Só ocorrências já vistoriadas pelo fiscal (com medidas)</label><label class="chk"><input type="checkbox" data-chg="piP" data-k="soConf" ${P.soConf?'checked':''}> Só com prioridade já confirmada</label></div>
  <h4 style="margin-top:12px">2. Raio e caminhões</h4>
  <div class="g4">${n('raioKm','Raio para agrupar (km) — 0 = sem agrupar')}${n('dens','Peso específico do asfalto (t/m³)')}${n('carga','Carga de cada caminhão (t)')}${n('camDia','Caminhões por dia')}</div>
- <label>Serviço padrão (para ocorrências ainda sem serviço definido)<select data-chg="piP" data-k="svcPad"><option value="">— nenhum (custo fica zerado) —</option>${O().servicos.map(x=>`<option value="${x.id}" ${P.svcPad===x.id?'selected':''}>${esc((x.codigo?x.codigo+' — ':'')+x.descricao.slice(0,90))} (${esc(x.unidade)})</option>`).join('')}</select></label>
+ <div class="g2"><label>Título do orçamento<select data-chg="piGrp" id="pi-grp">${piGrpOpts(O(),P)}</select></label>
+ <label>Serviço padrão (para ocorrências ainda sem serviço definido)<select data-chg="piP" data-k="svcPad" id="pi-svc">${piSvcOpts(O(),P)}</select></label></div>
  <div class="g4">${n('qtdPad','Volume quando não informado (m³)')}${n('esp','Espessura p/ serviços em m² (cm)')}</div>
  <h4 style="margin-top:12px">3. Período</h4>
  <div class="g4"><label>Começar em<input type="date" value="${P.inicio}" data-chg="piP" data-k="inicio"></label>${n('n','Planejar para quantos')}<label>Unidade<select data-chg="piP" data-k="unid"><option value="dia" ${P.unid==='dia'?'selected':''}>dia(s) útil(eis)</option><option value="semana" ${P.unid==='semana'?'selected':''}>semana(s)</option><option value="mes" ${P.unid==='mes'?'selected':''}>mês(es)</option></select></label><label class="chk" style="align-self:end"><input type="checkbox" data-chg="piP" data-k="limSaldo" ${P.limSaldo?'checked':''}> Parar quando acabar o saldo livre</label></div>
@@ -1581,6 +1587,7 @@ const CHG={
  liberaPI(el,d){if(!can('config'))return;const o=O();o.liberaPI=o.liberaPI||{};o.liberaPI[d.k]=el.checked;saveObra(o);toast(el.checked?'Planejamento instruído liberado para '+PERFIL[d.k]+'.':'Planejamento instruído bloqueado para '+PERFIL[d.k]+'.')},
  afF(el,d){const f=AF();f[d.k]=el.type==='checkbox'?el.checked:el.value;if(d.k==='perto'&&el.checked&&!G.pos)gpsIniciar();render()},vfServ(){if(M&&M.t==='vf'){M.qEdit=false;vfCalc()}},
  piMapaModo(el){M.mapModo=el.value;M.mapF=null;piMapaDesenha(true)},
+ piGrp(el){const p=M.p;p.svcGrp=el.value;const o=O();if(p.svcPad&&p.svcGrp&&!o.servicos.some(x=>x.id===p.svcPad&&piGrpKey(x)===p.svcGrp)){const f=o.servicos.find(x=>piGrpKey(x)===p.svcGrp&&x.preco>0);p.svcPad=f?f.id:''}const e=$('#pi-svc');if(e)e.innerHTML=piSvcOpts(o,p);if(M.res)piCalc()},
  piP(el,d){const p=M.p,k=d.k;if(k.startsWith('pri.'))p.pris[k.slice(4)]=el.checked;else if(el.type==='checkbox')p[k]=el.checked;else p[k]=el.value;if(M.res)piCalc()},
  proxTodas(el){M.todas=el.checked;proxAtualiza()},proxChk(el,d){M.marc[d.id]=el.checked},
  nome(el){S.nome=el.value.trim();lsSet('tc_nome',S.nome)},perfil(el){if(S.trava)return;S.perfil=el.value;if(!(window.TC_USUARIO&&window.TC_USUARIO.admin))lsSet('tc_perfil',S.perfil);render()},
