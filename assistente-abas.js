@@ -27,6 +27,8 @@
   var PROPRIAS = ((me && me.dataset.proprioAbas) || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
   if (!SEL) return;
 
+  var RECOLH = !!(me && me.dataset.recolhido);
+  var aberto = !RECOLH, fab = null;
   var CORES = {fundo: '#ffffff', borda: '#2563eb', texto: '#1e293b', botao: '#2563eb'};
   var guia = {ativo: false, campos: [], i: 0};
   var barra = null, painel = null, ultimaChave = '';
@@ -102,7 +104,9 @@
       '.tc-dest{outline:3px solid #2563eb!important;outline-offset:3px!important;animation:tcPulse 1.2s infinite}' +
       '@keyframes tcPulse{0%,100%{box-shadow:0 0 0 0 rgba(37,99,235,.55)}50%{box-shadow:0 0 0 7px rgba(37,99,235,0)}}' +
       '@media(max-width:640px){#tc-aa{left:8px;right:8px;bottom:8px;max-width:none;justify-content:space-between}#tc-aa .mid small{max-width:110px}#tc-pg{right:8px;left:8px;width:auto;bottom:70px}}' +
-      '@media print{#tc-aa,#tc-pg{display:none!important}}';
+      '#tc-fab{position:fixed;left:12px;bottom:12px;z-index:99985;width:44px;height:44px;border-radius:50%;border:2px solid #2563eb;background:#fff;color:#2563eb;font-size:20px;cursor:pointer;box-shadow:0 4px 14px rgba(37,99,235,.3);padding:0}' +
+      '#tc-aa .x{padding:7px 8px}' +
+      '@media print{#tc-aa,#tc-pg,#tc-fab{display:none!important}}';
     document.head.appendChild(s);
   }
   function montarBarra() {
@@ -111,11 +115,20 @@
     barra = document.createElement('div'); barra.id = 'tc-aa';
     barra.innerHTML = '<button type="button" id="tc-ant">‹ Anterior</button>' +
       '<div class="mid"><button type="button" id="tc-aux">📋 Auxílio de preenchimento</button><small id="tc-pos"></small></div>' +
-      '<button type="button" class="pri" id="tc-prox">Próximo ›</button>';
+      '<button type="button" class="pri" id="tc-prox">Próximo ›</button>' + (RECOLH ? '<button type="button" class="x" id="tc-rec" title="Esconder a barra">✕</button>' : '');
     document.body.appendChild(barra);
     barra.querySelector('#tc-ant').onclick = function () { mover(-1); };
     barra.querySelector('#tc-prox').onclick = function () { mover(1); };
     barra.querySelector('#tc-aux').onclick = abrirAuxilio;
+    var rc = barra.querySelector('#tc-rec');
+    if (rc) rc.onclick = function () { aberto = false; fecharGuia(); atualizar(); };
+  }
+  function montarFab() {
+    if (fab) return;
+    css();
+    fab = document.createElement('button'); fab.type = 'button'; fab.id = 'tc-fab'; fab.title = 'Abrir navegação entre abas e Auxílio de preenchimento'; fab.textContent = '📋';
+    fab.onclick = function () { aberto = true; atualizar(); };
+    document.body.appendChild(fab);
   }
 
   function mover(d) {
@@ -136,7 +149,9 @@
   function atualizar() {
     var l = abas();
     var modal = document.querySelector('#modal:not(.hidden),[role=dialog]:not([hidden]),.modal-overlay.open,.modal-overlay.show,.modal-overlay.active');
-    if (l.length < 2 || (modal && visivel(modal))) { if (barra) barra.style.display = 'none'; return; }
+    if (l.length < 2 || (modal && visivel(modal))) { if (barra) barra.style.display = 'none'; if (fab) fab.style.display = 'none'; return; }
+    if (RECOLH && !aberto) { if (barra) barra.style.display = 'none'; montarFab(); fab.style.display = ''; return; }
+    if (fab) fab.style.display = 'none';
     montarBarra(); barra.style.display = '';
     var i = -1; l.forEach(function (b, k) { if (ehAtiva(b)) i = k; });
     barra.querySelector('#tc-ant').disabled = i <= 0;
