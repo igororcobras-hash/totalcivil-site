@@ -1916,7 +1916,7 @@ function buildTabs() {
   $('tabs-list').onclick = e => { const b = e.target.closest('.tab-btn'); if (b) showTab(b.dataset.tab); };
 }
 function showTab(k) {
-  if (TAB === 'tresd' && k !== 'tresd') { T3stop(); if (RAIN_FATOR !== 1) { RAIN_FATOR = 1; calc(); } }
+  if (TAB === 'tresd' && k !== 'tresd') { if (T3isFs()) T3fullscreen(); T3stop(); if (RAIN_FATOR !== 1) { RAIN_FATOR = 1; calc(); } }
   TAB = k; try { localStorage.setItem('tc_dren_tab', k); } catch (e) {}
   document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === k));
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('active', p.id === 'tab-' + k));
@@ -2104,7 +2104,7 @@ function vChuva() {
 let RAIN_FATOR = 1;
 const THREE_URL = 'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js';
 const ORBIT_URL = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
-let T3 = {renderer: null, scene: null, cam: null, ctrl: null, raf: 0, exag: 1, anim: true, objs: [], rain: null, info: '', span: 50, cx: 0, cz: 0, waves: [], parts: [], rainObj: null};
+let T3 = {renderer: null, scene: null, cam: null, ctrl: null, raf: 0, exag: 1, anim: true, objs: [], rain: null, info: '', span: 50, cx: 0, cz: 0, waves: [], parts: [], rainObj: null, real: false, sun: null};
 // componentes que podem ser mostrados ou ocultados separadamente
 const T3COMP = [
   ['tubo', 'Tubos (parede e vazio)', 0x9aa9b8],
@@ -2135,7 +2135,7 @@ function vTresD() {
     <div class="bar-btns" style="margin-bottom:.5rem;flex-wrap:wrap;gap:.5rem;align-items:center">
       <label style="font-size:.85rem;font-weight:600">Chuva: <span id="t3-fator">${f.toFixed(2)}</span>× do projeto</label>
       <input id="t3-chuva" type="range" min="0.25" max="3" step="0.05" value="${f}" oninput="document.getElementById('t3-fator').textContent=(+this.value).toFixed(2)" onchange="setChuva3D(this.value)" style="flex:1;min-width:160px">
-      <span id="t3-i" style="font-size:.85rem">i = ${fmt(ref * f, 1)} mm/h (t = ${P.crit.tcMin} min, TR ${P.crit.tr} anos)</span>
+      <span id="t3-i" style="font-size:.85rem">i = ${fmt(ref, 1)} mm/h (t = ${P.crit.tcMin} min, TR ${P.crit.tr} anos)</span>
       <button class="btn btn-secondary btn-sm" onclick="setChuva3D(1)">Chuva de projeto</button>
     </div>
     <div class="bar-btns" style="margin-bottom:.5rem;flex-wrap:wrap;gap:.5rem;align-items:center">
@@ -2143,6 +2143,8 @@ function vTresD() {
       ${[1, 3, 5, 10].map(v => `<button class="btn btn-secondary btn-sm" onclick="T3.exag=${v};T3build();T3fit()">${v}×</button>`).join('')}
       <label style="font-size:.85rem;display:inline-flex;gap:.3rem;align-items:center"><input type="checkbox" checked onchange="T3.anim=this.checked"> Animação</label>
       <button class="btn btn-secondary btn-sm" onclick="T3fit()">Enquadrar</button>
+      <button id="t3-real" class="btn btn-secondary btn-sm" onclick="T3toggleReal()" title="Sombras, névoa, chão e água com brilho. A chuva continua alterando os cálculos.">Realista: desligado</button>
+      <button class="btn btn-secondary btn-sm t3-fs-btn" onclick="T3fullscreen()" title="Abre ou fecha o desenho 3D em tela cheia (Esc para sair)">⛶ Tela cheia</button>
     </div>
     <div class="bar-btns" style="margin-bottom:.5rem;flex-wrap:wrap;gap:.4rem;align-items:center">
       <span style="font-size:.85rem">Vista:</span>
@@ -2190,7 +2192,7 @@ function setChuva3D(v) {
   RAIN_FATOR = Math.max(0.25, Math.min(3, +v || 1));
   const r = document.getElementById('t3-chuva'); if (r) r.value = RAIN_FATOR;
   const fa = document.getElementById('t3-fator'); if (fa) fa.textContent = RAIN_FATOR.toFixed(2);
-  const ia = document.getElementById('t3-i'); if (ia) ia.textContent = 'i = ' + fmt(idf(P.crit.tcMin) * RAIN_FATOR, 1) + ' mm/h (t = ' + P.crit.tcMin + ' min, TR ' + P.crit.tr + ' anos)';
+  const ia = document.getElementById('t3-i'); if (ia) ia.textContent = 'i = ' + fmt(idf(P.crit.tcMin), 1) + ' mm/h (t = ' + P.crit.tcMin + ' min, TR ' + P.crit.tr + ' anos)';
   calc(); refreshRes(); T3build(); T3fit();
 }
 
@@ -2211,10 +2213,19 @@ function T3start(box) {
   T3.renderer.setSize(w, h);
   box.appendChild(T3.renderer.domElement);
   T3pad(box);
+  const fsb = document.createElement('button');
+  fsb.type = 'button'; fsb.className = 't3-fs-btn'; fsb.textContent = '⛶ Tela cheia';
+  fsb.title = 'Abre ou fecha o desenho 3D em tela cheia (Esc para sair)';
+  fsb.style.cssText = 'position:absolute;top:10px;right:10px;z-index:6;padding:.35rem .6rem;border-radius:6px;border:1px solid rgba(255,255,255,.3);background:rgba(20,30,40,.65);color:#e8ecf1;font-size:.8rem;cursor:pointer';
+  fsb.onclick = T3fullscreen; box.appendChild(fsb);
+  if (!T3._rs) { T3._rs = true; window.addEventListener('resize', T3resize); document.addEventListener('fullscreenchange', T3fsChange); document.addEventListener('webkitfullscreenchange', T3fsChange); }
+  T3fsLabel();
   T3.scene = new THREE.Scene();
   T3.scene.background = new THREE.Color(0x0f1620);
   T3.scene.add(new THREE.AmbientLight(0xffffff, 0.75));
-  const sun = new THREE.DirectionalLight(0xffffff, 0.6); sun.position.set(1, 2, 1); T3.scene.add(sun);
+  const sun = new THREE.DirectionalLight(0xffffff, 0.6); sun.position.set(1, 2, 1); T3.scene.add(sun); T3.sun = sun;
+  T3.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  T3applyReal();
   T3.cam = new THREE.PerspectiveCamera(45, w / h, 0.1, 10000);
   T3.ctrl = new THREE.OrbitControls(T3.cam, T3.renderer.domElement);
   T3.ctrl.enableDamping = true;
@@ -2236,6 +2247,54 @@ function T3stop() {
   T3.raf = 0;
   if (T3.renderer) { try { T3.renderer.dispose(); T3.renderer.forceContextLoss && T3.renderer.forceContextLoss(); } catch (e) {} }
   T3.renderer = null; T3.scene = null; T3.cam = null; T3.ctrl = null; T3.objs = []; T3.rain = null; T3.waves = []; T3.parts = [];
+}
+
+// Modo realista: sombras, névoa, chão e materiais com brilho (não muda os cálculos)
+function T3applyReal() {
+  if (!T3.renderer || !T3.scene || !T3.sun) return;
+  const on = !!T3.real;
+  T3.renderer.shadowMap.enabled = on;
+  T3.sun.castShadow = on;
+  if (on) {
+    const k = Math.max(20, T3.span || 50) * 2.2;
+    T3.sun.shadow.mapSize.set(2048, 2048);
+    Object.assign(T3.sun.shadow.camera, {left: -k, right: k, top: k, bottom: -k, near: 1, far: k * 6});
+    T3.sun.shadow.camera.updateProjectionMatrix();
+    T3.sun.shadow.bias = -0.0008;
+    T3.scene.fog = new THREE.Fog(0x0f1620, (T3.span || 50) * 2.5, (T3.span || 50) * 7);
+    T3.scene.background = new THREE.Color(0x0b1220);
+  } else {
+    T3.scene.fog = null;
+    T3.scene.background = new THREE.Color(0x0f1620);
+  }
+  const btn = document.getElementById('t3-real'); if (btn) btn.textContent = 'Realista: ' + (on ? 'ligado' : 'desligado');
+}
+function T3toggleReal() {
+  T3.real = !T3.real;
+  T3applyReal();
+  T3build(); T3fit();
+}
+
+// Tela cheia: usa a API do navegador; no iPhone (sem suporte) ocupa a janela inteira
+function T3isFs() { const b = $('t3-box'); return !!b && ((document.fullscreenElement || document.webkitFullscreenElement) === b || b.classList.contains('t3-fs')); }
+function T3fullscreen() {
+  const b = $('t3-box'); if (!b) return;
+  if (T3isFs()) {
+    if (document.fullscreenElement || document.webkitFullscreenElement) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else { b.classList.remove('t3-fs'); b.style.cssText = b.dataset.css || b.style.cssText; document.body.style.overflow = ''; T3fsChange(); }
+    return;
+  }
+  const req = b.requestFullscreen || b.webkitRequestFullscreen;
+  const css = () => { b.dataset.css = b.style.cssText; b.classList.add('t3-fs'); b.style.cssText += ';position:fixed;inset:0;width:100vw;height:100vh;z-index:9999;border-radius:0;border:0'; document.body.style.overflow = 'hidden'; T3fsChange(); };
+  if (req) { try { const r = req.call(b); if (r && r.catch) r.catch(css); } catch (e) { css(); } } else css();
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { const b = $('t3-box'); if (b && b.classList.contains('t3-fs')) T3fullscreen(); } });
+function T3fsChange() { T3fsLabel(); setTimeout(T3resize, 60); }
+function T3fsLabel() { const on = T3isFs(); document.querySelectorAll('.t3-fs-btn').forEach(x => { x.textContent = on ? '✕ Sair da tela cheia' : '⛶ Tela cheia'; }); }
+function T3resize() {
+  const b = $('t3-box'); if (!b || !T3.renderer || !T3.cam) return;
+  const w = Math.max(320, b.clientWidth), h = Math.max(300, b.clientHeight);
+  T3.renderer.setSize(w, h); T3.cam.aspect = w / h; T3.cam.updateProjectionMatrix();
 }
 
 function T3fit() {
@@ -2328,6 +2387,10 @@ function T3pad(box) {
 }
 
 function T3mat(color, opacity) {
+  if (T3.real) {
+    const agua = opacity < 1 && color === 0x2aa7c9;
+    return new THREE.MeshStandardMaterial({color, transparent: opacity < 1, opacity: opacity, side: THREE.DoubleSide, depthWrite: opacity >= 1, roughness: agua ? 0.12 : 0.8, metalness: 0});
+  }
   return new THREE.MeshLambertMaterial({color, transparent: opacity < 1, opacity: opacity, side: THREE.DoubleSide, depthWrite: opacity >= 1});
 }
 
@@ -2366,7 +2429,7 @@ function T3build() {
   if (!T3.scene || !R || !P) return;
   T3.objs.forEach(o => { T3.scene.remove(o); if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
   T3.objs = []; T3.waves = []; T3.parts = [];
-  const add = (o, comp) => { o.userData.comp = comp || 'outro'; T3.scene.add(o); T3.objs.push(o); return o; };
+  const add = (o, comp) => { o.userData.comp = comp || 'outro'; if (T3.real && o.isMesh) { o.castShadow = !(o.material && o.material.opacity < 0.6); o.receiveShadow = true; } T3.scene.add(o); T3.objs.push(o); return o; };
   const G = geoRuas();
   const ex = T3.exag || 1;
   const pvPos = new Map();
@@ -2384,6 +2447,7 @@ function T3build() {
   const at = (pvId, z) => { const q = pvPos.get(pvId); return q && isNum(z) ? P3(q.x, q.y, Y(z)) : null; };
   const pav = P.pav || {}, pRev = +pav.rev || 0, pBase = +pav.base || 0, pSub = +pav.sub || 0, pLar = +pav.larg || 8;
 
+  if (T3.real) { const g = new THREE.Mesh(new THREE.PlaneGeometry(T3.span * 5, T3.span * 5), new THREE.MeshStandardMaterial({color: 0x3d4a3c, roughness: 1, metalness: 0})); g.rotation.x = -Math.PI / 2; g.position.y = Y(base) - 0.02; add(g, 'outro'); }
   // terreno natural (linha entre as cotas de tampa dos PVs) e grade
   const grid = new THREE.GridHelper(T3.span * 3, 30, 0x1e3a4a, 0x162733);
   grid.position.y = Y(base + 0.01); add(grid, 'outro');
@@ -2522,7 +2586,7 @@ function T3build() {
 
   // resumo
   const folgaErr = P.pvs.filter(p => R.pv[p.id] && isNum(R.pv[p.id].folga) && R.pv[p.id].folga < 0).length;
-  const ref = idf(P.crit.tcMin) * RAIN_FATOR;
+  const ref = idf(P.crit.tcMin);
   T3.info = `<b>Lâmina máx.:</b> ${fmt(lamMax.v * 100, 1)} cm (${esc(lamMax.id)}) · <b>V máx.:</b> ${fmt(vMax.v, 2)} m/s (${esc(vMax.id)}) · <b>i:</b> ${fmt(ref, 1)} mm/h · <b>Trechos em carga:</b> ${emCarga.length ? esc(emCarga.join(', ')) : 'nenhum'} · <b>PVs com extravasamento:</b> ${folgaErr}`;
   T3msg();
   T3apply();
@@ -2549,6 +2613,17 @@ function T3particles(pos, seg, n, kind, scale, color, V) {
 }
 
 function T3rain(span, y0, n) {
+  if (T3.real) {
+    const geo = new THREE.BufferGeometry();
+    const arr = new Float32Array(n * 6), sp = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = (Math.random() - 0.5) * span * 3, z = (Math.random() - 0.5) * span * 3, y = Math.random() * 40;
+      arr.set([x, y, z, x, y + 0.6, z], i * 6); sp[i] = 0.7 + Math.random() * 0.6;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+    const mat = new THREE.LineBasicMaterial({color: 0xa9d4ef, transparent: true, opacity: 0.5});
+    return {points: new THREE.LineSegments(geo, mat), arr, sp, n, y0, span, streak: true};
+  }
   const geo = new THREE.BufferGeometry();
   const arr = new Float32Array(n * 3), sp = new Float32Array(n);
   for (let i = 0; i < n; i++) { arr[i * 3] = (Math.random() - 0.5) * span * 3; arr[i * 3 + 1] = Math.random() * 40; arr[i * 3 + 2] = (Math.random() - 0.5) * span * 3; sp[i] = 0.7 + Math.random() * 0.6; }
@@ -2594,7 +2669,13 @@ function T3animate(t) {
   });
   if (T3.rain && anim) {
     const rn = T3.rain, a = rn.arr;
-    for (let i = 0; i < rn.n; i++) {
+    if (rn.streak) {
+      for (let i = 0; i < rn.n; i++) {
+        a[i * 6 + 1] -= 0.35 * rn.sp[i] * (0.6 + RAIN_FATOR * 0.4);
+        if (a[i * 6 + 1] < rn.y0) a[i * 6 + 1] = 35 + Math.random() * 5;
+        a[i * 6 + 4] = a[i * 6 + 1] + 0.6;
+      }
+    } else for (let i = 0; i < rn.n; i++) {
       a[i * 3 + 1] -= 0.35 * rn.sp[i] * (0.6 + RAIN_FATOR * 0.4);
       if (a[i * 3 + 1] < rn.y0) a[i * 3 + 1] = 35 + Math.random() * 5;
     }
