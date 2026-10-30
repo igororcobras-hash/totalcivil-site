@@ -2210,6 +2210,7 @@ function T3start(box) {
   T3.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
   T3.renderer.setSize(w, h);
   box.appendChild(T3.renderer.domElement);
+  T3pad(box);
   T3.scene = new THREE.Scene();
   T3.scene.background = new THREE.Color(0x0f1620);
   T3.scene.add(new THREE.AmbientLight(0xffffff, 0.75));
@@ -2231,6 +2232,7 @@ function T3start(box) {
 
 function T3stop() {
   if (T3.raf) cancelAnimationFrame(T3.raf);
+  if (T3.hold) { clearInterval(T3.hold); T3.hold = 0; }
   T3.raf = 0;
   if (T3.renderer) { try { T3.renderer.dispose(); T3.renderer.forceContextLoss && T3.renderer.forceContextLoss(); } catch (e) {} }
   T3.renderer = null; T3.scene = null; T3.cam = null; T3.ctrl = null; T3.objs = []; T3.rain = null; T3.waves = []; T3.parts = [];
@@ -2270,6 +2272,59 @@ function T3rot(ang) {
   const x = off.x * c + off.z * sn, z = -off.x * sn + off.z * c;
   T3.cam.position.set(T3.ctrl.target.x + x, T3.cam.position.y, T3.ctrl.target.z + z);
   T3.ctrl.update();
+}
+
+// Gira a câmera em torno do alvo: dTheta = horizontal (esq./dir.), dPhi = vertical (cima/baixo)
+function T3orbit(dTheta, dPhi) {
+  if (!T3.cam || !T3.ctrl) return;
+  const off = new THREE.Vector3().subVectors(T3.cam.position, T3.ctrl.target);
+  const sph = new THREE.Spherical().setFromVector3(off);
+  sph.theta += dTheta;
+  sph.phi = Math.min(Math.max(sph.phi + dPhi, 0.05), Math.PI - 0.05);
+  off.setFromSpherical(sph);
+  T3.cam.position.copy(T3.ctrl.target).add(off);
+  T3.ctrl.update();
+}
+
+// Controle redondo: setas (clique ou manter pressionado) e arraste pelo centro
+function T3pad(box) {
+  const pad = document.createElement('div');
+  pad.id = 't3-pad';
+  pad.style.cssText = 'position:absolute;right:14px;bottom:14px;width:124px;height:124px;border-radius:50%;background:rgba(20,30,40,.6);border:1px solid rgba(255,255,255,.28);box-shadow:0 2px 10px rgba(0,0,0,.35);user-select:none;touch-action:none;z-index:5';
+  const btn = (d, css, svg) => `<button type="button" data-d="${d}" title="${{up: 'Para cima', down: 'Para baixo', left: 'Para a esquerda', right: 'Para a direita'}[d]}" style="position:absolute;${css};width:34px;height:34px;border:0;border-radius:50%;background:rgba(255,255,255,.14);color:#e8ecf1;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0">${svg}</button>`;
+  const arrow = rot => `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" style="transform:rotate(${rot}deg)"><path d="M12 4l8 9h-5v7H9v-7H4z"/></svg>`;
+  pad.innerHTML =
+    btn('up', 'top:2px;left:45px', arrow(0)) +
+    btn('down', 'bottom:2px;left:45px', arrow(180)) +
+    btn('left', 'left:2px;top:45px', arrow(-90)) +
+    btn('right', 'right:2px;top:45px', arrow(90)) +
+    '<div data-c="1" title="Arraste para girar em qualquer direção" style="position:absolute;left:32px;top:32px;width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,.08);border:1px dashed rgba(255,255,255,.35);cursor:grab"></div>';
+  box.appendChild(pad);
+  const STEP = Math.PI / 24, FAST = 0.012;
+  const act = d => {
+    if (d === 'left') T3orbit(-STEP, 0);
+    else if (d === 'right') T3orbit(STEP, 0);
+    else if (d === 'up') T3orbit(0, -STEP);
+    else if (d === 'down') T3orbit(0, STEP);
+  };
+  const stopHold = () => { if (T3.hold) { clearInterval(T3.hold); T3.hold = 0; } };
+  pad.querySelectorAll('button[data-d]').forEach(b => {
+    const d = b.dataset.d;
+    b.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); act(d); stopHold(); T3.hold = setInterval(() => act(d), 60); });
+    ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, stopHold));
+  });
+  const c = pad.querySelector('[data-c]');
+  let drag = null;
+  c.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); drag = {x: e.clientX, y: e.clientY}; c.setPointerCapture(e.pointerId); c.style.cursor = 'grabbing'; });
+  c.addEventListener('pointermove', e => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    drag = {x: e.clientX, y: e.clientY};
+    T3orbit(-dx * FAST, dy * FAST);
+  });
+  const endDrag = () => { drag = null; c.style.cursor = 'grab'; };
+  c.addEventListener('pointerup', endDrag);
+  c.addEventListener('pointercancel', endDrag);
 }
 
 function T3mat(color, opacity) {
