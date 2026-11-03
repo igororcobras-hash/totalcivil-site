@@ -2113,8 +2113,8 @@ const T3COMP = [
   ['pvFundo', 'PV: laje de fundo', 0x9aa3a8],
   ['pvCamara', 'PV: paredes da câmara', 0xbfc7cc],
   ['pvLaje', 'PV: laje da tampa (concreto)', 0x8b9499],
-  ['pvPescoco', 'PV: pescoço Ø0,60 (ferro fundido)', 0x3a3f45],
-  ['pvTampao', 'PV: tampão Ø0,60 (ferro fundido)', 0x202428],
+  ['pvPescoco', 'PV: chaminé (pescoço) em anéis de concreto armado Ø0,60', 0xa9a49a],
+  ['pvTampao', 'PV: tampão de ferro fundido Ø0,60 (no nível do pavimento)', 0x202428],
   ['caixas', 'Caixas (bocas-de-lobo e de ralo)', 0x8c9499],
   ['meioFio', 'Meio-fio', 0xc9c2b1],
   ['ramais', 'Ramais (caixa → PV)', 0xa8a29a],
@@ -2613,12 +2613,15 @@ function T3ruas(K) {
 
 // caixas de captação (na cota da sarjeta), lâmina d'água na sarjeta e ramais caixa → PV
 function T3caixas(K) {
-  const G = K.G, c = P.crit;
+  const G = K.G, c = P.crit, DS = new Map();
+  const dsDe = id => { if (!DS.has(id)) { let d = null; try { d = dadosSecao(id); } catch (e) {} DS.set(id, d); } return DS.get(id); };
   P.bls.forEach(b => {
     const rb = R.bl[b.id], g = G[b.rua], pvo = pvById(b.pv), q = posBL(G, b); if (!rb || !g || !q) return;
     const r = g.r, sec = T3sec(r), sg = b.lado === 'D' ? -1 : 1, sB = num(b.dist) || 0, dm = blDim(b);
     const zCurb = T3zPe(r, sB, sg); if (!isNum(zCurb)) return;
-    const naSarjeta = b.tipo === 'gr', prof = num(b.cxH) || +c.blProf || 1.0, topo = zCurb + (naSarjeta ? 0 : sec.mfH), fundo = topo - prof;
+    // cotas da caixa e do ramal = as do cálculo (dadosSecao), as mesmas que dimensionam a câmara do PV
+    const gx = (dsDe(b.pv) || {bls: []}).bls.find(x => x.b.id === b.id);
+    const naSarjeta = b.tipo === 'gr', prof = gx ? gx.prof : num(b.cxH) || +c.blProf || 1.0, topo = gx ? gx.topo : zCurb + (naSarjeta ? 0 : sec.mfH), fundo = gx ? gx.fundo : topo - prof;
     const x = q.x - T3.cx, z = -(q.y - T3.cz), rotY = Math.atan2(g.ux, -g.uy);
     const cx = new THREE.Mesh(new THREE.BoxGeometry(dm.Be, prof * K.ex, dm.Le), T3mat(0x8c9499, 0.35));
     cx.position.set(x, K.Y(topo) - prof * K.ex / 2, z); cx.rotation.y = rotY; K.add(cx, 'caixas');
@@ -2649,8 +2652,11 @@ function T3caixas(K) {
     // ramal: tubo reto da caixa ao PV (saída 5 cm acima do fundo da caixa, declividade do ramal)
     const pvq = pvo && posPV(G, pvo); if (!pvq) return;
     const rD = (num(b.rD) || 400) / 1000, rI = (num(b.rI) || 0) / 100, Lg = Math.hypot(pvq.x - q.x, pvq.y - q.y);
-    const ciBL = fundo + 0.05, ciPV = ciBL - rI * Lg;
-    const A = new THREE.Vector3(x, K.Y(ciBL) + rD / 2, z), B = new THREE.Vector3(pvq.x - T3.cx, K.Y(ciPV) + rD / 2, -(pvq.y - T3.cz));
+    const ciBL = gx ? gx.ciBL : fundo + 0.05, ciPV = gx ? gx.ciPV : ciBL - rI * Lg;
+    // o ramal termina na face externa da parede do PV (entra na câmara, abaixo da laje da tampa)
+    const gp = T3pvGeo(b.pv), ePV = gp ? gp.m.L / 2 + gp.m.parede : 0, k = Lg > ePV + 0.1 ? (Lg - ePV) / Lg : 1;
+    const pxB = q.x + (pvq.x - q.x) * k, pyB = q.y + (pvq.y - q.y) * k;
+    const A = new THREE.Vector3(x, K.Y(ciBL) + rD / 2, z), B = new THREE.Vector3(pxB - T3.cx, K.Y(ciPV) + rD / 2, -(pyB - T3.cz));
     K.add(T3link(A, B, rD / 2 + 0.05, T3mat(0xa8a29a, 0.4)), 'ramais');
     const ram = rb.ram || {}, lam = ram.carga ? rD : (isNum(ram.y) && ram.y > 0 ? Math.min(ram.y, rD) : 0), V = isNum(ram.V) ? ram.V : 0;
     if (lam > 0.002) {
@@ -2769,6 +2775,22 @@ function T3lvApply(m) {
   T3.lev[l.key] = l.cur;
 }
 
+// geometria do PV no 3D = a do cálculo (PV EMOP: r.emop) ou a do PV circular dos desenhos 2D
+function T3pvGeo(id) {
+  const r = R && R.pv[id], pv = pvById(id); if (!r || !pv || !isNum(r.tp) || !isNum(r.fundo)) return null;
+  const circ = !r.emop, m = r.emop || pvCircMedidas(Math.max(0.6, (num(pv.dpv) || 1000) / 1000), r.tp, r.fundo), TAMP = 0.06;
+  const f = r.fundo, tp = r.tp, zl = Math.min(f + m.Hi + m.eT, tp - TAMP), zc = Math.max(f + 0.10, zl - m.eT);
+  return {m, f, tp, zc, zl, circ, TAMP};
+}
+// laje (quadrada ou circular) com abertura circular no centro, de espessura h, base em y = 0
+function T3lajeFuro(lado, circ, rFuro, h, cor) {
+  const sh = new THREE.Shape();
+  if (circ) sh.absarc(0, 0, lado / 2, 0, Math.PI * 2, false); else { sh.moveTo(-lado / 2, -lado / 2); sh.lineTo(lado / 2, -lado / 2); sh.lineTo(lado / 2, lado / 2); sh.lineTo(-lado / 2, lado / 2); sh.lineTo(-lado / 2, -lado / 2); }
+  const fu = new THREE.Path(); fu.absarc(0, 0, rFuro, 0, Math.PI * 2, true); sh.holes.push(fu);
+  const geo = new THREE.ExtrudeGeometry(sh, {depth: h, bevelEnabled: false, curveSegments: 24}); geo.rotateX(-Math.PI / 2);
+  return new THREE.Mesh(geo, T3mat(cor, 1));
+}
+
 function T3build() {
   if (!T3.scene || !R || !P) return;
   T3.objs.forEach(o => { T3.scene.remove(o); if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
@@ -2805,49 +2827,64 @@ function T3build() {
   const K = {G, Y, add, ex, base};
   T3ruas(K);
 
-  // poços de visita: laje de fundo, câmara, laje da tampa, pescoço Ø0,60 e tampão Ø0,60
+  // poços de visita com as MESMAS medidas do cálculo e dos desenhos 2D (seção e perfil):
+  // laje de fundo ABAIXO da cota de fundo, câmara do fundo até a laje da tampa, laje da tampa com abertura Ø0,60,
+  // chaminé (pescoço) em anéis de concreto armado Ø0,60 e tampão de ferro fundido no nível da tampa (pavimento)
   P.pvs.forEach(pv => {
     const r = R.pv[pv.id], q = pvPos.get(pv.id); if (!r || !q || !isNum(r.tp) || !isNum(r.fundo)) return;
-    const s = Math.max(0.6, (num(pv.dpv) || 1000) / 1000);
-    const fundoY = Y(r.fundo), tpY = Y(r.tp), L_F = 0.15 * ex, L_T = 0.15 * ex, PESC = 0.60 * ex;
-    const x = q.x - T3.cx, z = -(q.y - T3.cz);
-    const lajeTopY = tpY - PESC, lajeBotY = lajeTopY - L_T;
-    // laje de fundo (concreto)
-    const fundo = new THREE.Mesh(new THREE.BoxGeometry(s + 0.3, L_F, s + 0.3), T3mat(0x9aa3a8, 1));
-    fundo.position.set(x, fundoY + L_F / 2, z); add(fundo, 'pvFundo');
-    // paredes da câmara (4 painéis)
-    const hCam = Math.max(0.1, lajeBotY - (fundoY + L_F));
-    const pw = 0.15;
-    [[0, (s / 2 + pw / 2), s + 0.3, pw], [0, -(s / 2 + pw / 2), s + 0.3, pw], [(s / 2 + pw / 2), 0, pw, s + 0.3], [-(s / 2 + pw / 2), 0, pw, s + 0.3]].forEach(([dx, dz, bx, bz]) => {
+    const g = T3pvGeo(pv.id); if (!g) return;
+    const {m, f, tp, zc, zl, circ, TAMP} = g, x = q.x - T3.cx, z = -(q.y - T3.cz);
+    const Li = m.L, ext = m.L + 2 * m.parede;
+    const yF = Y(f), yC = Y(zc), yL = Y(zl), yT = Y(tp), yTb = Y(tp - TAMP);
+    // laje de fundo (concreto armado), de f − eF até f
+    const lf = circ ? new THREE.Mesh(new THREE.CylinderGeometry(ext / 2, ext / 2, yF - Y(f - m.eF), 32), T3mat(0x9aa3a8, 1))
+      : new THREE.Mesh(new THREE.BoxGeometry(ext, yF - Y(f - m.eF), ext), T3mat(0x9aa3a8, 1));
+    lf.position.set(x, (yF + Y(f - m.eF)) / 2, z); add(lf, 'pvFundo');
+    // paredes da câmara, de f até zc
+    const hCam = Math.max(0.02, yC - yF);
+    if (circ) {
+      const w = new THREE.Mesh(new THREE.CylinderGeometry(ext / 2, ext / 2, hCam, 32, 1, true), T3mat(0xbfc7cc, 0.35));
+      w.position.set(x, yF + hCam / 2, z); add(w, 'pvCamara');
+    } else [[0, (Li + m.parede) / 2, ext, m.parede], [0, -(Li + m.parede) / 2, ext, m.parede], [(Li + m.parede) / 2, 0, m.parede, Li], [-(Li + m.parede) / 2, 0, m.parede, Li]].forEach(([dx, dz, bx, bz]) => {
       const p = new THREE.Mesh(new THREE.BoxGeometry(bx, hCam, bz), T3mat(0xbfc7cc, 0.35));
-      p.position.set(x + dx, fundoY + L_F + hCam / 2, z + dz); add(p, 'pvCamara');
+      p.position.set(x + dx, yF + hCam / 2, z + dz); add(p, 'pvCamara');
     });
-    // laje da tampa (concreto)
-    const laje = new THREE.Mesh(new THREE.BoxGeometry(s + 0.3, L_T, s + 0.3), T3mat(0x8b9499, 1));
-    laje.position.set(x, lajeBotY + L_T / 2, z); add(laje, 'pvLaje');
-    // pescoço Ø0,60 em ferro fundido (anel)
-    const pesc = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.30, PESC, 24, 1, true), T3mat(0x3a3f45, 0.95));
-    pesc.position.set(x, lajeTopY + PESC / 2, z); add(pesc, 'pvPescoco');
-    // tampão Ø0,60 no topo
-    const tamp = new THREE.Mesh(new THREE.CylinderGeometry(0.31, 0.31, 0.06 * ex, 24), T3mat(0x202428, 1));
-    tamp.position.set(x, tpY - 0.03 * ex, z); add(tamp, 'pvTampao');
-    // água no PV (câmara e pescoço)
-    if (isNum(r.H) && r.H > -1e8 && r.H > r.fundo) {
-      const topW = Math.min(r.H, r.tp);
-      const wy = Y(topW) - fundoY - L_F;
-      if (wy > 0.01) {
-        const wb = new THREE.Mesh(new THREE.BoxGeometry(s * 0.96, wy, s * 0.96), T3mat(0x2aa7c9, 0.55));
-        wb.position.set(x, fundoY + L_F + wy / 2, z); add(wb, 'agua'); T3lv(wb, 'pv:' + pv.id, fundoY + L_F, wy, 'box');
-        const surf = new THREE.Mesh(new THREE.PlaneGeometry(s * 0.96, s * 0.96, 6, 6), T3mat(0x7fd8ee, 0.7));
-        surf.rotation.x = -Math.PI / 2; surf.position.set(x, fundoY + L_F + wy, z); add(surf, 'agua'); T3lv(surf, 'pv:' + pv.id, fundoY + L_F, wy, 'surf');
-        T3.waves.push({mesh: surf, kind: 'pv', amp: Math.min(0.08, 0.01 + (r.hf || 0) * 0.03)});
+    // laje da tampa (concreto armado) de zc até zl, com abertura central Ø0,60
+    if (yL - yC > 0.005) { const lt = T3lajeFuro(ext, circ, 0.30, yL - yC, 0x8b9499); lt.position.set(x, yC, z); add(lt, 'pvLaje'); }
+    // chaminé (pescoço): anéis de concreto armado Ø0,60 (parede 0,08 m), da laje da tampa até o tampão
+    const hCh = yTb - yL;
+    if (hCh > 0.005) {
+      const ch = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, hCh, 28, 1, true), T3mat(0xa9a49a, 0.75));
+      ch.position.set(x, yL + hCh / 2, z); add(ch, 'pvPescoco');
+      const chi = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.30, hCh, 28, 1, true), T3mat(0x8f8a80, 0.75));
+      chi.position.set(x, yL + hCh / 2, z); add(chi, 'pvPescoco');
+    }
+    // tampão de ferro fundido Ø0,60 com aro, topo na cota da tampa (nível do pavimento)
+    const aro = T3lajeFuro(0.82, true, 0.31, Math.max(0.01, yT - yTb), 0x2a2e33); aro.position.set(x, yTb, z); add(aro, 'pvTampao');
+    const tamp = new THREE.Mesh(new THREE.CylinderGeometry(0.30, 0.30, Math.max(0.01, yT - yTb) * 0.6, 28), T3mat(0x202428, 1));
+    tamp.position.set(x, yT - Math.max(0.01, yT - yTb) * 0.3 + 0.002, z); add(tamp, 'pvTampao');
+    // água no PV: da cota de fundo até o nível d'água calculado (linha piezométrica); acima da laje sobe pela chaminé
+    if (isNum(r.H) && r.H > -1e8 && r.H > f) {
+      const hC = Math.min(r.H, zc), wy = Y(hC) - yF, wl = (circ ? 0.9 : 0.96) * Li;
+      if (wy > 0.005) {
+        const wb = circ ? new THREE.Mesh(new THREE.CylinderGeometry(wl / 2, wl / 2, wy, 28), T3mat(0x2aa7c9, 0.55)) : new THREE.Mesh(new THREE.BoxGeometry(wl, wy, wl), T3mat(0x2aa7c9, 0.55));
+        wb.position.set(x, yF + wy / 2, z); add(wb, 'agua'); T3lv(wb, 'pv:' + pv.id, yF, wy, 'box');
+        if (r.H <= zc + 1e-6) {
+          const surf = new THREE.Mesh(new THREE.PlaneGeometry(wl, wl, 6, 6), T3mat(0x7fd8ee, 0.7));
+          surf.rotation.x = -Math.PI / 2; surf.position.set(x, yF + wy, z); add(surf, 'agua'); T3lv(surf, 'pv:' + pv.id, yF, wy, 'surf');
+          T3.waves.push({mesh: surf, kind: 'pv', amp: Math.min(0.08, 0.01 + (r.hf || 0) * 0.03)});
+        }
       }
-      if (r.H > r.tp + 1e-6) {
-        const ring = new THREE.Mesh(new THREE.BoxGeometry(s * 1.1, 0.06, s * 1.1), T3mat(0xe5484d, 0.8));
-        ring.position.set(x, tpY + 0.05, z); add(ring, 'agua');
+      if (r.H > zc + 1e-6) {   // água subindo pela laje e pela chaminé
+        const hS = Y(Math.min(r.H, tp)) - yC;
+        if (hS > 0.005) { const wc = new THREE.Mesh(new THREE.CylinderGeometry(0.29, 0.29, hS, 24), T3mat(0x2aa7c9, 0.6)); wc.position.set(x, yC + hS / 2, z); add(wc, 'agua'); T3lv(wc, 'pvc:' + pv.id, yC, hS, 'box'); }
+      }
+      if (r.H > tp + 1e-6) {
+        const ring = new THREE.Mesh(new THREE.BoxGeometry(ext * 1.1, 0.06, ext * 1.1), T3mat(0xe5484d, 0.8));
+        ring.position.set(x, yT + 0.05, z); add(ring, 'agua');
       }
     }
-    if (isNum(r.hf) && r.hf > 0.0005) T3.parts.push(T3particles(P3(q.x, q.y, Math.min(tpY, isNum(r.H) && r.H > -1e8 ? Y(Math.min(r.H, r.tp)) : tpY) + 0.05), null, Math.min(60, 8 + r.hf * 400), 'pv', s * 0.7, 0x9fe8ff));
+    if (isNum(r.hf) && r.hf > 0.0005) T3.parts.push(T3particles(P3(q.x, q.y, Math.min(Y(zc), isNum(r.H) && r.H > -1e8 ? Y(Math.min(r.H, zc)) : Y(zc)) + 0.05), null, Math.min(60, 8 + r.hf * 400), 'pv', Li * 0.7, 0x9fe8ff));
   });
 
   // trechos: parede do tubo (concreto ou PEAD/PVC), água e fluxo
@@ -2857,7 +2894,12 @@ function T3build() {
     const pa = pvPos.get(t.m), pb = pvPos.get(t.j); if (!pa || !pb) return;
     const g = galOf(t), D = Math.max(0.1, g ? g.H : (isNum(r.D) ? r.D / 1000 : (num(t.D) || 400) / 1000));
     const esp = espTr(t) || 0, Wd = g ? g.B : D;
-    const A = P3(pa.x, pa.y, Y(r.cm) + D / 2), B = P3(pb.x, pb.y, Y(r.cj) + D / 2);
+    const A0 = P3(pa.x, pa.y, Y(r.cm) + D / 2), B0 = P3(pb.x, pb.y, Y(r.cj) + D / 2);
+    // o tubo começa e termina na face externa da parede de cada PV (não atravessa a câmara)
+    const ga = T3pvGeo(t.m), gb = T3pvGeo(t.j), u0 = new THREE.Vector3().subVectors(B0, A0), L0 = u0.length(); u0.normalize();
+    const ea = ga ? ga.m.L / 2 + ga.m.parede : 0, eb = gb ? gb.m.L / 2 + gb.m.parede : 0;
+    const A = ea + eb < L0 - 0.2 ? A0.clone().addScaledVector(u0, ea) : A0, B = ea + eb < L0 - 0.2 ? B0.clone().addScaledVector(u0, -eb) : B0;
+    const yInvA = A.y - D / 2, yInvB = B.y - D / 2;
     // parede (externa) e vazio (interno)
     add(T3link(A, B, D / 2 + esp, T3mat(T3matCor(t.mat), 0.3)), 'tubo');
     add(T3link(A, B, D / 2, T3mat(0x6f8294, 0.12)), 'tubo');
@@ -2869,12 +2911,14 @@ function T3build() {
       const mid = new THREE.Vector3().addVectors(A, B).multiplyScalar(0.5);
       const chord = carga ? Wd : 2 * Math.sqrt(Math.max(0, lam * (D - lam)));
       const wm = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.02, chord * 0.9), lam, L), T3mat(0x2aa7c9, 0.55));
-      wm.position.set(mid.x, Y(r.cm) + lam / 2, mid.z); T3basis(wm, dir, false); add(wm, 'agua'); T3lv(wm, 'tr:' + t.id, Y(r.cm), lam, 'box');
+      const yMid = (yInvA + yInvB) / 2;   // geratriz inferior no meio do trecho (o tubo tem declividade)
+      wm.position.set(mid.x, yMid + lam / 2, mid.z); T3basis(wm, dir, false); add(wm, 'agua'); T3lv(wm, 'tr:' + t.id, yMid, lam, 'box');
       const sf = new THREE.Mesh(new THREE.PlaneGeometry(Math.max(0.02, chord * 0.9), L, 2, 10), T3mat(0x7fd8ee, 0.6));
-      sf.position.set(mid.x, Y(r.cm) + lam, mid.z); T3basis(sf, dir, true); add(sf, 'agua'); T3lv(sf, 'tr:' + t.id, Y(r.cm), lam, 'surf');
+      sf.position.set(mid.x, yMid + lam, mid.z); T3basis(sf, dir, true); add(sf, 'agua'); T3lv(sf, 'tr:' + t.id, yMid, lam, 'surf');
       T3.waves.push({mesh: sf, kind: 'tr', amp: Math.min(0.5 * lam, 0.01 + 0.025 * V), V});
       const n = Math.round(Math.min(70, 6 + V * 10));
-      T3.parts.push(T3particles(null, {A, B, dir: dir.clone().normalize(), L, lam, chord}, n, 'tr', 1, 0x6fdcff, V));
+      const Ai = A.clone(), Bi = B.clone(); Ai.y = yInvA; Bi.y = yInvB;
+      T3.parts.push(T3particles(null, {A: Ai, B: Bi, dir: dir.clone().normalize(), L, lam, chord}, n, 'tr', 1, 0x6fdcff, V));
     }
     if (carga) emCarga.push(t.id);
     if (lam > lamMax.v) lamMax = {v: lam, id: t.id};
