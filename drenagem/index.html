@@ -2104,7 +2104,7 @@ function vChuva() {
 let RAIN_FATOR = 1;
 const THREE_URL = 'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js';
 const ORBIT_URL = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
-let T3 = {renderer: null, scene: null, cam: null, ctrl: null, raf: 0, exag: 1, anim: true, objs: [], rain: null, info: '', span: 50, cx: 0, cz: 0, waves: [], parts: [], rainObj: null, real: false, sun: null, lev: {}, pend: false};
+let T3 = {renderer: null, scene: null, cam: null, ctrl: null, raf: 0, exag: 1, anim: true, objs: [], rain: null, info: '', span: 50, cx: 0, cz: 0, waves: [], parts: [], rainObj: null, real: false, sun: null, lev: {}, pend: false, pan: false, labels: []};
 // componentes que podem ser mostrados ou ocultados separadamente
 const T3COMP = [
   ['tubo', 'Tubos (parede e vazio)', 0x9aa9b8],
@@ -2117,10 +2117,14 @@ const T3COMP = [
   ['pvTampao', 'PV: tampão Ø0,60 (ferro fundido)', 0x202428],
   ['caixas', 'Caixas (bocas-de-lobo e de ralo)', 0x8c9499],
   ['meioFio', 'Meio-fio', 0xc9c2b1],
-  ['pavRev', 'Pavimento: revestimento', 0x2b2f35],
-  ['pavBase', 'Pavimento: base', 0x7a6f5d],
-  ['pavSub', 'Pavimento: sub-base', 0x9c8f7a],
-  ['chuva', 'Chuva', 0x9ec9e6]
+  ['ramais', 'Ramais (caixa → PV)', 0xa8a29a],
+  ['sarjeta', 'Sarjeta', 0xb9b4a8],
+  ['passeio', 'Passeio', 0x8d8a83],
+  ['pavRev', 'Pavimento: pista (revestimento)', 0x2b2f35],
+  ['pavBase', 'Pavimento: base (borda)', 0x7a6f5d],
+  ['pavSub', 'Pavimento: sub-base (borda)', 0x9c8f7a],
+  ['chuva', 'Chuva', 0x9ec9e6],
+  ['cotas', 'Cotas (níveis)', 0xe8ecf1]
 ];
 let T3VIS = {};
 T3COMP.forEach(([k]) => { T3VIS[k] = true; });
@@ -2130,7 +2134,7 @@ function vTresD() {
   const f = RAIN_FATOR, ref = idf(P.crit.tcMin), pv = P.pav || {};
   const pvRev = pv.rev != null ? pv.rev : 0.05, pvBase = pv.base != null ? pv.base : 0.15, pvSub = pv.sub != null ? pv.sub : 0.20, pvLar = pv.larg != null ? pv.larg : 8;
   return `<h3>Visualização 3D — escoamento e componentes</h3>
-  <p class="lead">Modelo tridimensional da rede já calculada: lâmina d'água em cada trecho e nível d'água nos PVs e nas caixas, com turbulência onde o cálculo mostra perda por PV. Arraste para girar e use a roda do mouse para aproximar. Ao mudar a chuva, a rede é recalculada e o desenho acompanha.</p>
+  <p class="lead">Modelo tridimensional da rede já calculada: lâmina d'água em cada trecho e nível d'água nos PVs e nas caixas, com turbulência onde o cálculo mostra perda por PV. Mouse como no AutoCAD: botão esquerdo gira, botão do meio ou direito move o desenho (pan), a roda aproxima no ponto do cursor e o duplo clique no botão do meio enquadra a rede. No celular: um dedo gira, dois dedos movem e aproximam. Ruas, sarjetas, meio-fio com o raio das esquinas e passeios seguem a planta baixa e as cotas do greide. Ao mudar a chuva, a rede é recalculada e o desenho acompanha.</p>
   <div class="card" style="padding:.6rem">
     <div class="bar-btns" style="margin-bottom:.5rem;flex-wrap:wrap;gap:.5rem;align-items:center">
       <label style="font-size:.85rem;font-weight:600">Chuva: <span id="t3-fator">${f.toFixed(2)}</span>× do projeto</label>
@@ -2141,7 +2145,7 @@ function vTresD() {
     <div class="bar-btns" style="margin-bottom:.5rem;flex-wrap:wrap;gap:.5rem;align-items:center">
       <span style="font-size:.85rem">Exagero vertical:</span>
       ${[1, 3, 5, 10].map(v => `<button class="btn btn-secondary btn-sm" onclick="T3.exag=${v};T3build();T3fit()">${v}×</button>`).join('')}
-      <label style="font-size:.85rem;display:inline-flex;gap:.3rem;align-items:center"><input type="checkbox" checked onchange="T3.anim=this.checked"> Animação</label>
+      <label style="font-size:.85rem;display:inline-flex;gap:.3rem;align-items:center"><input id="t3-anim" type="checkbox" ${T3.anim ? 'checked' : ''} onchange="T3setAnim(this.checked)"> Água em movimento</label>
       <span style="font-size:.85rem">Zoom:</span><button class="btn btn-secondary btn-sm" onclick="T3zoom(0.8)" title="Aproximar">＋</button><button class="btn btn-secondary btn-sm" onclick="T3zoom(1.25)" title="Afastar">－</button>
       <button class="btn btn-secondary btn-sm" onclick="T3fit()">Enquadrar</button>
       <button id="t3-real" class="btn btn-secondary btn-sm" onclick="T3toggleReal()" title="Sombras, névoa, chão e água com brilho. A chuva continua alterando os cálculos.">Realista: desligado</button>
@@ -2169,12 +2173,11 @@ function vTresD() {
     <div style="display:flex;gap:.4rem;margin-top:.6rem;flex-wrap:wrap"><button class="btn btn-secondary btn-sm" onclick="T3ver(true)">Mostrar todos</button><button class="btn btn-secondary btn-sm" onclick="T3ver(false)">Ocultar todos</button></div>
   </div>
   <div class="card" style="margin-top:.8rem"><h4>Estrutura do pavimento (para o desenho e a composição das camadas)</h4>
-    <p style="font-size:.8rem;color:var(--muted);margin:0 0 .5rem">Espessuras em metros, por camada, e largura da via. Serão usadas no desenho da seção; os dados dos programas de pavimento flexível e intertravado não são lidos automaticamente.</p>
+    <p style="font-size:.8rem;color:var(--muted);margin:0 0 .5rem">Espessuras em metros, por camada. A largura da pista, do passeio, da sarjeta e o espelho do meio-fio vêm de cada rua (aba 3. Ruas e greide); os dados dos programas de pavimento flexível e intertravado não são lidos automaticamente.</p>
     <div class="fgrid">
       <div class="fld"><label>Revestimento (m)</label><input id="t3-rev" type="number" step="0.01" value="${pvRev}"></div>
       <div class="fld"><label>Base (m)</label><input id="t3-base" type="number" step="0.01" value="${pvBase}"></div>
       <div class="fld"><label>Sub-base (m)</label><input id="t3-sub" type="number" step="0.01" value="${pvSub}"></div>
-      <div class="fld"><label>Largura da via (m)</label><input id="t3-larg" type="number" step="0.1" value="${pvLar}"></div>
     </div>
     <div class="bar-btns" style="margin-top:.5rem"><button class="btn btn-primary btn-sm" onclick="T3pavSalvar()">Aplicar estrutura</button></div>
   </div>`;
@@ -2182,7 +2185,7 @@ function vTresD() {
 
 function T3pavSalvar() {
   const g = id => +document.getElementById(id).value || 0;
-  P.pav = {rev: g('t3-rev'), base: g('t3-base'), sub: g('t3-sub'), larg: g('t3-larg') || 8};
+  P.pav = Object.assign({}, P.pav || {}, {rev: g('t3-rev'), base: g('t3-base'), sub: g('t3-sub')});
   save(); T3build(); T3fit();
   toast('Estrutura do pavimento aplicada');
 }
@@ -2279,6 +2282,7 @@ function T3start(box) {
   T3pad(box);
   T3rainKnob(box);
   T3zoomBtns(box);
+  T3barra(box);
   const fsb = document.createElement('button');
   fsb.type = 'button'; fsb.className = 't3-fs-btn'; fsb.textContent = '⛶ Tela cheia';
   fsb.title = 'Abre ou fecha o desenho 3D em tela cheia (Esc para sair)';
@@ -2295,7 +2299,8 @@ function T3start(box) {
   T3.cam = new THREE.PerspectiveCamera(45, w / h, 0.1, 10000);
   T3.ctrl = new THREE.OrbitControls(T3.cam, T3.renderer.domElement);
   T3.ctrl.enableDamping = true;
-  T3.ctrl.enableZoom = true; T3.ctrl.zoomSpeed = 1.2; T3.ctrl.minDistance = 0.5; T3.ctrl.maxDistance = 5000;
+  T3.ctrl.enableZoom = true; T3.ctrl.zoomSpeed = 1.2; T3.ctrl.minDistance = 0.3; T3.ctrl.maxDistance = 5000; T3.ctrl.screenSpacePanning = true;
+  T3setPan(T3.pan); T3cadMouse(T3.renderer.domElement);
   T3build(); T3fit();
   const t0 = performance.now();
   const loop = now => {
@@ -2304,6 +2309,7 @@ function T3start(box) {
     T3.ctrl.update();
     T3animate((now - t0) / 1000);
     T3.renderer.render(T3.scene, T3.cam);
+    T3labelsUpd();
   };
   T3.raf = requestAnimationFrame(loop);
 }
@@ -2313,7 +2319,7 @@ function T3stop() {
   if (T3.hold) { clearInterval(T3.hold); T3.hold = 0; }
   T3.raf = 0;
   if (T3.renderer) { try { T3.renderer.dispose(); T3.renderer.forceContextLoss && T3.renderer.forceContextLoss(); } catch (e) {} }
-  T3.renderer = null; T3.scene = null; T3.cam = null; T3.ctrl = null; T3.objs = []; T3.rain = null; T3.waves = []; T3.parts = []; T3.lev = {}; T3.pend = false;
+  T3.renderer = null; T3.scene = null; T3.cam = null; T3.ctrl = null; T3.objs = []; T3.rain = null; T3.waves = []; T3.parts = []; T3.lev = {}; T3.pend = false; T3.labels = [];
 }
 
 // Modo realista: sombras, névoa, chão e materiais com brilho (não muda os cálculos)
@@ -2492,6 +2498,263 @@ function T3matCor(mat) {
   return 0xa8a29a;   // concreto (CA / PS)
 }
 
+/* ---------- 3D: ruas com a geometria da planta (pista, sarjeta, meio-fio, passeio, esquinas com raio) ---------- */
+// cota do eixo da rua na estaca s (greide; sem greide, interpola as tampas dos PVs da rua)
+function T3zEixo(r, s) {
+  const z = greideCota(r.id, s); if (isNum(z)) return z;
+  const ps = P.pvs.filter(p => p.rua === r.id && R.pv[p.id] && isNum(R.pv[p.id].tp)).map(p => ({d: num(p.dist) || 0, z: R.pv[p.id].tp})).sort((a, b) => a.d - b.d);
+  if (!ps.length) return null; if (ps.length === 1 || s <= ps[0].d) return ps[0].z; if (s >= ps[ps.length - 1].d) return ps[ps.length - 1].z;
+  for (let i = 0; i < ps.length - 1; i++) if (s >= ps[i].d && s <= ps[i + 1].d) return ps[i].z + (ps[i + 1].z - ps[i].z) * (s - ps[i].d) / ((ps[i + 1].d - ps[i].d) || 1);
+  return ps[0].z;
+}
+function T3sec(r) {
+  const a = (+r.larg || 7) / 2, sjW = Math.min(a, num(r.sjW) || 0), it = (+r.it || 3) / 100, sjI = num(r.sjI) > 0 ? num(r.sjI) / 100 : it;
+  return {a, sjW, xs: Math.max(0, a - sjW), it, sjI, mfH: num(r.mfH) || 0.15, w: a + (+r.passeio || 2)};
+}
+// pé do meio-fio (sarjeta junto à guia) no lado sg (+1 = E, -1 = D)
+function T3zPe(r, s, sg) {
+  const z = typeof cotaMF === 'function' ? cotaMF(r.id, s, sg > 0 ? 'E' : 'D') : null; if (isNum(z)) return z;
+  const z0 = T3zEixo(r, s); if (!isNum(z0)) return null;
+  const c = T3sec(r); return z0 - c.it * c.xs - c.sjI * c.sjW;
+}
+// superfície da pista na seção (coroa no eixo, caimento da pista e da sarjeta até o pé do meio-fio)
+function T3zPista(r, s, off) {
+  const z0 = T3zEixo(r, s); if (!isNum(z0)) return null;
+  const c = T3sec(r), x = Math.min(Math.abs(off), c.a), zp = T3zPe(r, s, off >= 0 ? 1 : -1);
+  if (c.sjW > 0) { const zx = z0 - c.it * c.xs; return x <= c.xs ? z0 + (zx - z0) * (c.xs > 0 ? x / c.xs : 0) : zx + (zp - zx) * (x - c.xs) / c.sjW; }
+  return z0 + (zp - z0) * x / c.a;
+}
+// intervalo [a,b] menos os cortes
+function T3segs(a, b, cuts) {
+  let out = [[a, b]];
+  (cuts || []).forEach(([c0, c1]) => { const n = []; out.forEach(([x, y]) => { if (c1 <= x || c0 >= y) n.push([x, y]); else { if (c0 > x) n.push([x, c0]); if (c1 < y) n.push([c1, y]); } }); out = n; });
+  return out.filter(([x, y]) => y - x > 0.05);
+}
+function T3samp(a, b, st) { const n = Math.max(1, Math.ceil((b - a) / (st || 2))), o = []; for (let i = 0; i <= n; i++) o.push(a + (b - a) * i / n); return o; }
+// faixa ao longo da rua: offs(s) = lista de afastamentos; zf(s, off) = cota
+function T3faixa(K, g, ss, offs, zf, cor, op, comp, dy) {
+  const nO = offs.length, pos = [], idx = [];
+  ss.forEach(s => offs.forEach(o => { const p = g.at(s, o), z = zf(s, o); pos.push(p.x - T3.cx, K.Y(isNum(z) ? z : K.base) + (dy || 0), -(p.y - T3.cz)); }));
+  for (let i = 0; i < ss.length - 1; i++) for (let j = 0; j < nO - 1; j++) { const a = i * nO + j, b = a + 1, c = a + nO, d = c + 1; idx.push(a, c, b, b, c, d); }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+  return K.add(new THREE.Mesh(geo, T3mat(cor, op)), comp);
+}
+// parede vertical ao longo de pontos (planta) entre zb(i) e zt(i)
+function T3parede(K, pts, zb, zt, cor, op, comp) {
+  const pos = [], idx = [];
+  pts.forEach((p, i) => { const x = p.x - T3.cx, z = -(p.y - T3.cz); pos.push(x, K.Y(zb(i)), z, x, K.Y(zt(i)), z); });
+  for (let i = 0; i < pts.length - 1; i++) { const a = 2 * i; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+  return K.add(new THREE.Mesh(geo, T3mat(cor, op)), comp);
+}
+// polígono (planta) com cota por vértice
+function T3poligono(K, pts, zf, cor, op, comp, dy) {
+  if (pts.length < 3) return;
+  const tri = THREE.ShapeUtils.triangulateShape(pts.map(p => new THREE.Vector2(p.x, p.y)), []);
+  const pos = []; pts.forEach((p, i) => pos.push(p.x - T3.cx, K.Y(zf(p, i)) + (dy || 0), -(p.y - T3.cz)));
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex([].concat(...tri)); geo.computeVertexNormals();
+  return K.add(new THREE.Mesh(geo, T3mat(cor, op)), comp);
+}
+const T3COR = {pista: 0x2b2f35, sarjeta: 0xb9b4a8, meioFio: 0xd8d2c4, passeio: 0x8d8a83, base: 0x7a6f5d, sub: 0x9c8f7a};
+function T3ruas(K) {
+  const G = K.G, CR = cruzamentos(G), pav = P.pav || {}, eR = pav.rev != null ? +pav.rev || 0 : 0.05, eB = pav.base != null ? +pav.base || 0 : 0.15, eS = pav.sub != null ? +pav.sub || 0 : 0.20;
+  const gs = P.ruas.map(r => G[r.id]).filter(Boolean);
+  // trecho de pista que já é coberto pela rua transversal (desenhado só uma vez no cruzamento)
+  const cobre = {};
+  for (let i = 0; i < gs.length; i++) for (let j = i + 1; j < gs.length; j++) {
+    const g1 = gs[i], g2 = gs[j], k = g1.ux * g2.nx + g1.uy * g2.ny; if (Math.abs(k) < 0.2) continue;
+    const s1c = -g2.loc(g1.at(0)).off / k, s2c = g2.loc(g1.at(s1c)).s;
+    const [a1, b1] = extRua(G, g1), [a2, b2] = extRua(G, g2); if (s1c < a1 - 1 || s1c > b1 + 1 || s2c < a2 - 1 || s2c > b2 + 1) continue;
+    const h = T3sec(g1.r).a / Math.abs(k); (cobre[g2.r.id] = cobre[g2.r.id] || []).push([s2c - h, s2c + h]);
+  }
+  gs.forEach(g => {
+    const r = g.r, c = T3sec(r), [e0, e1] = extRua(G, g), [p0, p1] = extRua(G, g, true);
+    // pista (revestimento) com coroa e caimento até o pé do meio-fio
+    const offsP = [-c.a, -c.xs, 0, c.xs, c.a].filter((v, i, A) => i === 0 || v !== A[i - 1]);
+    T3segs(e0, e1, cobre[r.id]).forEach(([a, b]) => T3faixa(K, g, T3samp(a, b), offsP, (s, o) => T3zPista(r, s, o), T3COR.pista, 0.6, 'pavRev'));
+    [1, -1].forEach(sg => {
+      const cuts = CR.cortes[r.id + '|' + sg] || [];
+      T3segs(e0, e1, cuts).forEach(([a, b]) => {
+        const ss = T3samp(a, b), zp = s => T3zPe(r, s, sg);
+        if (c.sjW > 0) T3faixa(K, g, ss, [sg * c.xs, sg * c.a], (s, o) => T3zPista(r, s, o), T3COR.sarjeta, 0.85, 'sarjeta', 0.004);
+        // meio-fio: espelho (face) e topo
+        const pf = ss.map(s => g.at(s, sg * c.a));
+        T3parede(K, pf, i => zp(ss[i]), i => zp(ss[i]) + c.mfH, T3COR.meioFio, 0.95, 'meioFio');
+        T3faixa(K, g, ss, [sg * c.a, sg * (c.a + 0.15)], s => zp(s) + c.mfH + 0.005, T3COR.meioFio, 0.95, 'meioFio');
+        // camadas do pavimento: faces sob a borda da pista
+        let top = 0;
+        [['pavRev', eR], ['pavBase', eB], ['pavSub', eS]].forEach(([comp, th], q) => {
+          if (!(th > 0)) return; const t0 = top; top += th;
+          if (q > 0) T3parede(K, pf, i => zp(ss[i]) - top, i => zp(ss[i]) - t0, q === 1 ? T3COR.base : T3COR.sub, 0.9, comp);
+        });
+      });
+      // passeio
+      T3segs(p0, p1, cuts).forEach(([a, b]) => T3faixa(K, g, T3samp(a, b), [sg * c.a, sg * c.w], (s) => T3zPe(r, s, sg) + c.mfH, T3COR.passeio, 0.7, 'passeio'));
+    });
+  });
+  // esquinas: pista até a curva, meio-fio no raio e passeio da quadra
+  (CR.esq || []).forEach(q => {
+    const g1 = G[q.r1], g2 = G[q.r2]; if (!g1 || !g2) return;
+    const zA = T3zPe(g1.r, q.sT1, q.sg1), zB = T3zPe(g2.r, q.sT2, q.sg2); if (!isNum(zA) || !isNum(zB)) return;
+    const arco = q.arco && q.arco.length > 1 ? q.arco : [q.C], n = arco.length - 1;
+    const zArc = i => zA + (zB - zA) * (n ? i / n : 0.5), mf = Math.max(T3sec(g1.r).mfH, T3sec(g2.r).mfH);
+    if (arco.length > 1) {
+      T3poligono(K, [q.C].concat(arco), (p, i) => i === 0 ? (zA + zB) / 2 : zArc(i - 1), T3COR.pista, 0.6, 'pavRev');
+      T3parede(K, arco, zArc, i => zArc(i) + mf, T3COR.meioFio, 0.95, 'meioFio');
+      const inn = arco.map(p => { const dx = q.O.x - p.x, dy = q.O.y - p.y, d = Math.hypot(dx, dy) || 1; return {x: p.x + dx / d * 0.15, y: p.y + dy / d * 0.15}; });
+      const pts = arco.concat(inn.slice().reverse());
+      T3poligono(K, pts, (p, i) => (i <= n ? zArc(i) : zArc(2 * n + 1 - i)) + mf + 0.005, T3COR.meioFio, 0.95, 'meioFio');
+    }
+    const poly = [q.T1, q.P1, q.L, q.P2, q.T2].concat(arco.length > 1 ? arco.slice(1, -1).reverse() : []);
+    T3poligono(K, poly, () => (zA + zB) / 2 + mf, T3COR.passeio, 0.7, 'passeio');
+  });
+}
+
+// caixas de captação (na cota da sarjeta), lâmina d'água na sarjeta e ramais caixa → PV
+function T3caixas(K) {
+  const G = K.G, c = P.crit;
+  P.bls.forEach(b => {
+    const rb = R.bl[b.id], g = G[b.rua], pvo = pvById(b.pv), q = posBL(G, b); if (!rb || !g || !q) return;
+    const r = g.r, sec = T3sec(r), sg = b.lado === 'D' ? -1 : 1, sB = num(b.dist) || 0, dm = blDim(b);
+    const zCurb = T3zPe(r, sB, sg); if (!isNum(zCurb)) return;
+    const naSarjeta = b.tipo === 'gr', prof = num(b.cxH) || +c.blProf || 1.0, topo = zCurb + (naSarjeta ? 0 : sec.mfH), fundo = topo - prof;
+    const x = q.x - T3.cx, z = -(q.y - T3.cz), rotY = Math.atan2(g.ux, -g.uy);
+    const cx = new THREE.Mesh(new THREE.BoxGeometry(dm.Be, prof * K.ex, dm.Le), T3mat(0x8c9499, 0.35));
+    cx.position.set(x, K.Y(topo) - prof * K.ex / 2, z); cx.rotation.y = rotY; K.add(cx, 'caixas');
+    if (dm.tp === 'gr' || dm.tp === 'cb') {
+      const gq = g.at(sB, sg * (sec.a - dm.gB / 2));
+      const gr = new THREE.Mesh(new THREE.BoxGeometry(dm.gB, 0.03, dm.gL), T3mat(0x3a3f45, 1));
+      gr.position.set(gq.x - T3.cx, K.Y(zCurb) + 0.015, -(gq.y - T3.cz)); gr.rotation.y = rotY; K.add(gr, 'caixas');
+    }
+    // água na sarjeta a montante da caixa: largura T e lâmina y do cálculo
+    (() => {
+    const T = isNum(rb.T) ? Math.min(rb.T, sec.a) : 0, y = isNum(rb.y) ? Math.max(0, rb.y) : 0;
+    if (T > 0.02 && y > 0.002) {
+      const Sd = typeof sarjSentidoLado === 'function' ? sarjSentidoLado(b.rua, sB, b.lado) : null, up = Sd == null || Sd >= 0 ? -1 : 1;
+      // só sobre a sarjeta (não entra na boca da rua transversal)
+      const [e0, e1] = extRua(G, g), seg = T3segs(e0, e1, cruzamentos(G).cortes[b.rua + '|' + sg]).find(([x, y]) => sB >= x - 2 && sB <= y + 2) || [e0, e1];
+      const sB2 = Math.max(seg[0], Math.min(seg[1], sB)), sA = Math.max(seg[0], Math.min(seg[1], sB2 + up * 15));
+      if (Math.abs(sA - sB2) < 0.5) return;
+      const ss = T3samp(Math.min(sA, sB2), Math.max(sA, sB2), 1);
+      const m = T3faixa(K, g, ss, [sg * (sec.a - T), sg * sec.a], s => T3zPe(r, s, sg), 0x2aa7c9, 0.7, 'agua', 0.006);
+      T3lv(m, 'sj:' + b.id, 0, y * K.ex, 'surf');
+      const pA = g.at(sA, sg * (sec.a - T / 3)), pB = g.at(sB2, sg * (sec.a - T / 3));
+      const A = new THREE.Vector3(pA.x - T3.cx, K.Y(T3zPe(r, sA, sg)) + y * K.ex * 0.6, -(pA.y - T3.cz)), B = new THREE.Vector3(pB.x - T3.cx, K.Y(T3zPe(r, sB2, sg)) + y * K.ex * 0.6, -(pB.y - T3.cz));
+      const dir = new THREE.Vector3().subVectors(B, A);
+      if (dir.length() > 0.1) T3.parts.push(T3particles(null, {A, B, dir: dir.clone().normalize(), L: dir.length(), lam: 0.01, chord: T * 0.6}, 18, 'tr', 0.8, 0x9fe8ff, 1));
+    }
+    })();
+    if (rb.Qbyp > 1e-4) T3.parts.push(T3particles(new THREE.Vector3(x, K.Y(topo) + 0.1, z), null, 25, 'bl', 0.8, 0xffb454));
+    // ramal: tubo reto da caixa ao PV (saída 5 cm acima do fundo da caixa, declividade do ramal)
+    const pvq = pvo && posPV(G, pvo); if (!pvq) return;
+    const rD = (num(b.rD) || 400) / 1000, rI = (num(b.rI) || 0) / 100, Lg = Math.hypot(pvq.x - q.x, pvq.y - q.y);
+    const ciBL = fundo + 0.05, ciPV = ciBL - rI * Lg;
+    const A = new THREE.Vector3(x, K.Y(ciBL) + rD / 2, z), B = new THREE.Vector3(pvq.x - T3.cx, K.Y(ciPV) + rD / 2, -(pvq.y - T3.cz));
+    K.add(T3link(A, B, rD / 2 + 0.05, T3mat(0xa8a29a, 0.4)), 'ramais');
+    const ram = rb.ram || {}, lam = ram.carga ? rD : (isNum(ram.y) && ram.y > 0 ? Math.min(ram.y, rD) : 0), V = isNum(ram.V) ? ram.V : 0;
+    if (lam > 0.002) {
+      const dir = new THREE.Vector3().subVectors(B, A), L = dir.length(), mid = new THREE.Vector3().addVectors(A, B).multiplyScalar(0.5);
+      const chord = ram.carga ? rD : 2 * Math.sqrt(Math.max(0, lam * (rD - lam)));
+      const yb = (K.Y(ciBL) + K.Y(ciPV)) / 2;
+      const wm = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.02, chord * 0.9), lam, L), T3mat(0x2aa7c9, 0.6));
+      wm.position.set(mid.x, yb + lam / 2, mid.z); T3basis(wm, dir, false); K.add(wm, 'agua'); T3lv(wm, 'rm:' + b.id, yb, lam, 'box');
+      const a2 = A.clone(), b2 = B.clone(); a2.y = K.Y(ciBL); b2.y = K.Y(ciPV);
+      T3.parts.push(T3particles(null, {A: a2, B: b2, dir: dir.clone().normalize(), L, lam, chord}, Math.round(Math.min(30, 6 + V * 6)), 'tr', 0.8, 0x6fdcff, V));
+    }
+  });
+}
+
+// cotas (níveis) junto aos PVs e às caixas: etiquetas que acompanham o desenho
+function T3cotas(K) {
+  const lay = document.getElementById('t3-labels'); if (!lay) return;
+  lay.innerHTML = ''; T3.labels = [];
+  const mk = (pos, html, kind) => { const d = document.createElement('div'); d.className = 't3-lab t3-lab-' + kind; d.innerHTML = html; lay.appendChild(d); T3.labels.push({pos, el: d}); };
+  P.pvs.forEach(pv => {
+    const r = R.pv[pv.id], q = posPV(K.G, pv); if (!r || !q || !isNum(r.tp)) return;
+    const na = isNum(r.H) && r.H > -1e8 ? r.H : null;
+    mk(new THREE.Vector3(q.x - T3.cx, K.Y(r.tp) + 0.4, -(q.y - T3.cz)),
+      `<b>${esc(pv.id)}</b><br>Tampa ${fmt(r.tp, 2)}${na != null ? '<br><span style="color:#7fd8ee">NA ' + fmt(na, 2) + '</span>' : ''}<br>Fundo ${fmt(r.fundo, 2)}`, 'pv');
+  });
+  P.bls.forEach(b => {
+    const rb = R.bl[b.id], g = K.G[b.rua], q = posBL(K.G, b); if (!rb || !g || !q) return;
+    const zc = T3zPe(g.r, num(b.dist) || 0, b.lado === 'D' ? -1 : 1); if (!isNum(zc)) return;
+    mk(new THREE.Vector3(q.x - T3.cx, K.Y(zc) + 0.3, -(q.y - T3.cz)),
+      `Sarjeta ${fmt(zc, 2)}${isNum(rb.y) ? '<br><span style="color:#7fd8ee">lâmina ' + fmt(rb.y * 100, 1) + ' cm</span>' : ''}`, 'bl');
+  });
+  T3labelsUpd();
+}
+function T3labelsUpd() {
+  const lay = document.getElementById('t3-labels'); if (!lay || !T3.cam || !T3.renderer) return;
+  const on = T3VIS.cotas !== false; lay.style.display = on ? '' : 'none'; if (!on) return;
+  const W = T3.renderer.domElement.clientWidth, H = T3.renderer.domElement.clientHeight, lim = (T3.span || 50) * 1.1;
+  (T3.labels || []).forEach(l => {
+    const d = T3.cam.position.distanceTo(l.pos), p = l.pos.clone().project(T3.cam);
+    const vis = p.z < 1 && p.x > -1.1 && p.x < 1.1 && p.y > -1.1 && p.y < 1.1 && d < lim * (l.el.classList.contains('t3-lab-bl') ? 0.45 : 1);
+    l.el.style.display = vis ? '' : 'none';
+    if (vis) l.el.style.transform = `translate(${((p.x + 1) / 2 * W).toFixed(1)}px,${((1 - p.y) / 2 * H).toFixed(1)}px) translate(-50%,-100%)`;
+  });
+}
+
+// botões dentro do desenho: água em movimento/parada, girar ou mover (pan), cotas
+function T3barra(box) {
+  if (!document.getElementById('t3-lab-css')) { const st = document.createElement('style'); st.id = 't3-lab-css';
+    st.textContent = '.t3-lab{position:absolute;left:0;top:0;font:11px/1.25 system-ui,sans-serif;color:#e8ecf1;background:rgba(10,18,28,.8);border:1px solid rgba(255,255,255,.25);border-radius:4px;padding:2px 5px;white-space:nowrap;will-change:transform}.t3-lab-bl{font-size:10px;opacity:.92}';
+    document.head.appendChild(st); }
+  const bar = document.createElement('div');
+  bar.id = 't3-bar';
+  bar.style.cssText = 'position:absolute;top:10px;left:96px;right:150px;z-index:6;display:flex;flex-wrap:wrap;gap:6px';
+  const mk = (id, fn, tt) => { const b = document.createElement('button'); b.type = 'button'; b.id = id; b.title = tt; b.style.cssText = 'padding:.35rem .6rem;border-radius:6px;border:1px solid rgba(255,255,255,.3);background:rgba(20,30,40,.7);color:#e8ecf1;font-size:.8rem;cursor:pointer;white-space:nowrap'; b.onclick = fn; bar.appendChild(b); return b; };
+  mk('t3-b-agua', () => T3setAnim(!T3.anim), 'Liga ou desliga o movimento da água, da chuva e do fluxo');
+  mk('t3-b-pan', () => T3setPan(!T3.pan), 'Girar: arrastar com o botão esquerdo gira o desenho. Mover: arrastar move o desenho (como o pan do AutoCAD). O botão do meio e o direito sempre movem.');
+  mk('t3-b-cotas', () => { T3VIS.cotas = T3VIS.cotas === false; T3barraUpd(); T3labelsUpd(); }, 'Mostra ou oculta as cotas (tampa, nível d\'água e fundo dos PVs; sarjeta e lâmina nas caixas)');
+  mk('t3-b-fit', () => T3fit(), 'Enquadrar a rede toda (também: duplo clique com o botão do meio)');
+  box.appendChild(bar);
+  const lay = document.createElement('div'); lay.id = 't3-labels';
+  lay.style.cssText = 'position:absolute;inset:0;pointer-events:none;z-index:4;overflow:hidden';
+  box.appendChild(lay);
+  T3barraUpd();
+}
+function T3barraUpd() {
+  const s = (id, t, on) => { const b = document.getElementById(id); if (b) { b.textContent = t; b.style.background = on ? 'rgba(14,116,144,.85)' : 'rgba(20,30,40,.7)'; } };
+  s('t3-b-agua', T3.anim ? '💧 Água em movimento' : '⏸ Água parada', T3.anim);
+  s('t3-b-pan', T3.pan ? '✋ Mover (pan)' : '⟳ Girar', T3.pan);
+  s('t3-b-cotas', T3VIS.cotas !== false ? '📏 Cotas: sim' : '📏 Cotas: não', T3VIS.cotas !== false);
+  s('t3-b-fit', '⤢ Enquadrar', false);
+  const ck = document.getElementById('t3-anim'); if (ck) ck.checked = !!T3.anim;
+}
+function T3setAnim(v) { T3.anim = !!v; T3barraUpd(); }
+function T3setPan(v) {
+  T3.pan = !!v;
+  if (T3.ctrl) {
+    T3.ctrl.mouseButtons = {LEFT: T3.pan ? THREE.MOUSE.PAN : THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: T3.pan ? THREE.MOUSE.ROTATE : THREE.MOUSE.PAN};
+    T3.ctrl.touches = {ONE: T3.pan ? THREE.TOUCH.PAN : THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN};
+  }
+  T3barraUpd();
+}
+// zoom na direção do cursor (como no AutoCAD) e duplo clique do botão do meio = enquadrar
+function T3cadMouse(el) {
+  const ray = new THREE.Raycaster(), v2 = new THREE.Vector2();
+  el.addEventListener('wheel', e => {
+    if (!T3.cam || !T3.ctrl) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    const r = el.getBoundingClientRect(); v2.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1);
+    ray.setFromCamera(v2, T3.cam);
+    const hit = ray.intersectObjects(T3.objs.filter(o => o.isMesh && o.visible), false)[0];
+    let P0 = hit && hit.point;
+    if (!P0) { const pl = new THREE.Plane(new THREE.Vector3(0, 1, 0), -T3.ctrl.target.y); P0 = new THREE.Vector3(); if (!ray.ray.intersectPlane(pl, P0)) P0 = T3.ctrl.target.clone(); }
+    const f = Math.pow(1.0015, Math.max(-300, Math.min(300, e.deltaY * (e.deltaMode === 1 ? 33 : 1))));
+    const dist = T3.cam.position.distanceTo(P0);
+    if (f < 1 && dist * f < 0.3) return;
+    if (f > 1 && T3.cam.position.distanceTo(T3.ctrl.target) * f > (T3.ctrl.maxDistance || 5000)) return;
+    T3.cam.position.sub(P0).multiplyScalar(f).add(P0);
+    T3.ctrl.target.sub(P0).multiplyScalar(f).add(P0);
+    T3.ctrl.update();
+  }, {passive: false, capture: true});
+  let last = 0;
+  el.addEventListener('pointerdown', e => { if (e.button !== 1) return; e.preventDefault(); const t = performance.now(); if (t - last < 350) { T3fit(); last = 0; } else last = t; });
+  el.addEventListener('contextmenu', e => e.preventDefault());
+}
+
 // nível da água: guarda o nível atual por elemento e sobe/desce suavemente até o novo valor
 function T3lv(m, key, bottom, h, kind) {
   const prev = T3.lev[key];
@@ -2537,31 +2800,9 @@ function T3build() {
     if (a && b) add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([a, b]), terrMat), 'outro');
   });
 
-  // estrutura do pavimento: camadas abaixo do terreno ao longo de cada trecho
-  R.ordem.forEach(t => {
-    const pa = pvPos.get(t.m), pb = pvPos.get(t.j), ra = R.pv[t.m], rb = R.pv[t.j];
-    if (!pa || !pb || !ra || !rb || !isNum(ra.tp) || !isNum(rb.tp)) return;
-    const A = P3(pa.x, pa.y, Y(ra.tp)), B = P3(pb.x, pb.y, Y(rb.tp));
-    const dir = new THREE.Vector3().subVectors(B, A), L = dir.length(); if (L < 0.01) return;
-    const mid = new THREE.Vector3().addVectors(A, B).multiplyScalar(0.5);
-    let top = mid.y;
-    [['pavRev', pRev, 0x2b2f35], ['pavBase', pBase, 0x7a6f5d], ['pavSub', pSub, 0x9c8f7a]].forEach(([comp, th, col]) => {
-      if (!(th > 0)) return;
-      const hgt = th * ex;
-      const m = new THREE.Mesh(new THREE.BoxGeometry(pLar, hgt, L), T3mat(col, 0.85));
-      m.position.set(mid.x, top - hgt / 2, mid.z); T3basis(m, dir, false);
-      add(m, comp); top -= hgt;
-    });
-    // meio-fio: faixa nas duas bordas da via
-    if (pLar > 0) {
-      const off = new THREE.Vector3(-dir.z, 0, dir.x).normalize().multiplyScalar(pLar / 2);
-      [1, -1].forEach(sg => {
-        const c = new THREE.Vector3(mid.x + off.x * sg, mid.y + 0.07 * ex, mid.z + off.z * sg);
-        const g = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.2 * ex, L), T3mat(0xc9c2b1, 1));
-        g.position.copy(c); T3basis(g, dir, false); add(g, 'meioFio');
-      });
-    }
-  });
+  // ruas: pista, sarjeta, meio-fio e passeio pela geometria da planta (cruzamentos e raio das esquinas)
+  const K = {G, Y, add, ex, base};
+  T3ruas(K);
 
   // poços de visita: laje de fundo, câmara, laje da tampa, pescoço Ø0,60 e tampão Ø0,60
   P.pvs.forEach(pv => {
@@ -2639,25 +2880,8 @@ function T3build() {
     if (V > vMax.v) vMax = {v: V, id: t.id};
   });
 
-  // caixas de captação: dimensões do catálogo (CAIXAS) e lâmina junto à guia / grelha
-  P.bls.forEach(b => {
-    const rb = R.bl[b.id], pv = pvById(b.pv), pvr = pv && R.pv[pv.id], q = posBL(G, b), cat = CAIXAS[b.modelo] || {};
-    if (!rb || !q || !pvr || !isNum(pvr.tp)) return;
-    const gz = pvr.tp, cB = cat.cxB || 0.6, cL = cat.cxL || 1.0, cH = cat.cxH || 1.2;
-    const x = q.x - T3.cx, z = -(q.y - T3.cz), yG = Y(gz);
-    const cx = new THREE.Mesh(new THREE.BoxGeometry(cB, cH * ex, cL), T3mat(0x8c9499, 0.3));
-    cx.position.set(x, yG - (cH * ex) / 2, z); add(cx, 'caixas');
-    if (cat.gL && cat.gB) { // grelha no nível da sarjeta
-      const gr = new THREE.Mesh(new THREE.BoxGeometry(cat.gB, 0.03, cat.gL), T3mat(0x3a3f45, 1));
-      gr.position.set(x, yG + 0.015, z); add(gr, 'caixas');
-    }
-    const wy = isNum(rb.y) ? Math.max(0, rb.y) * ex : 0;
-    if (wy > 0.001) {
-      const wb = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.2, cB * 0.8), wy, Math.max(0.2, cL * 0.8)), T3mat(0x2aa7c9, 0.5));
-      wb.position.set(x, yG + wy / 2, z); add(wb, 'agua'); T3lv(wb, 'bl:' + b.id, yG, wy, 'box');
-    }
-    if (rb.Qbyp > 1e-4) T3.parts.push(T3particles(P3(q.x, q.y, yG + 0.1), null, 25, 'bl', 0.8, 0xffb454));
-  });
+  // caixas de captação, água na sarjeta e ramais (caixa → PV)
+  T3caixas(K);
 
   // chuva: partículas caindo (quantidade proporcional ao fator de chuva)
   const rainN = Math.min(1200, Math.round(300 * RAIN_FATOR));
@@ -2668,6 +2892,7 @@ function T3build() {
   const folgaErr = P.pvs.filter(p => R.pv[p.id] && isNum(R.pv[p.id].folga) && R.pv[p.id].folga < 0).length;
   const ref = idf(P.crit.tcMin);
   T3.info = `<b>Lâmina máx.:</b> ${fmt(lamMax.v * 100, 1)} cm (${esc(lamMax.id)}) · <b>V máx.:</b> ${fmt(vMax.v, 2)} m/s (${esc(vMax.id)}) · <b>i:</b> ${fmt(ref, 1)} mm/h · <b>Trechos em carga:</b> ${emCarga.length ? esc(emCarga.join(', ')) : 'nenhum'} · <b>PVs com extravasamento:</b> ${folgaErr}`;
+  T3cotas(K);
   T3msg();
   T3apply();
 }
@@ -4005,7 +4230,7 @@ function raioRua(r) { const v = num(r && r.raio); return isNum(v) && v >= 0 ? v 
 const _CRZ = new WeakMap();
 function cruzamentos(G) {
   if (_CRZ.has(G)) return _CRZ.get(G);
-  const out = {cantos: [], cortes: {}, cortesP: {}, clip: {}, clipP: {}};
+  const out = {cantos: [], esq: [], cortes: {}, cortesP: {}, clip: {}, clipP: {}};
   const gs = P.ruas.map(r => G[r.id]).filter(Boolean);
   const addCorte = (id, sg, a, b) => { const k = id + '|' + sg; (out.cortes[k] = out.cortes[k] || []).push([Math.min(a, b), Math.max(a, b)]); };
   const addClip = (id, lado, v, o = out.clip) => { const c = o[id] = o[id] || {lo: -Infinity, hi: Infinity}; if (lado > 0) c.hi = Math.min(c.hi, v); else c.lo = Math.max(c.lo, v); };
@@ -4037,9 +4262,15 @@ function cruzamentos(G) {
         while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
         const arco = []; for (let q = 0; q <= 16; q++) { const an = an1 + da * q / 16; arco.push({x: O.x + R * Math.cos(an), y: O.y + R * Math.sin(an)}); }
         out.cantos.push({C, T1, T2, O, R, arco, r1: g1.r.id, r2: g2.r.id});
-        c.t = t;
+        c.t = t; c.arco = arco; c.O = O;
       }
       cn[sg1 + '|' + sg2] = c;
+      if (existe) {   // esquina completa (usada no 3D): tangentes, curva, alinhamento dos lotes
+        const W1 = a1 + (+g1.r.passeio || 2), W2 = a2 + (+g2.r.passeio || 2), sT1 = sC1 + e1 * c.t, sT2 = sC2 + e2 * c.t;
+        const sL = (sg2 * W2 - g2.loc(g1.at(0, sg1 * W1)).off) / k;
+        out.esq.push({C, O: c.O || C, arco: c.arco || null, sg1, sg2, sT1, sT2, r1: g1.r.id, r2: g2.r.id,
+          T1: g1.at(sT1, sg1 * a1), T2: g2.at(sT2, sg2 * a2), P1: g1.at(sT1, sg1 * W1), P2: g2.at(sT2, sg2 * W2), L: g1.at(sL, sg1 * W1)});
+      }
     }));
     // meio-fio interrompido na boca de cada rua
     [1, -1].forEach(sg1 => { if (!ext2(sg1)) return;
