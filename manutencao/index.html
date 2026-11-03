@@ -2305,5 +2305,187 @@ ACTS.vfArquivar = function () { const ger = $('#vf-arqger') && $('#vf-arqger').c
   const oc = id && O().ocorrencias.find(x => x.id === id); if (ger && oc && oc.arquivo) setTimeout(() => arqGerarAbrir([id]), 50); return r; };
 })();
 </script>
+<script>
+/* =====================================================================
+   PATCH SP-04 (03/11/2026)
+   9.  Botão “📎 Anexar documentos” no relato (Novo relato / Abrir ocorrência), no atendimento do
+       fiscal e no atendimento da empresa contratada (execução). Aceita qualquer arquivo (PDF, Word,
+       Excel, imagens, e-mail…), até 15 MB cada. O arquivo fica no aparelho (mesmo banco das fotos),
+       entra no backup e sobe para a nuvem em partes (fotosServicos), como as fotos.
+       Lista dos documentos com Abrir, Baixar e Remover; contador 📎 nos cartões.
+   10. Pesquisa de ocorrências por usuário, local ou qualquer informação (nº, rua, bairro, referência,
+       relato, constatação, serviço, situação, prioridade, semana, quem registrou/atendeu, legendas e
+       nomes de documentos), no Planejamento e na aba Relatos: resultados no mapa e em lista, com
+       “Abrir / editar” e “📍 Ver no mapa”.
+   ===================================================================== */
+(function () {
+/* ---------- 9. documentos anexados ---------- */
+const DOC_MAX = 15 * 1024 * 1024, DOC_PARTE = 800000, DOC_TIPOS = ['oc', 'vf', 'ex'];
+const fTam = b => b >= 1048576 ? fN(b / 1048576, 1) + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+const docIco = (n, t) => { n = String(n || '').toLowerCase(); t = String(t || ''); return /\.pdf$/.test(n) || /pdf/.test(t) ? '📕' : /\.(docx?|odt|rtf)$/.test(n) ? '📘' : /\.(xlsx?|ods|csv)$/.test(n) ? '📗' : /^image\//.test(t) ? '🖼' : /\.(eml|msg)$/.test(n) ? '✉️' : /\.(zip|rar|7z)$/.test(n) ? '🗜' : '📄'; };
+const docEdita = () => { if (!M || !DOC_TIPOS.includes(M.t)) return false; if (M.t === 'ex') return can('exec') && !(M.d && M.d.medicaoNum); return can('ocorr'); };
+function docsLista(docs, ed) {
+  if (!docs || !docs.length) return '<p class="muted small">Nenhum documento anexado.</p>';
+  return `<div class="docs" style="display:grid;gap:6px">${docs.map((x, i) => `<div class="row gap" style="align-items:center;border:1px solid var(--line);border-radius:10px;padding:6px 10px;flex-wrap:wrap"><span style="font-size:20px">${docIco(x.nome, x.tipo)}</span><span style="flex:1;min-width:160px;word-break:break-word"><b class="small">${esc(x.nome)}</b><br><span class="small muted">${fTam(x.tam || 0)}${x.em ? ' · ' + fDH(x.em) : ''}${x.por ? ' · ' + esc(x.por) : ''}</span></span><button type="button" class="btn mini" data-act="docAbrir" data-i="${i}">Abrir</button><button type="button" class="btn mini" data-act="docBaixar" data-i="${i}">⬇ Baixar</button>${ed ? `<button type="button" class="btn mini dan" data-act="docDel" data-i="${i}">remover</button>` : ''}</div>`).join('')}</div>`;
+}
+function docsField(d, ed, leg) {
+  return `<fieldset><legend>${leg || '📎 Documentos anexados'}</legend><div class="row gap"><button type="button" class="btn" data-act="docAnexar" ${ed ? '' : 'disabled'}>📎 Anexar documentos</button></div>
+ <p class="small muted">Ofícios, e-mails, protocolos, PDF, Word, Excel, imagens… (até 15 MB por arquivo). Ficam guardados com a ocorrência e entram no backup.</p><div id="docsArea">${docsLista(d.docs, ed)}</div></fieldset>`;
+}
+function refreshDocs() { const a = $('#docsArea'); if (a && M && M.d) a.innerHTML = docsLista(M.d.docs, docEdita()); }
+const docChip = docs => docs && docs.length ? `<span class="chip" style="--c:#2563a8" title="${esc(docs.map(x => x.nome).join(' · '))}">📎 ${docs.length} documento${docs.length > 1 ? 's' : ''}</span>` : '';
+
+/* entrada de arquivo (qualquer tipo) */
+const inDoc = document.createElement('input'); inDoc.type = 'file'; inDoc.id = 'fileDoc'; inDoc.multiple = true; inDoc.hidden = true; document.body.appendChild(inDoc);
+inDoc.addEventListener('change', e => { const f = [...e.target.files]; e.target.value = ''; if (f.length) docsAdd(f); });
+const lerDataURL = f => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = () => rej(r.error); r.readAsDataURL(f); });
+async function docsAdd(files) {
+  if (!docEdita()) { toast('Abra um relato ou atendimento primeiro.'); return; }
+  const m = M; let n = 0;
+  for (const f of files) {
+    if (f.size > DOC_MAX) { toast('“' + f.name + '” tem ' + fTam(f.size) + '. O limite é 15 MB por arquivo.', 5000); continue; }
+    try { const data = await lerDataURL(f); const id = 'd' + uid();
+      await DB.put('fotos', id, {id, obraId: S.obraId, data, doc: true, nome: f.name});
+      if (M !== m) { DB.del('fotos', id); return; }
+      m.d.docs = (m.d.docs || []).concat({id, nome: f.name, tipo: f.type || '', tam: f.size, em: new Date().toISOString(), por: quem()});
+      (m.novas = m.novas || []).push(id); n++;
+    } catch (err) { console.warn('Documento:', f.name, err); toast('Não foi possível ler “' + f.name + '”.'); }
+  }
+  refreshDocs(); if (n) toast(n + ' documento(s) anexado(s). Salve para gravar.');
+}
+async function docDados(x) { const d = await getFoto(x.id); if (!d) toast('Documento não encontrado neste aparelho nem na nuvem.', 5000); return d; }
+async function docBlob(data, tipo) { const r = await fetch(data); const b = await r.blob(); return tipo && b.type !== tipo ? new Blob([b], {type: tipo}) : b; }
+ACTS.docAnexar = function () { if (!docEdita()) return; inDoc.click(); };
+ACTS.docAbrir = async function (d) { const x = M && M.d && (M.d.docs || [])[+d.i]; if (!x) return; const w = window.open('', '_blank');
+  const data = await docDados(x); if (!data) { if (w) w.close(); return; }
+  const url = URL.createObjectURL(await docBlob(data, x.tipo)); if (w) w.location.href = url; else { const a = document.createElement('a'); a.href = url; a.target = '_blank'; a.rel = 'noopener'; a.click(); }
+  setTimeout(() => URL.revokeObjectURL(url), 120000); };
+ACTS.docBaixar = async function (d) { const x = M && M.d && (M.d.docs || [])[+d.i]; if (!x) return; const data = await docDados(x); if (!data) return;
+  const url = URL.createObjectURL(await docBlob(data, x.tipo)); const a = document.createElement('a'); a.href = url; a.download = x.nome || 'documento'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000); };
+ACTS.docDel = function (d) { if (!docEdita()) return; const x = M.d.docs[+d.i]; if (!x || !confirm('Remover o documento “' + x.nome + '”?')) return;
+  if (M.novas && M.novas.includes(x.id)) { DB.del('fotos', x.id); fotoCache.delete(x.id); M.novas = M.novas.filter(k => k !== x.id); } else (M.docRem = M.docRem || []).push(x.id);
+  M.d.docs.splice(+d.i, 1); refreshDocs(); };
+/* apaga do aparelho os documentos removidos, depois de salvar */
+const docLimpa = ids => (ids || []).forEach(id => { DB.del('fotos', id); fotoCache.delete(id); });
+
+/* telas: relato, atendimento do fiscal, atendimento da empresa */
+const _modalOc4 = modalOc;
+modalOc = function (d) { const h = _modalOc4.apply(this, arguments); if (!d.docs) d.docs = [];
+  return h.replace('<fieldset><legend>3. Problema identificado</legend>', docsField(d, can('ocorr')) + '<fieldset><legend>3. Problema identificado</legend>'); };
+const _modalVF4 = modalVF;
+modalVF = function (d) { if (!d.docs) { const oc = O().ocorrencias.find(x => x.id === d.id); d.docs = oc && oc.docs ? oc.docs.map(x => Object.assign({}, x)) : []; }
+  return _modalVF4.apply(this, arguments).replace('<fieldset><legend>4. Características</legend>', docsField(d, can('ocorr'), '📎 Documentos da ocorrência') + '<fieldset><legend>4. Características</legend>'); };
+const _modalEx4 = modalEx;
+modalEx = function (d) { if (!d.docs) d.docs = [];
+  return _modalEx4.apply(this, arguments).replace('<fieldset><legend>Descrição para o RDO</legend>', docsField(d, can('exec') && !d.medicaoNum, '📎 Documentos do atendimento') + '<fieldset><legend>Descrição para o RDO</legend>'); };
+
+/* gravação */
+const _ocSave4 = ACTS.ocSave;
+ACTS.ocSave = function () { const rem = M && M.docRem; const r = _ocSave4.apply(this, arguments); if (!M || M.t !== 'oc') docLimpa(rem); return r; };
+const _exSave4 = ACTS.exSave;
+ACTS.exSave = function () { const rem = M && M.docRem; const r = _exSave4.apply(this, arguments); if (!M || M.t !== 'ex') docLimpa(rem); return r; };
+const _vfSalvar4 = vfSalvar;
+vfSalvar = function () { const d = M && M.d, rem = M && M.docRem; const oc = d && O().ocorrencias.find(x => x.id === d.id);
+  const ant = oc ? oc.docs : null; if (oc && can('ocorr')) oc.docs = (d.docs || []).slice();
+  const r = _vfSalvar4.apply(this, arguments); if (!M || M.t !== 'vf') docLimpa(rem); else if (oc) oc.docs = ant; return r; };
+const _ocDel4 = ACTS.ocDel;
+ACTS.ocDel = function () { const docs = M && M.d && M.d.docs; const r = _ocDel4.apply(this, arguments); if (!M) docLimpa((docs || []).map(x => x.id)); return r; };
+
+const _exDel4 = ACTS.exDel;
+ACTS.exDel = function () { const docs = M && M.d && M.d.docs; const r = _exDel4.apply(this, arguments); if (!M) docLimpa((docs || []).map(x => x.id)); return r; };
+
+/* cartões: contador de documentos */
+const _ocCard4 = ocCard;
+ocCard = function (o, oc) { const h = _ocCard4.apply(this, arguments); return oc && oc.docs && oc.docs.length ? h.replace('<div class="chips">', '<div class="chips">' + docChip(oc.docs)) : h; };
+const _exCard4 = exCard;
+exCard = function (o, e) { const h = _exCard4.apply(this, arguments); return e && e.docs && e.docs.length ? h.replace('<div class="chips">', '<div class="chips">' + docChip(e.docs)) : h; };
+
+/* backup e exclusão da obra levam os documentos junto com as fotos */
+const idsDocs = o => { const s = new Set(); (o.ocorrencias || []).forEach(x => (x.docs || []).forEach(f => s.add(f.id))); (o.execucoes || []).forEach(x => (x.docs || []).forEach(f => s.add(f.id))); return [...s]; };
+const _idsFotos4 = idsFotos;
+idsFotos = function (o) { return [...new Set(_idsFotos4.apply(this, arguments).concat(idsDocs(o)))]; };
+/* documento grande vai para a nuvem em partes: o registro principal guarda “TC_PARTES:n” */
+const _getFoto4 = getFoto;
+getFoto = async function (id) { let d = await _getFoto4.apply(this, arguments);
+  if (typeof d === 'string' && d.indexOf('TC_PARTES:') === 0) { const n = +d.slice(10); let s = '';
+    try { for (let i = 0; i < n; i++) { const p = NUV.ad && NUV.ad.foto ? await NUV.ad.foto(id + '_p' + i) : null; if (p == null) throw new Error('parte ' + i + ' ausente'); s += p; } }
+    catch (e) { console.warn('Documento na nuvem:', id, e); fotoCache.delete(id); DB.del('fotos', id); return null; }
+    d = s; fotoCache.set(id, d); await DB.put('fotos', id, {id, obraId: S.obraId, data: d, doc: true}); }
+  return d; };
+/* envio para a nuvem: fotos como antes (reduzidas); documentos sem alteração, em partes de até 800 mil caracteres */
+nuvSobeFotos = async function (o) { const ad = NUV.ad; if (!ad || !ad.fotoPut || !nuvPode(o) || NUV.subindo) return; NUV.subindo = true;
+  try { let enviadas = []; try { enviadas = (await DB.get('kv', 'fotosup:' + o.id)) || []; } catch (_) {} const ja = new Set(enviadas); let n = 0;
+    for (const id of _idsFotos4(o)) { if (ja.has(id)) continue; const r = await DB.get('fotos', id); const d = r && r.data; if (!d) continue;
+      const p = await fotoReduz(d); if (!p || p.dados.length > 800000) continue;
+      await ad.fotoPut(id, o, p.dados, p.w, p.h); ja.add(id); n++; if (p.dados !== d) { await DB.put('fotos', id, {id, obraId: o.id, data: p.dados}); fotoCache.set(id, p.dados); }
+      if (n % 5 === 0) await DB.put('kv', 'fotosup:' + o.id, [...ja]); }
+    if (n) await DB.put('kv', 'fotosup:' + o.id, [...ja]); }
+  catch (e) { console.warn('Fotos na nuvem:', e); } finally { NUV.subindo = false; }
+  await nuvSobeDocs(o, new Set(idsDocs(o))); };
+let subindoDocs = false;
+async function nuvSobeDocs(o, docs) { const ad = NUV.ad; if (!ad || !ad.fotoPut || !nuvPode(o) || subindoDocs || !docs.size) return; subindoDocs = true;
+  try { let ja = []; try { ja = (await DB.get('kv', 'docsup:' + o.id)) || []; } catch (_) {} const set = new Set(ja); let n = 0;
+    const put = async (id, dados) => { try { await ad.fotoPut(id, o, dados, 0, 0); } catch (e) { if (!/permission|already|exist/i.test(String(e && (e.code || e.message)))) throw e; } };
+    for (const id of docs) { if (set.has(id)) continue; const r = await DB.get('fotos', id); const d = r && r.data; if (!d) continue;
+      if (d.length <= DOC_PARTE) await put(id, d);
+      else { const k = Math.ceil(d.length / DOC_PARTE); for (let i = 0; i < k; i++) await put(id + '_p' + i, d.slice(i * DOC_PARTE, (i + 1) * DOC_PARTE)); await put(id, 'TC_PARTES:' + k); }
+      set.add(id); n++; await DB.put('kv', 'docsup:' + o.id, [...set]); }
+  } catch (e) { console.warn('Documentos na nuvem:', e); } finally { subindoDocs = false; } }
+
+/* ---------- 10. pesquisa de ocorrências (Planejamento e Relatos) ---------- */
+const SPQ = {maps: {}};
+const spNorm = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+const spqF = () => (S.f.spq = S.f.spq || {});
+function spUsuarios(oc) { const u = []; if (oc.criadoPor) u.push(oc.criadoPor); if (oc.vistFiscal && oc.vistFiscal.por) u.push(oc.vistFiscal.por); (oc.hist || []).forEach(h => { if (h.quem) u.push(h.quem); }); (oc.docs || []).forEach(x => { if (x.por) u.push(x.por); }); return u; }
+function spTexto(o, oc) {
+  const sv = id => { const s = id && svcOf(o, id); return s ? s.codigo + ' ' + s.descricao : ''; };
+  const t = ['#' + oc.num, 'nº ' + oc.num, oc.rua, oc.bairro, oc.ref, oc.desc, oc.sug, oc.constat, oc.tipo, oc.ext, oc.solucao, ST[oc.status] && ST[oc.status].l, PRI[priEf(oc)] && PRI[priEf(oc)].l,
+    oc.semana ? labSem(oc.semana) : '', oc.criadoEm ? fData(String(oc.criadoEm).slice(0, 10)) : '', sv(oc.servSug), sv(oc.servicoId), (oc.servsFiscal || []).map(s => sv(s.id)).join(' '),
+    (oc.hist || []).map(h => h.acao).join(' '), (oc.fotos || []).map(f => f.legenda || '').join(' '), (oc.docs || []).map(x => x.nome).join(' ')].concat(spUsuarios(oc));
+  (o.execucoes || []).filter(e => e.ocorrenciaId === oc.id).forEach(e => t.push(e.desc, e.descCampo, (e.docs || []).map(x => x.nome + ' ' + (x.por || '')).join(' '), (e.itens || []).map(i => sv(i.servicoId)).join(' ')));
+  return spNorm(t.filter(Boolean).join(' '));
+}
+function spBusca(o, k) { const f = spqF()[k] || {}; const termos = spNorm(f.q).split(/\s+/).filter(Boolean); if (!termos.length && !f.u) return null;
+  return ativas(o).filter(oc => (!f.u || spUsuarios(oc).includes(f.u)) && (!termos.length || (t => termos.every(w => t.includes(w)))(spTexto(o, oc)))).sort(ordPri); }
+function spCard(o, k) { const f = spqF()[k] || {}; const us = [...new Set(ativas(o).flatMap(spUsuarios))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+  return `<div class="card spq" data-k="${k}" style="margin-bottom:16px"><h3>🔎 Pesquisar ocorrências</h3>
+ <p class="muted small">Por usuário, local ou qualquer informação: nº, rua, bairro, referência, relato, constatação, serviço, situação, prioridade, semana, quem registrou ou atendeu, nome de documento… Use várias palavras para refinar. Os resultados aparecem no mapa e na lista.</p>
+ <div class="toolbar"><label style="flex:1;min-width:200px">Pesquisar<input id="spq-q-${k}" placeholder="ex.: Rua das Flores, Centro, buraco, Maria, #12" autocomplete="off" value="${esc(f.q || '')}" data-inp="spq" data-k="${k}"></label>
+ <label>Usuário<select id="spq-u-${k}" data-chg="spqU" data-k="${k}"><option value="">Todos</option>${us.map(u => `<option ${f.u === u ? 'selected' : ''}>${esc(u)}</option>`).join('')}</select></label>
+ <button type="button" class="btn sm" data-act="spqLimpar" data-k="${k}">✕ Limpar</button></div>
+ <p class="small" id="spq-info-${k}" style="margin:6px 0"></p><div id="spq-map-${k}" class="pickmap" style="height:340px;display:none"></div><div id="spq-list-${k}" class="list" style="margin-top:10px"></div></div>`; }
+const SPQ_MAX = 60;
+function spAtualiza(k) { const o = O(); const info = $('#spq-info-' + k), lista = $('#spq-list-' + k), mp = $('#spq-map-' + k); if (!o || !info || !lista || !mp) return;
+  const l = spBusca(o, k);
+  if (!l) { info.innerHTML = ''; lista.innerHTML = ''; mp.style.display = 'none'; spMapaFecha(k); return; }
+  const cc = l.filter(x => x.lat != null).length;
+  info.innerHTML = l.length ? `<b>${l.length}</b> ocorrência(s) encontrada(s) · ${cc} no mapa${l.length - cc ? ' · ' + (l.length - cc) + ' sem coordenadas (só na lista)' : ''}${l.length > SPQ_MAX ? ' · mostrando as ' + SPQ_MAX + ' primeiras na lista' : ''}` : '<span class="muted">Nenhuma ocorrência encontrada.</span>';
+  lista.innerHTML = l.slice(0, SPQ_MAX).map(oc => ocCard(o, oc).replace('<button class="btn sm" data-act="ocEdit"', (oc.lat != null ? `<button class="btn sm" data-act="spqVer" data-k="${k}" data-id="${oc.id}">📍 Ver no mapa</button>` : '') + '<button class="btn sm" data-act="ocEdit"')).join('');
+  hydrate(lista); mp.style.display = cc ? '' : 'none'; if (cc) spMapa(k, l); else spMapaFecha(k); }
+function spMapaFecha(k) { const m = SPQ.maps[k]; if (m) { try { m.map.remove(); } catch (_) {} delete SPQ.maps[k]; } }
+function spMapa(k, l) { const el = $('#spq-map-' + k); if (!el) return; if (typeof L === 'undefined') { el.innerHTML = '<div class="nomap">Mapa indisponível (sem internet). Veja a lista abaixo.</div>'; return; }
+  let m = SPQ.maps[k]; if (m && m.el !== el) { spMapaFecha(k); m = null; }
+  if (!m) { const c = S.settings.mapa; const map = L.map(el).setView([c.lat, c.lng], c.zoom); L.tileLayer(OSM, {maxZoom: 19, attribution: '© OpenStreetMap'}).addTo(map);
+    map.on('popupopen', e => hydrate(e.popup.getElement())); m = SPQ.maps[k] = {map, el, grupo: L.layerGroup().addTo(map), mk: {}}; }
+  m.grupo.clearLayers(); m.mk = {}; const pts = [];
+  l.filter(x => x.lat != null).forEach(x => { const feito = x.status === 'executada' || x.status === 'medida';
+    const mk = L.circleMarker([x.lat, x.lng], {radius: 10, fillColor: feito ? '#2e7d4f' : PRI[priEf(x)].c, color: '#fff', weight: 3, fillOpacity: .95}).addTo(m.grupo); pts.push([x.lat, x.lng]); m.mk[x.id] = mk;
+    mk.bindPopup(`<b>#${x.num} ${esc(ocLocal(x))}</b><br>${PRI[priEf(x)].l} · ${ST[x.status].l}<br>${esc((x.desc || '').slice(0, 100))}${x.fotos[0] ? '<br><img data-foto="' + x.fotos[0].id + '" style="width:180px;margin-top:6px;border-radius:6px">' : ''}<br><a href="#" data-act="ocEdit" data-id="${x.id}">Abrir ocorrência</a>`); });
+  setTimeout(() => { if (SPQ.maps[k] !== m) return; m.map.invalidateSize({animate: false}); if (pts.length) m.map.fitBounds(pts, {padding: [40, 40], maxZoom: 17, animate: false}); }, 40); }
+INP.spq = function (el, d) { const f = spqF(); f[d.k] = Object.assign({}, f[d.k], {q: el.value}); clearTimeout(SPQ.t); SPQ.t = setTimeout(() => spAtualiza(d.k), 200); };
+CHG.spqU = function (el, d) { const f = spqF(); f[d.k] = Object.assign({}, f[d.k], {u: el.value}); spAtualiza(d.k); };
+ACTS.spqLimpar = function (d) { spqF()[d.k] = {}; const q = $('#spq-q-' + d.k), u = $('#spq-u-' + d.k); if (q) q.value = ''; if (u) u.value = ''; spAtualiza(d.k); };
+ACTS.spqVer = function (d) { const m = SPQ.maps[d.k], mk = m && m.mk[d.id]; if (!mk) return; m.el.scrollIntoView({behavior: 'smooth', block: 'center'}); m.map.setView(mk.getLatLng(), 18, {animate: false}); mk.openPopup(); };
+
+const _tPlan4 = tPlan;
+tPlan = function (o) { return _tPlan4.apply(this, arguments).replace('<div class="card"><h3>1. Prioridades e programação</h3>', spCard(o, 'plan') + '<div class="card"><h3>1. Prioridades e programação</h3>'); };
+const _tVistoria4 = tVistoria;
+tVistoria = function (o) { const h = _tVistoria4.apply(this, arguments); const i = h.indexOf('<div class="list">'); return i < 0 ? h + spCard(o, 'rel') : h.slice(0, i) + spCard(o, 'rel') + h.slice(i); };
+/* a cada redesenho da tela: fecha os mapas antigos e refaz os resultados */
+const _render4 = _render;
+_render = function () { Object.keys(SPQ.maps).forEach(spMapaFecha); const r = _render4.apply(this, arguments);
+  ['plan', 'rel'].forEach(k => { if ($('#spq-list-' + k)) spAtualiza(k); }); return r; };
+})();
+</script>
 </body>
 </html>
