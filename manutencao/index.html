@@ -2222,5 +2222,87 @@ const _atModo = ACTS.atModo;
 ACTS.atModo = function (d) { if (S.perfil === 'empresa' && d.v !== 'emp') return; return _atModo.apply(this, arguments); };
 })();
 </script>
+<script>
+/* =====================================================================
+   PATCH SP-03 (03/11/2026)
+   8. Relatos arquivados → novo contrato ou atendimento próprio: abre o cadastro de obra
+      (somente dentro deste programa de Serviços Públicos) e leva os relatos escolhidos,
+      com fotos, local, relato e constatação do fiscal. O original continua arquivado,
+      marcado “enviado para <obra>”.
+   ===================================================================== */
+(function () {
+const ARQS = () => S.f.arqSel || (S.f.arqSel = {});
+CHG.arqSel = function (el, d) { ARQS()[d.id] = el.checked; render(); };
+ACTS.arqSelTodos = function () { const o = O(); arqLista(o).forEach(x => { if (!x.arquivo.enviadoPara) ARQS()[x.id] = true; }); render(); };
+ACTS.arqSelLimpar = function () { S.f.arqSel = {}; render(); };
+/* escolha: novo contrato ou atendimento próprio */
+function arqGerarAbrir(ids) {
+  const o = O(), l = ids.map(id => o.ocorrencias.find(x => x.id === id)).filter(Boolean);
+  if (!l.length) { toast('Marque pelo menos um relato arquivado.'); return; }
+  M = {t: 'arqGer', ids: l.map(x => x.id)};
+  abrirModal(`<div class="mh"><h3>🏗 Gerar novo cadastro com ${l.length} relato(s) arquivado(s)</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+   <p class="small">Os relatos vão para uma <b>nova obra deste programa de Serviços Públicos</b>, com fotos, local, relato e constatação do fiscal. Aqui eles continuam arquivados, marcados como “enviado para” a nova obra.</p>
+   <div class="list">${l.map(x => `<p class="small">#${x.num} ${esc(ocLocal(x))} — <span class="muted">${esc(arqNome(x.arquivo))}</span></p>`).join('')}</div>
+   <fieldset><legend>Tipo do novo cadastro</legend>
+    <label class="chk"><input type="radio" name="ag-tipo" value="contrato" checked> 📄 Novo contrato (empresa contratada)</label>
+    <label class="chk"><input type="radio" name="ag-tipo" value="proprio"> 👷 Atendimento próprio (equipe da Prefeitura)</label></fieldset></div>
+   <div class="mf"><button class="btn" data-act="mClose">Cancelar</button><button class="btn pri" data-act="arqGerarOk">Abrir cadastro da obra</button></div>`);
+}
+ACTS.arqGerar = function (d) { if (!can('ocorr')) return; const ids = d.id ? [d.id] : Object.keys(ARQS()).filter(k => ARQS()[k]); arqGerarAbrir(ids); };
+ACTS.arqGerarOk = function () {
+  const o = O(), ids = M.ids, tipo = ($('input[name=ag-tipo]:checked') || {}).value || 'contrato';
+  const l = ids.map(id => o.ocorrencias.find(x => x.id === id)).filter(Boolean), orgs = [...new Set(l.map(x => arqNome(x.arquivo)))];
+  const d = novaObra({tipo: o.tipo, cidade: o.cidade, local: o.local, gestor: o.gestor, fiscal: o.fiscal, fiscalAdm: o.fiscalAdm,
+    nome: (tipo === 'proprio' ? 'Atendimento próprio — ' : 'Novo contrato — ') + orgs.join(', '),
+    contrato: tipo === 'proprio' ? 'Atendimento próprio' : '', contratada: tipo === 'proprio' ? 'Equipe própria da Prefeitura' : '',
+    objeto: 'Atendimento de ' + l.length + ' relato(s) encaminhado(s) a partir da obra “' + o.nome + '” (' + orgs.join(', ') + ').'});
+  fecharModal(false);
+  M = {t: 'obra', d, novo: true, arqLevar: {de: o.id, ids, tipo}};
+  abrirModal(modalObra(d, true));
+};
+/* ao cadastrar a obra, copia os relatos (com fotos novas, independentes da obra de origem) */
+const _obraSave = ACTS.obraSave;
+ACTS.obraSave = async function () {
+  const lev = M && M.arqLevar; const r = _obraSave.apply(this, arguments);
+  if (!lev) return r;
+  const nova = S.obras[S.obraId], orig = S.obras[lev.de]; if (!nova || !orig || nova.id === orig.id) return r;
+  let n = 0;
+  for (const id of lev.ids) { const x = orig.ocorrencias.find(y => y.id === id); if (!x) continue;
+    const fotos = [];
+    for (const f of x.fotos || []) { const data = await getFoto(f.id); if (!data) continue; const nid = 'f' + uid(); await DB.put('fotos', nid, {id: nid, obraId: nova.id, data}); fotoCache.set(nid, data); fotos.push(Object.assign({}, f, {id: nid})); }
+    const oc = {id: 'c' + uid(), num: ++nova.seq, rua: x.rua || '', bairro: x.bairro || '', ref: x.ref || '', lat: x.lat ?? null, lng: x.lng ?? null, origem: x.origem || null,
+      desc: x.desc || '', constat: x.constat || '', tipo: x.tipo || '', med: x.med ? Object.assign({}, x.med) : undefined, priF: x.priF || 'media', fotos,
+      criadoEm: x.criadoEm || new Date().toISOString(), hist: [], status: 'relato', veioDe: {obraId: orig.id, obra: orig.nome, num: x.num, orgao: arqNome(x.arquivo)}};
+    if (x.vistFiscal) oc.vistFiscal = Object.assign({}, x.vistFiscal);
+    nova.ocorrencias.push(oc); recalcStatus(nova, oc);
+    log(oc, 'Recebido do relato nº ' + x.num + ' arquivado na obra “' + orig.nome + '” (' + arqNome(x.arquivo) + ')' + (lev.tipo === 'proprio' ? ' — atendimento próprio' : ' — novo contrato'));
+    x.arquivo.enviadoPara = {obraId: nova.id, obra: nova.nome, num: oc.num, tipo: lev.tipo, em: new Date().toISOString(), por: quem()};
+    log(x, 'Enviado para a obra “' + nova.nome + '” como relato nº ' + oc.num); n++; }
+  S.f.arqSel = {}; await saveObra(orig); await saveObra(nova); nuvDescarga && nuvDescarga(nova.id);
+  render(); toast(n + ' relato(s) levado(s) para “' + nova.nome + '”. Ajuste agora a planilha de serviços do contrato.', 6000);
+  return r;
+};
+/* aba Ocorrências Arquivadas: seleção, botão de gerar e marca “enviado para” */
+const _tArq = tArq;
+tArq = function (o) { let h = _tArq.apply(this, arguments); const sel = Object.keys(ARQS()).filter(k => ARQS()[k]).length;
+  h = h.replace('<p class="small muted">Relatos que o fiscal verificou', `<div class="row gap" style="margin:6px 0"><span class="small muted"><b>${sel}</b> selecionado(s)</span><span class="sp"></span><button class="btn sm" data-act="arqSelTodos">☑ Selecionar todos da lista</button><button class="btn sm" data-act="arqSelLimpar">☐ Limpar</button><button class="btn pri" data-act="arqGerar" ${sel && can('ocorr') ? '' : 'disabled'} title="Abre o cadastro de uma nova obra deste programa e leva os relatos selecionados">🏗 Novo contrato / atendimento próprio (${sel})</button></div><p class="small muted">Relatos que o fiscal verificou`);
+  arqLista(o).forEach(x => {
+    const ini = '<article class="item"><div class="hd"><div><span class="num">#' + x.num + '</span>', i = h.indexOf(ini); if (i < 0) return;
+    const env = x.arquivo.enviadoPara;
+    const ck = env ? '' : `<input type="checkbox" data-chg="arqSel" data-id="${x.id}" ${ARQS()[x.id] ? 'checked' : ''} title="Selecionar">`;
+    let bloco = h.slice(i); const fimHd = bloco.indexOf('</div></div>') + '</div>'.length;
+    bloco = bloco.slice(0, fimHd) + ck + bloco.slice(fimHd);
+    if (env) bloco = bloco.replace('<div class="chips">', `<div class="chips"><span class="chip" style="--c:#2563a8">🏗 enviado para “${esc(env.obra)}” (nº ${env.num}) · ${env.tipo === 'proprio' ? 'atendimento próprio' : 'novo contrato'}</span>`);
+    else bloco = bloco.replace('<button class="btn sm" data-act="arqRestaurar"', `<button class="btn sm" data-act="arqGerar" data-id="${x.id}" ${can('ocorr') ? '' : 'disabled'}>🏗 Novo contrato / atendimento próprio</button><button class="btn sm" data-act="arqRestaurar"`);
+    h = h.slice(0, i) + bloco; });
+  return h; };
+/* no atendimento do fiscal, ao arquivar: opção de já abrir o novo cadastro */
+const _modalVF3 = modalVF;
+modalVF = function (d) { return _modalVF3.apply(this, arguments).replace('<button type="button" class="btn sm" data-act="vfArquivar"', '<label class="chk"><input type="checkbox" id="vf-arqger"> Depois de arquivar, gerar <b>novo contrato ou atendimento próprio</b> com este relato</label><button type="button" class="btn sm" data-act="vfArquivar"'); };
+const _vfArq = ACTS.vfArquivar;
+ACTS.vfArquivar = function () { const ger = $('#vf-arqger') && $('#vf-arqger').checked, id = M && M.d && M.d.id; const r = _vfArq.apply(this, arguments);
+  const oc = id && O().ocorrencias.find(x => x.id === id); if (ger && oc && oc.arquivo) setTimeout(() => arqGerarAbrir([id]), 50); return r; };
+})();
+</script>
 </body>
 </html>
