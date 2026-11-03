@@ -1913,5 +1913,203 @@ nuvLigar();
 
  render();rascunhoRestaura()})();
 </script>
+<script>
+/* =====================================================================
+   PATCH SP-01 (03/11/2026)
+   1. Programação semanal → planejamento do FISCAL e da EMPRESA da semana, com rota de atendimento
+      (rotas também na lista do fiscal, na lista da empresa e nas execuções a conferir).
+      Depois do atendimento do fiscal (fotos + medidas) a ocorrência fica liberada para a empresa
+      (a lista “A atender” da empresa abre nas ocorrências vistoriadas pelo fiscal).
+   2. Execução da empresa → aviso para os fiscais: execuções a conferir no atendimento do fiscal, com
+      alerta quando o serviço ou as medidas/quantidades diferem do levantado pelo fiscal (tolerância 10%).
+   3. Custo previsto (R$) fora das ocorrências/relatos e da programação semanal (fica só no
+      quadro “Custo e saldo do contrato”).
+   4. Atendimento do fiscal: vários serviços do contrato (acumulam), lista com quebra de texto e busca.
+   ===================================================================== */
+(function () {
+const SP_TOL = 0.10;
+if (!document.getElementById('sp01-css')) { const st = document.createElement('style'); st.id = 'sp01-css';
+  st.textContent = '.vfsv-box{max-height:320px;overflow:auto;border:1px solid var(--line,#ddd);border-radius:8px;padding:4px}' +
+    '.vfsv{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:start;padding:6px;border-bottom:1px solid var(--line,#eee);cursor:pointer}' +
+    '.vfsv:last-child{border-bottom:0}.vfsv .t{white-space:normal;word-break:break-word;overflow-wrap:anywhere;font-size:.86rem;line-height:1.3}' +
+    '.vfsv input[type=checkbox]{margin-top:3px}.vfsv .q{width:110px}.vfsv.on{background:rgba(37,99,168,.08)}' +
+    '.sp-div{border-left:4px solid #c0392b;background:rgba(192,57,43,.07);padding:6px 8px;border-radius:6px;margin:6px 0}' +
+    '.sp-rotas a{margin:3px 4px 3px 0;display:inline-flex}';
+  document.head.appendChild(st); }
+
+/* ---------- serviços do fiscal (vários) ---------- */
+function spServsOc(oc) {
+  if (Array.isArray(oc.servsFiscal) && oc.servsFiscal.length) return oc.servsFiscal.map(s => ({id: s.id, qtd: s.qtd}));
+  return oc.servSug ? [{id: oc.servSug, qtd: oc.qtdFiscal || ''}] : [];
+}
+const unNorm = sv => String((sv && sv.unidade) || '').toLowerCase().replace('³', '3').replace('²', '2').trim();
+function vfListaSvc(o, d) {
+  const g = vfTipos(o).find(x => x.t === d.tipo && x.n), base = g ? o.servicos.filter(x => x.grupo && String(x.grupo.c) === g.k) : o.servicos.slice();
+  const sel = new Set(d.servs.map(s => s.id));
+  o.servicos.forEach(x => { if (sel.has(x.id) && !base.includes(x)) base.unshift(x); });
+  const q = norm(d.svBusca || '');
+  const l = base.filter(x => sel.has(x.id) || !q || norm([x.codigo, x.descricao, x.unidade].join(' ')).includes(q));
+  return l.sort((a, b) => (sel.has(b.id) - sel.has(a.id))).map(x => { const s = d.servs.find(y => y.id === x.id);
+    return `<label class="vfsv ${s ? 'on' : ''}"><input type="checkbox" data-chg="vfSv" data-id="${x.id}" ${s ? 'checked' : ''} ${can('ocorr') ? '' : 'disabled'}>` +
+      `<span class="t"><b>${esc(x.codigo)}</b> · ${esc(x.descricao)} <span class="muted">(${esc(x.unidade)})</span></span>` +
+      (s ? `<input class="q" inputmode="decimal" placeholder="qtd" value="${inp(s.qtd)}" data-inp="vfSvQ" data-id="${x.id}" title="Quantidade levantada na unidade do serviço" ${can('ocorr') ? '' : 'disabled'}>` : '<span></span>') + '</label>'; }).join('') || '<p class="small muted" style="padding:6px">Nenhum serviço com essa busca.</p>';
+}
+function vfSvcHtml(o, d) {
+  return `<div><label>Serviços do contrato <span class="muted small">(marque um ou mais — eles se acumulam)</span><input placeholder="🔎 buscar por código ou descrição" value="${esc(d.svBusca || '')}" data-inp="vfBusca"></label>
+   <div class="vfsv-box" id="vf-servs">${vfListaSvc(o, d)}</div><p class="small muted" id="vf-svres" style="margin-top:4px"></p></div>`;
+}
+function vfServsRedraw() { const o = O(), b = $('#vf-servs'); if (!b || !M || M.t !== 'vf') return; b.innerHTML = vfListaSvc(o, M.d); hydrate(b); vfSvRes(); }
+function vfSvRes() { const e = $('#vf-svres'); if (!e || !M) return; const o = O(), n = M.d.servs.length;
+  e.innerHTML = n ? n + ' serviço(s) marcado(s): ' + M.d.servs.map(s => { const sv = svcOf(o, s.id); return sv ? esc(sv.codigo) + ' = <b>' + (s.qtd !== '' && s.qtd != null ? fN(num(s.qtd) || 0) : '—') + ' ' + esc(sv.unidade) + '</b>' : ''; }).join(' · ') : 'Nenhum serviço marcado.'; }
+const _modalVF = modalVF;
+modalVF = function (d) {
+  const o = O();
+  if (!d.servs) { const oc = o.ocorrencias.find(x => x.id === d.id) || {}; d.servs = spServsOc(oc).map(s => ({id: s.id, qtd: s.qtd, man: s.qtd !== '' && s.qtd != null})); if (!d.servs.length && d.servSug) d.servs = [{id: d.servSug, qtd: d.qtd || '', man: !!d.qtd}]; }
+  let h = _modalVF.apply(this, arguments);
+  h = h.replace(/<div class="g2"><label>Serviço sugerido<select id="vf-serv"[\s\S]*?<\/select><\/label><label>Quantidade levantada[\s\S]*?<\/label><\/div>/, vfSvcHtml(o, d));
+  return h;
+};
+vfCalc = function () {
+  if (!M || M.t !== 'vf') return; const x = vfVals(), dens = (S.f.pi && S.f.pi.dens) || 2.3; const r = $('#vf-res');
+  if (r) r.innerHTML = x.a ? `Área total <b>${fN(x.a)} m²</b>${x.v ? ` · volume <b>${fN(x.v, 3)} m³</b> · massa asfáltica ≈ <b>${fN(x.v * dens, 2)} t</b> (${fN(dens)} t/m³)` : ' · informe a espessura para calcular o volume'}` : 'Informe comprimento e largura.';
+  const o = O(); let mud = false;
+  (M.d.servs || []).forEach(s => { if (s.man) return; const un = unNorm(svcOf(o, s.id)); const q = un === 'm2' ? x.a : (un === 't' || un === 'ton') ? x.v * dens : (un === 'm3' ? x.v : null);
+    if (q != null) { const v = q ? Math.round(q * 1000) / 1000 : ''; if (String(v) !== String(s.qtd)) { s.qtd = v; mud = true; } } });
+  if (mud) { (M.d.servs || []).forEach(s => { const el = document.querySelector('#vf-servs input.q[data-id="' + s.id + '"]'); if (el && document.activeElement !== el) el.value = s.qtd !== '' ? inp(s.qtd) : ''; }); }
+  vfSvRes();
+};
+CHG.vfSv = function (el, d) { if (!M || M.t !== 'vf') return; const id = d.id; if (el.checked) { if (!M.d.servs.some(s => s.id === id)) M.d.servs.push({id, qtd: '', man: false}); } else M.d.servs = M.d.servs.filter(s => s.id !== id); vfServsRedraw(); vfCalc(); };
+INP.vfSvQ = function (el, d) { if (!M || M.t !== 'vf') return; const s = M.d.servs.find(x => x.id === (d && d.id || el.dataset.id)); if (s) { s.qtd = el.value; s.man = el.value.trim() !== ''; } vfSvRes(); };
+INP.vfBusca = function (el) { if (!M || M.t !== 'vf') return; M.d.svBusca = el.value; vfServsRedraw(); };
+vfSalvar = function () {
+  if (!can('ocorr')) return; const o = O(), d = M.d, oc = o.ocorrencias.find(x => x.id === d.id); if (!oc) return; const x = vfVals();
+  oc.rua = $('#vf-rua').value.trim(); oc.bairro = $('#vf-bairro').value.trim(); oc.ref = $('#vf-ref').value.trim(); if (d.lat != null) { oc.lat = d.lat; oc.lng = d.lng; oc.origem = d.origem || oc.origem; }
+  const ids = new Set(d.fotos.map(f => f.id)); oc.fotos.filter(f => !ids.has(f.id)).forEach(f => { DB.del('fotos', f.id); fotoCache.delete(f.id); }); oc.fotos = d.fotos;
+  oc.constat = $('#vf-const').value.trim(); oc.tipo = d.tipo; oc.med = {c: x.c, l: x.l, e: x.e, n: x.n};
+  oc.servsFiscal = (d.servs || []).map(s => ({id: s.id, qtd: t2(num(s.qtd) || 0)}));
+  oc.servSug = oc.servsFiscal[0] ? oc.servsFiscal[0].id : ''; oc.qtdFiscal = oc.servsFiscal[0] ? oc.servsFiscal[0].qtd : 0;
+  const pr = $('input[name=vf-pri]:checked'); if (pr) oc.priF = pr.value; oc.vistFiscal = {em: new Date().toISOString(), por: quem()}; oc.liberadaEmpresa = oc.vistFiscal.em; recalcStatus(o, oc);
+  log(oc, 'Atendimento do fiscal: ' + (oc.tipo || 'vistoria') + (x.a ? ' · ' + fN(x.c) + '×' + fN(x.l) + ' m' + (x.e ? '×' + fN(x.e, 0) + ' cm' : '') + (x.n > 1 ? ' ×' + x.n : '') : '') + ' · ' + oc.servsFiscal.length + ' serviço(s) · ' + oc.fotos.length + ' foto(s) · liberada para a empresa contratada');
+  M.novas = []; saveObra(o); nuvDescarga(o.id); fecharModal(false); render();
+  toast('Atendimento do fiscal salvo. A ocorrência nº ' + oc.num + ' já está liberada para a empresa contratada (Atendimento do contratado).' + (oc.fotos.length ? '' : ' Lembre de fotografar o antes.'), 6000);
+};
+vfMed = function (oc) { const m = oc.med || {}; if (!oc.vistFiscal) return ''; const o = O(), sv = spServsOc(oc);
+  const dim = m.c && m.l ? `📐 ${m.n > 1 ? m.n + ' × ' : ''}${fN(m.c)} × ${fN(m.l)} m${m.e ? ' × ' + fN(m.e, 0) + ' cm' : ''}` : '';
+  const ss = sv.map(s => { const x = svcOf(o, s.id); return x ? esc(x.descricao.slice(0, 80)) + (s.qtd ? ': <b>' + fN(num(s.qtd) || 0) + ' ' + esc(x.unidade) + '</b>' : '') : ''; }).filter(Boolean).join('<br>');
+  return dim || ss ? `<div class="small">${dim}${dim && ss ? '<br>' : ''}${ss ? 'Levantado pelo fiscal: ' + ss : ''}</div>` : ''; };
+/* execução já vem com todos os serviços levantados pelo fiscal */
+exNovo = function (oc) {
+  const d = {id: 'x' + uid(), data: S.f.dia, ocorrenciaId: null, local: {rua: '', bairro: ''}, med: {c: 0, l: 0, e: 0}, itens: [], fotos: [], descCampo: '', desc: '', descOrigem: null, concluiu: false, conferida: false, conferidaPor: null, medicaoNum: null, criadoPor: quem(), criadoEm: new Date().toISOString()};
+  if (oc) { d.ocorrenciaId = oc.id; d.local = {rua: oc.rua || '', bairro: oc.bairro || ''}; if (oc.med) d.med = {c: oc.med.c || 0, l: oc.med.l || 0, e: oc.med.e || 0};
+    // serviços levantados pelo fiscal; se o gestor programou outro serviço, ele substitui o primeiro (não soma)
+    const sid = oc.servicoId || oc.servSug, sv = spServsOc(oc).map(s => ({servicoId: s.id, qtd: s.qtd || ''}));
+    if (sid && !sv.some(i => i.servicoId === sid)) { if (sv.length) sv[0] = {servicoId: sid, qtd: oc.qtdPlan || sv[0].qtd}; else sv.push({servicoId: sid, qtd: oc.qtdPlan || oc.qtdFiscal || ''}); }
+    else if (sid && oc.qtdPlan) sv.forEach(i => { if (i.servicoId === sid) i.qtd = oc.qtdPlan; });
+    d.itens = sv; }
+  M = {t: 'ex', novas: [], novo: true, d}; abrirModal(modalEx(M.d, true)); INP.medidas();
+};
+
+/* ---------- divergência: execução da empresa × levantamento do fiscal ---------- */
+function spDiverg(o, e) {
+  const oc = e.ocorrenciaId && o.ocorrencias.find(x => x.id === e.ocorrenciaId); if (!oc || !oc.vistFiscal) return [];
+  const out = [], ref = {}; spServsOc(oc).forEach(s => { ref[s.id] = num(s.qtd) || 0; }); if (oc.servicoId && ref[oc.servicoId] == null) ref[oc.servicoId] = oc.qtdPlan || 0;
+  const ex = {}; (e.itens || []).forEach(i => { if (i.servicoId) ex[i.servicoId] = (ex[i.servicoId] || 0) + (num(i.qtd) || 0); });
+  const nm = id => { const s = svcOf(o, id); return s ? s.codigo + ' ' + s.descricao.slice(0, 60) : 'serviço'; }, un = id => { const s = svcOf(o, id); return s ? s.unidade : ''; };
+  Object.keys(ex).forEach(id => { if (ref[id] == null) out.push('serviço diferente do levantado: ' + nm(id)); else if (ref[id] > 0 && Math.abs(ex[id] - ref[id]) / ref[id] > SP_TOL) out.push(nm(id) + ': executado ' + fN(ex[id]) + ' ' + un(id) + ' × levantado ' + fN(ref[id]) + ' ' + un(id)); });
+  Object.keys(ref).forEach(id => { if (ex[id] == null && Object.keys(ex).length) out.push('serviço levantado e não executado: ' + nm(id)); });
+  const m = oc.med || {}, me = e.med || {};
+  [['c', 'comprimento', 'm'], ['l', 'largura', 'm'], ['e', 'espessura', 'cm']].forEach(([k, n, u]) => { const a = +m[k] || 0, b = +me[k] || 0; if (a > 0 && b > 0 && Math.abs(b - a) / a > SP_TOL) out.push(n + ': executado ' + fN(b) + ' ' + u + ' × levantado ' + fN(a) + ' ' + u); });
+  return out;
+}
+const spPend = o => o.execucoes.filter(e => !e.conferida && !e.medicaoNum && e.qualidade !== 'reprovada');
+const _modalConf = modalConf;
+modalConf = function (e) { const o = O(), dv = spDiverg(o, e); let h = _modalConf.apply(this, arguments);
+  const al = dv.length ? `<div class="sp-div small"><b>⚠ A empresa alterou o serviço ou as medidas em relação ao levantamento do fiscal — confira no local antes de aprovar:</b><br>• ${dv.map(esc).join('<br>• ')}</div>` : (e.ocorrenciaId ? '<div class="small" style="color:#2e7d4f">✔ Serviço e medidas conferem com o levantamento do fiscal (tolerância 10%).</div>' : '');
+  return h.replace('<div class="cols">', al + '<div class="cols">'); };
+const _exCard = exCard;
+exCard = function (o, e) { const h = _exCard.apply(this, arguments); if (e.conferida || e.medicaoNum) return h; const dv = spDiverg(o, e);
+  return dv.length ? h.replace('<div class="chips">', '<div class="chips"><span class="chip" style="--c:#c0392b" title="' + esc(dv.join(' · ')) + '">⚠ alterou medidas/serviço — fiscal deve voltar ao local</span>') : h; };
+
+/* ---------- rotas de atendimento (Google Maps, até 10 pontos por rota) ---------- */
+function spRotas(pts) {
+  let l = pts.filter(p => p.lat != null); if (!l.length) return [];
+  const ini = G.pos && G.st === 'ok' ? G.pos : null, ord = []; let cur = ini || l[0];
+  while (l.length) { let k = 0, best = Infinity; l.forEach((p, i) => { const dd = distM(cur, p); if (dd < best) { best = dd; k = i; } }); cur = l[k]; ord.push(l.splice(k, 1)[0]); }
+  const rs = []; for (let i = 0; i < ord.length; i += 10) { const ch = ord.slice(i, i + 10), dest = ch[ch.length - 1], way = ch.slice(0, -1);
+    const org = i === 0 ? (ini ? ini.lat + ',' + ini.lng : '') : ord[i - 1].lat + ',' + ord[i - 1].lng;
+    rs.push({de: i + 1, ate: i + ch.length, nums: ch.map(p => '#' + p.num), url: 'https://www.google.com/maps/dir/?api=1' + (org ? '&origin=' + org : '') + '&destination=' + dest.lat + ',' + dest.lng + (way.length ? '&waypoints=' + way.map(p => p.lat + ',' + p.lng).join('%7C') : '') + '&travelmode=driving'}); }
+  return rs;
+}
+function spRotaModal(tit, ocs) {
+  const sem = ocs.filter(x => x.lat == null).length, rs = spRotas(ocs);
+  abrirModal(`<div class="mh"><h3>🧭 Rota de atendimento — ${esc(tit)}</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+   <p class="small">${ocs.length} ocorrência(s) · ordenadas pela mais próxima ${G.pos && G.st === 'ok' ? 'da sua posição' : 'uma da outra (ligue o GPS para começar de onde você está)'} · até 10 pontos por rota no Google Maps.</p>
+   ${rs.length ? '<div class="sp-rotas">' + rs.map((r, i) => `<a class="btn pri" target="_blank" rel="noopener" href="${r.url}">🧭 Rota ${i + 1} — paradas ${r.de} a ${r.ate}</a><div class="small muted" style="margin:0 0 6px">${r.nums.join(' → ')}</div>`).join('') + '</div>' : '<p class="neg small">Nenhuma ocorrência com coordenadas.</p>'}
+   ${sem ? `<p class="small neg">${sem} ocorrência(s) sem coordenadas ficaram de fora: abra o atendimento no local e use “Usar minha posição atual”.</p>` : ''}</div>
+   <div class="mf"><button class="btn" data-act="mClose">Fechar</button></div>`);
+}
+const SPR = {fis: [], conf: []};
+ACTS.spRota = function (d) { const o = O(); let l = [], tit = '';
+  if (d.k === 'fis') { l = SPR.fis.map(id => o.ocorrencias.find(x => x.id === id)).filter(Boolean); tit = 'fiscal'; }
+  else if (d.k === 'emp') { l = (SX.vis || []).map(id => o.ocorrencias.find(x => x.id === id)).filter(Boolean); tit = 'empresa contratada'; }
+  else if (d.k === 'conf') { l = SPR.conf.map(id => o.ocorrencias.find(x => x.id === id)).filter(Boolean); tit = 'conferência das execuções'; }
+  else if (d.k === 'sem') { const w = isoWeek(S.f.semDia); l = ativas(o).filter(x => x.semana === w && x.status !== 'medida').sort(ordPri); tit = labSem(w); }
+  if (!l.length) { toast('Nenhuma ocorrência nesta lista.'); return; } spRotaModal(tit, l); };
+/* programação semanal → planejamento do fiscal / da empresa */
+ACTS.spProgFis = function () { const f = AF(); f.sit = 'sem'; f.sem = isoWeek(S.f.semDia); S.f.atM = 'fis'; S.tab = 'atend'; render(); window.scrollTo(0, 0); };
+ACTS.spProgEmp = function () { const f = sxF(); f.sub = 'aat'; f.sit = 'sem'; S.f.dia = S.f.semDia; S.f.atM = 'emp'; S.tab = 'atend'; render(); window.scrollTo(0, 0); };
+
+/* ---------- 3. sem custo previsto nas ocorrências e na programação ---------- */
+const _ocCard = ocCard;
+ocCard = function () { return _ocCard.apply(this, arguments).replace(/<div class="small"><span class="chip" style="--c:#7b3fb0">💲 previsto [^<]*<\/span><\/div>/, ''); };
+const _tPlan = tPlan;
+tPlan = function (o) { let h = _tPlan.apply(this, arguments);
+  h = h.replace(/ · R\$\s?[\d.,]+(?=<\/span><\/h4>)/g, '');
+  const w = isoWeek(S.f.semDia), n = ativas(o).filter(x => x.semana === w && x.status !== 'medida').length, nv = ativas(o).filter(x => x.semana === w && x.status !== 'medida' && !x.vistFiscal).length;
+  return h.replace('<button class="btn pri" data-act="relProg">', `<button class="btn" data-act="spProgFis" ${n ? '' : 'disabled'} title="Abre o atendimento do fiscal só com as ocorrências desta semana (fotos do antes e medidas), com rota">👷 Planejamento do fiscal (${nv} a vistoriar)</button><button class="btn" data-act="spProgEmp" ${n ? '' : 'disabled'} title="Abre o atendimento da empresa contratada só com as ocorrências desta semana, com rota">🚧 Planejamento da empresa (${n})</button><button class="btn" data-act="spRota" data-k="sem" ${n ? '' : 'disabled'}>🧭 Rota da semana</button><button class="btn pri" data-act="relProg">`); };
+
+/* ---------- atendimento do fiscal: semana programada, rota e execuções a conferir ---------- */
+tAtendFis = function (o) { const f = AF(); let l = ativas(o).filter(x => x.status !== 'executada' && x.status !== 'medida');
+  if (f.sit === 'pend') l = l.filter(x => !x.vistFiscal); else if (f.sit === 'feitas') l = l.filter(x => x.vistFiscal);
+  else if (f.sit === 'sem') { const w = f.sem || isoWeek(S.f.semDia); l = l.filter(x => x.semana === w); }
+  if (f.bai) l = l.filter(x => norm(x.bairro) === norm(f.bai)); if (f.q) { const q = norm(f.q); l = l.filter(x => norm([x.rua, x.bairro, x.desc, x.ref, '#' + x.num].join(' ')).includes(q)); }
+  const aqui = G.pos && G.st === 'ok' ? G.pos : null; const dd = x => aqui && x.lat != null ? distM(aqui, x) : null;
+  l = aqui && f.perto ? l.slice().sort((a, b) => (dd(a) ?? 1e12) - (dd(b) ?? 1e12)) : l.slice().sort(ordPri); SPR.fis = l.map(x => x.id);
+  // execuções da empresa aguardando a conferência do fiscal
+  const pend = spPend(o).map(e => ({e, dv: spDiverg(o, e), oc: e.ocorrenciaId && o.ocorrencias.find(x => x.id === e.ocorrenciaId)})).sort((a, b) => b.dv.length - a.dv.length || String(b.e.data).localeCompare(String(a.e.data)));
+  SPR.conf = [...new Set(pend.filter(p => p.oc).map(p => p.oc.id))]; const nDv = pend.filter(p => p.dv.length).length;
+  const cConf = pend.length ? `<div class="card" style="margin-bottom:12px;border-left:4px solid ${nDv ? '#c0392b' : '#b7791f'}"><h3>🔔 Execuções da empresa para conferir em campo (${pend.length})${nDv ? ` · <span style="color:#c0392b">${nDv} com alteração de medidas/serviço</span>` : ''}</h3>
+    <p class="small muted">A empresa registrou estes atendimentos. Vá ao local, confira as fotos do antes e do depois e a qualidade, e aprove. Onde houver ⚠, o serviço ou as medidas diferem do que o fiscal levantou (tolerância 10%).</p>
+    <div class="row gap" style="margin-bottom:6px"><button class="btn sm" data-act="spRota" data-k="conf">🧭 Rota da conferência</button></div>
+    <div class="list">${pend.slice(0, 100).map(p => { const L = localEx(o, p.e); return `<article class="item"><div class="hd"><div><span class="num">${fData(p.e.data)}</span> <b>${esc(L.txt)}</b></div></div>
+      <div class="chips">${p.oc ? `<span class="chip" style="--c:#2563a8">ocorrência #${p.oc.num}</span>` : '<span class="chip" style="--c:#5a6075">avulso</span>'}${p.dv.length ? '<span class="chip" style="--c:#c0392b">⚠ alterou medidas/serviço</span>' : (p.oc && p.oc.vistFiscal ? '<span class="chip" style="--c:#2e7d4f">confere com o levantamento</span>' : '')}</div>
+      ${p.dv.length ? `<div class="sp-div small">• ${p.dv.map(esc).join('<br>• ')}</div>` : ''}${thumbsMini(p.e.fotos)}
+      <div class="row gap" style="justify-content:flex-end">${p.oc && p.oc.lat != null ? `<a class="btn sm" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${p.oc.lat},${p.oc.lng}">🧭 Ir até o local</a>` : ''}<button class="btn sm pri" data-act="exConf" data-id="${p.e.id}" ${can('conferir') ? '' : 'disabled'}>✔ Conferir em campo</button></div></article>`; }).join('')}</div></div>` : '';
+  const semOpt = f.sit === 'sem' ? `<option value="sem" selected>Programadas na ${labSem(f.sem || isoWeek(S.f.semDia))}</option>` : `<option value="sem">Programadas na semana da programação</option>`;
+  return cConf + `<div class="card"><p class="small muted">O fiscal vai ao local das ocorrências, tira as <b>fotos do antes</b> e informa as <b>características, as dimensões e os serviços do contrato</b>. Ao salvar, a ocorrência fica <b>liberada para a empresa contratada</b> (Atendimento do contratado).</p>
+   <div class="toolbar"><label>Mostrar<select data-chg="afF" data-k="sit"><option value="pend" ${f.sit === 'pend' ? 'selected' : ''}>Aguardando atendimento do fiscal</option><option value="feitas" ${f.sit === 'feitas' ? 'selected' : ''}>Já vistoriadas pelo fiscal</option><option value="todas" ${f.sit === 'todas' ? 'selected' : ''}>Todas em aberto</option>${semOpt}</select></label>
+   <label>Bairro<select data-chg="afF" data-k="bai"><option value="">Todos</option>${bairrosDe(o).map(b => `<option ${f.bai === b ? 'selected' : ''}>${esc(b)}</option>`).join('')}</select></label>
+   <label style="flex:1;min-width:160px">Palavra-chave<input placeholder="rua, bairro, descrição, nº" value="${esc(f.q)}" data-chg="afF" data-k="q"></label>
+   <label class="chk" style="align-self:end"><input type="checkbox" data-chg="afF" data-k="perto" ${f.perto ? 'checked' : ''}> 📍 Mais próximas de mim</label><button class="btn" data-act="spRota" data-k="fis" style="align-self:end">🧭 Rota de atendimento</button></div>
+   ${f.perto && !G.pos ? '<div class="alert">Sem posição do GPS ainda. Toque no 📍 do topo para ligar o GPS.</div>' : ''}
+   <b>${l.length} ocorrência(s)</b>
+   <div class="list" style="margin-top:8px">${l.slice(0, 300).map(x => { const d = dd(x); return `<article class="item"><div class="hd"><div><span class="num">#${x.num}</span> <b>${esc(ocLocal(x))}</b></div></div>
+    <div class="chips">${chipP(priEf(x))}${vfChip(x)}${x.semana ? `<span class="chip" style="--c:#2563a8">🗓 ${labSem(x.semana)}</span>` : ''}${x.lat != null ? '' : '<span class="chip" style="--c:#b7791f">sem coordenadas</span>'}${d != null ? `<button type="button" class="chip rota" style="--c:#2563a8" data-act="rotaOc" data-id="${x.id}" title="Abrir o mapa com a rota até a ocorrência">📏 ${fDist(d)} · 🧭 rota</button>` : (x.lat != null ? `<button type="button" class="chip rota" style="--c:#7a8396" data-act="gpsChip" title="Ligar o GPS para ver a distância e a rota">📏 distância · ligar GPS</button>` : '')}</div>
+    <div class="small">${esc((x.desc || '').slice(0, 160))}</div>${x.ref ? `<div class="small muted">Ref.: ${esc(x.ref)}</div>` : ''}${vfMed(x)}${thumbsMini(x.fotos)}
+    <div class="row gap" style="justify-content:flex-end;margin-top:6px">${x.lat != null ? `<a class="btn sm" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${x.lat},${x.lng}">🧭 Ir até o local</a>` : ''}<button class="btn sm pri" data-act="vfAbrir" data-id="${x.id}" ${can('ocorr') ? '' : 'disabled'}>👷 ${x.vistFiscal ? 'Rever atendimento' : 'Fazer atendimento'}</button></div></article>`; }).join('') || '<p class="muted small">Nenhuma ocorrência neste filtro.</p>'}</div></div>`; };
+
+/* ---------- atendimento da empresa: abre nas liberadas pelo fiscal, com rota; aviso no botão do fiscal ---------- */
+const _tAtend = tAtend;
+tAtend = function (o) {
+  if (!S.f.sx && S.perfil === 'empresa') S.f.sx = {sub: 'aat', sit: 'vist', bai: '', q: '', atF: 'todas'};
+  let h = _tAtend.apply(this, arguments);
+  const pend = spPend(o), nDv = pend.filter(e => spDiverg(o, e).length).length;
+  if (pend.length) h = h.replace(/(vistoria técnica: fotos do antes e dimensões · \d+ aguardando)/, '$1 · <b>🔔 ' + pend.length + ' execução(ões) a conferir' + (nDv ? ' · ⚠ ' + nDv + ' com alteração' : '') + '</b>');
+  h = h.replace('<option value="vist" ' , '<option value="vist" ').replace('>Já vistoriadas pelo fiscal</option><option value="prog"', '>Liberadas pelo fiscal (vistoriadas)</option><option value="prog"');
+  if (S.f.atM === 'emp' && (sxF().sub !== 'ate')) h = h.replace(/(<button class="btn" data-act="exNew"[^>]*>＋ Execução avulsa<\/button>)/, '$1<button class="btn" data-act="spRota" data-k="emp">🧭 Rota de atendimento</button>');
+  return h;
+};
+})();
+</script>
 </body>
 </html>
