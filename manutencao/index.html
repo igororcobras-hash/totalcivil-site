@@ -2453,13 +2453,13 @@ function spCard(o, k) { const f = spqF()[k] || {}; const us = [...new Set(ativas
  <div class="toolbar"><label style="flex:1;min-width:200px">Pesquisar<input id="spq-q-${k}" placeholder="ex.: Rua das Flores, Centro, buraco, Maria, #12" autocomplete="off" value="${esc(f.q || '')}" data-inp="spq" data-k="${k}"></label>
  <label>Usuário<select id="spq-u-${k}" data-chg="spqU" data-k="${k}"><option value="">Todos</option>${us.map(u => `<option ${f.u === u ? 'selected' : ''}>${esc(u)}</option>`).join('')}</select></label>
  <button type="button" class="btn sm" data-act="spqLimpar" data-k="${k}">✕ Limpar</button></div>
- <p class="small" id="spq-info-${k}" style="margin:6px 0"></p><div id="spq-map-${k}" class="pickmap" style="height:340px;display:none"></div><div id="spq-list-${k}" class="list" style="margin-top:10px"></div></div>`; }
-const SPQ_MAX = 60;
+ <p class="small" id="spq-info-${k}" style="margin:6px 0"></p><div id="spq-list-${k}" class="list" style="margin:10px 0"></div><div id="spq-map-${k}" class="pickmap" style="height:380px;display:none"></div></div>`; }
+const SPQ_MAX = 100000; /* lista com todos os relatos encontrados (pedido de 03/11/2026) */
 function spAtualiza(k) { const o = O(); const info = $('#spq-info-' + k), lista = $('#spq-list-' + k), mp = $('#spq-map-' + k); if (!o || !info || !lista || !mp) return;
   const l = spBusca(o, k);
   if (!l) { info.innerHTML = ''; lista.innerHTML = ''; mp.style.display = 'none'; spMapaFecha(k); return; }
   const cc = l.filter(x => x.lat != null).length;
-  info.innerHTML = l.length ? `<b>${l.length}</b> ocorrência(s) encontrada(s) · ${cc} no mapa${l.length - cc ? ' · ' + (l.length - cc) + ' sem coordenadas (só na lista)' : ''}${l.length > SPQ_MAX ? ' · mostrando as ' + SPQ_MAX + ' primeiras na lista' : ''}` : '<span class="muted">Nenhuma ocorrência encontrada.</span>';
+  info.innerHTML = l.length ? `<b>${l.length}</b> ocorrência(s) encontrada(s), em lista abaixo · ${cc} no mapa (depois da lista)${l.length - cc ? ' · ' + (l.length - cc) + ' sem coordenadas (só na lista)' : ''}${l.length > SPQ_MAX ? ' · mostrando as ' + SPQ_MAX + ' primeiras na lista' : ''}` : '<span class="muted">Nenhuma ocorrência encontrada.</span>';
   lista.innerHTML = l.slice(0, SPQ_MAX).map(oc => ocCard(o, oc).replace('<button class="btn sm" data-act="ocEdit"', (oc.lat != null ? `<button class="btn sm" data-act="spqVer" data-k="${k}" data-id="${oc.id}">📍 Ver no mapa</button>` : '') + '<button class="btn sm" data-act="ocEdit"')).join('');
   hydrate(lista); mp.style.display = cc ? '' : 'none'; if (cc) spMapa(k, l); else spMapaFecha(k); }
 function spMapaFecha(k) { const m = SPQ.maps[k]; if (m) { try { m.map.remove(); } catch (_) {} delete SPQ.maps[k]; } }
@@ -2562,6 +2562,28 @@ tArq = function (o) { let h = _tArq5b.apply(this, arguments);
   o.ocorrencias.filter(x => x.arquivo && x.arquivo.enviadoPara && x.arquivo.enviadoPara.tipo === 'exportado').forEach(x => { const e = x.arquivo.enviadoPara;
     h = h.replace(`🏗 enviado para “${esc(e.obra)}” (nº ${e.num}) · nova obra`, `📤 exportado para a obra “${esc(e.obra)}” (nº ${e.num})`); });
   return h; };
+
+/* também em “Abrir / editar” do relato (pedido de 03/11/2026) */
+const _modalOc5 = modalOc;
+modalOc = function (d, isNew) { const h = _modalOc5.apply(this, arguments); const o = O();
+  if (isNew || d.arquivo || !can('ocorr') || o.execucoes.some(e => e.ocorrenciaId === d.id)) return h;
+  const n = obrasDestino(o).length;
+  const fs = `<fieldset style="border-color:#c9a227"><legend>📤 Exportar este relato para outra obra</legend><p class="small">Não é desta obra? O relato vai para a obra escolhida como <b>relato novo</b>, com local, relato, fotos e documentos. Aqui ele sai do planejamento e fica em “Ocorrências Arquivadas”, marcado “exportado para” a outra obra. As alterações feitas nesta janela vão junto.</p>
+ ${n ? `<div class="g2"><label>Obra de destino<select id="oc-expo">${optObras(o)}</select></label><label>Motivo / observação<input id="oc-expm" placeholder="ex.: rua do contrato de drenagem"></label></div><div class="row gap" style="margin-top:8px"><button type="button" class="btn sm pri" data-act="ocExportar">📤 Exportar este relato</button></div>` : '<div class="alert">Não há outra obra neste aparelho para receber o relato. Crie a obra em “⇄ Trocar obra”.</div>'}</fieldset>`;
+  const i = h.lastIndexOf('</div>\n <div class="mf">'); return i < 0 ? h : h.slice(0, i) + fs + h.slice(i); };
+ACTS.ocExportar = async function () { if (!M || M.t !== 'oc' || M.novo || !can('ocorr')) return; const o = O(), d = M.d, x = o.ocorrencias.find(y => y.id === d.id); if (!x) return;
+  const dest = S.obras[($('#oc-expo') || {}).value]; if (!dest) { toast('Escolha a obra de destino.'); return; }
+  if (o.execucoes.some(e => e.ocorrenciaId === x.id)) { toast('Este relato já tem execução lançada e não pode ser exportado.', 4000); return; }
+  if (!confirm('Exportar o relato nº ' + x.num + ' para a obra “' + dest.nome + '”? Aqui ele fica em “Ocorrências Arquivadas”, marcado como exportado.')) return;
+  const v = id => { const e = $(id); return e ? e.value.trim() : null; };
+  [['rua', '#oc-rua'], ['bairro', '#oc-bairro'], ['ref', '#oc-ref'], ['desc', '#oc-desc'], ['sug', '#oc-sug']].forEach(([k, id]) => { const t = v(id); if (t !== null) x[k] = t; });
+  if (d.lat != null) { x.lat = d.lat; x.lng = d.lng; x.origem = d.origem || x.origem; }
+  const r = $('input[name="oc-pri"]:checked'); if (r) x.priF = r.value;
+  const rem = (M.orig || []).filter(id => !d.fotos.some(f => f.id === id)); x.fotos = d.fotos; x.docs = (d.docs || []).slice();
+  const docRem = M.docRem || [], mot = v('#oc-expm') || ''; M.novas = []; fecharModal(false);
+  rem.concat(docRem).forEach(id => { DB.del('fotos', id); fotoCache.delete(id); });
+  const oc = await exportarRelato(o, x, dest, mot); render();
+  toast('Relato nº ' + x.num + ' exportado para “' + dest.nome + '” como relato nº ' + oc.num + '.', 6000); };
 })();
 </script>
 </body>
