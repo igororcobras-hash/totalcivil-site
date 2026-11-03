@@ -2022,6 +2022,7 @@ function spDiverg(o, e) {
   return out;
 }
 const spPend = o => o.execucoes.filter(e => !e.conferida && !e.medicaoNum && e.qualidade !== 'reprovada');
+window.spDivergExt = spDiverg;
 const _modalConf = modalConf;
 modalConf = function (e) { const o = O(), dv = spDiverg(o, e); let h = _modalConf.apply(this, arguments);
   const al = dv.length ? `<div class="sp-div small"><b>⚠ A empresa alterou o serviço ou as medidas em relação ao levantamento do fiscal — confira no local antes de aprovar:</b><br>• ${dv.map(esc).join('<br>• ')}</div>` : (e.ocorrenciaId ? '<div class="small" style="color:#2e7d4f">✔ Serviço e medidas conferem com o levantamento do fiscal (tolerância 10%).</div>' : '');
@@ -2109,6 +2110,116 @@ tAtend = function (o) {
   if (S.f.atM === 'emp' && (sxF().sub !== 'ate')) h = h.replace(/(<button class="btn" data-act="exNew"[^>]*>＋ Execução avulsa<\/button>)/, '$1<button class="btn" data-act="spRota" data-k="emp">🧭 Rota de atendimento</button>');
   return h;
 };
+})();
+</script>
+<script>
+/* =====================================================================
+   PATCH SP-02 (03/11/2026)
+   5. Toda foto com data/hora e coordenadas: gravadas na foto e carimbadas na imagem
+      (EXIF → GPS do aparelho → local da ocorrência; hora do EXIF, da câmera ou do arquivo).
+   6. Relatório de atendimento do fiscal e relatório de atendimento da empresa, separados
+      (aba Relatórios e botão em cada atendimento), sem valores em R$.
+   7. Empresa contratada: só a aba Atendimento, só no “Atendimento do contratado”.
+   ===================================================================== */
+(function () {
+ORIGEM.ocorrencia = 'do local da ocorrência';
+const pad = n => String(n).padStart(2, '0');
+const fHora = iso => { const d = new Date(iso); return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+/* ---------- 5. fotos com hora e coordenadas, carimbadas ---------- */
+processarFoto = async function (file, camera) {
+  const buf = await file.arrayBuffer(); let ex = {}; try { ex = lerExif(buf); } catch (e) {}
+  let lat = ex.lat, lng = ex.lng, origem = lat != null ? 'exif' : null;
+  if (lat == null && camera) { try { const p = await posicaoAtual(); lat = p.lat; lng = p.lng; origem = 'gps-aparelho'; } catch (e) {} }
+  if (lat == null && M && M.d) { const d = M.d, la = d.lat != null ? d.lat : d.local && d.local.lat != null ? d.local.lat : null, ln = d.lat != null ? d.lng : d.local ? d.local.lng : null;
+    if (la == null && d.ocorrenciaId) { const oc = O().ocorrencias.find(x => x.id === d.ocorrenciaId); if (oc && oc.lat != null) { lat = oc.lat; lng = oc.lng; origem = 'ocorrencia'; } }
+    else if (la != null) { lat = la; lng = ln; origem = 'ocorrencia'; } }
+  if (lat == null) { try { const p = await posicaoAtual(); lat = p.lat; lng = p.lng; origem = 'gps-aparelho'; } catch (e) {} }
+  const quando = ex.data || (camera ? new Date().toISOString() : (file.lastModified ? new Date(file.lastModified).toISOString() : new Date().toISOString()));
+  const url = URL.createObjectURL(new Blob([buf], {type: file.type || 'image/jpeg'}));
+  const img = await carregarImg(url); const mx = FOTO_MAX; let w = img.naturalWidth, h = img.naturalHeight; const k = Math.min(1, mx / Math.max(w, h)); w = Math.round(w * k); h = Math.round(h * k);
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.drawImage(img, 0, 0, w, h); URL.revokeObjectURL(url);
+  // carimbo: data/hora e coordenadas (e o local, quando houver)
+  const d = M && M.d, oc = d && (d.ocorrenciaId ? O().ocorrencias.find(x => x.id === d.ocorrenciaId) : (M.t === 'vf' || M.t === 'oc') ? d : null);
+  const loc = oc ? (oc.num ? 'Ocorrência nº ' + oc.num + ' · ' : '') + [oc.rua || (oc.local && oc.local.rua), oc.bairro || (oc.local && oc.local.bairro)].filter(Boolean).join(' — ') : '';
+  const l1 = fHora(quando) + '   ·   ' + (lat != null ? fN(lat, 6) + ', ' + fN(lng, 6) : 'SEM COORDENADAS');
+  const fs = Math.max(13, Math.round(w / 48)), lh = Math.round(fs * 1.35), lines = loc ? [l1, loc] : [l1], bh = lh * lines.length + Math.round(fs * 0.6);
+  g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(0, h - bh, w, bh); g.fillStyle = '#fff'; g.font = '600 ' + fs + 'px system-ui, Arial, sans-serif'; g.textBaseline = 'top';
+  lines.forEach((t, i) => { let s = t; while (g.measureText(s).width > w - fs && s.length > 4) s = s.slice(0, -2); g.fillText(s === t ? t : s + '…', Math.round(fs * 0.5), h - bh + Math.round(fs * 0.3) + i * lh); });
+  const data = c.toDataURL('image/jpeg', FOTO_Q);
+  const id = 'f' + uid(); await DB.put('fotos', id, {id, obraId: S.obraId, data}); fotoCache.set(id, data);
+  return {id, lat: lat ?? null, lng: lng ?? null, origem, tiradaEm: quando, carimbo: true, legenda: '', fase: 'depois'};
+};
+const _fotosArea = fotosArea;
+fotosArea = function (fotos) { let h = _fotosArea.apply(this, arguments);
+  fotos.forEach(f => { if (f.tiradaEm) h = h.replace('<button class="btn mini dan" data-act="fotoDel" data-i="' + fotos.indexOf(f) + '">', '<span class="gpsbadge ok">🕒 ' + fHora(f.tiradaEm) + '</span><button class="btn mini dan" data-act="fotoDel" data-i="' + fotos.indexOf(f) + '">'); });
+  return h; };
+
+/* ---------- 6. relatórios de atendimento (fiscal e empresa) ---------- */
+const capFoto = (f, n, L, ocx) => { const lat = f.lat != null ? f.lat : (L && L.lat), lng = f.lng != null ? f.lng : (L && L.lng);
+  return `<b>Foto ${n}</b> — ${cap(f.fase || 'antes')}${f.legenda ? ' — ' + esc(f.legenda) : ''}<br>${f.tiradaEm ? '🕒 ' + fHora(f.tiradaEm) : '<span style="color:#c0392b">sem data/hora</span>'} · ${lat != null ? '📍 ' + fN(lat, 6) + ', ' + fN(lng, 6) + (f.origem ? ' (' + esc(ORIGEM[f.origem] || f.origem) + ')' : '') : '<span style="color:#c0392b">sem coordenadas</span>'}`; };
+const noPeriodo = (iso, de, ate) => { const d = String(iso || '').slice(0, 10); return d && d >= de && d <= ate; };
+async function htmlAtendFiscal(o, de, ate) {
+  const l = o.ocorrencias.filter(x => x.vistFiscal && noPeriodo(x.vistFiscal.em, de, ate)).sort((a, b) => String(a.vistFiscal.em).localeCompare(String(b.vistFiscal.em)));
+  if (!l.length) return null; let n = 0, b = '';
+  for (const x of l) { const m = x.med || {}, sv = (Array.isArray(x.servsFiscal) && x.servsFiscal.length ? x.servsFiscal : x.servSug ? [{id: x.servSug, qtd: x.qtdFiscal}] : []);
+    let fo = ''; for (const f of x.fotos || []) { n++; const src = await getFoto(f.id); fo += `<div class="foto"><img src="${src || ''}"><div class="cp">${capFoto(f, n, x)}</div></div>`; }
+    b += `<div style="page-break-inside:avoid;margin:10px 0 16px"><h2>Ocorrência nº ${x.num} — ${esc(ocLocal(x))}</h2><table>
+     <tr><td><b>Atendimento do fiscal</b></td><td>${fHora(x.vistFiscal.em)}${x.vistFiscal.por ? ' — ' + esc(x.vistFiscal.por) : ''}</td><td><b>Prioridade sugerida</b></td><td>${(PRI[x.priF] || PRI.media).l}</td></tr>
+     <tr><td><b>Coordenadas</b></td><td>${x.lat != null ? fN(x.lat, 6) + ', ' + fN(x.lng, 6) : '—'}</td><td><b>Referência</b></td><td>${esc(x.ref || '—')}</td></tr>
+     <tr><td><b>Relato recebido</b></td><td colspan="3">${esc(x.desc || '—')}</td></tr>
+     <tr><td><b>Característica</b></td><td>${esc(x.tipo || '—')}</td><td><b>Dimensões</b></td><td>${m.c && m.l ? (m.n > 1 ? m.n + ' × ' : '') + fN(m.c) + ' × ' + fN(m.l) + ' m' + (m.e ? ' × ' + fN(m.e, 0) + ' cm' : '') : '—'}</td></tr>
+     <tr><td><b>Constatação do fiscal</b></td><td colspan="3">${esc(x.constat || '—')}</td></tr>
+     <tr><td><b>Serviços levantados</b></td><td colspan="3">${sv.map(s => { const q = svcOf(o, s.id); return q ? esc(q.codigo + ' — ' + q.descricao) + ': <b>' + fN(num(s.qtd) || 0) + ' ' + esc(q.unidade) + '</b>' : ''; }).filter(Boolean).join('<br>') || '—'}</td></tr></table>
+     ${fo ? `<div class="fotos">${fo}</div>` : '<p><i>Sem fotos.</i></p>'}</div>`; }
+  return docWrap('Relatório de atendimento do fiscal — ' + o.nome, `<section class="pg">${cabDoc(o, 'RELATÓRIO DE ATENDIMENTO DO FISCAL', 'Período: <b>' + fData(de) + ' a ' + fData(ate) + '</b> · ' + l.length + ' ocorrência(s) vistoriada(s)')}${b}${assinaturas(o)}</section>`);
+}
+async function htmlAtendEmpresa(o, de, ate) {
+  const l = o.execucoes.filter(e => e.data >= de && e.data <= ate).sort((a, b) => String(a.data).localeCompare(String(b.data)) || String(a.criadoEm || '').localeCompare(String(b.criadoEm || '')));
+  if (!l.length) return null; let n = 0, b = '';
+  for (const e of l) { const L = localEx(o, e), oc = L.oc, me = e.med || {};
+    const F = fotosConf(e, o); let fo = '';
+    for (const f of F.antes.concat(e.fotos.filter(x => x.fase === 'durante'), F.depois)) { n++; const src = await getFoto(f.id); fo += `<div class="foto"><img src="${src || ''}"><div class="cp">${capFoto(f, n, L)}</div></div>`; }
+    const dv = typeof window.spDivergExt === 'function' ? window.spDivergExt(o, e) : [];
+    const conf = e.conferida ? 'Conferida em campo — qualidade aprovada' + (e.conferidaPor ? ' — ' + esc(e.conferidaPor) : '') : e.qualidade === 'reprovada' ? 'Reprovada pelo fiscal — refazer' : 'Aguardando conferência do fiscal';
+    b += `<div style="page-break-inside:avoid;margin:10px 0 16px"><h2>${fData(e.data)} — ${esc(L.txt)}${oc ? ' (ocorrência nº ' + oc.num + ')' : ' (avulso)'}</h2><table>
+     <tr><td><b>Registrado por</b></td><td>${esc(e.criadoPor || '—')}${e.criadoEm ? ' em ' + fHora(e.criadoEm) : ''}</td><td><b>Situação</b></td><td>${conf}</td></tr>
+     <tr><td><b>Serviços executados</b></td><td colspan="3">${e.itens.map(i => { const s = svcOf(o, i.servicoId); return s ? esc(s.codigo + ' — ' + s.descricao) + ': <b>' + fN(num(i.qtd) || 0) + ' ' + esc(s.unidade) + '</b>' : ''; }).filter(Boolean).join('<br>') || '—'}</td></tr>
+     <tr><td><b>Medidas</b></td><td>${me.c && me.l ? fN(me.c) + ' × ' + fN(me.l) + ' m' + (me.e ? ' × ' + fN(me.e, 0) + ' cm' : '') : '—'}</td><td><b>Serviço concluído</b></td><td>${e.concluiu ? 'Sim' : 'Não'}</td></tr>
+     <tr><td><b>Descrição</b></td><td colspan="3">${esc(e.desc || e.descCampo || '—')}</td></tr>
+     ${e.parecer ? `<tr><td><b>Parecer do fiscal</b></td><td colspan="3">${esc(e.parecer)}</td></tr>` : ''}
+     ${dv.length ? `<tr><td><b>Alterações em relação ao levantamento do fiscal</b></td><td colspan="3" style="color:#c0392b">${dv.map(esc).join('<br>')}</td></tr>` : ''}</table>
+     ${fo ? `<div class="fotos">${fo}</div>` : '<p><i>Sem fotos.</i></p>'}</div>`; }
+  return docWrap('Relatório de atendimento da empresa — ' + o.nome, `<section class="pg">${cabDoc(o, 'RELATÓRIO DE ATENDIMENTO DA EMPRESA CONTRATADA', 'Período: <b>' + fData(de) + ' a ' + fData(ate) + '</b> · ' + l.length + ' atendimento(s)')}${b}${assinaturas(o)}</section>`);
+}
+window.htmlAtendFiscal = htmlAtendFiscal; window.htmlAtendEmpresa = htmlAtendEmpresa;
+ACTS.relAtFis = async function () { const o = O(), r = S.f.rel; toast('Montando relatório…'); const h = await htmlAtendFiscal(o, r.de, r.ate); if (!h) { toast('Nenhum atendimento do fiscal entre ' + fData(r.de) + ' e ' + fData(r.ate) + '.', 4000); return; } abrirPreview('Atendimento do fiscal — ' + fData(r.de) + ' a ' + fData(r.ate), h, false); };
+ACTS.relAtEmp = async function () { const o = O(), r = S.f.rel; toast('Montando relatório…'); const h = await htmlAtendEmpresa(o, r.de, r.ate); if (!h) { toast('Nenhum atendimento da empresa entre ' + fData(r.de) + ' e ' + fData(r.ate) + '.', 4000); return; } abrirPreview('Atendimento da empresa — ' + fData(r.de) + ' a ' + fData(r.ate), h, false); };
+CHG.spRelP = function (el, d) { S.f.rel[d.k] = el.value; render(); };
+const periodo = k => { const r = S.f.rel; return `<span class="row gap" style="align-items:end"><label>De<input type="date" value="${r.de}" data-chg="spRelP" data-k="de"></label><label>Até<input type="date" value="${r.ate}" data-chg="spRelP" data-k="ate"></label><button class="btn" data-act="${k}">🖨 Relatório de atendimento ${k === 'relAtFis' ? 'do fiscal' : 'da empresa'}</button></span>`; };
+const _tRel = tRel;
+tRel = function (o) { return _tRel.apply(this, arguments).replace('<p class="small muted" style="margin-top:12px">Para PDF:', `<div class="cols" style="margin-top:14px"><div class="item"><h4>Relatório de atendimento do fiscal</h4><p class="small muted">Ocorrências vistoriadas no período: relato, constatação, dimensões, serviços levantados e fotos do antes com data/hora e coordenadas.</p><button class="btn pri" data-act="relAtFis">Gerar relatório do fiscal</button></div>
+  <div class="item"><h4>Relatório de atendimento da empresa</h4><p class="small muted">Execuções da empresa contratada no período: serviços e quantidades, medidas, situação da conferência, alterações em relação ao fiscal e fotos do antes e do depois com data/hora e coordenadas.</p><button class="btn pri" data-act="relAtEmp">Gerar relatório da empresa</button></div></div>
+  <p class="small muted" style="margin-top:12px">Para PDF:`); };
+const _tAtend2 = tAtend;
+tAtend = function (o) {
+  /* 7. empresa contratada: só o atendimento do contratado */
+  if (S.perfil === 'empresa') S.f.atM = 'emp';
+  let h = _tAtend2.apply(this, arguments);
+  if (S.perfil === 'empresa') h = h.replace(/<button class="btn [^"]*" data-act="atModo" data-v="fis"[\s\S]*?<\/button>/, '');
+  const k = S.f.atM === 'fis' ? 'relAtFis' : 'relAtEmp';
+  return h.replace('<div class="toolbar">', `<div class="toolbar" style="justify-content:flex-end">${periodo(k)}</div><div class="toolbar">`);
+};
+/* 7. empresa contratada: só a aba Atendimento */
+const _telaObra = telaObra;
+telaObra = function (o) {
+  if (S.perfil !== 'empresa') return _telaObra.apply(this, arguments);
+  S.tab = 'atend'; S.f.atM = 'emp';
+  return _telaObra.apply(this, arguments).replace(/<nav class="tabs">[\s\S]*?<\/nav>/, '<nav class="tabs"><button class="tab on" data-act="tab" data-k="atend">Atendimento</button></nav>');
+};
+const _tab = ACTS.tab;
+ACTS.tab = function (d) { if (S.perfil === 'empresa' && d.k !== 'atend') { toast('A empresa contratada tem acesso só aos atendimentos.'); return; } return _tab.apply(this, arguments); };
+const _atModo = ACTS.atModo;
+ACTS.atModo = function (d) { if (S.perfil === 'empresa' && d.v !== 'emp') return; return _atModo.apply(this, arguments); };
 })();
 </script>
 </body>
