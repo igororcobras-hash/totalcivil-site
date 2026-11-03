@@ -1721,7 +1721,7 @@ function toggleHelp(b) { const h = b.closest('.field, td, th').querySelector('.f
    ===================================================================== */
 const TABS = [
   ['projeto', '1. Projeto'], ['chuva', '2. Chuva (IDF · tc)'], ['ruas', '3. Ruas e greide'],
-  ['bacias', '4. Bacias'], ['bls', '5. Sarjetas e bocas-de-lobo'], ['pvs', '6. Poços de visita e topografia'],
+  ['bacias', '4. Bacias'], ['bls', '5. Caixas de Ralo e Boca de Lobo'], ['pvs', '6. Poços de visita e topografia'],
   ['rede', '7. Rede tronco'], ['planta', '8. Planta baixa'], ['perfil', '9. Perfil e piezométrica'], ['secao', '10. Seção transversal'],
   ['tresd', '11. Visualização 3D'], ['custos', '12. Custos (SINAPI/SCO)'], ['verif', '13. Verificação'], ['memorial', '14. Memorial e impressão']
 ];
@@ -2057,7 +2057,7 @@ function vProjeto() {
   <p class="hint" style="font-size:.78rem;color:var(--muted);margin-top:.6rem">Diâmetros, cotas, declividades e áreas são dados de cada trecho e ficam nas planilhas das abas 4 a 7, localizados por estaca.</p></div>
   <details class="ajuda"><summary>Critérios de verificação (limites de norma) — altere só se necessário</summary><div class="in">
     <p>Estes valores <b>não são dados do projeto</b>: são os limites usados para conferir os resultados (aprovado ✓, atenção ⚠ ou revisar ✕). Os padrões seguem DNIT e DAEE/CETESB.</p>
-    <div class="section-title">Sarjetas e bocas-de-lobo</div><div class="fgrid">
+    <div class="section-title">Caixas de Ralo e Boca de Lobo</div><div class="fgrid">
       ${fld('crit.ymax', 'Lâmina máx. na guia (m)', {step: 0.005})}${fld('crit.Tmax', 'Largura alagada máx. (m)', {step: 0.1})}
       ${fld('crit.Cw', 'Coef. vertedor Cw', {step: 0.01})}${fld('crit.Co', 'Coef. orifício Co', {step: 0.01})}
       ${fld('crit.ramalDmin', 'Ramal — Ø mín. (mm)', {step: 50})}${fld('crit.ramalLmax', 'Ramal — L máx. (m)', {step: 1})}${fld('crit.ramalImin', 'Ramal — i mín. (%)', {step: 0.1})}</div>
@@ -2607,6 +2607,7 @@ function T3ruas(K) {
     }
     const poly = [q.T1, q.P1, q.L, q.P2, q.T2].concat(arco.length > 1 ? arco.slice(1, -1).reverse() : []);
     T3poligono(K, poly, () => (zA + zB) / 2 + mf, T3COR.passeio, 0.7, 'passeio');
+    if (q.arcoM && q.arcoM.length > 2) T3poligono(K, [q.L].concat(q.arcoM), () => (zA + zB) / 2 + mf, T3COR.passeio, 0.7, 'passeio');
   });
 }
 
@@ -3056,10 +3057,10 @@ function vBacias() {
     <p>Áreas mistas: C ponderado = Σ(Cᵢ·Aᵢ) / ΣAᵢ.</p>`)}`;
 }
 
-/* ---------- 5. SARJETAS E BOCAS-DE-LOBO ---------- */
+/* ---------- 5. CAIXAS DE RALO E BOCA DE LOBO ---------- */
 function vBLs() {
   P.bls.forEach(b => { b.cxPad = padKey(b.cxB, b.cxL); b.grPad = padKey(b.gB, b.gL); });
-  return `<h3>Sarjetas, bocas-de-lobo e ramais</h3>
+  return `<h3>Caixas de Ralo e Boca de Lobo — e ramais</h3>
   <p class="lead">Uma linha por poço de visita (PV-01, PV-02…), localizado por estaca. Na mesma linha: vazão que chega pela sarjeta, lâmina, largura alagada, quanto o PV engole, quanto <b>passa</b> para o PV seguinte e o funcionamento do <b>ramal até o PV da rede</b>. Toque em ▸ para grelha, depressão, fator de redução e sugestões.</p>
   <div class="bar-btns"><button class="btn btn-primary btn-sm" onclick="addItem('bls')">＋ Poço de visita</button></div>
   ${sheet('bls', [
@@ -3294,7 +3295,7 @@ function aplicarPrevia() {
 }
 /* ---------- 12. MEMORIAL ---------- */
 const IMPR_ITENS = [
-  ['crit', 'Critérios de projeto'], ['metod', 'Metodologia e fórmulas'], ['bacias', 'Bacias de contribuição'], ['bls', 'Sarjetas e bocas-de-lobo'], ['ramais', 'Ramais de ligação'],
+  ['crit', 'Critérios de projeto'], ['metod', 'Metodologia e fórmulas'], ['bacias', 'Bacias de contribuição'], ['bls', 'Caixas de Ralo e Boca de Lobo'], ['ramais', 'Ramais de ligação'],
   ['rede', 'Rede tronco — planilha de cálculo'], ['pvs', 'Poços de visita'], ['piez', 'Linha piezométrica'], ['planta', 'Desenho — planta baixa'], ['perfis', 'Desenho — perfis longitudinais'],
   ['secoes', 'Desenho — seções transversais (todos os PVs)'], ['quant', 'Quantitativos estimados'], ['custos', 'Orçamento estimado (SINAPI/SCO)'], ['verif', 'Verificação'], ['refs', 'Referências e assinatura']
 ];
@@ -3355,7 +3356,7 @@ function memorialHTML(sel) {
   ${sel.bacias ? `${H('Bacias de contribuição')}
   ${T(['Bacia', 'Descrição', 'Destino', 'A (ha)', 'C', 'tc (min)', 'i (mm/h)', 'Q (L/s)'], P.bacias.map(b => { const r = R.bac[b.id]; return tr([esc(b.id), esc(b.nome), esc(b.dest), fmt(r.A, 3), fmt(r.C, 2), fmt(r.tc, 1), fmt(r.i, 1), fL(r.Q)]); }))}` : ''}
 
-  ${sel.bls ? `${H('Sarjetas e bocas-de-lobo')}
+  ${sel.bls ? `${H('Caixas de Ralo e Boca de Lobo')}
   ${T(['BL', 'Rua / est.', 'Modelo da caixa', 'S (%)', 'Q afl. (L/s)', 'y (cm)', 'T (m)', 'Q adm. (L/s)', 'Cap. (L/s)', 'Engolida (L/s)', 'Passa (L/s)', ''], P.bls.map(b => { const r = R.bl[b.id]; return tr([esc(b.id), esc(ruaNome(b.rua)) + ' ' + estLabel(num(b.dist)), esc((CAIXAS[b.modelo] || {}).nome || BLTIPOS[b.tipo].nome), fmt(r.Sp, 2), fL(r.Qafl), isNum(r.y) ? fmt(r.y * 100, 1) : '—', fmt(r.T, 2), fL(r.Qadm), fL(r.Qcap), fL(r.Qeng), fL(r.Qbyp) + (b.prox && r.Qbyp > 1e-4 ? ' → ' + esc(b.prox) : ''), stTxt(r.st)]); }))}` : ''}
 
   ${sel.ramais ? `${H('Ramais de ligação')}
@@ -3856,6 +3857,7 @@ function baixarBlob(nome, b) {
     });
     // curvas do meio-fio nas esquinas
     CR.cantos.forEach(c => { e += dPl('MEIO-FIO-RAIO-ESQUINA', c.arco.map(p => [p.x, p.y]), false); });
+    (CR.muros || []).forEach(m => { e += dPl('PASSEIO-ALINHAMENTO', m.arco.map(p => [p.x, p.y]), false); });
     // trechos com seta de fluxo e rótulo
     R.ordem.forEach(t => {
       const a = posPV(G, pvById(t.m)), b = posPV(G, pvById(t.j)); if (!a || !b) return;
@@ -4230,7 +4232,7 @@ function raioRua(r) { const v = num(r && r.raio); return isNum(v) && v >= 0 ? v 
 const _CRZ = new WeakMap();
 function cruzamentos(G) {
   if (_CRZ.has(G)) return _CRZ.get(G);
-  const out = {cantos: [], esq: [], cortes: {}, cortesP: {}, clip: {}, clipP: {}};
+  const out = {cantos: [], esq: [], muros: [], cortes: {}, cortesP: {}, clip: {}, clipP: {}};
   const gs = P.ruas.map(r => G[r.id]).filter(Boolean);
   const addCorte = (id, sg, a, b) => { const k = id + '|' + sg; (out.cortes[k] = out.cortes[k] || []).push([Math.min(a, b), Math.max(a, b)]); };
   const addClip = (id, lado, v, o = out.clip) => { const c = o[id] = o[id] || {lo: -Infinity, hi: Infinity}; if (lado > 0) c.hi = Math.min(c.hi, v); else c.lo = Math.max(c.lo, v); };
@@ -4268,8 +4270,24 @@ function cruzamentos(G) {
       if (existe) {   // esquina completa (usada no 3D): tangentes, curva, alinhamento dos lotes
         const W1 = a1 + (+g1.r.passeio || 2), W2 = a2 + (+g2.r.passeio || 2), sT1 = sC1 + e1 * c.t, sT2 = sC2 + e2 * c.t;
         const sL = (sg2 * W2 - g2.loc(g1.at(0, sg1 * W1)).off) / k;
-        out.esq.push({C, O: c.O || C, arco: c.arco || null, sg1, sg2, sT1, sT2, r1: g1.r.id, r2: g2.r.id,
-          T1: g1.at(sT1, sg1 * a1), T2: g2.at(sT2, sg2 * a2), P1: g1.at(sT1, sg1 * W1), P2: g2.at(sT2, sg2 * W2), L: g1.at(sL, sg1 * W1)});
+        const L = g1.at(sL, sg1 * W1);
+        // muro / alinhamento dos lotes com o MESMO raio do meio-fio (curva tangente aos dois alinhamentos)
+        let arcoM = null;
+        if (c.t > 0) {
+          const Rm = c.t * Math.tan(th / 2), blm = Math.hypot(d1.x + d2.x, d1.y + d2.y) || 1, dcm = Rm / Math.sin(th / 2);
+          const Om = {x: L.x + (d1.x + d2.x) / blm * dcm, y: L.y + (d1.y + d2.y) / blm * dcm};
+          const M1 = {x: L.x + d1.x * c.t, y: L.y + d1.y * c.t}, M2 = {x: L.x + d2.x * c.t, y: L.y + d2.y * c.t};
+          let b1 = Math.atan2(M1.y - Om.y, M1.x - Om.x), b2 = Math.atan2(M2.y - Om.y, M2.x - Om.x), db = b2 - b1;
+          while (db > Math.PI) db -= 2 * Math.PI; while (db < -Math.PI) db += 2 * Math.PI;
+          arcoM = []; for (let q = 0; q <= 16; q++) { const an = b1 + db * q / 16; arcoM.push({x: Om.x + Rm * Math.cos(an), y: Om.y + Rm * Math.sin(an)}); }
+          out.muros.push({L, arco: arcoM, O: Om, R: Rm, r1: g1.r.id, r2: g2.r.id});
+          // alinhamento reto interrompido onde entra a curva do muro
+          const sL2 = g2.loc(L).s, k1 = g1.r.id + '|' + sg1, k2 = g2.r.id + '|' + sg2;
+          (out.cortesP[k1] = out.cortesP[k1] || []).push([Math.min(sL, sL + e1 * c.t), Math.max(sL, sL + e1 * c.t)]);
+          (out.cortesP[k2] = out.cortesP[k2] || []).push([Math.min(sL2, sL2 + e2 * c.t), Math.max(sL2, sL2 + e2 * c.t)]);
+        }
+        out.esq.push({C, O: c.O || C, arco: c.arco || null, sg1, sg2, sT1, sT2, r1: g1.r.id, r2: g2.r.id, arcoM,
+          T1: g1.at(sT1, sg1 * a1), T2: g2.at(sT2, sg2 * a2), P1: g1.at(sT1, sg1 * W1), P2: g2.at(sT2, sg2 * W2), L});
       }
     }));
     // meio-fio interrompido na boca de cada rua
@@ -4368,6 +4386,9 @@ function svgPlanta(K, W, H, st, lay) {
     s += poly([g.at(e0, w), g.at(e1, w), g.at(e1, -w), g.at(e0, -w)], K.pass); });
   P.ruas.forEach(r => { const g = G[r.id]; if (!g) return; const a = (+r.larg || 7) / 2, [e0, e1] = extRua(G, g);
     s += poly([g.at(e0, a), g.at(e1, a), g.at(e1, -a), g.at(e0, -a)], K.pav); });
+  // muros com raio: o canto do lote vira passeio, com a curva do alinhamento
+  cruzamentos(G).muros.forEach(m => { s += poly([m.L].concat(m.arco), K.pass);
+    s += `<polyline points="${m.arco.map(p => { const q = S(p); return q.x.toFixed(1) + ',' + q.y.toFixed(1); }).join(' ')}" fill="none" stroke="${K.ink}" stroke-width="0.8" opacity="0.45"/>`; });
   // esquinas com raio (curva do meio-fio na embocadura das ruas)
   cruzamentos(G).cantos.forEach(c => { s += poly([c.C].concat(c.arco), K.pav);
     const pts = c.arco.map(p => { const q = S(p); return q.x.toFixed(1) + ',' + q.y.toFixed(1); }).join(' ');
@@ -5025,7 +5046,7 @@ async function lerBanco(tipo, ref) {
   const r = await fetch(DADOS_URL + it.arquivo); if (!r.ok) throw new Error('falha ao baixar ' + it.arquivo);
   if (!window.DecompressionStream) throw new Error('navegador sem descompressão nativa — atualize o Chrome/Safari');
   const txt = await new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).text();
-  const d = JSON.parse(txt); BANCOS[k] = {map: d.compMap || {}, comp: d.competencia || it.competencia, it}; return BANCOS[k];
+  const d = JSON.parse(txt); BANCOS[k] = {map: d.compMap || {}, comp: d.competencia || it.competencia, it, dipr: d.dipr || null}; return BANCOS[k];
 }
 const ultimoRef = (idx, tipo) => ((idx[tipo] || []).map(x => x.ref).sort().pop()) || '';
 
@@ -5049,32 +5070,35 @@ function regras(cfg) {
   const I = cfg.interf === 'ALTO' ? /ALTO NÍVEL/ : /BAIXO NÍVEL/, L = [];
   DIAMS.forEach(D => L.push({k: 'tubo:' + D, nome: 'Tubo de concreto Ø' + D + ' mm (fornec. e assentamento)',
     sinapi: [[new RegExp('^TUBO DE CONCRETO PARA REDES COLETORAS DE ÁGUAS PLUVIAIS, DIÂMETRO DE ' + D + ' MM'), /FORNECIMENTO E ASSENTAMENTO/], [I]],
-    sco: [[new RegExp('^Tubo de concreto (armado, classe PA-1|simples, classe PS-1).*(diâmetro|de) (de )?' + fx(D) + 'm')], [/PA-1/]]}));
+    sco: [[new RegExp('^Tubo de concreto (armado, classe PA-1|simples, classe PS-1).*(diâmetro|de) (de )?' + fx(D) + 'm')], [/PA-1/]],
+    emop: typeof EMOP_PA !== 'undefined' ? EMOP_PA['PA-1'][D] || null : null}));
   const dH = [/(PROF\.|PROFUNDIDADE) ATÉ 1,5 M/, /PROF\. MAIOR QUE 1,5 M (E )?ATÉ 3,0 M/, /PROF\. (MAIOR QUE |DE )3,0 M ATÉ 4,5 M/, /PROF\. MAIOR QUE 4,5 M ATÉ 6,0 M/];
   const dB = [/LARG(URA|\.) MENOR QUE 0,8 M/, /LARG(URA|\.) DE 0,8 M A 1,5 M|LARG(URA|\.) MENOR QUE 1,5 M/, /LARG(URA|\.)? DE 1,5 M A 2,5 M/];
   BANDS.forEach((b, h) => [0, 1, 2].forEach(w => L.push({k: `esc:${h}:${w}`, nome: `Escavação mecanizada de vala, prof. ${fmt(b[0], 1)}–${fmt(b[1], 1)} m, largura ${['< 0,8', '0,8–1,5', '1,5–2,5'][w]} m`,
-    sinapi: [[/^ESCAVAÇÃO MECANIZADA DE VALA/, dH[h], /1A CATEGORIA/], [dB[w], I, w < 2 ? /RETROESCAV/ : /ESCAVADEIRA/]]})));
+    sinapi: [[/^ESCAVAÇÃO MECANIZADA DE VALA/, dH[h], /1A CATEGORIA/], [dB[w], I, w < 2 ? /RETROESCAV/ : /ESCAVADEIRA/]],
+    emop: ['03.020.0050', '03.020.0085', '03.020.0090', '03.020.0100'][h]})));
   const rH = [/PROFUNDIDADE ATÉ 1,5 M/, /PROFUNDIDADE (DE )?1,5 A 3,0 M/, /PROFUNDIDADE (DE )?3,0 A (4,5|6,0) M/, /PROFUNDIDADE (DE )?3,0 A 6,0 M/];
   const rB = [/LARGURA ATÉ 0,8 M/, /LARGURA (0,8 A 1,5|ATÉ 1,5) M/, /LARGURA (DE )?1,5 A 2,5 M/];
   BANDS.forEach((b, h) => [0, 1, 2].forEach(w => L.push({k: `reat:${h}:${w}`, nome: `Reaterro mecanizado de vala, prof. ${fmt(b[0], 1)}–${fmt(b[1], 1)} m, largura ${['< 0,8', '0,8–1,5', '1,5–2,5'][w]} m`,
-    sinapi: [[/^REATERRO MECANIZADO DE VALA/, rH[h], /1ª CATEGORIA/], [rB[w], /PERCUSSÃO/]]})));
+    sinapi: [[/^REATERRO MECANIZADO DE VALA/, rH[h], /1ª CATEGORIA/], [rB[w], /PERCUSSÃO/]], emop: '03.011.0015'})));
   const eH = [/PROFUNDIDADE DE 0 A 1,5 M/, /PROFUNDIDADE DE 1,5 A 3,0 M/, /PROFUNDIDADE DE 3,0 A 4,5 M/, /PROFUNDIDADE DE 4,5 A 6,0 M/];
   BANDS.forEach((b, h) => [0, 1].forEach(w => L.push({k: `escor:${h}:${w}`, nome: `Escoramento de vala (${cfg.escor.toLowerCase()}), prof. ${fmt(b[0], 1)}–${fmt(b[1], 1)} m, largura ${w ? '1,5–2,5' : '< 1,5'} m`,
     sinapi: [[new RegExp('^ESCORAMENTO DE VALA, TIPO ' + cfg.escor), eH[h]], [w ? /MAIOR OU IGUAL A 1,5 M/ : /LARGURA MENOR QUE 1,5 M/]],
-    sco: [[/^Escoramento para valas/], [/2,50m/]]})));
+    sco: [[/^Escoramento para valas/], [/2,50m/]], emop: {PONTALETEAMENTO: '05.080.0020', 'DESCONTÍNUO': '05.080.0025', 'CONTÍNUO': '05.080.0030'}[cfg.escor] || '05.080.0025'})));
   [0, 1].forEach(w => L.push({k: 'berco:' + w, nome: 'Berço de brita no fundo da vala, largura ' + (w ? '1,5–2,5' : '< 1,5') + ' m',
-    sinapi: [[/^PREPARO DE FUNDO DE VALA/, /CAMADA DE BRITA/], [w ? /MAIOR OU IGUAL A 1,5 M/ : /LARGURA MENOR QUE 1,5 M/, /MECANIZADO/]]}));
+    sinapi: [[/^PREPARO DE FUNDO DE VALA/, /CAMADA DE BRITA/], [w ? /MAIOR OU IGUAL A 1,5 M/ : /LARGURA MENOR QUE 1,5 M/, /MECANIZADO/]], emop: '06.088.0010'}));
   [[1000, '1,0'], [1200, '1,2'], [1500, '1,5'], [2000, '1,5']].forEach(([d, s]) => {
     L.push({k: 'pvbase:' + d, nome: 'Base de PV circular pré-moldado Ø' + d + ' (sem tampão)',
       sinapi: [[/^BASE PARA POÇO DE VISITA CIRCULAR PARA DRENAGEM, EM CONCRETO PRÉ-MOLDADO/, new RegExp('DIÂMETRO INTERNO = ' + s + '0? M')], []],
-      sco: [[/^Poço de visita de blocos de concreto/, new RegExp('internamente \\(' + (d <= 1200 ? '1,20x1,20' : d <= 1500 ? '1,50x1,50' : '2,00x2,00'))], []]});
+      sco: [[/^Poço de visita de blocos de concreto/, new RegExp('internamente \\(' + (d <= 1200 ? '1,20x1,20' : d <= 1500 ? '1,50x1,50' : '2,00x2,00'))], []],
+      emop: typeof EMOP_PVBL !== 'undefined' ? ((EMOP_PVBL.find(x => x[1] * 1000 >= d - 1) || EMOP_PVBL[EMOP_PVBL.length - 1])[0]) : null});
     L.push({k: 'pvacr:' + d, nome: 'Acréscimo de PV circular pré-moldado Ø' + d + ' (por metro)',
       sinapi: [[/^ACRÉSCIMO PARA POÇO DE VISITA CIRCULAR PARA DRENAGEM, EM CONCRETO PRÉ-MOLDADO/, new RegExp('DIÂMETRO INTERNO = ' + s.replace(',0', '') + '(,0)? M')], []]});
   });
   [['gs', 'SIMPLES RETANGULAR'], ['gd', 'DUPLA RETANGULAR'], ['cb', 'COMBINADA COM GRELHA RETANGULAR'], ['gr', 'COMBINADA COM GRELHA RETANGULAR']].forEach(([t, s]) =>
     [['Pré-moldada', 'EM CONCRETO PRÉ-MOLDADO', /pré-moldado/i], ['Blocos de concreto', 'EM ALVENARIA COM BLOCOS DE CONCRETO', /blocos de concreto/i], ['Alvenaria de tijolo maciço', 'EM ALVENARIA COM TIJOLOS CERÂMICOS MACIÇOS', /tijolo maci/i], ['Concreto moldado in loco', 'EM ALVENARIA COM BLOCOS DE CONCRETO', /blocos de concreto/i]].forEach(([c, sc, rs]) =>
       L.push({k: `bl:${t}:${c}`, nome: 'Caixa de boca-de-lobo — ' + BLTIPOS[t].nome.toLowerCase() + ' — ' + c.toLowerCase(),
-        sinapi: [[new RegExp('^CAIXA PARA BOCA DE LOBO ' + s)], [new RegExp(sc)]], sco: [[/^Caixa de ralo/, rs], []]})));
+        sinapi: [[new RegExp('^CAIXA PARA BOCA DE LOBO ' + s)], [new RegExp(sc)]], sco: [[/^Caixa de ralo/, rs], []], emop: t === 'gr' || t === 'cb' ? '06.015.0030' : '06.015.0031'})));
   // terraplenagem (corte, carga, transporte e aterro do greide de projeto)
   L.push({k: 'terra:corte', nome: 'Corte e escavação de material de 1ª categoria com trator de esteiras (reaproveitado no aterro)',
     sinapi: [[/^ESCAVAÇÃO HORIZONTAL EM SOLO DE 1A CATEGORIA COM TRATOR DE ESTEIRAS \(150HP/], []], sco: [[/^Escavação mecânica com trator tipo D-6R, em material de 1ª categoria/], []]});
@@ -5088,33 +5112,39 @@ function regras(cfg) {
 }
 function precoDe(v, regime) { const p = regime === 'D' ? v.precoCom : v.preco; return isNum(+p) ? +p : null; }
 
+const BANCOS_CUSTO = {sinapi: 'SINAPI RJ', sco: 'SCO-Rio', emop: 'EMOP-RJ'};
 async function atualizarCustos(silencioso) {
   const cfg = custosCfg();
   try {
-    if (!silencioso) toast('Buscando preços no SINAPI e no SCO…');
+    if (!silencioso) toast('Buscando preços no SINAPI, no SCO e na EMOP…');
     const idx = await lerIndice();
+    if (!BANCOS_CUSTO[cfg.banco]) cfg.banco = 'sinapi';
     const outro = cfg.banco === 'sinapi' ? 'sco' : 'sinapi';
-    const ref = cfg.refFix || ultimoRef(idx, cfg.banco); if (!ref) throw new Error('nenhum mês disponível');
-    const refO = (idx[outro] || []).some(x => x.ref === ref) ? ref : ultimoRef(idx, outro);
+    const ref = cfg.refFix || ultimoRef(idx, cfg.banco); if (!ref) throw new Error('nenhum mês disponível de ' + BANCOS_CUSTO[cfg.banco]);
     const BK = {[cfg.banco]: await lerBanco(cfg.banco, ref)};
-    if (refO) { try { BK[outro] = await lerBanco(outro, refO); } catch (e) { /* segue só com o principal */ } }
+    for (const t of Object.keys(BANCOS_CUSTO)) {
+      if (t === cfg.banco) continue;
+      const r2 = (idx[t] || []).some(x => x.ref === ref) ? ref : ultimoRef(idx, t);
+      if (r2) { try { BK[t] = await lerBanco(t, r2); } catch (e) { /* segue sem esse banco */ } }
+    }
     const precos = {}, cmp = {};
     for (const rg of regras(cfg)) {
       cmp[rg.k] = {};
-      for (const tipo of ['sinapi', 'sco']) {
+      for (const tipo of Object.keys(BANCOS_CUSTO)) {
         const B = BK[tipo]; if (!B) continue;
         let cod = tipo === cfg.banco && cfg.over[rg.k] && B.map[cfg.over[rg.k]] ? cfg.over[rg.k] : null;
-        if (!cod && rg[tipo]) cod = procura(B.map, rg[tipo][0], rg[tipo][1]);
+        if (!cod && typeof rg[tipo] === 'string') cod = B.map[rg[tipo]] ? rg[tipo] : null;
+        else if (!cod && rg[tipo]) cod = procura(B.map, rg[tipo][0], rg[tipo][1]);
         if (!cod) continue;
         const v = B.map[cod], m = (v.descr || '').match(/PROFUNDIDADE = ([\d,]+) M/);
-        cmp[rg.k][tipo] = {cod: cod.replace(/^S[CI]-|^SCO-/, ''), full: cod, descr: v.descr, unid: v.unid, preco: precoDe(v, cfg.regime), fonte: (tipo === 'sinapi' ? 'SINAPI RJ ' : 'SCO-Rio ') + B.comp, hBase: m ? parseFloat(m[1].replace(',', '.')) : null, src: tipo};
+        cmp[rg.k][tipo] = {cod: cod.replace(/^S[CI]-|^SCO-/, ''), full: cod, descr: v.descr, unid: v.unid, preco: precoDe(v, cfg.regime), fonte: BANCOS_CUSTO[tipo] + ' ' + B.comp, hBase: m ? parseFloat(m[1].replace(',', '.')) : null, src: tipo};
       }
-      const esc1 = cmp[rg.k][cfg.banco] || cmp[rg.k][outro];
+      const esc1 = cmp[rg.k][cfg.banco] || cmp[rg.k][outro] || Object.values(cmp[rg.k])[0];
       if (esc1) precos[rg.k] = esc1;
     }
-    cfg.precos = precos; cfg.cmp = cmp; cfg.ref = ref; cfg.comp = BK[cfg.banco].comp; cfg.compO = BK[outro] ? BK[outro].comp : ''; cfg.at = new Date().toISOString();
+    cfg.precos = precos; cfg.cmp = cmp; cfg.ref = ref; cfg.comp = BK[cfg.banco].comp; cfg.compO = BK[outro] ? BK[outro].comp : ''; cfg.comps = {}; Object.keys(BK).forEach(t => { cfg.comps[t] = BK[t].comp; }); cfg.at = new Date().toISOString();
     save(); calc(); if (TAB === 'custos') renderTab();
-    toast('Preços atualizados: ' + (cfg.banco === 'sinapi' ? 'SINAPI RJ ' : 'SCO-Rio ') + cfg.comp + (cfg.compO ? ' · comparativo ' + (outro === 'sco' ? 'SCO ' : 'SINAPI ') + cfg.compO : ''));
+    toast('Preços atualizados: ' + BANCOS_CUSTO[cfg.banco] + ' ' + cfg.comp + (Object.keys(BK).length > 1 ? ' · comparativo: ' + Object.keys(BK).filter(t => t !== cfg.banco).map(t => BANCOS_CUSTO[t] + ' ' + BK[t].comp).join(', ') : ''));
     return true;
   } catch (e) {
     if (!silencioso) alert('Não foi possível buscar os preços: ' + e.message + '\n\nVerifique a conexão. Enquanto isso o programa usa valores de referência.');
@@ -5180,10 +5210,10 @@ function vCustos() {
   const cfg = custosCfg(), o = orcamento();
   const R$ = v => 'R$ ' + fmt(v, 2);
   const refs = INDICE ? (INDICE[cfg.banco] || []).map(x => x.ref).sort().reverse() : (cfg.ref ? [cfg.ref] : []);
-  return `<h3>Custos — SINAPI e SCO-Rio</h3>
+  return `<h3>Custos — SINAPI, SCO-Rio e EMOP</h3>
   <p class="lead">Preços lidos automaticamente dos bancos mensais publicados no site (os mesmos do programa de Orçamento), atualizados pela rotina mensal. O programa localiza cada composição pela descrição (diâmetro, faixa de profundidade, largura da vala, interferência) e monta o <b>orçamento estimado da drenagem</b>. Esses preços também orientam a correção automática da rede (menor custo).</p>
   <div class="card"><h4>Banco de preços</h4><div class="fgrid">
-    <div class="field"><label>Banco principal</label><select onchange="P.custos.banco=this.value;P.custos.refFix='';INDICE&&0;atualizarCustos()"><option value="sinapi"${cfg.banco === 'sinapi' ? ' selected' : ''}>SINAPI — RJ</option><option value="sco"${cfg.banco === 'sco' ? ' selected' : ''}>SCO — Rio de Janeiro</option></select></div>
+    <div class="field"><label>Banco principal</label><select onchange="P.custos.banco=this.value;P.custos.refFix='';INDICE&&0;atualizarCustos()"><option value="sinapi"${cfg.banco === 'sinapi' ? ' selected' : ''}>SINAPI — RJ</option><option value="sco"${cfg.banco === 'sco' ? ' selected' : ''}>SCO — Rio de Janeiro</option><option value="emop"${cfg.banco === 'emop' ? ' selected' : ''}>EMOP — RJ</option></select></div>
     <div class="field"><label>Mês de referência</label><select onchange="P.custos.refFix=this.value;atualizarCustos()"><option value="">Mais recente (automático)</option>${refs.map(r => `<option value="${r}"${cfg.refFix === r ? ' selected' : ''}>${r.split('-').reverse().join('/')}</option>`).join('')}</select></div>
     <div class="field"><label>Regime</label><select onchange="P.custos.regime=this.value;atualizarCustos()"><option value="O"${cfg.regime === 'O' ? ' selected' : ''}>Não desonerado (onerado)</option><option value="D"${cfg.regime === 'D' ? ' selected' : ''}>Desonerado</option></select></div>
     <div class="field"><label>Interferências no local</label><select onchange="P.custos.interf=this.value;atualizarCustos()"><option value="BAIXO"${cfg.interf === 'BAIXO' ? ' selected' : ''}>Baixo nível</option><option value="ALTO"${cfg.interf === 'ALTO' ? ' selected' : ''}>Alto nível (vias com redes)</option></select></div>
@@ -5194,7 +5224,7 @@ function vCustos() {
     <button class="btn btn-primary btn-sm" onclick="INDICE=null;atualizarCustos()">⟳ Buscar preços agora</button>
     <label style="font-size:.8rem;display:inline-flex;gap:.35rem;align-items:center"><input type="checkbox" ${cfg.auto ? 'checked' : ''} onchange="P.custos.auto=this.checked;save()"/> Atualizar sozinho quando sair mês novo</label>
   </div>
-  <div class="msg ${o.comBanco ? 'ok' : 'warn'}" style="margin-top:.6rem">${o.comBanco ? '✓' : '⚠'} <span>${o.comBanco ? `Usando <b>${cfg.banco === 'sinapi' ? 'SINAPI RJ' : 'SCO-Rio'} ${esc(cfg.comp)}</b> · ${cfg.regime === 'D' ? 'desonerado' : 'não desonerado'} · atualizado em ${new Date(cfg.at).toLocaleString('pt-BR')}` : 'Preços ainda não carregados — usando valores de referência. Toque em "Buscar preços agora" (precisa de internet).'}</span></div>
+  <div class="msg ${o.comBanco ? 'ok' : 'warn'}" style="margin-top:.6rem">${o.comBanco ? '✓' : '⚠'} <span>${o.comBanco ? `Usando <b>${BANCOS_CUSTO[cfg.banco] || cfg.banco} ${esc(cfg.comp)}</b> · ${cfg.regime === 'D' ? 'desonerado' : 'não desonerado'} · atualizado em ${new Date(cfg.at).toLocaleString('pt-BR')}` : 'Preços ainda não carregados — usando valores de referência. Toque em "Buscar preços agora" (precisa de internet).'}</span></div>
   </div>
   <div class="card"><h4>Orçamento estimado da drenagem</h4>
     <div class="tbl-wrap"><table><thead><tr><th>Código</th><th>Descrição</th><th>Fonte</th><th>Unid.</th><th class="td-num">Quant.</th><th class="td-num">Preço unit.</th><th class="td-num">Total</th></tr></thead><tbody>
@@ -5205,19 +5235,19 @@ function vCustos() {
     </tbody></table></div>
     <p class="hint" style="font-size:.74rem;color:var(--muted);margin-top:.5rem">Estimativa para estudo e comparação de alternativas. Não inclui escavação de ramais e PVs, pavimentação, bota-fora, esgotamento, tampões, grelhas e mobilização. Para o orçamento oficial, leve as quantidades para o programa de Orçamento.</p>
   </div>
-  <div class="card"><h4>Conferência das composições — SINAPI × SCO-Rio</h4>
-    <p class="hint" style="font-size:.76rem;color:var(--muted);margin:0 0 .5rem">Para cada item: código, descrição completa, unidade e preço nos dois bancos (${cfg.regime === 'D' ? 'desonerado' : 'não desonerado'}). A coluna marcada ✓ é a usada no orçamento. Para usar outra composição, digite o código no campo "Usar código".</p>
-    <div class="tbl-wrap"><table class="cmp"><thead><tr><th>Item do projeto</th><th>SINAPI ${esc(cfg.banco === 'sinapi' ? cfg.comp : cfg.compO || '')}</th><th>SCO-Rio ${esc(cfg.banco === 'sco' ? cfg.comp : cfg.compO || '')}</th><th>Usar código</th></tr></thead><tbody>
+  <div class="card"><h4>Conferência das composições — SINAPI × SCO-Rio × EMOP</h4>
+    <p class="hint" style="font-size:.76rem;color:var(--muted);margin:0 0 .5rem">Para cada item: código, descrição completa, unidade e preço nos três bancos (${cfg.regime === 'D' ? 'desonerado' : 'não desonerado'}). A coluna marcada ✓ é a usada no orçamento. Para usar outra composição, digite o código no campo "Usar código".</p>
+    <div class="tbl-wrap"><table class="cmp"><thead><tr><th>Item do projeto</th>${Object.keys(BANCOS_CUSTO).map(t => `<th>${BANCOS_CUSTO[t]} ${esc((cfg.comps || {})[t] || (cfg.banco === t ? cfg.comp : ''))}</th>`).join('')}<th>Usar código</th></tr></thead><tbody>
     ${regras(cfg).filter(rg => o.linhas.some(x => x.k === rg.k)).map(rg => { const c2 = (cfg.cmp || {})[rg.k] || {}, us = preco(rg.k);
       const cel = t => { const x = c2[t]; if (!x) return '<td class="muted">não encontrado</td>'; const sel = us.src === t;
         return `<td style="white-space:normal;min-width:260px${sel ? ';background:var(--agua-lt)' : ''}"><b>${sel ? '✓ ' : ''}${esc(x.cod)}</b> · ${esc(x.unid)} · <b>R$ ${fmt(x.preco, 2)}</b><br><small>${esc(x.descr)}</small></td>`; };
-      return `<tr><td style="white-space:normal;min-width:180px"><b>${esc(rg.nome)}</b></td>${cel('sinapi')}${cel('sco')}<td style="width:140px"><input type="text" placeholder="${esc(us.cod)}" value="${esc(cfg.over[rg.k] ? cfg.over[rg.k].replace(/^S[CI]-|^SCO-/, '') : '')}" onchange="trocaCodigo('${rg.k}',this.value)"/></td></tr>`; }).join('')}
+      return `<tr><td style="white-space:normal;min-width:180px"><b>${esc(rg.nome)}</b></td>${Object.keys(BANCOS_CUSTO).map(cel).join('')}<td style="width:140px"><input type="text" placeholder="${esc(us.cod)}" value="${esc(cfg.over[rg.k] ? cfg.over[rg.k].replace(/^S[CI]-|^SCO-/, '') : '')}" onchange="trocaCodigo('${rg.k}',this.value)"/></td></tr>`; }).join('')}
     </tbody></table></div></div>`;
 }
 function trocaCodigo(k, v) {
   const cfg = custosCfg(); v = String(v || '').trim();
   if (!v) delete cfg.over[k];
-  else cfg.over[k] = /^SCO-|^S[CI]-/.test(v) ? v : (cfg.banco === 'sinapi' ? 'SC-' + v : (v.startsWith('SCO-') ? v : 'SCO-' + v));
+  else cfg.over[k] = cfg.banco === 'emop' ? v.replace(/-[0-9A-Z]$/, '') : /^SCO-|^S[CI]-/.test(v) ? v : (cfg.banco === 'sinapi' ? 'SC-' + v : (v.startsWith('SCO-') ? v : 'SCO-' + v));
   save(); atualizarCustos();
 }
 </script>
@@ -6295,6 +6325,11 @@ async function lerEmopLocal(forcar) {
       db.close();
     }
   } catch (e) { /* sem acesso ao banco do Orçamento */ }
+  // banco EMOP mensal publicado no site (orcamento/dados/emop): tem prioridade sobre o catálogo salvo
+  try {
+    const idx = await lerIndice(), ref = ultimoRef(idx, 'emop');
+    if (ref) { const B = await lerBanco('emop', ref); if (B.dipr && B.dipr.length) { const sit = montar(B.dipr.map(([c, d, u, p]) => ({CODIGO: c, DESCR1: d, UNID: u, CUSTO: p})), {origem: 'site', competencia: B.comp}); if (sit) EMOP_LOCAL = sit; } }
+  } catch (e) { /* sem o banco do site: fica o importado no Orçamento */ }
   if (!EMOP_LOCAL) {
     try { const c = JSON.parse(localStorage.getItem('orcadipr_base_v11') || '[]'); if (Array.isArray(c) && c.some(x => /^\d\d\.\d{3}\.\d{4}-/.test(x.CODIGO))) EMOP_LOCAL = montar(c, {origem: 'catálogo salvo'}); } catch (e) {}
   }
@@ -6489,7 +6524,7 @@ async function carregarBancosLic() {
     }
   } catch (e) { LIC.aviso.push('Bancos SINAPI e SCO-Rio indisponíveis (' + e.message + '). Confira a internet e toque em "⟳ Recarregar bancos".'); }
   LIC.BK.emop = await lerEmopLocal(true);
-  LIC.refs.emop = LIC.BK.emop ? (LIC.BK.emop.meta.importadoEm ? 'importada em ' + String(LIC.BK.emop.meta.importadoEm).slice(0, 10) : 'importada no Orçamento') : '';
+  LIC.refs.emop = LIC.BK.emop ? (LIC.BK.emop.meta.origem === 'site' ? LIC.BK.emop.meta.competencia : LIC.BK.emop.meta.importadoEm ? 'importada em ' + String(LIC.BK.emop.meta.importadoEm).slice(0, 10) : 'importada no Orçamento') : '';
 }
 function calcLic() {
   LIC.res = {};
@@ -6857,11 +6892,13 @@ function orcAlas(add) {
     if (a.enr) { add('ala:enr', a.enr.V); add('ala:geo', a.enr.geo); } });
 }
 const ALA_NOME = {conc: 'Concreto armado fck 25 MPa da boca de lançamento (preparo e lançamento)', cic: 'Concreto ciclópico da boca de lançamento (30% pedra de mão)', forma: 'Fôrma de madeira para testa, alas, soleira e dente', aco: 'Armadura de aço CA-50 (corte, dobra e montagem)', lastro: 'Lastro de concreto magro (5 cm)', esc: 'Escavação localizada para a boca de lançamento', enr: 'Enrocamento de pedra arrumada a jusante', geo: 'Geotêxtil não tecido sob o enrocamento'};
+// códigos EMOP-RJ da boca de lançamento (conferidos na EMOP 09/2026)
+const ALA_EMOP = {conc: '11.025.0009', cic: '11.003.0014', forma: '11.004.0022', aco: '11.009.0072', lastro: '11.025.0002', esc: '03.020.0050', enr: '06.085.0045', geo: '06.100.0012'};
 const ALA_UN = {conc: 'm³', cic: 'm³', forma: 'm²', aco: 'kg', lastro: 'm³', esc: 'm³', enr: 'm³', geo: 'm²'};
 function itensAlasLic(add, grupo) {
   if (!R || !R.ala) return;
   Object.entries(R.ala).forEach(([id, a]) => { if (a.nao) return;
-    const it = (k, q, memo) => add(grupo, ALA_NOME[k], ALA_UN[k], q, {emop: null, sinapi: null, sco: null}, id + ': ' + memo);
+    const it = (k, q, memo) => add(grupo, ALA_NOME[k], ALA_UN[k], q, {emop: ALA_EMOP[k] || null, sinapi: null, sco: null}, id + ': ' + memo);
     it(a.par.mat === 'arm' ? 'conc' : 'cic', a.Vc, 'testa ' + fmt(a.Vt, 2) + ' + alas ' + fmt(a.Va, 2) + ' + soleira ' + fmt(a.Vs, 2) + ' + dente ' + fmt(a.Vd, 2) + ' m³');
     it('forma', a.forma, 'faces da testa, das alas e do dente'); if (a.aco) it('aco', a.aco, fmt(a.par.taxa, 0) + ' kg/m³ × ' + fmt(a.Vc, 2) + ' m³');
     it('lastro', a.lastro, fmt(a.foot, 2) + ' m² × 0,05 m'); it('esc', a.escav, 'projeção da boca + 0,30 m de folga');
@@ -8385,6 +8422,26 @@ function topoColar() {
 const btnTopo = '<button class="btn btn-primary btn-sm" onclick="abrirTopografia()" title="Digitar só as cotas do terreno: eixo, pé do meio-fio e muro dos dois lados">📐 Topografia</button>';
 const _vPVs63 = vPVs; vPVs = function () { return _vPVs63.apply(this, arguments).replace('<h3>Poços de visita e topografia</h3>', '<h3>Poços de visita e topografia</h3><div class="card" style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap;padding:.6rem .8rem">' + btnTopo + '<span style="font-size:.8rem;color:var(--muted);flex:1;min-width:220px">Cotas do terreno por estaca (eixo, meio-fio e muro dos dois lados). O eixo dá a tampa dos PVs; o meio-fio dá a declividade e a inclinação de cada sarjeta e a cota das caixas; o muro verifica lote e passeio.</span></div>'); };
 const _vRuas63 = vRuas; vRuas = function () { return _vRuas63.apply(this, arguments).replace('<button class="btn btn-primary btn-sm" onclick="addItem(\'ruas\')">＋ Rua</button>', '<button class="btn btn-primary btn-sm" onclick="addItem(\'ruas\')">＋ Rua</button> ' + btnTopo); };
+
+/* ---------- meio-fio com sarjeta: um seletor único para todas as ruas (topografia, perfil, planta e seção) ---------- */
+function mfAtual() { const ks = [...new Set(P.ruas.map(r => r.mf || ''))]; return ks.length === 1 ? ks[0] : ''; }
+function mfSelHtml() {
+  const cur = mfAtual();
+  return `<label class="mf-sel" style="font-size:.8rem;display:inline-flex;gap:.3rem;align-items:center;flex-wrap:wrap" title="Modelo de meio-fio com sarjeta de TODAS as ruas. Mudar aqui muda na topografia, no perfil, na planta, na seção transversal, no 3D e nos cálculos da sarjeta. Para uma rua diferente das outras, use a aba 3. Ruas e greide.">Meio-fio / sarjeta <select onchange="mfTodas(this.value)" style="max-width:340px">${cur ? '' : '<option value="" selected>diferente por rua</option>'}${Object.entries(MEIOFIO).filter(([k]) => k !== 'outro' || cur === 'outro').map(([k, v]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${esc(v.nome)}</option>`).join('')}</select></label>`;
+}
+function mfTodas(k) {
+  if (!k || !MEIOFIO[k]) return;
+  P.ruas.forEach(r => { r.mf = k; aplicaMeioFio(r); });
+  save(); calc();
+  if ($('modal-topo') && $('modal-topo').classList.contains('open') && typeof topoTela === 'function') topoTela();
+  renderTab();
+  toast('Meio-fio em todas as ruas: ' + MEIOFIO[k].nome);
+}
+const _vPVsMf = vPVs; vPVs = function () { return _vPVsMf.apply(this, arguments).replace('<h3>Poços de visita e topografia</h3>', '<h3>Poços de visita e topografia</h3><div class="card" style="padding:.5rem .8rem">' + mfSelHtml() + '</div>'); };
+const _vPerfilMf = vPerfil; vPerfil = function () { return _vPerfilMf.apply(this, arguments).replace('<div class="svg-scroll" id="perfil-box">', '<div class="bar-btns" style="margin:.3rem 0">' + mfSelHtml() + '</div><div class="svg-scroll" id="perfil-box">'); };
+const _vSecaoMf = vSecao; vSecao = function () { return _vSecaoMf.apply(this, arguments).replace('<button class="btn btn-secondary btn-sm" onclick="exportDXFSecao()"', mfSelHtml() + '<button class="btn btn-secondary btn-sm" onclick="exportDXFSecao()"'); };
+const _vPlantaMf = vPlanta; vPlanta = function () { return _vPlantaMf.apply(this, arguments).replace('<button class="btn btn-primary btn-sm" onclick="exportDXFPlanta()" title="Baixa a planta baixa em DXF', mfSelHtml() + '<button class="btn btn-primary btn-sm" onclick="exportDXFPlanta()" title="Baixa a planta baixa em DXF'); };
+const _topoTelaMf = topoTela; topoTela = function () { const r = _topoTelaMf.apply(this, arguments); const b = $('topo-body'); if (b && !b.querySelector('.mf-sel')) { const d = document.createElement('div'); d.className = 'bar-btns'; d.style.margin = '0 0 .6rem'; d.innerHTML = mfSelHtml(); b.prepend(d); } return r; };
 </script>
 <script>
 /* =====================================================================
@@ -8880,7 +8937,7 @@ async function enviarAoOrcamento(solK, bank) {
   var ORDER = ['projeto','chuva','ruas','bacias','bls','pvs','rede','planta','perfil','secao','custos','verif','memorial'];
   var TAB_NAMES = {
     projeto:'1. Projeto', chuva:'2. Chuva (IDF · tc)', ruas:'3. Ruas e greide',
-    bacias:'4. Bacias', bls:'5. Sarjetas e bocas-de-lobo', pvs:'6. Poços de visita e topografia',
+    bacias:'4. Bacias', bls:'5. Caixas de Ralo e Boca de Lobo', pvs:'6. Poços de visita e topografia',
     rede:'7. Rede tronco', planta:'8. Planta baixa', perfil:'9. Perfil e piezométrica',
     secao:'10. Seção transversal', custos:'11. Custos (SINAPI/SCO)',
     verif:'12. Verificação', memorial:'13. Memorial e impressão'
