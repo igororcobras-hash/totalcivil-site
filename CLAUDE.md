@@ -31,3 +31,10 @@ Responda sempre em português do Brasil. O dono do projeto é engenheiro civil, 
 
 ## Publicação
 - Branch `main` do repositório `igororcobras-hash/totalcivil-site`; cada alteração na `main` dispara a rotina que publica o site (alguns minutos). Depois de subir: Ctrl+Shift+R. O fluxo ideal do mapa é PR → testes → confirmação → merge; o dono tem subido arquivos direto pelo site do GitHub quando o push da sessão falha.
+
+## Se o push para o GitHub falhar (já aconteceu; roteiro que resolveu em 03/11/2026)
+O push depende de DUAS coisas, ambas do dono:
+1. **Conexão do GitHub no claude.ai** (pode vencer ou ser revogada). Sintoma: erro 403 "GitHub authentication required" ou "Claude's own sign-in ... was refused". Solução: reconectar em https://claude.ai/customize/connectors?auth_start=github&auth_start_force=1 e confirmar que o app Claude está instalado no repositório em https://github.com/apps/claude/installations/select_target (conta `igororcobras-hash`, repositório `totalcivil-site`, com escrita). A sessão precisa ter o repositório anexado (`add_repo` com `access: push`; sessão nova com o repositório selecionado, se não anexar).
+2. **Permissão do modo automático do Claude Code para `git push`.** Sintoma: "Permission ... denied by the auto mode classifier ([Out-of-Place Publication])". Não contornar. O dono libera em `/permissions` (regra `Bash(git push:*)`) ou aprova o push na tela.
+Antes de empurrar: `git fetch origin main`. Se o dono subiu arquivos pelo site, o `main` do GitHub terá commits "Add files via upload": junte (`git merge origin/main`), confira que os arquivos finais são os testados e só então faça `git push -u origin main`, sem `--force`.
+Sem o push funcionando, entregue os arquivos prontos (SendUserFile) e o passo a passo de upload pelo site (https://github.com/igororcobras-hash/totalcivil-site/upload/main/<pasta>).
