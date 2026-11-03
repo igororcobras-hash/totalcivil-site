@@ -2487,5 +2487,82 @@ _render = function () { Object.keys(SPQ.maps).forEach(spMapaFecha); const r = _r
   ['plan', 'rel'].forEach(k => { if ($('#spq-list-' + k)) spAtualiza(k); }); return r; };
 })();
 </script>
+<script>
+/* =====================================================================
+   PATCH SP-05 (03/11/2026)
+   11. Seção 7 do atendimento do fiscal (“Não é deste contrato?”): escolher entre ARQUIVAR para outro
+       órgão (como antes) ou EXPORTAR o relato para outra obra deste programa de Serviços Públicos.
+       A exportação leva local, relato, constatação, medidas, prioridade sugerida, fotos e documentos
+       (duplicados) e entra na obra de destino como relato novo, com a marca “veio da obra …”.
+       Aqui o original fica em “Ocorrências Arquivadas”, marcado “exportado para <obra> (nº)”.
+       Também há o botão “📤 Exportar para outra obra” em cada relato arquivado.
+   ===================================================================== */
+(function () {
+const obrasDestino = o => Object.values(S.obras).filter(x => x && x.id !== o.id && !x.demo === !o.demo && (!S.trava || (S.acessos && S.acessos[x.id]))).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+const optObras = o => obrasDestino(o).map(x => `<option value="${x.id}">${esc(x.nome)}${x.contrato ? ' · contrato ' + esc(x.contrato) : ''}</option>`).join('');
+async function dupArq(lista, destId, pref) { const out = [];
+  for (const f of lista || []) { const data = await getFoto(f.id); if (!data) continue; const nid = pref + uid(); await DB.put('fotos', nid, {id: nid, obraId: destId, data, doc: pref === 'd' || undefined}); fotoCache.set(nid, data); out.push(Object.assign({}, f, {id: nid})); }
+  return out; }
+/* copia o relato para a obra de destino e arquiva o original marcado “exportado para” */
+async function exportarRelato(o, x, dest, mot) {
+  const oc = {id: 'c' + uid(), num: ++dest.seq, rua: x.rua || '', bairro: x.bairro || '', ref: x.ref || '', lat: x.lat ?? null, lng: x.lng ?? null, origem: x.origem || null,
+    desc: x.desc || '', sug: x.sug || '', constat: x.constat || '', tipo: x.tipo || '', med: x.med ? Object.assign({}, x.med) : {c: 0, l: 0}, priF: x.priF || 'media',
+    fotos: await dupArq(x.fotos, dest.id, 'f'), docs: await dupArq(x.docs, dest.id, 'd'), criadoEm: x.criadoEm || new Date().toISOString(), criadoPor: x.criadoPor || '', ext: x.ext || '',
+    hist: [], status: 'relato', veioDe: {obraId: o.id, obra: o.nome, num: x.num, orgao: 'Exportado'}};
+  if (x.vistFiscal) oc.vistFiscal = Object.assign({}, x.vistFiscal);
+  dest.ocorrencias.push(oc); recalcStatus(dest, oc);
+  log(oc, 'Recebido por exportação do relato nº ' + x.num + ' da obra “' + o.nome + '”' + (mot ? ' — ' + mot : ''));
+  const em = new Date().toISOString();
+  x.arquivo = {destino: 'Outros', orgao: 'Outra obra: ' + dest.nome, motivo: mot || 'Exportado para outra obra deste programa', em, por: quem(), enviadoPara: {obraId: dest.id, obra: dest.nome, num: oc.num, tipo: 'exportado', em, por: quem()}};
+  log(x, 'Exportado para a obra “' + dest.nome + '” como relato nº ' + oc.num + (mot ? ' — ' + mot : '')); recalcStatus(o, x);
+  await saveObra(o); await saveObra(dest); if (typeof nuvDescarga === 'function') { nuvDescarga(o.id); nuvDescarga(dest.id); }
+  return oc; }
+
+/* seção 7: Arquivar ou Exportar */
+const _modalVF5 = modalVF;
+modalVF = function (d) { let h = _modalVF5.apply(this, arguments); const o = O(), dis = can('ocorr') ? '' : 'disabled', n = obrasDestino(o).length;
+  h = h.replace('<legend>7. Não é deste contrato? Arquivar relato</legend>', `<legend>7. Não é deste contrato? Arquivar ou exportar o relato</legend>
+ <div class="row gap" style="margin:2px 0 8px"><label class="chk" style="margin:0"><input type="radio" name="vf-sete" value="arq" checked data-chg="vfSete" ${dis}> 🗄 Arquivar (é de outro órgão)</label><label class="chk" style="margin:0"><input type="radio" name="vf-sete" value="exp" data-chg="vfSete" ${dis}> 📤 Exportar para outra obra deste programa</label></div>
+ <div id="vf-exp" style="display:none"><p class="small">O relato vai para a obra escolhida como <b>relato novo</b>, com local, relato, constatação, medidas, fotos e documentos. Aqui ele sai do planejamento e fica em “Ocorrências Arquivadas”, marcado “exportado para” a outra obra.</p>
+ ${n ? `<div class="g2"><label>Obra de destino<select id="vf-expo" ${dis}>${optObras(o)}</select></label><label>Motivo / observação<input id="vf-expm" placeholder="ex.: rua do contrato de drenagem" ${dis}></label></div>
+ <div class="row gap" style="margin-top:8px"><button type="button" class="btn sm pri" data-act="vfExportar" ${dis}>📤 Exportar este relato</button></div>` : '<div class="alert">Não há outra obra neste aparelho para receber o relato. Crie a obra em “⇄ Trocar obra” ou use “Arquivar” com a opção de criar nova obra.</div>'}</div><div id="vf-arqbox">`);
+  return h.replace(/(data-act="vfArquivar"[^>]*>[^<]*<\/button><\/div>)(<\/fieldset>)/, '$1</div>$2'); };
+CHG.vfSete = function (el) { const exp = el.value === 'exp'; const a = $('#vf-exp'), b = $('#vf-arqbox'); if (a) a.style.display = exp ? '' : 'none'; if (b) b.style.display = exp ? 'none' : ''; };
+ACTS.vfExportar = async function () { if (!M || M.t !== 'vf' || !can('ocorr')) return; const o = O(), d = M.d, x = o.ocorrencias.find(y => y.id === d.id); if (!x) return;
+  const dest = S.obras[($('#vf-expo') || {}).value]; if (!dest) { toast('Escolha a obra de destino.'); return; }
+  if (o.execucoes.some(e => e.ocorrenciaId === x.id)) { toast('Este relato já tem execução lançada e não pode ser exportado.', 4000); return; }
+  if (!confirm('Exportar o relato nº ' + x.num + ' para a obra “' + dest.nome + '”? Aqui ele fica em “Ocorrências Arquivadas”, marcado como exportado.')) return;
+  x.rua = $('#vf-rua').value.trim(); x.bairro = $('#vf-bairro').value.trim(); x.ref = $('#vf-ref').value.trim(); if (d.lat != null) { x.lat = d.lat; x.lng = d.lng; x.origem = d.origem || x.origem; }
+  const c = $('#vf-const'); if (c) x.constat = c.value.trim(); x.fotos = d.fotos; if (d.docs) x.docs = d.docs.slice();
+  const mot = ($('#vf-expm') || {}).value || ''; M.novas = []; fecharModal(false);
+  const oc = await exportarRelato(o, x, dest, mot.trim()); render();
+  toast('Relato nº ' + x.num + ' exportado para “' + dest.nome + '” como relato nº ' + oc.num + '.', 6000); };
+
+/* aba Ocorrências Arquivadas: exportar um relato arquivado para outra obra */
+const _tArq5 = tArq;
+tArq = function (o) { let h = _tArq5.apply(this, arguments); if (!obrasDestino(o).length) return h;
+  arqLista(o).forEach(x => { if (x.arquivo.enviadoPara) return; const ini = '<article class="item"><div class="hd"><div><span class="num">#' + x.num + '</span>', i = h.indexOf(ini); if (i < 0) return;
+    const j = h.indexOf('<button class="btn sm" data-act="arqRestaurar"', i); if (j < 0) return;
+    h = h.slice(0, j) + `<button class="btn sm" data-act="arqExportar" data-id="${x.id}" ${can('ocorr') ? '' : 'disabled'}>📤 Exportar para outra obra</button>` + h.slice(j); });
+  return h; };
+ACTS.arqExportar = function (d) { if (!can('ocorr')) return; const o = O(), x = o.ocorrencias.find(y => y.id === d.id); if (!x) return;
+  M = {t: 'arqExp', id: x.id};
+  abrirModal(`<div class="mh"><h3>📤 Exportar o relato nº ${x.num} para outra obra</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+   <p class="small">${esc(ocLocal(x))} — <span class="muted">${esc((x.desc || '').slice(0, 160))}</span></p>
+   <p class="small">Vai para a obra escolhida como <b>relato novo</b>, com fotos e documentos. Aqui continua arquivado, marcado “exportado para” a outra obra.</p>
+   <div class="g2"><label>Obra de destino<select id="ax-o">${optObras(o)}</select></label><label>Motivo / observação<input id="ax-m" value="${esc(x.arquivo && x.arquivo.motivo || '')}"></label></div></div>
+   <div class="mf"><button class="btn" data-act="mClose">Cancelar</button><button class="btn pri" data-act="arqExportarOk">📤 Exportar</button></div>`); };
+ACTS.arqExportarOk = async function () { if (!M || M.t !== 'arqExp') return; const o = O(), x = o.ocorrencias.find(y => y.id === M.id), dest = S.obras[$('#ax-o').value]; if (!x || !dest) return;
+  const mot = $('#ax-m').value.trim(), orgAnt = arqNome(x.arquivo); fecharModal(false);
+  const oc = await exportarRelato(o, x, dest, mot || (orgAnt ? 'Antes arquivado para ' + orgAnt : '')); render();
+  toast('Relato nº ' + x.num + ' exportado para “' + dest.nome + '” como relato nº ' + oc.num + '.', 6000); };
+/* marca do “exportado para” nos cartões arquivados (SP-03 escreve “nova obra”) */
+const _tArq5b = tArq;
+tArq = function (o) { let h = _tArq5b.apply(this, arguments);
+  o.ocorrencias.filter(x => x.arquivo && x.arquivo.enviadoPara && x.arquivo.enviadoPara.tipo === 'exportado').forEach(x => { const e = x.arquivo.enviadoPara;
+    h = h.replace(`🏗 enviado para “${esc(e.obra)}” (nº ${e.num}) · nova obra`, `📤 exportado para a obra “${esc(e.obra)}” (nº ${e.num})`); });
+  return h; };
+})();
+</script>
 </body>
 </html>
