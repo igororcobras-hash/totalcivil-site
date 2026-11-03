@@ -5113,17 +5113,36 @@ function regras(cfg) {
 function precoDe(v, regime) { const p = regime === 'D' ? v.precoCom : v.preco; return isNum(+p) ? +p : null; }
 
 const BANCOS_CUSTO = {sinapi: 'SINAPI RJ', sco: 'SCO-Rio', emop: 'EMOP-RJ'};
+// EMOP importada pelo cliente no programa de Orçamento (a EMOP é licenciada: não vai para o site) → formato dos bancos de custo
+async function emopComoBanco() {
+  const E = await lerEmopLocal(); if (!E) return null;
+  const map = {};
+  Object.entries(E.map).forEach(([full, v]) => {
+    const m = /^(\d\d\.\d{3}\.\d{4})-(.)$/.exec(full); if (!m) return;
+    const e = map[m[1]] = map[m[1]] || {descr: v.DESCR1 || '', unid: v.UNID || '', preco: null, precoCom: null, itens: []}, c = +v.CUSTO;
+    if (!(c > 0)) return;
+    if (m[2] === '0' || m[2] === '1') { e.preco = c; e.descr = v.DESCR1 || e.descr; e.unid = v.UNID || e.unid; } else e.precoCom = c;
+  });
+  Object.values(map).forEach(e => { if (e.precoCom == null) e.precoCom = e.preco; if (e.preco == null) e.preco = e.precoCom; });
+  const mt = E.meta || {};
+  return {map, comp: mt.competencia || (mt.importadoEm ? 'importada ' + String(mt.importadoEm).slice(0, 10) : 'importada no Orçamento'), it: {}, local: true};
+}
 async function atualizarCustos(silencioso) {
   const cfg = custosCfg();
   try {
     if (!silencioso) toast('Buscando preços no SINAPI, no SCO e na EMOP…');
     const idx = await lerIndice();
     if (!BANCOS_CUSTO[cfg.banco]) cfg.banco = 'sinapi';
-    const outro = cfg.banco === 'sinapi' ? 'sco' : 'sinapi';
-    const ref = cfg.refFix || ultimoRef(idx, cfg.banco); if (!ref) throw new Error('nenhum mês disponível de ' + BANCOS_CUSTO[cfg.banco]);
-    const BK = {[cfg.banco]: await lerBanco(cfg.banco, ref)};
+    const outroBanco = cfg.banco === 'sinapi' ? 'sco' : 'sinapi';
+    const emopCli = cfg.banco === 'emop' && !ultimoRef(idx, 'emop') ? await emopComoBanco() : null;
+    if (cfg.banco === 'emop' && !ultimoRef(idx, 'emop') && !emopCli) { cfg.banco = 'sinapi'; throw new Error('a EMOP não está carregada neste aparelho: importe os arquivos da EMOP (DIPR, MAT, REUT e COMP) no programa de Orçamento (Atualizar EMOP). Voltei para o SINAPI'); }
+    const outro = emopCli ? 'sinapi' : outroBanco;
+    const ref = emopCli ? (cfg.refFix || ultimoRef(idx, 'sinapi')) : (cfg.refFix || ultimoRef(idx, cfg.banco)); if (!ref) throw new Error('nenhum mês disponível de ' + BANCOS_CUSTO[cfg.banco]);
+    const BK = emopCli ? {emop: emopCli} : {[cfg.banco]: await lerBanco(cfg.banco, ref)};
+    if (emopCli) BK.sinapi = await lerBanco('sinapi', ref);
     for (const t of Object.keys(BANCOS_CUSTO)) {
-      if (t === cfg.banco) continue;
+      if (BK[t]) continue;
+      if (t === 'emop' && !ultimoRef(idx, 'emop')) { try { const b2 = await emopComoBanco(); if (b2) BK.emop = b2; } catch (e) { /* sem EMOP no aparelho */ } continue; }
       const r2 = (idx[t] || []).some(x => x.ref === ref) ? ref : ultimoRef(idx, t);
       if (r2) { try { BK[t] = await lerBanco(t, r2); } catch (e) { /* segue sem esse banco */ } }
     }
@@ -6328,7 +6347,7 @@ async function lerEmopLocal(forcar) {
   // banco EMOP mensal publicado no site (orcamento/dados/emop): tem prioridade sobre o catálogo salvo
   try {
     const idx = await lerIndice(), ref = ultimoRef(idx, 'emop');
-    if (ref) { const B = await lerBanco('emop', ref); if (B.dipr && B.dipr.length) { const sit = montar(B.dipr.map(([c, d, u, p]) => ({CODIGO: c, DESCR1: d, UNID: u, CUSTO: p})), {origem: 'site', competencia: B.comp}); if (sit) EMOP_LOCAL = sit; } }
+    if (ref) { const B = await lerBanco('emop', ref); if (B.dipr && B.dipr.length) { const sit = montar(B.dipr.map(([c, d, u, p]) => ({CODIGO: c, DESCR1: d, UNID: u, CUSTO: p})), {origem: 'site', competencia: B.comp}); if (sit && !EMOP_LOCAL) EMOP_LOCAL = sit; } }
   } catch (e) { /* sem o banco do site: fica o importado no Orçamento */ }
   if (!EMOP_LOCAL) {
     try { const c = JSON.parse(localStorage.getItem('orcadipr_base_v11') || '[]'); if (Array.isArray(c) && c.some(x => /^\d\d\.\d{3}\.\d{4}-/.test(x.CODIGO))) EMOP_LOCAL = montar(c, {origem: 'catálogo salvo'}); } catch (e) {}
