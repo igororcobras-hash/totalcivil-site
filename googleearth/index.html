@@ -514,6 +514,13 @@ function lerCoordenadas(txt){
     if(/s/i.test(m[3])) lat = -lat; if(/[wo]/i.test(m[6])) lon = -lon;
     return valida(lat, lon);
   }
+  // leitura por OCR: aspas perdidas e hemisfério confundido (S lido como 8, 5 ou $); só vale para o Brasil (sul/oeste)
+  m = t.match(/(\d{1,2})\s*[°º*]\s*(\d{1,2})\s*['`]?\s+(\d{1,2}(?:[.,]\d+)?)\s*["']?\s*([NS85$])?[\s,;]+(\d{1,3})\s*[°º*]\s*(\d{1,2})\s*['`]?\s+(\d{1,2}(?:[.,]\d+)?)\s*["']?\s*(?:([EWOL])|VV|vv)/);
+  if(m){
+    let lat = +m[1] + +m[2] / 60 + numBR(m[3]) / 3600, lon = +m[5] + +m[6] / 60 + numBR(m[7]) / 3600;
+    if(!(m[4] && /N/.test(m[4]))) lat = -lat; if(!(m[8] && /[EL]/.test(m[8]))) lon = -lon;
+    const v = valida(lat, lon); if(v && lat < -15 && lat > -30 && lon < -35 && lon > -55) return v;
+  }
   // -22.550742, -41.974335   ou   Lat -22,5507 Long -41,9743
   m = t.match(/(-?\d{1,2}[.,]\d{3,})\s*°?\s*([NS])?[\s,;]+(?:long?\w*\s*:?\s*)?(-?\d{1,3}[.,]\d{3,})\s*°?\s*([EWOL])?/i);
   if(m){
@@ -836,13 +843,28 @@ async function textoDaFoto(blob){
   const W = bmp.width, H = bmp.height, k = Math.min(1, 1800 / Math.max(W, H));
   const pedacos = [[0, 0, 1, .34], [0, .55, 1, .45]];  // faixa de cima e de baixo, onde ficam as tarjas
   const w = await motorOCR();
-  let txt = '';
-  for(const [x, y, ww, hh] of pedacos){
-    const c = document.createElement('canvas'); c.width = Math.round(W * ww * k); c.height = Math.round(H * hh * k);
-    const g = c.getContext('2d'); g.filter = 'grayscale(1) contrast(1.4)';
-    g.drawImage(bmp, W * x, H * y, W * ww, H * hh, 0, 0, c.width, c.height);
-    const r = await w.recognize(c); txt += '\n' + (r && r.data ? r.data.text : '');
-  }
+  try{ await w.setParameters({tessedit_pageseg_mode: '6', preserve_interword_spaces: '1'}); }catch(e){}
+  const ler = async (modo) => {
+    let txt = '';
+    for(const [x, y, ww, hh] of pedacos){
+      const c = document.createElement('canvas'); c.width = Math.round(W * ww * k); c.height = Math.round(H * hh * k);
+      const g = c.getContext('2d', {willReadFrequently: true});
+      if(modo === 'claro') g.filter = 'grayscale(1)'; else g.filter = 'grayscale(1) contrast(1.4)';
+      g.drawImage(bmp, W * x, H * y, W * ww, H * hh, 0, 0, c.width, c.height);
+      let alvo = c;
+      if(modo === 'claro'){   // tarja de texto branco: deixa só os pixels claros (preto sobre branco) e amplia 2x
+        const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+        for(let i = 0; i < p.length; i += 4){ const v = p[i] > 215 ? 0 : 255; p[i] = p[i + 1] = p[i + 2] = v; p[i + 3] = 255; }
+        g.putImageData(d, 0, 0);
+        alvo = document.createElement('canvas'); alvo.width = c.width * 2; alvo.height = c.height * 2;
+        const g2 = alvo.getContext('2d'); g2.fillStyle = '#fff'; g2.fillRect(0, 0, alvo.width, alvo.height); g2.drawImage(c, 0, 0, alvo.width, alvo.height);
+      }
+      const r = await w.recognize(alvo); txt += '\n' + (r && r.data ? r.data.text : '');
+    }
+    return txt;
+  };
+  let txt = await ler('claro');
+  if(!lerCoordenadas(txt) && !lerEnderecoTarja(txt)) txt += '\n' + await ler('normal');
   if(bmp.close) bmp.close();
   return txt;
 }
