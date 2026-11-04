@@ -564,7 +564,25 @@ function lerCoordenadas(txt){
   }
   return null;
 }
-function valida(lat, lon){ return (isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && !(lat === 0 && lon === 0)) ? {lat, lon} : null; }
+function valida(lat, lon){ return (isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && !(lat === 0 && lon === 0)) ? corrigeHemisferio(lat, lon) : null; }
+/* As coordenadas são a forma principal de localizar. Quando o sinal (S/W) se perde — tarja lida sem a letra,
+   EXIF sem a referência, número digitado sem o "-" — o ponto cai na Ásia ou na África.
+   Se o ponto estiver fora do Brasil e trocando o sinal ele cair no Brasil, usa o sinal certo. */
+const BRASIL = {latMin: -34.5, latMax: 5.5, lonMin: -74.5, lonMax: -32};
+const REF_PADRAO = {lat: -22.527, lon: -41.945};   // Rio das Ostras
+function noBrasil(lat, lon){ return lat >= BRASIL.latMin && lat <= BRASIL.latMax && lon >= BRASIL.lonMin && lon <= BRASIL.lonMax; }
+function refLocal(){
+  try{ const g = (S.fotos || []).filter(f => f.orig === 'gps' && f.lat != null && noBrasil(f.lat, f.lon)); if(g.length){ const ord = a => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)]; return {lat: ord(g.map(f => f.lat)), lon: ord(g.map(f => f.lon))}; } }catch(e){}
+  return REF_PADRAO;
+}
+function corrigeHemisferio(lat, lon){
+  if(noBrasil(lat, lon)) return {lat, lon};
+  const ref = refLocal(), d = (a, b) => Math.hypot(a - ref.lat, (b - ref.lon) * Math.cos(ref.lat * Math.PI / 180));
+  const cands = [[-Math.abs(lat), -Math.abs(lon)], [lat, -Math.abs(lon)], [-Math.abs(lat), lon], [-lat, -lon]].filter(c => noBrasil(c[0], c[1]));
+  if(!cands.length) return {lat, lon};
+  cands.sort((a, b) => d(a[0], a[1]) - d(b[0], b[1]));
+  return {lat: cands[0][0], lon: cands[0][1], corrigido: true};
+}
 
 /* ---------- texto da tarja: data, endereço ---------- */
 const MESES = {jan:0, fev:1, mar:2, abr:3, mai:4, jun:5, jul:6, ago:7, set:8, out:9, nov:10, dez:11};
@@ -1937,6 +1955,9 @@ function renderTudo(){ renderFotos(); renderMarcacoes(); renderListas(); renderE
 /* ---------- início ---------- */
 function iniciar(){
   carregarLocal().then(() => {
+    // conserta fotos já salvas com o sinal trocado (ponto em outro país)
+    let n = 0; S.fotos.forEach(f => { if(f.lat != null && f.lon != null && !noBrasil(f.lat, f.lon)){ const v = corrigeHemisferio(f.lat, f.lon); if(v.corrigido){ f.lat = v.lat; f.lon = v.lon; n++; } } });
+    if(n){ salvar(); setTimeout(() => aviso(n + ' foto(s) estavam fora do Brasil por sinal trocado nas coordenadas e foram corrigidas.', 6000), 800); }
     aplicarConfig(); renderTudo();
     if(S.amb) aplicarAmbiente(S.amb); else abrirSelecaoAmbiente();
   });
