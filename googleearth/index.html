@@ -511,6 +511,11 @@ function kb(n){ return n > 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') 
 function numBR(s){ return parseFloat(String(s).replace(',', '.')); }
 function lerCoordenadas(txt){
   const t = String(txt || '').replace(/[’′]/g, "'").replace(/[”″]/g, '"').replace(/º/g, '°');
+  // link do Google Earth / Google Maps colado: .../@-22.55,-41.97,... ou !3d..!4d.. ou ?q=lat,lon
+  if(/google\.|goo\.gl|maps\.app/i.test(t)){
+    const u = t.match(/@(-?\d{1,2}\.\d+),(-?\d{1,3}\.\d+)/) || t.match(/!3d(-?\d{1,2}\.\d+)!4d(-?\d{1,3}\.\d+)/) || t.match(/[?&](?:q|ll|query)=(-?\d{1,2}\.\d+)(?:,|%2C)(-?\d{1,3}\.\d+)/i);
+    if(u){ const v = valida(+u[1], +u[2]); if(v) return v; }
+  }
   // 22°33'2,67"S 41°58'27,606"W
   let m = t.match(/(\d{1,2})\s*°\s*(\d{1,2})\s*'\s*(\d{1,2}(?:[.,]\d+)?)\s*"?\s*([NS])[\s,;]*(\d{1,3})\s*°\s*(\d{1,2})\s*'\s*(\d{1,2}(?:[.,]\d+)?)\s*"?\s*([EWOL])/i);
   if(m){
@@ -785,7 +790,7 @@ function renderFotos(){
       (m ? '<span class="grp" style="background:' + m.cor + ';color:' + corTexto(m.cor) + '">' + esc(m.nome) + '</span>' : '') + '</div>' +
       '<div class="corpo"><div class="nome">' + esc(f.nome) + '</div>' +
       '<div class="campo"><label>Data e hora</label><input type="datetime-local" data-campo="data" value="' + isoLocal(f.data) + '"></div>' +
-      '<div class="campo"><label>Coordenadas (lat, long)</label><input data-campo="coord" placeholder="-22.550742, -41.974335 ou 22°33\'2,67&quot;S 41°58\'27,6&quot;W" value="' + (temLocal(f) ? f.lat.toFixed(6) + ', ' + f.lon.toFixed(6) : '') + '"' + (temLocal(f) ? ' readonly title="Para mudar o local use “Marcar no mapa”. Você pode selecionar e copiar."' : '') + '></div>' +
+      '<div class="campo"><label>Coordenadas (lat, long)</label><input data-campo="coord" placeholder="-22.550742, -41.974335, 22°33\'2,67&quot;S 41°58\'27,6&quot;W ou link do Google Earth" value="' + (temLocal(f) ? f.lat.toFixed(6) + ', ' + f.lon.toFixed(6) : '') + '"' + (temLocal(f) ? ' readonly title="Para mudar o local use “Marcar no mapa”. Você pode selecionar e copiar."' : '') + '></div>' +
       '<div class="campo"><label>Endereço</label><input data-campo="end" placeholder="Rua, número - bairro" value="' + esc(f.end) + '"></div>' +
       '<div class="campo"><label>Comentário</label><textarea data-campo="coment" placeholder="Opcional">' + esc(f.coment) + '</textarea></div>' +
       blocoProps(f) + '<div class="bts">' + linkFotoEarth(f) + '</div>' +
@@ -819,7 +824,7 @@ $('grade').addEventListener('change', e => {
     else { const r = lerCoordenadas(v); if(r){ f.lat = r.lat; f.lon = r.lon; f.orig = 'manual'; } else { aviso('Coordenadas não reconhecidas. Use -22.5507, -41.9743 ou 22°33\'2,67"S 41°58\'27,6"W.'); return; } }
     renderFotos();
   }
-  else if(c === 'end') f.end = e.target.value.trim();
+  else if(c === 'end'){ f.end = e.target.value.trim(); if(f.end && !temLocal(f)){ salvar(); geocodificar([f], true); return; } }
   else if(c === 'coment') f.coment = e.target.value;
   salvar();
 });
@@ -898,6 +903,8 @@ async function ocrFotos(lista, umaSo){
       const e = lerEnderecoTarja(t); if(e){ if(!f.end) f.end = e.texto; f.cep = e.cep; if(!temLocal(f)) endereco++; }
       progresso('prog-acao', (i + 1) / lista.length); salvar(); renderFotos();
     }
+    const novosEnd = lista.filter(f => !temLocal(f) && f.end);
+    if(novosEnd.length){ $('txt-acao').textContent = 'Tarja lida. Buscando as coordenadas dos endereços…'; await geocodificar(novosEnd); }
     $('txt-acao').textContent = 'Tarja lida: ' + achou + ' foto(s) com coordenadas.' + (endereco ? ' ' + endereco + ' foto(s) só com endereço: use “Buscar coordenadas pelo endereço”.' : '');
   }catch(e){ $('txt-acao').textContent = 'Erro na leitura da tarja: ' + (e.message || e); }
   progresso('prog-acao', null);
