@@ -1397,7 +1397,8 @@ async function gerar(tipo, daAbaFotos, abrirLink){
   const urlOn = S.exp.urlOn && (S.exp.url || '').trim();
   let avisoDestino = '';
   if(S.exp.destino === 'mesclar' && !projKML){ S.exp.destino = 'pasta'; salvar(); renderExportar(); avisoDestino = '<div class="msg info">Você não enviou o KML do projeto existente, então gerei só a <b>pasta nova</b> (arquivo pequeno) para importar no projeto. Para receber o projeto completo, envie o KML exportado dele.</div>'; }
-  const modo = urlOn ? 'url' : (tipo === 'kmz' ? 'kmz' : 'data');
+  // só na descrição: a foto vai embutida no texto (formato do TESTE D, que funcionou no Google Earth Web)
+  const modo = urlOn ? 'url' : ((tipo === 'kmz' && S.exp.fotosEm !== 'descricao') ? 'kmz' : 'data');
   if(tipo === 'kmz' && typeof JSZip === 'undefined'){ msg.innerHTML = '<div class="msg bad">O compactador não carregou (internet). Gere o KML.</div>'; return; }
   const onde = await escolherOndeSalvar(nomeArquivoSaida(tipo === 'kmz' ? 'kmz' : 'kml'), tipo);
   if(onde.cancelou){ msg.innerHTML = '<div class="msg info">Geração cancelada: nenhum local escolhido para salvar.</div>'; return; }
@@ -1450,8 +1451,8 @@ function perguntarFotos(seguir){
     d.style.cssText = 'position:fixed;inset:0;background:rgba(15,30,51,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
     d.innerHTML = '<div class="cartao" style="max-width:520px;width:100%;margin:0"><h3 style="margin-top:0">Como as fotos vão aparecer no Google Earth?</h3>' +
       '<div class="opcoes">' +
-      '<button type="button" class="opcao" data-v="carrossel" style="text-align:left;cursor:pointer"><span><b>📚 Em lista (carrossel) — recomendado</b><small>Fotos na faixa de imagens do ponto. Testado e funcionando no Google Earth Web.</small></span></button>' +
-      '<button type="button" class="opcao" data-v="descricao" style="text-align:left;cursor:pointer"><span><b>📝 Na descrição</b><small>Fotos dentro do texto do ponto. Ainda em teste: pode não carregar no Google Earth Web.</small></span></button>' +
+      '<button type="button" class="opcao" data-v="carrossel" style="text-align:left;cursor:pointer"><span><b>📚 Em lista (carrossel)</b><small>Fotos na faixa de imagens do ponto.</small></span></button>' +
+      '<button type="button" class="opcao" data-v="descricao" style="text-align:left;cursor:pointer"><span><b>📝 Na descrição</b><small>Fotos dentro do texto do ponto, abaixo da ocorrência.</small></span></button>' +
       '<button type="button" class="opcao" data-v="ambos" style="text-align:left;cursor:pointer"><span><b>📚 + 📝 Nos dois</b><small>Carrossel e descrição juntos.</small></span></button>' +
       '</div><div class="linha" style="margin-top:12px;justify-content:flex-end"><button type="button" class="bt" data-v="">Cancelar</button></div></div>';
     document.body.appendChild(d);
