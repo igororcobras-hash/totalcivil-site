@@ -1295,11 +1295,13 @@ async function montarKML(modo, aoAvancar){
   const estiloDe = m => { const k = 'tc_' + m.cor.replace('#', '') + '_' + m.esp + '_' + iconeDe(m); if(!estilos.has(k)) estilos.set(k, m); return k; };
   const pms = itens.map(({m, g}) => {
     const fsIds = fotosOrdenadas(m.fotos).map(f => f.id);
-    const car = fsIds.length ? '<gx:Carousel>' + fsIds.map(id => {
-      const o = fotos.get(id); if(!o || o.falta) return '';
-      const url = modo === 'url' ? base + o.nome : modo === 'data' ? o.data : 'files/' + o.nome;
+    const urlDe = id => { const o = fotos.get(id); if(!o || o.falta) return ''; return modo === 'url' ? base + o.nome : modo === 'data' ? o.data : 'files/' + o.nome; };
+    const onde = S.exp.fotosEm || 'carrossel';   // 'carrossel' | 'descricao' | 'ambos'
+    const car = (fsIds.length && onde !== 'descricao') ? '<gx:Carousel>' + fsIds.map(id => {
+      const url = urlDe(id); if(!url) return '';
       return '<gx:Image kml:id="img_' + id + '"><gx:imageUrl>' + xml(url) + '</gx:imageUrl></gx:Image>';
     }).join('') + '</gx:Carousel>' : '';
+    const imgsDesc = (fsIds.length && onde !== 'carrossel') ? fsIds.map(urlDe).filter(Boolean).map(u => '<p><img src="' + esc(u) + '" width="400"></p>').join('') : '';
     let geo = '', pts = [];
     if(g.tipo === 'ponto'){ pts = [g.pt]; geo = '<Point><coordinates>' + coordsTxt(pts) + '</coordinates></Point>'; }
     else if(g.tipo === 'caminho'){
@@ -1307,7 +1309,7 @@ async function montarKML(modo, aoAvancar){
       const ls = g.linhas.map(l => '<LineString><tessellate>1</tessellate><coordinates>' + coordsTxt(l) + '</coordinates></LineString>');
       geo = ls.length === 1 ? ls[0] : '<MultiGeometry>' + ls.join('') + '</MultiGeometry>';
     }else{ pts = g.anel; geo = '<Polygon><tessellate>1</tessellate><outerBoundaryIs><LinearRing><coordinates>' + coordsTxt(g.anel.concat([g.anel[0]])) + '</coordinates></LinearRing></outerBoundaryIs></Polygon>'; }
-    return {pasta: m.pasta || '', x: '<Placemark id="pm_' + m.id + '"><name>' + xml(m.nome) + '</name><description>' + cdata(descricao(m)) + '</description>' + lookAt(pts) +
+    return {pasta: m.pasta || '', x: '<Placemark id="pm_' + m.id + '"><name>' + xml(m.nome) + '</name><description>' + cdata(descricao(m) + imgsDesc) + '</description>' + lookAt(pts) +
       '<styleUrl>#' + estiloDe(m) + '</styleUrl>' + car + geo + '</Placemark>'};
   });
   const sty = [...estilos].map(([k, m]) => '<Style id="' + k + '"><IconStyle><scale>1.2</scale><Icon><href>https://earth.google.com/earth/document/icon?color=' + m.cor.replace('#', '').toLowerCase() + '&amp;id=' + iconeDe(m) + '&amp;scale=4</href></Icon><hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/></IconStyle><LabelStyle><scale>0.9</scale></LabelStyle><LineStyle><color>' + abgr(m.cor) + '</color><width>' + m.esp + '</width></LineStyle><PolyStyle><color>' + abgr(m.cor, '59') + '</color></PolyStyle></Style>').join('');
@@ -1439,8 +1441,33 @@ async function gerarZipFotos(){
   baixar(slug(S.exp.pasta || nomePastaPadrao()) + '_fotos.zip', blob);
   msg.innerHTML = '<div class="msg ok">Fotos reduzidas (' + fotos.size + ', ' + kb(blob.size) + '). Descompacte e suba os arquivos, sem subpastas, no endereço público informado.</div>';
 }
-$('bt-kmz').onclick = () => gerar('kmz'); $('bt-kmz-f').onclick = () => gerar('kmz', true); $('bt-kml-f').onclick = () => gerar('kml', true);
-$('bt-kml').onclick = () => gerar('kml');
+/* pergunta, ao salvar, onde as fotos ficam: em lista (carrossel) ou na descrição */
+function perguntarFotos(seguir){
+  if(!S.fotos.length){ seguir(); return; }
+  let d = $('dlg-fotos');
+  if(!d){
+    d = document.createElement('div'); d.id = 'dlg-fotos';
+    d.style.cssText = 'position:fixed;inset:0;background:rgba(15,30,51,.55);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+    d.innerHTML = '<div class="cartao" style="max-width:520px;width:100%;margin:0"><h3 style="margin-top:0">Como as fotos vão aparecer no Google Earth?</h3>' +
+      '<div class="opcoes">' +
+      '<button type="button" class="opcao" data-v="carrossel" style="text-align:left;cursor:pointer"><span><b>📚 Em lista (carrossel) — recomendado</b><small>Fotos na faixa de imagens do ponto. Testado e funcionando no Google Earth Web.</small></span></button>' +
+      '<button type="button" class="opcao" data-v="descricao" style="text-align:left;cursor:pointer"><span><b>📝 Na descrição</b><small>Fotos dentro do texto do ponto. Ainda em teste: pode não carregar no Google Earth Web.</small></span></button>' +
+      '<button type="button" class="opcao" data-v="ambos" style="text-align:left;cursor:pointer"><span><b>📚 + 📝 Nos dois</b><small>Carrossel e descrição juntos.</small></span></button>' +
+      '</div><div class="linha" style="margin-top:12px;justify-content:flex-end"><button type="button" class="bt" data-v="">Cancelar</button></div></div>';
+    document.body.appendChild(d);
+  }
+  d.querySelectorAll('[data-v]').forEach(b => { b.classList.toggle('on', b.dataset.v === (S.exp.fotosEm || 'carrossel')); });
+  d.hidden = false; d.style.display = 'flex';
+  d.onclick = e => {
+    const b = e.target.closest('[data-v]'); if(!b && e.target !== d) return;
+    d.style.display = 'none';
+    if(!b || !b.dataset.v) return;
+    S.exp.fotosEm = b.dataset.v; salvar();
+    seguir();   // o clique aqui conta como ação do usuário: a janela "Salvar como" pode abrir
+  };
+}
+$('bt-kmz').onclick = () => perguntarFotos(() => gerar('kmz')); $('bt-kmz-f').onclick = () => perguntarFotos(() => gerar('kmz', true)); $('bt-kml-f').onclick = () => perguntarFotos(() => gerar('kml', true));
+$('bt-kml').onclick = () => perguntarFotos(() => gerar('kml'));
 $('bt-zip').onclick = gerarZipFotos;
 
 function passosEarth(nome){
@@ -1489,7 +1516,7 @@ $('f-link').onchange = e => { S.exp.link = e.target.value.trim(); if(S.exp.link 
 $('bt-enviar').onclick = () => {
   const link = (S.exp.link || '').trim();
   if(link && S.exp.destino === 'novo') S.exp.destino = 'pasta';
-  gerar('kmz', true, link || linkEarth());   // pergunta onde salvar, abre o projeto e gera
+  perguntarFotos(() => gerar('kmz', true, link || linkEarth()));   // pergunta carrossel/descrição, onde salvar, abre o projeto e gera
 };
 $('f-dentro').onchange = e => { S.exp.dentro = e.target.value; salvar(); renderExportar(); };
 function aplicarCategoria(i){
