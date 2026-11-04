@@ -9490,4 +9490,420 @@ async function enviarAoOrcamento(solK, bank) {
 
 })();
 </script>
+<script>
+/* =====================================================================
+   PATCH DR-08 (04/11/2026) — Visualização 3D: sarjeta, chuva, qualidade e realismo
+   1. Lâmina na sarjeta em CUNHA (seção triangular, superfície horizontal na
+      seção): profundidade y junto à guia e zero na largura alagada T, crescendo
+      com a vazão acumulada a montante (y ∝ Q^3/8). Sobre a caixa a água é
+      engolida; a vazão que a caixa não engole (Qbyp) passa POR CIMA da grelha
+      e segue pela sarjeta até a próxima caixa.
+   2. Chuva visível: traços inclinados em volta do ponto que se olha, com
+      densidade e velocidade pela intensidade de chuva (mm/h).
+   3. Botão de QUALIDADE gráfica dentro do desenho (Mínima, Baixa, Média,
+      Alta, Ultra e Automático pelo desempenho): resolução, sombras,
+      reflexos, densidade da chuva, partículas e animação das ondas.
+   4. Modo realista: céu nublado, luz difusa, asfalto molhado com reflexo,
+      água com ondulação (mapa de normais) e pavimento opaco.
+   Não muda nenhum cálculo: só o desenho 3D. Substitui funções pelo nome
+   global; o código anterior fica acima.
+   ===================================================================== */
+const T3QL = [
+  {n: 'Mínima', pr: 0.5, rain: 0.3, sh: 0, part: 0.35, wave: 4, env: false, step: 2},
+  {n: 'Baixa', pr: 0.75, rain: 0.6, sh: 512, part: 0.6, wave: 2, env: false, step: 1.5},
+  {n: 'Média', pr: 1, rain: 1, sh: 1024, part: 1, wave: 1, env: true, step: 1},
+  {n: 'Alta', pr: 1.5, rain: 1.8, sh: 2048, part: 1.4, wave: 1, env: true, step: 0.75},
+  {n: 'Ultra', pr: 2, rain: 3, sh: 4096, part: 2, wave: 1, env: true, step: 0.5}
+];
+const T3q = (() => {
+  let s = {lv: 2, auto: false};
+  try { const v = JSON.parse(localStorage.getItem('tc_dren_t3q') || 'null'); if (v && v.lv >= 0 && v.lv < T3QL.length) s = {lv: v.lv | 0, auto: !!v.auto}; } catch (e) {}
+  return Object.assign(s, {fps: 0, fr: 0, t0: null, lastT: null, lo: 0, hi: 0, fc: 0});
+})();
+const T3AGUA = [0x2aa7c9, 0x7fd8ee];
+const T3OPACO = [0x2b2f35, 0xb9b4a8, 0xd8d2c4, 0x8d8a83];   // pista, sarjeta, meio-fio, passeio
+
+/* ---------- materiais ---------- */
+function T3lin(c) { const k = new THREE.Color(c); return T3.real && k.convertSRGBToLinear ? k.convertSRGBToLinear() : k; }
+function T3mat(color, opacity) {
+  if (T3.real) {
+    if (opacity < 1 && T3AGUA.includes(color))
+      return new THREE.MeshStandardMaterial({color: T3lin(0x3d7f92), transparent: true, opacity: Math.min(0.86, opacity + 0.1), side: THREE.DoubleSide, depthWrite: false,
+        roughness: 0.08, metalness: 0.05, normalMap: T3waterNormal(), normalScale: new THREE.Vector2(0.3, 0.3), envMapIntensity: 1.3});
+    const op = T3OPACO.includes(color) ? 1 : opacity;
+    const ferro = color === 0x202428 || color === 0x2a2e33 || color === 0x3a3f45;
+    const rough = color === 0x2b2f35 ? Math.max(0.28, 0.62 - 0.14 * Math.min(2, RAIN_FATOR)) : ferro ? 0.45 : 0.85;
+    return new THREE.MeshStandardMaterial({color: T3lin(color), transparent: op < 1, opacity: op, side: THREE.DoubleSide, depthWrite: op >= 1, roughness: rough, metalness: ferro ? 0.6 : 0});
+  }
+  return new THREE.MeshLambertMaterial({color, transparent: opacity < 1, opacity: opacity, side: THREE.DoubleSide, depthWrite: opacity >= 1});
+}
+// mapa de normais da água (ondulação), gerado uma vez e repetível
+function T3waterNormal() {
+  if (T3.wN) return T3.wN;
+  const N = 256, cv = document.createElement('canvas'); cv.width = cv.height = N;
+  const ctx = cv.getContext('2d'), img = ctx.createImageData(N, N), h = new Float32Array(N * N);
+  const W = [[3, 1, 0.9, 0.3], [1, 4, 0.7, 1.1], [5, 2, 0.45, 2.0], [2, 7, 0.3, 0.7], [9, 5, 0.18, 1.6], [7, 11, 0.12, 2.6]];
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) { let v = 0; for (const [a, b, A, p] of W) v += A * Math.sin(2 * Math.PI * (a * x + b * y) / N + p); h[y * N + x] = v; }
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++) {
+    const hx = h[y * N + (x + 1) % N] - h[y * N + (x - 1 + N) % N], hy = h[((y + 1) % N) * N + x] - h[((y - 1 + N) % N) * N + x];
+    let nx = -hx * 3, ny = -hy * 3, nz = 1; const l = Math.hypot(nx, ny, nz); nx /= l; ny /= l; nz /= l;
+    const i = (y * N + x) * 4; img.data[i] = (nx * 0.5 + 0.5) * 255; img.data[i + 1] = (ny * 0.5 + 0.5) * 255; img.data[i + 2] = (nz * 0.5 + 0.5) * 255; img.data[i + 3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  const t = new THREE.CanvasTexture(cv); t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return (T3.wN = t);
+}
+// céu nublado (fundo) e reflexo do ambiente
+function T3skyTex() {
+  if (T3.sky) return T3.sky;
+  const cv = document.createElement('canvas'); cv.width = 4; cv.height = 256; const ctx = cv.getContext('2d');
+  const gr = ctx.createLinearGradient(0, 0, 0, 256);
+  gr.addColorStop(0, '#3e4a57'); gr.addColorStop(0.55, '#77838f'); gr.addColorStop(0.78, '#9aa5ae'); gr.addColorStop(1, '#5c646b');
+  ctx.fillStyle = gr; ctx.fillRect(0, 0, 4, 256);
+  const t = new THREE.CanvasTexture(cv); if (THREE.sRGBEncoding) t.encoding = THREE.sRGBEncoding;
+  return (T3.sky = t);
+}
+function T3envMap() {
+  if (T3.env && T3.envR === T3.renderer) return T3.env;
+  T3.env = null;
+  try {
+    const pm = new THREE.PMREMGenerator(T3.renderer), sc = new THREE.Scene();
+    const sph = new THREE.Mesh(new THREE.SphereGeometry(100, 32, 16), new THREE.MeshBasicMaterial({map: T3skyTex(), side: THREE.BackSide}));
+    sc.add(sph); T3.env = pm.fromScene(sc, 0.04).texture; T3.envR = T3.renderer;
+    pm.dispose(); sph.geometry.dispose(); sph.material.dispose();
+  } catch (e) { T3.env = null; }
+  return T3.env;
+}
+
+/* ---------- modo realista: luz, céu, névoa, sombras e reflexos pela qualidade ---------- */
+function T3applyReal() {
+  if (!T3.renderer || !T3.scene || !T3.sun) return;
+  const on = !!T3.real, q = T3QL[T3q.lv], rd = T3.renderer, sc = T3.scene, k = Math.max(20, T3.span || 50) * 2.2;
+  if (T3.ambS !== sc) { T3.amb = sc.children.find(o => o.isAmbientLight) || null; T3.hemi = new THREE.HemisphereLight(0xd8e3ec, 0x40443a, 0); sc.add(T3.hemi); T3.ambS = sc; }
+  const sh = on && q.sh > 0;
+  rd.shadowMap.enabled = sh; T3.sun.castShadow = sh;
+  if (sh) {
+    if (T3.sun.shadow.mapSize.x !== q.sh) { T3.sun.shadow.mapSize.set(q.sh, q.sh); if (T3.sun.shadow.map) { T3.sun.shadow.map.dispose(); T3.sun.shadow.map = null; } }
+    Object.assign(T3.sun.shadow.camera, {left: -k, right: k, top: k, bottom: -k, near: 1, far: k * 6});
+    T3.sun.shadow.camera.updateProjectionMatrix();
+    T3.sun.shadow.bias = -0.0008; T3.sun.shadow.normalBias = 0.02;
+  }
+  if (on) {
+    rd.toneMapping = THREE.ACESFilmicToneMapping; rd.toneMappingExposure = 1.05;
+    if (THREE.sRGBEncoding) rd.outputEncoding = THREE.sRGBEncoding;
+    sc.background = T3skyTex();
+    sc.fog = new THREE.Fog(0x8a959f, (T3.span || 50) * 1.6, (T3.span || 50) * 6);
+    sc.environment = q.env ? T3envMap() : null;
+    if (T3.amb) T3.amb.intensity = 0.25;
+    T3.hemi.intensity = 0.75;
+    T3.sun.intensity = 1.1; T3.sun.color.set(0xfff2e0); T3.sun.position.set(k * 0.45, k * 1.1, k * 0.3);
+  } else {
+    rd.toneMapping = THREE.NoToneMapping; rd.toneMappingExposure = 1;
+    if (THREE.LinearEncoding) rd.outputEncoding = THREE.LinearEncoding;
+    sc.background = new THREE.Color(0x0f1620); sc.fog = null; sc.environment = null;
+    if (T3.amb) T3.amb.intensity = 0.75;
+    T3.hemi.intensity = 0;
+    T3.sun.intensity = 0.6; T3.sun.color.set(0xffffff); T3.sun.position.set(1, 2, 1);
+  }
+  const btn = document.getElementById('t3-real'); if (btn) btn.textContent = 'Realista: ' + (on ? 'ligado' : 'desligado');
+}
+// visibilidade: no realista some a grade e a linha do terreno; chão com a cor certa
+function T3apply() {
+  T3.objs.forEach(o => {
+    const c = o.userData && o.userData.comp; o.visible = c ? (T3VIS[c] !== false) : true;
+    if (c === 'outro' && T3.real && (o.type === 'GridHelper' || o.type === 'Line')) o.visible = false;
+    if (T3.real && c === 'outro' && o.isMesh && o.material && o.material.isMeshStandardMaterial && !o.userData.lin) { o.material.color.convertSRGBToLinear(); o.userData.lin = true; }
+  });
+}
+
+/* ---------- nível da água: a cunha da sarjeta sobe e desce pela espessura ---------- */
+function T3lvApply(m) {
+  const l = m.userData.lv, c = Math.max(0.0005, l.cur);
+  if (l.kind === 'box') { m.scale.y = c / Math.max(1e-6, l.h); m.position.y = l.bottom + c / 2; }
+  else if (l.kind === 'wedge') {
+    const w = m.userData.wg, k = c / Math.max(1e-6, l.h), pa = m.geometry.attributes.position, A = pa.array;
+    for (let i = 0; i < w.gy.length; i++) A[i * 3 + 1] = w.gy[i] + Math.max(0.002, w.th[i] * k);
+    pa.needsUpdate = true;
+  }
+  else m.position.y = l.bottom + c;
+  T3.lev[l.key] = l.cur;
+}
+
+/* ---------- lâmina na sarjeta (cunha) ---------- */
+function T3aguaSarj(K, b, rb, g) {
+  const G = K.G, r = g.r, sec = T3sec(r), sg = b.lado === 'D' ? -1 : 1, sB = num(b.dist) || 0, dm = blDim(b);
+  const y = isNum(rb.y) ? Math.max(0, rb.y) : 0, T = isNum(rb.T) ? Math.min(rb.T, sec.a) : 0;
+  if (!(y > 0.002 && T > 0.02 && rb.Qafl > 1e-6)) return;
+  const Sd = typeof sarjSentidoLado === 'function' ? sarjSentidoLado(b.rua, sB, b.lado) : null, fd = Sd == null || Sd >= 0 ? 1 : -1;   // sentido da água em s
+  const [e0, e1] = extRua(G, g), seg = T3segs(e0, e1, cruzamentos(G).cortes[b.rua + '|' + sg]).find(([p, q]) => sB >= p - 2 && sB <= q + 2) || [e0, e1];
+  const cl = s => Math.max(seg[0], Math.min(seg[1], s));
+  const lenOf = o => { const d = blDim(o); return (d.tp === 'gr' || d.tp === 'cb') ? d.gL : Math.max(0.6, num(o.L) || d.Le - 0.2); };
+  const lenB = lenOf(b);
+  const yQ = Q => Q > 1e-7 ? y * Math.pow(Math.min(1.5, Q / rb.Qafl), 3 / 8) : 0;   // seção triangular: y ∝ Q^(3/8)
+  const lado = o => (o.lado === 'D' ? -1 : 1);
+  // caixa a montante no mesmo lado da mesma rua: o trecho de água começa nela, com a vazão que ela deixou passar
+  const up = P.bls.filter(o => o !== b && o.rua === b.rua && lado(o) === sg && R.bl[o.id])
+    .map(o => ({o, d: (sB - (num(o.dist) || 0)) * fd})).filter(x => x.d > 0.5).sort((p, q) => p.d - q.d)[0];
+  let Lu = 18, Q0 = 0;
+  if (up) { Lu = Math.max(1, Math.min(25, up.d - lenOf(up.o) / 2 - lenB / 2)); if (up.o.prox === b.id) Q0 = R.bl[up.o.id].Qbyp || 0; }
+  const sU = cl(sB - fd * lenB / 2), sA = cl(sU - fd * Lu), sD = cl(sB + fd * lenB / 2);
+  const Qb = rb.Qbyp || 0, yB = yQ(Qb);
+  // a jusante: só a vazão que passa pela caixa
+  let Ld = 0, fade = false;
+  if (Qb > 1e-4) {
+    const pr = b.prox && P.bls.find(o => o.id === b.prox);
+    if (pr && pr.rua === b.rua && lado(pr) === sg && ((num(pr.dist) || 0) - sB) * fd > 0) {
+      const gap = ((num(pr.dist) || 0) - sB) * fd - lenB / 2 - lenOf(pr) / 2; Ld = Math.max(0, gap - 25);   // o resto é o trecho de montante da próxima caixa
+    } else { Ld = 12; fade = true; }
+  }
+  const sE = cl(sD + fd * Ld), step = T3QL[T3q.lv].step, pts = [];
+  const nU = Math.max(2, Math.ceil(Math.abs(sU - sA) / step));
+  for (let i = 0; i <= nU; i++) { const f = i / nU; pts.push([sA + (sU - sA) * f, yQ(Q0 + (rb.Qafl - Q0) * f)]); }
+  const nB = Math.max(3, Math.ceil(Math.abs(sD - sU) / Math.min(step, 0.2)));
+  for (let i = 1; i <= nB; i++) { const f = i / nB; pts.push([sU + (sD - sU) * f, y + (yB - y) * Math.pow(f, 0.7)]); }   // sobre a caixa: engolimento
+  if (Math.abs(sE - sD) > 0.05 && yB > 0.0005) { const nD = Math.max(2, Math.ceil(Math.abs(sE - sD) / step)); for (let i = 1; i <= nD; i++) { const f = i / nD; pts.push([sD + (sE - sD) * f, fade ? yB * Math.max(0, 1 - Math.pow(f, 1.5)) : yB]); } }
+  if (Math.abs(pts[pts.length - 1][0] - pts[0][0]) < 0.3) return;
+  // seção: da guia (j = 0) até a borda molhada T(s) = T · y(s) / y; superfície horizontal na seção
+  const nJ = 6, pos = [], uv = [], gy = [], th = [], idx = [];
+  pts.forEach(([s, ys]) => {
+    const Ts = Math.max(0.02, T * ys / y), zp = T3zPe(r, s, sg), lvl = isNum(zp) ? zp + ys : null;
+    for (let j = 0; j <= nJ; j++) {
+      const off = sg * (sec.a - Ts * j / nJ), p = g.at(s, off), zg = T3zPista(r, s, off);
+      const z0 = isNum(zg) ? zg : isNum(zp) ? zp : K.base, t = isNum(lvl) ? Math.max(0, lvl - z0) : 0;
+      const Yg = K.Y(z0) + 0.004;
+      gy.push(Yg); th.push(t * K.ex);
+      pos.push(p.x - T3.cx, Yg + Math.max(0.002, t * K.ex), -(p.y - T3.cz)); uv.push(s * 0.7, off * 0.7);
+    }
+  });
+  for (let i = 0; i < pts.length - 1; i++) for (let j = 0; j < nJ; j++) { const a = i * (nJ + 1) + j, a1 = a + 1, c = a + nJ + 1, d = c + 1; idx.push(a, c, a1, a1, c, d); }
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
+  geo.setIndex(idx); geo.computeVertexNormals();
+  const m = K.add(new THREE.Mesh(geo, T3mat(0x2aa7c9, 0.7)), 'agua');
+  m.userData.wg = {gy: Float32Array.from(gy), th: Float32Array.from(th)};
+  T3lv(m, 'sj:' + b.id, 0, y * K.ex, 'wedge');
+  // fluxo ao longo da lâmina (da ponta de montante até o fim da água)
+  const sEnd = pts[pts.length - 1][0], yEnd = pts[pts.length - 1][1], zA = T3zPe(r, sA, sg), zE = T3zPe(r, sEnd, sg);
+  if (isNum(zA) && isNum(zE)) {
+    const pa = g.at(sA, sg * (sec.a - T * 0.25)), pb = g.at(sEnd, sg * (sec.a - Math.max(0.05, T * yEnd / y) * 0.25));
+    const A = new THREE.Vector3(pa.x - T3.cx, K.Y(zA) + 0.004, -(pa.y - T3.cz)), B = new THREE.Vector3(pb.x - T3.cx, K.Y(zE) + 0.004, -(pb.y - T3.cz));
+    const dir = new THREE.Vector3().subVectors(B, A);
+    if (dir.length() > 0.2) T3.parts.push(T3particles(null, {A, B, dir: dir.clone().normalize(), L: dir.length(), lam: y * K.ex * 0.5, chord: T * 0.5}, 22, 'tr', 0.7, 0xbfefff, 1.2));
+  }
+  // redemoinho onde a caixa engole; partículas laranja = água que passa por cima da grelha
+  const zc = T3zPe(r, sB, sg);
+  if (isNum(zc) && (rb.Qeng || 0) > 1e-5) {
+    const pg = g.at(sB, (dm.tp === 'gr' || dm.tp === 'cb') ? sg * (sec.a - dm.gB / 2) : sg * (sec.a - 0.08));
+    T3.parts.push(T3particles(new THREE.Vector3(pg.x - T3.cx, K.Y(zc) + 0.02, -(pg.y - T3.cz)), null, Math.round(8 + 14 * Math.min(1, isNum(rb.ef) ? rb.ef : 1)), 'pv', 0.35, 0xd6f6ff));
+  }
+  const zd = T3zPe(r, sD, sg);
+  if (Qb > 1e-4 && isNum(zd)) { const pd = g.at(sD, sg * (sec.a - T * 0.2)); T3.parts.push(T3particles(new THREE.Vector3(pd.x - T3.cx, K.Y(zd) + yB * K.ex * 0.5, -(pd.y - T3.cz)), null, 20, 'bl', 0.5, 0xffb454)); }
+}
+
+// caixas, lâmina na sarjeta e ramais (PATCH DR-08: igual à anterior, só a água da sarjeta mudou)
+function T3caixas(K) {
+  const G = K.G, c = P.crit, DS = new Map();
+  const dsDe = id => { if (!DS.has(id)) { let d = null; try { d = dadosSecao(id); } catch (e) {} DS.set(id, d); } return DS.get(id); };
+  P.bls.forEach(b => {
+    const rb = R.bl[b.id], g = G[b.rua], pvo = pvById(b.pv), q = posBL(G, b); if (!rb || !g || !q) return;
+    const r = g.r, sec = T3sec(r), sg = b.lado === 'D' ? -1 : 1, sB = num(b.dist) || 0, dm = blDim(b);
+    const zCurb = T3zPe(r, sB, sg); if (!isNum(zCurb)) return;
+    // cotas da caixa e do ramal = as do cálculo (dadosSecao), as mesmas que dimensionam a câmara do PV
+    const gx = (dsDe(b.pv) || {bls: []}).bls.find(x => x.b.id === b.id);
+    const naSarjeta = b.tipo === 'gr', prof = gx ? gx.prof : num(b.cxH) || +c.blProf || 1.0, topo = gx ? gx.topo : zCurb + (naSarjeta ? 0 : sec.mfH), fundo = gx ? gx.fundo : topo - prof;
+    const x = q.x - T3.cx, z = -(q.y - T3.cz), rotY = Math.atan2(g.ux, -g.uy);
+    const cx = new THREE.Mesh(new THREE.BoxGeometry(dm.Be, prof * K.ex, dm.Le), T3mat(0x8c9499, 0.35));
+    cx.position.set(x, K.Y(topo) - prof * K.ex / 2, z); cx.rotation.y = rotY; K.add(cx, 'caixas');
+    if (dm.tp === 'gr' || dm.tp === 'cb') {
+      const gq = g.at(sB, sg * (sec.a - dm.gB / 2));
+      const gr = new THREE.Mesh(new THREE.BoxGeometry(dm.gB, 0.03, dm.gL), T3mat(0x3a3f45, 1));
+      gr.position.set(gq.x - T3.cx, K.Y(zCurb) + 0.015, -(gq.y - T3.cz)); gr.rotation.y = rotY; K.add(gr, 'caixas');
+    }
+    // água na sarjeta (PATCH DR-08): cunha triangular; sobre a caixa a água é engolida e a vazão que passa segue por cima
+    T3aguaSarj(K, b, rb, g);
+    // ramal: tubo reto da caixa ao PV (saída 5 cm acima do fundo da caixa, declividade do ramal)
+    const pvq = pvo && posPV(G, pvo); if (!pvq) return;
+    const rD = (num(b.rD) || 400) / 1000, rI = (num(b.rI) || 0) / 100, Lg = Math.hypot(pvq.x - q.x, pvq.y - q.y);
+    const ciBL = gx ? gx.ciBL : fundo + 0.05, ciPV = gx ? gx.ciPV : ciBL - rI * Lg;
+    // o ramal termina na face externa da parede do PV (entra na câmara, abaixo da laje da tampa)
+    const gp = T3pvGeo(b.pv), ePV = gp ? gp.m.L / 2 + gp.m.parede : 0, k = Lg > ePV + 0.1 ? (Lg - ePV) / Lg : 1;
+    const pxB = q.x + (pvq.x - q.x) * k, pyB = q.y + (pvq.y - q.y) * k;
+    const A = new THREE.Vector3(x, K.Y(ciBL) + rD / 2, z), B = new THREE.Vector3(pxB - T3.cx, K.Y(ciPV) + rD / 2, -(pyB - T3.cz));
+    K.add(T3link(A, B, rD / 2 + 0.05, T3mat(0xa8a29a, 0.4)), 'ramais');
+    const ram = rb.ram || {}, lam = ram.carga ? rD : (isNum(ram.y) && ram.y > 0 ? Math.min(ram.y, rD) : 0), V = isNum(ram.V) ? ram.V : 0;
+    if (lam > 0.002) {
+      const dir = new THREE.Vector3().subVectors(B, A), L = dir.length(), mid = new THREE.Vector3().addVectors(A, B).multiplyScalar(0.5);
+      const chord = ram.carga ? rD : 2 * Math.sqrt(Math.max(0, lam * (rD - lam)));
+      const yb = (K.Y(ciBL) + K.Y(ciPV)) / 2;
+      const wm = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.02, chord * 0.9), lam, L), T3mat(0x2aa7c9, 0.6));
+      wm.position.set(mid.x, yb + lam / 2, mid.z); T3basis(wm, dir, false); K.add(wm, 'agua'); T3lv(wm, 'rm:' + b.id, yb, lam, 'box');
+      const a2 = A.clone(), b2 = B.clone(); a2.y = K.Y(ciBL); b2.y = K.Y(ciPV);
+      T3.parts.push(T3particles(null, {A: a2, B: b2, dir: dir.clone().normalize(), L, lam, chord}, Math.round(Math.min(30, 6 + V * 6)), 'tr', 0.8, 0x6fdcff, V));
+    }
+  });
+}
+
+/* ---------- chuva: traços em volta do ponto que se olha ---------- */
+function T3rain(span, y0in, nIn) {
+  const q = T3QL[T3q.lv], ex = T3.exag || 1;
+  const n = Math.max(150, Math.round(1600 * q.rain * (0.3 + 0.7 * Math.min(3, RAIN_FATOR))));
+  const zt = [], tps = [];
+  P.pvs.forEach(pv => { const r = R.pv[pv.id]; if (r && isNum(r.tp)) { zt.push(r.tp); tps.push(r.tp); } if (r && isNum(r.fundo)) zt.push(r.fundo); });
+  const base = (zt.length ? Math.min(...zt) : 0) - 2, Yf = z => (z - base) * ex;
+  const y0 = tps.length ? Yf(Math.min(...tps)) - 0.3 : y0in, yTop = tps.length ? Yf(Math.max(...tps)) : y0in + 10;
+  const arr = new Float32Array(n * 6), px = new Float32Array(n), py = new Float32Array(n), pz = new Float32Array(n), sp = new Float32Array(n);
+  const R0 = span * 1.2, H0 = (yTop - y0) + Math.max(12, span * 0.3);
+  for (let i = 0; i < n; i++) {
+    px[i] = (Math.random() * 2 - 1) * R0; pz[i] = (Math.random() * 2 - 1) * R0; py[i] = y0 + Math.random() * H0; sp[i] = 0.75 + Math.random() * 0.5;
+    arr.set([px[i], py[i], pz[i], px[i], py[i] + 1, pz[i]], i * 6);
+  }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(arr, 3));
+  const mat = new THREE.LineBasicMaterial({color: T3.real ? 0xe4eef6 : 0xbfe0f5, transparent: true, opacity: T3.real ? 0.5 : 0.75, depthWrite: false});
+  const seg = new THREE.LineSegments(geo, mat); seg.frustumCulled = false;
+  return {points: seg, arr, px, py, pz, sp, n, y0, yTop, span, v2: true, streak: true};
+}
+function T3rainUpd(dt) {
+  const rn = T3.rain; if (!rn || !rn.v2) return;
+  const tg = T3.ctrl ? T3.ctrl.target : new THREE.Vector3(), cd = T3.cam ? T3.cam.position.distanceTo(tg) : rn.span;
+  const Rr = Math.max(8, Math.min(rn.span * 1.3, cd * 0.9)), f = Math.max(0.25, Math.min(1, Rr / (rn.span * 1.3)));
+  const top = Math.max(rn.yTop, tg.y) + Math.max(6, Rr * 0.7), H = top - rn.y0, F = Math.min(3, RAIN_FATOR);
+  const L = Math.max(0.3, Math.min(4.5, Rr * 0.045)) * (0.75 + 0.25 * F);
+  const v = (9 + Rr * 0.22) * (0.85 + 0.15 * F), sx = 0.16 * L, sz = 0.05 * L;
+  const nAct = Math.max(50, Math.min(rn.n, Math.round(rn.n * f))), a = rn.arr;
+  for (let i = 0; i < nAct; i++) {
+    let x = rn.px[i], z = rn.pz[i], yy = rn.py[i] - v * rn.sp[i] * dt;
+    if (yy < rn.y0 || yy > top + 1 || Math.abs(x - tg.x) > Rr || Math.abs(z - tg.z) > Rr) {
+      x = tg.x + (Math.random() * 2 - 1) * Rr; z = tg.z + (Math.random() * 2 - 1) * Rr;
+      yy = yy < rn.y0 ? top - Math.random() * H * 0.1 : rn.y0 + Math.random() * H;
+    }
+    rn.px[i] = x; rn.py[i] = yy; rn.pz[i] = z;
+    const k = i * 6; a[k] = x; a[k + 1] = yy; a[k + 2] = z; a[k + 3] = x + sx; a[k + 4] = yy + L; a[k + 5] = z + sz;
+  }
+  rn.points.geometry.setDrawRange(0, nAct * 2);
+  rn.points.geometry.attributes.position.needsUpdate = true;
+}
+
+/* ---------- animação (nível, ondas, fluxo, chuva, ondulação da água e desempenho) ---------- */
+function T3animate(t) {
+  if (!T3.scene) return;
+  const anim = T3.anim, q = T3QL[T3q.lv];
+  const dt = T3q.lastT == null ? 0 : Math.max(0, Math.min(0.05, t - T3q.lastT)); T3q.lastT = t;
+  T3fps(t); T3q.fc++;
+  T3.objs.forEach(o => {
+    const l = o.userData && o.userData.lv; if (!l) return;
+    if (l.cur !== l.h) { l.cur += (l.h - l.cur) * 0.12; if (Math.abs(l.h - l.cur) < 0.0008) l.cur = l.h; T3lvApply(o); }
+  });
+  if (anim && T3.wN) { T3.wN.offset.x = (t * 0.021) % 1; T3.wN.offset.y = (t * 0.047) % 1; }
+  if (T3q.fc % q.wave === 0) (T3.waves || []).forEach(w => {
+    if (!w.mesh || !anim) return;
+    const pos = w.mesh.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), k = w.kind === 'pv' ? 3 : 2.2 + (w.V || 0) * 0.5;
+      pos.setZ(i, Math.sin(t * (2 + (w.V || 0)) + x * k + y * 1.7) * (w.amp || 0.01) * 0.6);
+    }
+    pos.needsUpdate = true;
+  });
+  (T3.parts || []).forEach(p => {
+    if (!p.pts || !anim) return;
+    const a = p.arr;
+    for (let i = 0; i < p.n; i++) {
+      if (p.kind === 'tr' && p.seg) {
+        const s = p.seg, f = (p.phase[i] + t * (0.15 + 0.06 * p.V)) % 1;
+        const jitter = (Math.sin(t * 9 + i * 3.1) * 0.5) * s.chord * 0.25;
+        const base = new THREE.Vector3().lerpVectors(s.A, s.B, f), side = new THREE.Vector3(-s.dir.z, 0, s.dir.x).multiplyScalar(jitter);
+        a[i * 3] = base.x + side.x; a[i * 3 + 1] = base.y + s.lam * 0.6 + Math.sin(t * 7 + i) * 0.03; a[i * 3 + 2] = base.z + side.z;
+      } else {
+        const c = p.pos, ang = t * (3 + i * 0.1) + p.phase[i] * 6.28, r = p.scale * (0.2 + 0.5 * ((Math.sin(t * 5 + i * 2.3) + 1) / 2));
+        a[i * 3] = c.x + Math.cos(ang) * r * (0.5 + 0.5 * Math.sin(t * 4 + i));
+        a[i * 3 + 1] = c.y + Math.abs(Math.sin(ang * 1.3 + i)) * 0.25 * p.scale;
+        a[i * 3 + 2] = c.z + Math.sin(ang) * r;
+      }
+    }
+    for (let i = 0; i < p.n * 3; i++) if (!isFinite(a[i])) a[i] = 0;
+    p.pts.geometry.attributes.position.needsUpdate = true;
+  });
+  if (T3.rain && anim) {
+    const rn = T3.rain;
+    if (rn.v2) T3rainUpd(dt);
+    else {
+      const a = rn.arr;
+      for (let i = 0; i < rn.n; i++) { a[i * 3 + 1] -= 0.35 * rn.sp[i] * (0.6 + RAIN_FATOR * 0.4); if (a[i * 3 + 1] < rn.y0) a[i * 3 + 1] = 35 + Math.random() * 5; }
+      rn.points.geometry.attributes.position.needsUpdate = true;
+    }
+  }
+}
+
+/* ---------- qualidade gráfica ---------- */
+// menos partículas nas qualidades baixas
+(function () {
+  const p0 = window.T3particles;
+  window.T3particles = function (pos, seg, n, kind, scale, color, V) { return p0(pos, seg, Math.max(3, Math.round(n * T3QL[T3q.lv].part)), kind, scale, color, V); };
+})();
+function T3fps(t) {
+  T3q.fr++;
+  if (T3q.t0 == null || t < T3q.t0) { T3q.t0 = t; T3q.fr = 0; return; }
+  const el = t - T3q.t0; if (el < 1) return;
+  const f = T3q.fr / el; T3q.fps = T3q.fps ? T3q.fps * 0.5 + f * 0.5 : f; T3q.t0 = t; T3q.fr = 0;
+  const lb = document.getElementById('t3-qfps'); if (lb) lb.textContent = Math.round(T3q.fps) + ' quadros/s';
+  if (!T3q.auto) return;
+  if (T3q.fps < 24 && T3q.lv > 0) { if (++T3q.lo >= 2) { T3q.lo = 0; T3q.hi = 0; T3qualSet(T3q.lv - 1, true); } } else T3q.lo = 0;
+  if (T3q.fps > 55 && T3q.lv < 3) { if (++T3q.hi >= 5) { T3q.hi = 0; T3qualSet(T3q.lv + 1, true); } } else if (T3q.fps <= 55) T3q.hi = 0;
+}
+function T3qualSet(lv, auto) {
+  lv = Math.max(0, Math.min(T3QL.length - 1, Math.round(+lv || 0)));
+  if (!auto) T3q.auto = false;
+  if (lv === T3q.lv) { T3qualSave(); T3qualUI(); return; }
+  T3q.lv = lv; T3q.t0 = null; T3qualApply();
+}
+function T3qualSave() { try { localStorage.setItem('tc_dren_t3q', JSON.stringify({lv: T3q.lv, auto: T3q.auto})); } catch (e) {} }
+function T3qualApply(rebuild) {
+  const q = T3QL[T3q.lv];
+  if (T3.renderer) { T3.renderer.setPixelRatio(Math.min(2, q.pr)); T3resize(); }
+  T3applyReal();
+  if (rebuild !== false && T3.scene) T3build();
+  T3qualSave(); T3qualUI();
+}
+function T3qualUI() {
+  const q = T3QL[T3q.lv], nm = document.getElementById('t3-qnm'); if (nm) nm.textContent = q.n;
+  const ck = document.getElementById('t3-qauto'); if (ck) ck.checked = !!T3q.auto;
+  const k = document.getElementById('t3-qknob'), tr = document.getElementById('t3-qtrack');
+  if (k && tr) k.style.top = ((1 - T3q.lv / (T3QL.length - 1)) * (tr.clientHeight - 30)) + 'px';
+}
+// botão de arrastar (para cima = mais real, para baixo = mais leve), ao lado do botão da chuva
+function T3qualKnob(box) {
+  const c = document.createElement('div');
+  c.id = 't3-kqual';
+  c.style.cssText = 'position:absolute;left:92px;top:52px;bottom:150px;min-height:150px;width:74px;z-index:6;display:flex;flex-direction:column;align-items:center;gap:4px;color:#e8ecf1;font-size:.72rem;user-select:none;-webkit-user-select:none;touch-action:none';
+  const ticks = T3QL.map((_, i) => `<div style="position:absolute;left:8px;right:8px;height:2px;border-radius:1px;background:rgba(255,255,255,.35);top:calc(15px + (100% - 30px) * ${(1 - i / (T3QL.length - 1)).toFixed(3)} - 1px)"></div>`).join('');
+  c.innerHTML = '<div title="Qualidade gráfica: resolução, sombras, reflexos, chuva e partículas. Não muda os cálculos." style="background:rgba(20,30,40,.7);border:1px solid rgba(255,255,255,.3);border-radius:6px;padding:.2rem .4rem;text-align:center;line-height:1.2;white-space:nowrap">Qualidade<br><b id="t3-qnm"></b><br><span id="t3-qfps" style="opacity:.8">—</span></div>' +
+    '<div style="opacity:.85">▲ + real</div>' +
+    '<div id="t3-qtrack" title="Arraste para cima (imagem mais real) ou para baixo (animação mais leve, para placa de vídeo fraca)" style="position:relative;flex:1;width:34px;border-radius:17px;background:rgba(20,30,40,.6);border:1px solid rgba(255,255,255,.3);cursor:ns-resize;touch-action:none">' + ticks +
+    '<div id="t3-qknob" style="position:absolute;left:1px;top:0;width:30px;height:30px;border-radius:50%;background:#7ed957;border:2px solid #fff;box-shadow:0 1px 6px rgba(0,0,0,.5)"></div></div>' +
+    '<div style="opacity:.85">▼ + leve</div>' +
+    '<label title="Ajusta sozinho pela velocidade do computador (quadros por segundo)" style="display:flex;gap:3px;align-items:center;cursor:pointer;background:rgba(20,30,40,.7);border:1px solid rgba(255,255,255,.3);border-radius:6px;padding:.1rem .35rem"><input id="t3-qauto" type="checkbox" style="margin:0"> Auto</label>';
+  box.appendChild(c);
+  const tr = c.querySelector('#t3-qtrack');
+  let on = false;
+  const set = e => { const r = tr.getBoundingClientRect(), H = r.height - 30, frac = 1 - Math.max(0, Math.min(1, (e.clientY - r.top - 15) / H)); T3qualSet(frac * (T3QL.length - 1)); };
+  tr.addEventListener('pointerdown', e => { e.preventDefault(); e.stopPropagation(); on = true; tr.setPointerCapture(e.pointerId); set(e); });
+  tr.addEventListener('pointermove', e => { if (on) { e.preventDefault(); set(e); } });
+  const end = () => { on = false; };
+  tr.addEventListener('pointerup', end); tr.addEventListener('pointercancel', end);
+  tr.addEventListener('wheel', e => e.stopPropagation(), {passive: true});
+  c.querySelector('#t3-qauto').addEventListener('change', e => { T3q.auto = e.target.checked; T3q.lo = T3q.hi = 0; T3qualSave(); T3qualUI(); });
+  T3qualUI();
+}
+(function () {
+  const st0 = window.T3start;
+  window.T3start = function (box) {
+    st0(box);
+    if (!T3.renderer) return;
+    T3qualKnob(box);
+    T3q.t0 = null; T3q.lastT = null;
+    T3qualApply(false);
+  };
+  const b0 = window.T3build;
+  window.T3build = function () { b0(); if (T3.renderer && T3.scene) T3applyReal(); };
+})();
+</script>
 </body></html>
