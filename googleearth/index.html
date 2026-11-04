@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/lite.umd.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/full.umd.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 /* ===== DESIGN TOKENS — Total Civil ===== */
@@ -164,6 +164,22 @@ body.amb-ios .campo input,body.amb-ios .campo select,body.amb-ios .campo textare
 body.amb-ios .bt{min-height:44px}
 @media(max-width:560px){.grade{grid-template-columns:1fr}.marca h1{font-size:18px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important}}
+
+/* ---------- Listas de ruas (PDF) ---------- */
+.pill.prop{background:#E7F5F3;color:#0F6B5F}
+.lista-pdf{margin-bottom:14px}
+.lista-pdf .cabl{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:10px}
+.lista-pdf .cabl .campo{flex:1;min-width:220px}
+.tab-rolagem{overflow:auto;max-height:520px;border:1px solid var(--line);border-radius:10px}
+table.ruas{border-collapse:collapse;width:100%;font-size:12.5px;min-width:760px}
+table.ruas th{position:sticky;top:0;background:#eef0f3;text-align:left;padding:6px 8px;font-size:11.5px;text-transform:uppercase;letter-spacing:.03em;z-index:1}
+table.ruas td{padding:4px 8px;border-top:1px solid var(--line);vertical-align:middle}
+table.ruas td input[type=text]{width:100%;min-width:130px;border:1px solid transparent;background:transparent;padding:4px 6px;border-radius:6px;font:inherit}
+table.ruas td input[type=text]:focus{border-color:var(--orange);background:#fff;outline:0}
+table.ruas tr.off td{opacity:.45}
+.st{font-weight:700;font-size:11.5px;border-radius:99px;padding:2px 9px;white-space:nowrap}
+.st.ok{background:var(--ok-bg);color:var(--ok)}.st.aprox{background:var(--warn-bg);color:var(--warn)}.st.bairro{background:#F1ECFB;color:#5B3BA0}.st.nao{background:var(--bad-bg);color:var(--bad)}.st.pend{background:#eef0f3;color:var(--muted)}
+.det-props{font-size:11.5px;color:var(--muted);margin-top:4px}.det-props summary{cursor:pointer;font-weight:700}.det-props div{word-break:break-word}
 </style>
 <script src="/assistente-abas.js" data-tabs=".header-nav button" data-auxilio="gerar"></script>
 </head>
@@ -216,7 +232,8 @@ body.amb-ios .bt{min-height:44px}
     <button type="button" data-aba="fotos" class="active"><span class="n">1</span> Fotos</button>
     <button type="button" data-aba="mapa"><span class="n">2</span> Mapa</button>
     <button type="button" data-aba="marcacoes"><span class="n">3</span> Marcações</button>
-    <button type="button" data-aba="exportar"><span class="n">4</span> Gerar KML / KMZ</button>
+    <button type="button" data-aba="listas"><span class="n">4</span> Listas de ruas (PDF)</button>
+    <button type="button" data-aba="exportar"><span class="n">5</span> Gerar KML / KMZ</button>
   </nav>
 </header>
 
@@ -252,6 +269,7 @@ body.amb-ios .bt{min-height:44px}
     <div class="linha">
       <button type="button" class="bt" id="bt-ocr">🔎 Ler tarja das fotos sem local</button>
       <button type="button" class="bt" id="bt-geo">📍 Buscar coordenadas pelo endereço</button>
+      <button type="button" class="bt" id="bt-rev">🏠 Endereços por Coordenadas</button>
       <span style="flex:1"></span>
       <button type="button" class="bt peq" id="bt-sel-todas">Selecionar todas</button>
       <button type="button" class="bt peq" id="bt-sel-sem">Selecionar sem local</button>
@@ -263,6 +281,22 @@ body.amb-ios .bt{min-height:44px}
     <div class="resumo" id="resumo"></div>
   </div>
 
+  <div class="cartao" id="gerar-aqui">
+    <h3>Gerar para o Google Earth</h3>
+    <p class="ajuda" style="margin-top:0">Cada foto com local vira um ponto com a foto no carrossel. Ao anexar, o ponto já aparece na aba <b>Mapa</b>. Caminhos, polígonos, cores e textos ficam na aba <b>Marcações</b>.</p>
+    <div class="linha">
+      <div class="campo"><label for="f-dest">Onde vai entrar</label><select id="f-dest"><option value="novo">Projeto novo</option><option value="pasta">Pasta nova em projeto existente</option><option value="mesclar">Projeto existente completo (aba 5)</option></select></div>
+      <div class="campo" style="flex:1;min-width:180px" id="f-c-proj"><label for="f-proj">Nome do projeto</label><input id="f-proj"></div>
+      <div class="campo" style="flex:1;min-width:180px"><label for="f-pasta">Nome da pasta nova</label><input id="f-pasta"></div>
+    </div>
+    <div class="linha" style="margin-top:10px">
+      <button type="button" class="bt pri" id="bt-kmz-f">⬇ Gerar KMZ (com fotos)</button>
+      <button type="button" class="bt" id="bt-kml-f">⬇ Gerar KML</button>
+      <a class="bt" id="lk-earth" href="https://earth.google.com/web/" target="_blank" rel="noopener">🌍 Abrir no Google Earth Web</a>
+    </div>
+    <div class="barra-prog" id="prog-exp2" hidden><i></i></div>
+    <div id="msg-exp2" style="margin-top:8px"></div>
+  </div>
   <div class="grade" id="grade"></div>
 </section>
 
@@ -341,7 +375,27 @@ body.amb-ios .bt{min-height:44px}
   </div>
 </section>
 
-<!-- ================= 4. EXPORTAR ================= -->
+<!-- ================= 4. LISTAS DE RUAS (PDF) ================= -->
+<section class="aba" id="aba-listas">
+  <h2>Listas de ruas (PDF)</h2>
+  <p class="intro">Importe o PDF com a relação de ruas (como a planilha “Manutenção vias pavimentadas / tapa-buraco”). O programa lê o <b>título</b> e a tabela, acha cada rua no OpenStreetMap e monta um <b>caminho</b> por rua, numa <b>pasta com o nome do título</b>. Se houver fotos perto da rua, elas entram no carrossel dela.</p>
+  <div class="cartao">
+    <div class="linha">
+      <button type="button" class="bt pri" id="bt-pdf">📄 Importar PDF</button>
+      <input type="file" id="in-pdf" accept=".pdf,application/pdf" multiple hidden>
+      <button type="button" class="bt" id="bt-pdf-loc-todas">📍 Localizar as ruas de todas as listas</button>
+    </div>
+    <div class="opcoes" style="margin-top:10px">
+      <label class="opcao"><input type="checkbox" id="cfg-bairroPonto" checked><span><b>Rua não encontrada: marcar um ponto no centro do bairro</b><small>Fica indicado na descrição como local aproximado. Desmarque para deixar essas ruas de fora.</small></span></label>
+      <label class="opcao"><input type="checkbox" id="cfg-fotoRua" checked><span><b>Anexar à rua as fotos que estiverem a até 40 m dela</b><small>Só fotos com local e que ainda não estejam em outra marcação.</small></span></label>
+    </div>
+    <div class="barra-prog" id="prog-listas" hidden><i></i></div>
+    <div id="msg-listas" style="margin-top:8px"></div>
+  </div>
+  <div id="listas"></div>
+</section>
+
+<!-- ================= 5. EXPORTAR ================= -->
 <section class="aba" id="aba-exportar">
   <h2>Gerar KML / KMZ</h2>
   <p class="intro">Escolha onde as marcações vão entrar no Google Earth Web e gere o arquivo. As fotos vão no carrossel de cada marcação, como nos projetos feitos no próprio Google Earth.</p>
@@ -413,14 +467,14 @@ const CORES = [
   {hex:'#66BB6A', nome:'Verde'}, {hex:'#FFEE58', nome:'Amarelo'}, {hex:'#42A5F5', nome:'Azul'}, {hex:'#1976D2', nome:'Azul escuro'},
   {hex:'#00FFFF', nome:'Ciano'}, {hex:'#AB47BC', nome:'Roxo'}, {hex:'#EEEEEE', nome:'Cinza'}, {hex:'#FFFFFF', nome:'Branco'}
 ];
-const ORIGEM = {gps:'GPS da foto', tarja:'Tarja da foto', endereco:'Endereço (aprox.)', manual:'Marcado no mapa', sem:'Sem local'};
-const COR_ORIGEM = {gps:'#16a34a', tarja:'#1E4E8C', endereco:'#F57C00', manual:'#7C3AED', sem:'#B42318'};
+const ORIGEM = {gps:'GPS da foto', tarja:'Tarja da foto', endereco:'Endereço (aprox.)', manual:'Marcado no mapa', prop:'Propriedades da foto', sem:'Sem local'};
+const COR_ORIGEM = {gps:'#16a34a', tarja:'#1E4E8C', endereco:'#F57C00', manual:'#7C3AED', prop:'#0F6B5F', sem:'#B42318'};
 
 /* ---------- estado ---------- */
 let S = novoEstado();
 function novoEstado(){
-  return {versao:1, amb:'', fotos:[], marc:[],
-    cfg:{res:1280, qual:0.8, autor:'', mun:'Rio das Ostras - RJ', avulsas:true, corPadrao:'#FBC02D'},
+  return {versao:1, amb:'', fotos:[], marc:[], listas:[],
+    cfg:{res:1280, qual:0.8, autor:'', mun:'Rio das Ostras - RJ', avulsas:true, corPadrao:'#FBC02D', bairroPonto:true, fotoRua:true},
     exp:{destino:'novo', proj:'Vistoria de campo', pasta:'', dentro:'', urlOn:false, url:''}};
 }
 const BLOBS = new Map();            // id da foto -> Blob original
@@ -561,6 +615,7 @@ function irAba(a){
   if(a === 'mapa'){ iniciarMapa(); setTimeout(() => { mapa && mapa.invalidateSize(); desenharMapa(); }, 60); }
   if(a === 'marcacoes') renderMarcacoes();
   if(a === 'exportar') renderExportar();
+  if(a === 'listas') renderListas();
   window.scrollTo({top: 0});
 }
 document.querySelectorAll('.header-nav button').forEach(b => b.addEventListener('click', () => irAba(b.dataset.aba)));
@@ -595,23 +650,51 @@ async function reduzir(blob, maxPx, q){
   if(bmp.close) bmp.close();
   return await new Promise(ok => c.toBlob(ok, 'image/jpeg', q));
 }
+function textoProp(v){
+  if(v == null) return '';
+  if(typeof v === 'string') return v.replace(/\u0000/g, '').trim();
+  if(Array.isArray(v)) return v.map(textoProp).filter(Boolean).join('; ');
+  if(v instanceof Uint8Array){   // UserComment: 8 bytes de código de caracteres + texto
+    let b = v; if(b.length > 8 && /^(ASCII|UNICODE|JIS)/.test(String.fromCharCode.apply(null, b.slice(0, 5)))) b = b.slice(8);
+    try{ return new TextDecoder(v[0] === 0x55 ? 'utf-16be' : 'utf-8').decode(b).replace(/\u0000/g, '').trim(); }catch(e){ return ''; }
+  }
+  if(typeof v === 'object'){ if(v.value != null) return textoProp(v.value); if(v['#value'] != null) return textoProp(v['#value']); if(v.en != null) return textoProp(v.en); return Object.keys(v).map(k => textoProp(v[k])).filter(Boolean).join('; '); }
+  return String(v).trim();
+}
+const CAMPOS_PROP = [['titulo', ['XPTitle', 'title', 'Title', 'ObjectName', 'Headline']], ['assunto', ['XPSubject', 'subject', 'Subject']], ['comentario', ['XPComment', 'UserComment', 'Comment']],
+  ['descricao', ['ImageDescription', 'description', 'Description', 'Caption', 'Caption-Abstract']], ['palavras', ['XPKeywords', 'Keywords', 'keywords']], ['autor', ['XPAuthor', 'Artist', 'creator']],
+  ['local', ['Location', 'SubLocation', 'City', 'Sub-location', 'Province-State', 'Country-PrimaryLocationName']], ['camera', ['Make', 'Model']], ['programa', ['Software']]];
+function gpsXmp(lat, lon){   // XMP grava "22,33.044S"
+  const f = (t, neg) => { const m = String(t || '').match(/^\s*(\d+)[,:\s]+(\d+(?:\.\d+)?)(?:[,:\s]+(\d+(?:\.\d+)?))?\s*([NSEWOL])?\s*$/i); if(!m) { const n = numBR(t); return isFinite(n) ? n : NaN; } let v = +m[1] + numBR(m[2]) / 60 + (m[3] ? numBR(m[3]) / 3600 : 0); if(m[4] && /[SWO]/i.test(m[4])) v = -v; return v; };
+  return valida(f(lat), f(lon));
+}
 async function lerExif(file){
-  const r = {};
+  const r = {props: {}};
   if(typeof exifr === 'undefined') return r;
-  try{
-    const o = await exifr.parse(file, {tiff: true, exif: true, gps: true});
-    if(o){
-      if(typeof o.latitude === 'number' && typeof o.longitude === 'number'){ const v = valida(o.latitude, o.longitude); if(v){ r.lat = v.lat; r.lon = v.lon; } }
-      const d = o.DateTimeOriginal || o.CreateDate || o.ModifyDate;
-      if(d instanceof Date && !isNaN(d)) r.data = d.toISOString();
-    }
-  }catch(e){ /* foto sem EXIF */ }
+  let o = null;
+  try{ o = await exifr.parse(file, {tiff: true, ifd0: true, exif: true, gps: true, xmp: true, iptc: true, icc: false, jfif: false, mergeOutput: true, translateKeys: true, reviveValues: true}); }
+  catch(e){ try{ o = await exifr.parse(file, {tiff: true, exif: true, gps: true}); }catch(e2){ o = null; } }
+  if(!o) return r;
+  if(typeof o.latitude === 'number' && typeof o.longitude === 'number'){ const v = valida(o.latitude, o.longitude); if(v){ r.lat = v.lat; r.lon = v.lon; r.via = 'gps'; } }
+  const d = o.DateTimeOriginal || o.CreateDate || o.ModifyDate;
+  if(d instanceof Date && !isNaN(d)) r.data = d.toISOString();
+  // propriedades de texto do arquivo (Windows: Detalhes › Título, Assunto, Comentários, Marcas…)
+  CAMPOS_PROP.forEach(([k, nomes]) => { const t = nomes.map(n => textoProp(o[n])).filter(Boolean).filter((x, i, a) => a.indexOf(x) === i).join(' · ').slice(0, 400); if(t) r.props[k] = t; });
+  // coordenada fora dos campos de GPS: XMP ou escrita no texto das propriedades
+  if(r.lat == null){
+    const lx = o.GPSLatitude, ly = o.GPSLongitude;
+    if(typeof lx === 'string' && typeof ly === 'string'){ const v = gpsXmp(lx, ly); if(v){ r.lat = v.lat; r.lon = v.lon; r.via = 'prop'; } }
+  }
+  if(r.lat == null){
+    const todos = Object.keys(r.props).filter(k => k !== 'camera' && k !== 'programa').map(k => r.props[k]);
+    for(const t of todos.concat([todos.join(' | ')])){ const c = lerCoordenadas(t); if(c){ r.lat = c.lat; r.lon = c.lon; r.via = 'prop'; break; } }
+  }
   return r;
 }
 async function adicionarArquivos(lista){
   const arqs = [...lista].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name));
   if(!arqs.length){ aviso('Nenhuma imagem encontrada nos arquivos escolhidos.'); return; }
-  let feitos = 0, comGps = 0, falhas = 0;
+  let feitos = 0, comGps = 0, comProp = 0, falhas = 0;
   progresso('prog-fotos', 0);
   for(const file of arqs){
     try{
@@ -620,17 +703,17 @@ async function adicionarArquivos(lista){
       const mi = await miniatura(file, 360);
       const f = {id, nome: file.name, tam: file.size, w: mi.w, h: mi.h, thumb: mi.url,
         data: ex.data || (file.lastModified ? new Date(file.lastModified).toISOString() : ''), dataOrig: ex.data ? 'exif' : 'arquivo',
-        lat: ex.lat, lon: ex.lon, orig: ex.lat != null ? 'gps' : null, end: '', coment: '', tarja: ''};
+        lat: ex.lat, lon: ex.lon, orig: ex.lat != null ? (ex.via === 'prop' ? 'prop' : 'gps') : null, props: ex.props || {}, end: '', coment: '', tarja: ''};
       BLOBS.set(id, file);
       try{ await DB.put('fotos', id, file); }catch(e){ console.warn(e); }
-      S.fotos.push(f); if(f.orig === 'gps') comGps++;
+      S.fotos.push(f); if(f.orig === 'gps') comGps++; else if(f.orig === 'prop') comProp++;
     }catch(e){ console.warn('Foto não lida:', file.name, e); falhas++; }
     feitos++; progresso('prog-fotos', feitos / arqs.length);
   }
   S.fotos.sort((a, b) => (a.data || '').localeCompare(b.data || ''));
   progresso('prog-fotos', null);
   salvar(); renderFotos();
-  aviso(feitos - falhas + ' foto(s) anexada(s) · ' + comGps + ' com GPS' + (falhas ? ' · ' + falhas + ' não puderam ser lidas (formato não suportado neste navegador)' : ''), 5200);
+  aviso(feitos - falhas + ' foto(s) anexada(s) · ' + comGps + ' com GPS' + (comProp ? ' · ' + comProp + ' com coordenada nas propriedades do arquivo' : '') + (falhas ? ' · ' + falhas + ' não puderam ser lidas (formato não suportado neste navegador)' : ''), 5200);
 }
 $('bt-anexar').onclick = () => $('in-fotos').click();
 $('bt-camera').onclick = () => $('in-camera').click();
@@ -660,9 +743,15 @@ function estimarTamanho(){
   $('est-tam').textContent = 'Tamanho estimado das fotos no arquivo: cerca de ' + kb(porFoto * n) + ' para ' + n + ' foto(s). Arquivos acima de ~20 MB podem demorar ou falhar no Google Earth Web.';
 }
 
+const ROT_PROP = {titulo: 'Título', assunto: 'Assunto', comentario: 'Comentários', descricao: 'Descrição', palavras: 'Marcas', autor: 'Autor', local: 'Local', camera: 'Câmera', programa: 'Programa'};
+function blocoProps(f){
+  const p = f.props || {}, ks = Object.keys(ROT_PROP).filter(k => p[k]);
+  if(!ks.length) return '';
+  return '<details class="det-props"><summary>Propriedades do arquivo</summary>' + ks.map(k => '<div><b>' + ROT_PROP[k] + ':</b> ' + esc(p[k]) + '</div>').join('') + '</details>';
+}
 function renderFotos(){
   const g = $('grade');
-  const cont = {gps: 0, tarja: 0, endereco: 0, manual: 0, sem: 0};
+  const cont = {gps: 0, prop: 0, tarja: 0, endereco: 0, manual: 0, sem: 0};
   S.fotos.forEach(f => cont[origemDe(f)]++);
   $('resumo').innerHTML = S.fotos.length ? '<span class="pill">' + S.fotos.length + ' foto(s)</span>' +
     Object.keys(cont).filter(k => cont[k]).map(k => '<span class="pill ' + k + '">' + ORIGEM[k] + ': ' + cont[k] + '</span>').join('') +
@@ -681,9 +770,11 @@ function renderFotos(){
       '<div class="campo"><label>Coordenadas (lat, long)</label><input data-campo="coord" placeholder="-22.550742, -41.974335 ou 22°33\'2,67&quot;S 41°58\'27,6&quot;W" value="' + (temLocal(f) ? f.lat.toFixed(6) + ', ' + f.lon.toFixed(6) : '') + '"></div>' +
       '<div class="campo"><label>Endereço</label><input data-campo="end" placeholder="Rua, número - bairro" value="' + esc(f.end) + '"></div>' +
       '<div class="campo"><label>Comentário</label><textarea data-campo="coment" placeholder="Opcional">' + esc(f.coment) + '</textarea></div>' +
+      blocoProps(f) +
       '<div class="bts"><button type="button" class="bt peq" data-acao="marcar">📍 Marcar no mapa</button><button type="button" class="bt peq" data-acao="ocr">🔎 Ler tarja</button><button type="button" class="bt peq" data-acao="geo">Buscar endereço</button><button type="button" class="bt peq perigo" data-acao="rem">Remover</button></div>' +
       '</div></article>';
   }).join('');
+  if(typeof mapa !== 'undefined' && mapa) desenharMapa(false);
 }
 function corTexto(hex){ const n = parseInt(hex.slice(1), 16); const l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; return l > 0.6 ? '#0F1E33' : '#fff'; }
 
@@ -807,6 +898,31 @@ async function geocodificar(lista, umaSo){
   progresso('prog-acao', null);
   $('txt-acao').textContent = ok + ' de ' + lista.length + ' endereço(s) localizado(s). A posição é aproximada (meio da rua); confira no mapa e arraste se precisar.';
 }
+async function enderecoDeCoord(lat, lon){
+  const r = await fetch('https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&accept-language=pt-BR&lat=' + lat + '&lon=' + lon, {headers: {'Accept': 'application/json'}});
+  if(!r.ok) throw new Error('serviço de endereços respondeu ' + r.status);
+  const j = await r.json(), a = (j && j.address) || {};
+  const rua = a.road || a.pedestrian || a.path || a.residential || '', num = a.house_number || '';
+  const bairro = a.suburb || a.neighbourhood || a.quarter || a.city_district || a.village || '';
+  if(!rua && !bairro) return '';
+  return [rua + (num ? ', ' + num : ''), bairro].filter(Boolean).join(' - ');
+}
+$('bt-rev').onclick = async () => {
+  const alvo = S.fotos.filter(f => temLocal(f) && !f.end && (!S.fotos.some(x => x.sel) || f.sel));
+  if(!alvo.length){ aviso('Todas as fotos com local já têm endereço (ou não há fotos com local).'); return; }
+  progresso('prog-acao', 0); let ok = 0; const cache = {};
+  $('bt-rev').disabled = true;
+  try{
+    for(let i = 0; i < alvo.length; i++){
+      const f = alvo[i], k = f.lat.toFixed(5) + ',' + f.lon.toFixed(5);
+      $('txt-acao').textContent = 'Buscando endereço ' + (i + 1) + ' de ' + alvo.length + '…';
+      if(cache[k] === undefined){ try{ cache[k] = await enderecoDeCoord(f.lat, f.lon); }catch(e){ $('txt-acao').textContent = 'Erro: ' + (e.message || e); break; } await espera(1100); }
+      if(cache[k]){ f.end = cache[k]; ok++; }
+      progresso('prog-acao', (i + 1) / alvo.length); salvar();
+    }
+  } finally { progresso('prog-acao', null); $('bt-rev').disabled = false; renderFotos(); }
+  if(ok) $('txt-acao').textContent = ok + ' de ' + alvo.length + ' endereço(s) preenchido(s) pelas coordenadas. Confira antes de gerar.';
+};
 $('bt-geo').onclick = () => geocodificar(S.fotos.filter(f => !temLocal(f) || f.orig === 'endereco'));
 
 /* ============================================================
@@ -831,8 +947,9 @@ function iniciarMapa(){
   });
 }
 function iconeFoto(f){
-  const c = COR_ORIGEM[origemDe(f)];
-  return L.divIcon({className: '', iconSize: [18, 18], iconAnchor: [9, 9], html: '<div style="width:18px;height:18px;border-radius:50%;background:' + c + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5)"></div>'});
+  const m = marcDaFoto(f.id), c = m ? m.cor : S.cfg.corPadrao, algumaSel = S.fotos.some(x => x.sel);
+  const anel = f.sel ? '#FF6B1A' : '#fff', op = (algumaSel && !f.sel) ? .55 : 1, t = f.sel ? 22 : 18;
+  return L.divIcon({className: '', iconSize: [t, t], iconAnchor: [t / 2, t / 2], html: '<div style="width:' + t + 'px;height:' + t + 'px;border-radius:50%;background:' + c + ';opacity:' + op + ';border:3px solid ' + anel + ';box-shadow:0 1px 4px rgba(0,0,0,.6)"></div>'});
 }
 function desenharMapa(enquadrar){
   if(!mapa) return;
@@ -1016,7 +1133,7 @@ $('bt-salvar-marc').onclick = () => {
     fotos: fotosOrdenadas(ids).map(f => f.id), ruaGeo: usarRua ? form.ruaGeo : null, ruaNome: usarRua ? $('m-rua').value.trim() : ''};
   if(form.editando){ const m = S.marc.find(x => x.id === form.editando); Object.assign(m, dados); }
   else S.marc.push(Object.assign({id: novoId('m')}, dados));
-  S.marc = S.marc.filter(m => m.fotos.length || m.ruaGeo);
+  S.marc = S.marc.filter(m => m.fotos.length || m.ruaGeo || m.pt || m.lista);
   salvar(); msg.innerHTML = '<div class="msg ok">Marcação “' + esc(nome) + '” ' + (form.editando ? 'atualizada' : 'criada') + '.</div>';
   limparForm(); renderListaMarc(); renderFotos();
 };
@@ -1028,9 +1145,9 @@ function renderListaMarc(){
   el.innerHTML = S.marc.map(m => {
     const g = geometriaMarc(m);
     return '<div class="marc" data-id="' + m.id + '"><span class="faixa" style="background:' + m.cor + '"></span><div class="info"><div class="tit">' + esc(m.nome) + '</div>' +
-      '<div class="det">' + TIP[m.tipo] + (m.ruaGeo ? ' (rua inteira)' : '') + ' · ' + m.fotos.length + ' foto(s)' + (m.local ? ' · ' + esc(m.local) : '') + (g ? '' : ' · <b style="color:var(--bad)">sem geometria: localize as fotos</b>') + '</div>' +
+      '<div class="det">' + TIP[m.tipo] + (m.ruaGeo ? ' (rua inteira)' : '') + ' · ' + m.fotos.length + ' foto(s)' + (m.lista ? ' · pasta “' + esc(m.pasta) + '”' : '') + (m.local ? ' · ' + esc(m.local) : '') + (g ? '' : ' · <b style="color:var(--bad)">sem geometria: localize as fotos</b>') + '</div>' +
       (m.oc ? '<div class="det">Ocorrência: ' + esc(m.oc) + '</div>' : '') +
-      '<div class="bts"><button type="button" class="bt peq" data-acao="editar">Editar</button><button type="button" class="bt peq" data-acao="mapa">Ver no mapa</button><button type="button" class="bt peq perigo" data-acao="excluir">Excluir</button></div></div></div>';
+      '<div class="bts">' + (m.lista ? '' : '<button type="button" class="bt peq" data-acao="editar">Editar</button>') + '<button type="button" class="bt peq" data-acao="mapa">Ver no mapa</button><button type="button" class="bt peq perigo" data-acao="excluir">Excluir</button></div></div></div>';
   }).join('');
 }
 $('lista-marc').addEventListener('click', e => {
@@ -1077,7 +1194,7 @@ function descricao(m){
   return '<p><b><u>' + esc(m.nome) + '</u></b></p>' + (m.local ? '<p>' + esc(m.local) + '.</p>' : '') +
     p('Ocorrência', m.oc) + p('Causa', m.causa) + p('Solução adotada', m.sol) + p('Comentário', [m.com].concat(String(m.id).startsWith('av_') ? [] : coments).filter(Boolean).join('\n')) +
     (fs.length ? '<p>Fotos' + (S.cfg.autor ? ': ' + esc(S.cfg.autor) : '') + (quando ? ', ' + quando : '') + ' (' + fs.length + ').</p>' : '') +
-    (m.ruaGeo ? '<p><i>Traçado da rua conforme OpenStreetMap.</i></p>' : '') +
+    (m.ruaGeo ? '<p><i>Traçado da rua conforme OpenStreetMap.</i></p>' : '') + (m.aprox ? '<p><i>' + esc(m.aprox) + '</i></p>' : '') +
     (origens.length ? '<p><i>Localização das fotos: ' + origens.join(', ') + '.</i></p>' : '');
 }
 function lookAt(pts){
@@ -1124,13 +1241,15 @@ async function montarKML(modo, aoAvancar){
       const ls = g.linhas.map(l => '<LineString><tessellate>1</tessellate><coordinates>' + coordsTxt(l) + '</coordinates></LineString>');
       geo = ls.length === 1 ? ls[0] : '<MultiGeometry>' + ls.join('') + '</MultiGeometry>';
     }else{ pts = g.anel; geo = '<Polygon><tessellate>1</tessellate><outerBoundaryIs><LinearRing><coordinates>' + coordsTxt(g.anel.concat([g.anel[0]])) + '</coordinates></LinearRing></outerBoundaryIs></Polygon>'; }
-    return '<Placemark id="pm_' + m.id + '"><name>' + xml(m.nome) + '</name><description>' + cdata(descricao(m)) + '</description>' + lookAt(pts) +
-      '<styleUrl>#' + estiloDe(m) + '</styleUrl>' + car + geo + '</Placemark>';
+    return {pasta: m.pasta || '', x: '<Placemark id="pm_' + m.id + '"><name>' + xml(m.nome) + '</name><description>' + cdata(descricao(m)) + '</description>' + lookAt(pts) +
+      '<styleUrl>#' + estiloDe(m) + '</styleUrl>' + car + geo + '</Placemark>'};
   });
   const sty = [...estilos].map(([k, m]) => '<Style id="' + k + '"><IconStyle><color>' + abgr(m.cor) + '</color><scale>1.1</scale></IconStyle><LabelStyle><scale>0.9</scale></LabelStyle><LineStyle><color>' + abgr(m.cor) + '</color><width>' + m.esp + '</width></LineStyle><PolyStyle><color>' + abgr(m.cor, '59') + '</color></PolyStyle></Style>').join('');
   const pasta = (S.exp.pasta || '').trim() || nomePastaPadrao();
-  const pastaXml = '<Folder><name>' + xml(pasta) + '</name>' + pms.join('') + '</Folder>';
-  const corpo = S.exp.destino === 'pasta' ? pms.join('') : pastaXml;   // "pasta nova": o próprio arquivo vira a pasta ao importar
+  const subs = new Map(); pms.filter(p => p.pasta).forEach(p => { if(!subs.has(p.pasta)) subs.set(p.pasta, []); subs.get(p.pasta).push(p.x); });
+  const todos = pms.filter(p => !p.pasta).map(p => p.x).join('') + [...subs].map(([n, a]) => '<Folder><name>' + xml(n) + '</name>' + a.join('') + '</Folder>').join('');
+  const pastaXml = '<Folder><name>' + xml(pasta) + '</name>' + todos + '</Folder>';
+  const corpo = S.exp.destino === 'pasta' ? todos : pastaXml;   // "pasta nova": o próprio arquivo vira a pasta ao importar
   const docNome = S.exp.destino === 'novo' ? ((S.exp.proj || '').trim() || 'Imagens GoogleEarth') : pasta;
   let kml = '<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">\n<Document><name>' + xml(docNome) + '</name>' + sty + corpo + '</Document>\n</kml>\n';
   if(S.exp.destino === 'mesclar') kml = mesclarNoProjeto(sty, pastaXml);
@@ -1181,53 +1300,71 @@ $('in-proj').onchange = async e => {
 
 function baixar(nome, blob){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 5000); }
 function nomeArquivoSaida(ext){ const base = S.exp.destino === 'novo' ? (S.exp.proj || 'Imagens_GoogleEarth') : S.exp.destino === 'pasta' ? ((S.exp.pasta || nomePastaPadrao()) + '_pasta') : ((S.exp.pasta || nomePastaPadrao()) + '_projeto_completo'); return slug(base) + '.' + ext; }
+const BT_GERAR = ['bt-kmz', 'bt-kml', 'bt-zip', 'bt-kmz-f', 'bt-kml-f'];
+function msgExp(){ const a = $('msg-exp'), b = $('msg-exp2'); return {set innerHTML(h){ a.innerHTML = h; b.innerHTML = h; }}; }
+function progExp(f){ progresso('prog-exp', f); progresso('prog-exp2', f); }
 async function gerar(tipo){
-  const msg = $('msg-exp');
+  const msg = msgExp();
   const urlOn = S.exp.urlOn && (S.exp.url || '').trim();
   if(S.exp.urlOn && !urlOn){ msg.innerHTML = '<div class="msg bad">Informe o endereço da pasta das fotos ou desmarque “Usar endereço público”.</div>'; return; }
   if(S.exp.destino === 'mesclar' && !projKML){ msg.innerHTML = '<div class="msg bad">Envie o KML exportado do projeto existente.</div>'; return; }
   const modo = urlOn ? 'url' : (tipo === 'kmz' ? 'kmz' : 'data');
   if(tipo === 'kmz' && typeof JSZip === 'undefined'){ msg.innerHTML = '<div class="msg bad">O compactador não carregou (internet). Gere o KML.</div>'; return; }
-  ['bt-kmz', 'bt-kml', 'bt-zip'].forEach(id => $(id).disabled = true);
-  msg.innerHTML = '<div class="msg info">Preparando as fotos…</div>'; progresso('prog-exp', 0);
+  BT_GERAR.forEach(id => $(id).disabled = true);
+  msg.innerHTML = '<div class="msg info">Preparando as fotos…</div>'; progExp( 0);
   try{
-    const r = await montarKML(modo, f => progresso('prog-exp', f * .9));
+    const r = await montarKML(modo, f => progExp( f * .9));
     if(!r.nPm){ msg.innerHTML = '<div class="msg bad">Nada para gerar: nenhuma marcação com local e nenhuma foto avulsa com local.</div>'; return; }
     let blob, nome;
     if(tipo === 'kmz'){
       const z = new JSZip(); z.file('doc.kml', r.kml);
       if(modo === 'kmz') r.fotos.forEach(o => { if(o.blob) z.file('files/' + o.nome, o.blob); });
-      blob = await z.generateAsync({type: 'blob', mimeType: 'application/vnd.google-earth.kmz', compression: 'DEFLATE', compressionOptions: {level: 6}}, m => progresso('prog-exp', .9 + m.percent / 1000));
+      blob = await z.generateAsync({type: 'blob', mimeType: 'application/vnd.google-earth.kmz', compression: 'DEFLATE', compressionOptions: {level: 6}}, m => progExp( .9 + m.percent / 1000));
       nome = nomeArquivoSaida('kmz');
     }else{ blob = new Blob([r.kml], {type: 'application/vnd.google-earth.kml+xml'}); nome = nomeArquivoSaida('kml'); }
     baixar(nome, blob);
     const faltam = [...r.fotos.values()].filter(o => o.falta).length;
     msg.innerHTML = '<div class="msg ok"><b>' + esc(nome) + '</b> gerado (' + kb(blob.size) + '): ' + r.nPm + ' marcação(ões), ' + r.ids.length + ' foto(s).</div>' +
       (faltam ? '<div class="msg warn">' + faltam + ' foto(s) sem o arquivo original neste aparelho ficaram fora do carrossel. Anexe-as de novo.</div>' : '') +
-      (blob.size > 20 * 1048576 ? '<div class="msg warn">Arquivo grande. Se o Google Earth Web travar, reduza a resolução na aba Fotos.</div>' : '') +
+      '<div class="msg info">Agora abra o <a href="' + linkEarth() + '" target="_blank" rel="noopener"><b>Google Earth Web neste local</b></a> e importe o arquivo: <b>Arquivo › Abrir arquivo KML local</b> (ou <b>Importar</b> dentro do projeto). O Google não permite enviar o arquivo por link; o importador do Earth precisa ser acionado por você.</div>' + (blob.size > 20 * 1048576 ? '<div class="msg warn">Arquivo grande. Se o Google Earth Web travar, reduza a resolução na aba Fotos.</div>' : '') +
       (modo === 'url' ? '<div class="msg info">As fotos não estão no arquivo: suba o .zip de fotos reduzidas no endereço informado antes de importar.</div>' : '');
   }catch(e){ console.error(e); msg.innerHTML = '<div class="msg bad">Erro ao gerar: ' + esc(e.message || e) + '</div>'; }
-  finally{ progresso('prog-exp', null); ['bt-kmz', 'bt-kml', 'bt-zip'].forEach(id => $(id).disabled = false); }
+  finally{ progExp( null); BT_GERAR.forEach(id => $(id).disabled = false); }
 }
 async function gerarZipFotos(){
-  const msg = $('msg-exp');
+  const msg = msgExp();
   if(typeof JSZip === 'undefined'){ msg.innerHTML = '<div class="msg bad">O compactador não carregou (internet).</div>'; return; }
   const itens = itensExportacao().filter(x => x.g);
   const ids = [...new Set([].concat(...itens.map(x => x.m.fotos)))];
   if(!ids.length){ msg.innerHTML = '<div class="msg bad">Nenhuma foto para exportar.</div>'; return; }
-  progresso('prog-exp', 0);
-  const fotos = await prepararFotos(ids, 'kmz', f => progresso('prog-exp', f * .9));
+  progExp( 0);
+  const fotos = await prepararFotos(ids, 'kmz', f => progExp( f * .9));
   const z = new JSZip(); fotos.forEach(o => { if(o.blob) z.file(o.nome, o.blob); });
   const blob = await z.generateAsync({type: 'blob', compression: 'STORE'});
-  progresso('prog-exp', null);
+  progExp( null);
   baixar(slug(S.exp.pasta || nomePastaPadrao()) + '_fotos.zip', blob);
   msg.innerHTML = '<div class="msg ok">Fotos reduzidas (' + fotos.size + ', ' + kb(blob.size) + '). Descompacte e suba os arquivos, sem subpastas, no endereço público informado.</div>';
 }
-$('bt-kmz').onclick = () => gerar('kmz');
+$('bt-kmz').onclick = () => gerar('kmz'); $('bt-kmz-f').onclick = () => gerar('kmz'); $('bt-kml-f').onclick = () => gerar('kml');
 $('bt-kml').onclick = () => gerar('kml');
 $('bt-zip').onclick = gerarZipFotos;
 
+function linkEarth(){
+  const p = S.fotos.filter(temLocal); if(!p.length) return 'https://earth.google.com/web/';
+  const lat = p.reduce((x, f) => x + f.lat, 0) / p.length, lon = p.reduce((x, f) => x + f.lon, 0) / p.length;
+  let ext = 0; p.forEach(f => { ext = Math.max(ext, dist(lat, lon, f.lat, f.lon)); });
+  return 'https://earth.google.com/web/@' + lat.toFixed(7) + ',' + lon.toFixed(7) + ',30a,' + Math.round(Math.max(600, ext * 3.5)) + 'd,35y,0h,0t,0r';
+}
+function renderGerarAqui(){
+  $('f-dest').value = S.exp.destino; $('f-c-proj').hidden = S.exp.destino !== 'novo';
+  $('f-proj').value = S.exp.proj || ''; $('f-pasta').value = S.exp.pasta || ''; $('f-pasta').placeholder = nomePastaPadrao();
+  $('lk-earth').href = linkEarth();
+}
+$('f-dest').onchange = e => { S.exp.destino = e.target.value; salvar(); renderGerarAqui(); renderExportar(); };
+$('f-proj').onchange = e => { S.exp.proj = e.target.value.trim(); salvar(); renderExportar(); };
+$('f-pasta').onchange = e => { S.exp.pasta = e.target.value.trim(); salvar(); renderExportar(); };
 function renderExportar(){
+  renderGerarAqui();
   document.querySelectorAll('input[name=destino]').forEach(i => { i.checked = i.value === S.exp.destino; i.closest('.opcao').classList.toggle('on', i.checked); });
   $('c-proj').hidden = S.exp.destino !== 'novo';
   $('c-existente').hidden = S.exp.destino !== 'mesclar';
@@ -1287,7 +1424,348 @@ $('bt-novo').onclick = async () => {
 function aplicarConfig(){
   $('cfg-res').value = String(S.cfg.res); $('cfg-qual').value = String(S.cfg.qual); $('cfg-autor').value = S.cfg.autor || ''; $('cfg-mun').value = S.cfg.mun || '';
 }
-function renderTudo(){ renderFotos(); renderMarcacoes(); renderExportar(); if(mapa) desenharMapa(); }
+/* ============================================================
+   4. LISTAS DE RUAS (PDF)
+   ============================================================ */
+let pdfjsLib = null;
+async function carregarPdfJs(){
+  if(pdfjsLib) return pdfjsLib;
+  const base = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+  if(!window.pdfjsLib) await new Promise((ok, erro) => { const sc = document.createElement('script'); sc.src = base + 'pdf.min.js'; sc.onload = ok; sc.onerror = () => erro(new Error('não foi possível carregar o leitor de PDF (verifique a internet)')); document.head.appendChild(sc); });
+  pdfjsLib = window.pdfjsLib;
+  try{ const r = await fetch(base + 'pdf.worker.min.js'); const b = await r.blob(); pdfjsLib.GlobalWorkerOptions.workerSrc = URL.createObjectURL(b); }
+  catch(e){ pdfjsLib.GlobalWorkerOptions.workerSrc = base + 'pdf.worker.min.js'; }
+  return pdfjsLib;
+}
+const NORM = s => semAcento(s).toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+const CAB_CONHECIDAS = /^(rua|ruas|logradouro|via|vias|endereco|local|nome|bairro|processo|oficio|solicitante|demandas?|observacao|observacoes|obs|status|situacao|data|prioridade|extensao|trecho|servico|cep|responsavel|regional|tipo|n|numero|no|protocolo|solicitacao|origem|ofício)$/;
+const CAB_RUA = /^(rua|ruas|logradouro|via|vias|endereco|local|nome|trecho)/;
+function agruparLinhas(itens){
+  const ord = itens.slice().sort((a, b) => b.y - a.y || a.x - b.x), linhas = [];
+  for(const it of ord){
+    const tol = Math.max(2, (it.h || 9) * 0.3), u = linhas[linhas.length - 1];
+    if(u && Math.abs(u.y - it.y) <= tol) u.itens.push(it); else linhas.push({y: it.y, itens: [it]});
+  }
+  linhas.forEach(l => l.itens.sort((a, b) => a.x - b.x));
+  return linhas;
+}
+function mesclarCelulas(itens, folga){
+  const out = [];
+  itens.forEach(it => { const u = out[out.length - 1]; if(u && it.x - (u.x + u.w) < folga) { u.s += ' ' + it.s; u.w = it.x + it.w - u.x; } else out.push({s: it.s, x: it.x, w: it.w}); });
+  return out;
+}
+function nomeArquivoLimpo(n){ return String(n || 'Lista').replace(/\.pdf$/i, '').replace(/[_]+/g, ' ').replace(/\s+/g, ' ').trim(); }
+function classificarRua(r){ const n = NORM(r); if(/^(todas as vias|todas as ruas|todos os logradouros)/.test(n)) return 'todas'; if(/^vias( |$)/.test(n)) return 'vias'; return 'rua'; }
+function extrairListas(paginas, nomeArq){
+  const linhas = [];
+  paginas.forEach((its, pi) => agruparLinhas(its).forEach(l => { l.pag = pi; linhas.push(l); }));
+  const cabIdx = [];
+  linhas.forEach((l, i) => {
+    const cs = mesclarCelulas(l.itens, 3), nomes = cs.map(c => NORM(c.s));
+    if(cs.length >= 3 && nomes.filter(n => CAB_CONHECIDAS.test(n)).length >= 3 && nomes.some(n => CAB_RUA.test(n))){ l.cab = cs; cabIdx.push(i); }
+  });
+  const listas = [];
+  if(!cabIdx.length){
+    // sem cabeçalho: cada linha de texto é uma rua
+    const itens = linhas.map(l => l.itens.map(i => i.s).join(' ').trim()).filter(t => t.length >= 4 && !/^[\d\s\/.-]+$/.test(t)).map(t => ({rua: t}));
+    if(itens.length) listas.push({titulo: nomeArquivoLimpo(nomeArq), itens});
+    return finalizarListas(listas);
+  }
+  const tituloDe = (h, minI) => {
+    const ts = [];
+    for(let i = h - 1; i >= Math.max(minI, h - 2); i--){
+      const l = linhas[i]; if(l.cab || l.pag !== linhas[h].pag) break;
+      if(linhas[h].y - l.y > 34) break;
+      const col0 = linhas[h].cab[0].x;
+      const tit = l.itens.length === 1 || (l.itens.length <= 2 && l.itens[0].x - col0 > 8);
+      if(!tit || l.itens.some(it => /\d{2,}\s*\/\s*\d{4}/.test(it.s))) break;
+      ts.unshift(i);
+    }
+    return ts;
+  };
+  const blocos = cabIdx.map((h, k) => ({h, tit: tituloDe(h, k ? cabIdx[k - 1] + 1 : 0)}));
+  blocos.forEach((b, k) => {
+    const fim = k + 1 < blocos.length ? (blocos[k + 1].tit.length ? blocos[k + 1].tit[0] : blocos[k + 1].h) : linhas.length;
+    b.corpo = linhas.slice(b.h + 1, fim);
+    b.titulo = b.tit.map(i => linhas[i].itens.map(it => it.s).join(' ')).join(' – ').replace(/\s+/g, ' ').trim();
+    b.cab = linhas[b.h].cab;
+    b.assin = b.cab.map(c => NORM(c.s)).join('|');
+  });
+  let atual = null, n = 0;
+  blocos.forEach((b, k) => {
+    const rows = linhasTabela(b.corpo, b.cab);
+    const prev = atual;
+    if(prev && ((!b.titulo && b.assin === prev.assin) || (b.titulo && NORM(b.titulo) === NORM(prev.titulo)))) { prev.itens.push(...rows); return; }
+    n++;
+    atual = {titulo: b.titulo || (k === 0 ? nomeArquivoLimpo(nomeArq) : 'Lista ' + n), assin: b.assin, itens: rows};
+    listas.push(atual);
+  });
+  return finalizarListas(listas);
+}
+function finalizarListas(ls){ return ls.map(l => ({titulo: l.titulo, itens: l.itens.filter(i => i.rua && String(i.rua).trim().length > 1).map(i => Object.assign({bairro: '', processo: '', oficio: '', solicitante: '', demanda: '', extras: {}}, i))})).filter(l => l.itens.length); }
+function linhasTabela(ls, cab){
+  const cols = cab.map(c => ({nome: c.s, x: c.x}));
+  const ruaI = Math.max(0, cols.findIndex(c => CAB_RUA.test(NORM(c.nome))));
+  const cel = l => { const o = cols.map(() => []); l.itens.forEach(it => { let k = 0; cols.forEach((c, i) => { if(it.x >= c.x - 4) k = i; }); o[k].push(it.s); }); return o.map(a => a.join(' ').replace(/\s+/g, ' ').trim()); };
+  const L = ls.map(l => ({y: l.y, c: cel(l)}));
+  const anc = L.filter(l => l.c[ruaI]);
+  const difs = []; for(let i = 1; i < anc.length; i++) difs.push(anc[i - 1].y - anc[i].y);
+  difs.sort((a, b) => a - b); const passo = difs.length ? Math.max(6, difs[Math.floor(difs.length / 2)]) : 10;
+  const linhasAnc = [];
+  anc.forEach(l => {
+    const u = linhasAnc[linhasAnc.length - 1];
+    const soRua = l.c.every((t, i) => i === ruaI || !t);
+    if(u && soRua && u.y - l.y <= passo * 1.3 && u.c.some((t, i) => i !== ruaI && t) && l.c[ruaI].length < 25 && !/^(rua|av|avenida|travessa|estrada|alameda|r)\b/i.test(NORM(l.c[ruaI]))){ u.c[ruaI] += ' ' + l.c[ruaI]; return; }
+    linhasAnc.push({y: l.y, c: l.c.slice()});
+  });
+  L.filter(l => !l.c[ruaI]).forEach(l => {
+    let melhor = null, dm = 1e9; linhasAnc.forEach(a => { const d = Math.abs(a.y - l.y); if(d < dm){ dm = d; melhor = a; } });
+    if(melhor && dm <= passo * 2.5) l.c.forEach((t, i) => { if(t) melhor.c[i] = (melhor.c[i] ? melhor.c[i] + ' ' : '') + t; });
+  });
+  return linhasAnc.map(a => {
+    const r = {rua: a.c[ruaI], extras: {}}, dem = [];
+    cols.forEach((c, i) => { if(i === ruaI || !a.c[i]) return; const n = NORM(c.nome);
+      if(/^bairro/.test(n)) r.bairro = a.c[i]; else if(/^processo|^protocolo/.test(n)) r.processo = a.c[i]; else if(/^oficio/.test(n)) r.oficio = a.c[i]; else if(/^solicitante|^origem/.test(n)) r.solicitante = a.c[i];
+      else if(/demanda|^obs|situacao|status|prioridade/.test(n)) dem.push(a.c[i]); else r.extras[c.nome] = a.c[i]; });
+    r.demanda = dem.join(' · ');
+    return r;
+  });
+}
+async function lerPdfItens(buf){
+  const lib = await carregarPdfJs();
+  const doc = await lib.getDocument({data: new Uint8Array(buf)}).promise;
+  const pags = [];
+  for(let n = 1; n <= doc.numPages; n++){
+    const p = await doc.getPage(n), t = await p.getTextContent();
+    pags.push(t.items.filter(i => i.str && i.str.trim()).map(i => ({s: i.str.trim(), x: i.transform[4], y: i.transform[5], w: i.width, h: Math.abs(i.transform[3]) || i.height || 9})));
+  }
+  return pags;
+}
+const COR_LISTAS = ['#EF5350', '#FBC02D', '#42A5F5', '#66BB6A', '#AB47BC', '#F57C00'];
+$('bt-pdf').onclick = () => $('in-pdf').click();
+$('in-pdf').onchange = async e => {
+  const arqs = [...e.target.files]; e.target.value = '';
+  const msg = $('msg-listas'); let total = 0;
+  for(const f of arqs){
+    msg.innerHTML = '<div class="msg info">Lendo “' + esc(f.name) + '”…</div>';
+    try{
+      const ls = extrairListas(await lerPdfItens(await f.arrayBuffer()), f.name);
+      if(!ls.length){ msg.innerHTML = '<div class="msg bad">Não encontrei ruas em “' + esc(f.name) + '”. O PDF precisa ter texto (não pode ser foto escaneada) e uma coluna “Rua”.</div>'; continue; }
+      ls.forEach(l => { S.listas.push({id: novoId('l'), titulo: l.titulo, arquivo: f.name, cor: COR_LISTAS[S.listas.length % COR_LISTAS.length], itens: l.itens.map(i => Object.assign({id: novoId('i'), marcar: true, kind: classificarRua(i.rua), st: 'pend'}, i))}); total += l.itens.length; });
+      msg.innerHTML = '<div class="msg ok">“' + esc(f.name) + '”: ' + ls.length + ' lista(s) e ' + ls.reduce((s, l) => s + l.itens.length, 0) + ' linha(s) lidas. Confira os nomes e clique em “Localizar ruas”.</div>';
+    }catch(err){ console.error(err); msg.innerHTML = '<div class="msg bad">Erro ao ler o PDF: ' + esc(err.message || err) + '</div>'; }
+  }
+  salvar(); renderListas();
+};
+
+/* ----- nomes de ruas ----- */
+const TIPOS_RUA = {r:'rua', rua:'rua', av:'avenida', avenida:'avenida', trav:'travessa', tv:'travessa', travessa:'travessa', est:'estrada', estrada:'estrada', al:'alameda', alameda:'alameda', rod:'rodovia', rodovia:'rodovia', pca:'praca', praca:'praca', via:'via', beco:'beco', servidao:'servidao', largo:'largo'};
+const NOME_TIPO = {rua:'Rua', avenida:'Avenida', travessa:'Travessa', estrada:'Estrada', alameda:'Alameda', rodovia:'Rodovia', praca:'Praça', via:'Via', beco:'Beco', servidao:'Servidão', largo:'Largo'};
+const NUM_EXT = {1:'um', 2:'dois', 3:'tres', 4:'quatro', 5:'cinco', 6:'seis', 7:'sete', 8:'oito', 9:'nove', 10:'dez', 11:'onze', 12:'doze', 13:'treze', 14:'quatorze', 15:'quinze', 16:'dezesseis', 17:'dezessete', 18:'dezoito', 19:'dezenove', 20:'vinte'};
+function chaveRua(r){
+  const t = NORM(r).split(' ').filter(Boolean);
+  let tipo = ''; if(t.length > 1 && TIPOS_RUA[t[0]]){ tipo = TIPOS_RUA[t[0]]; t.shift(); }
+  const orig = t.slice(), pal = t.map(w => /^\d+$/.test(w) && NUM_EXT[+w] ? NUM_EXT[+w] : w);
+  return {tipo, orig, pal, nucleo: pal.join(' ')};
+}
+function tcase(s){
+  const peq = new Set(['de', 'da', 'do', 'das', 'dos', 'e', 'em']);
+  return String(s || '').trim().toLowerCase().split(/\s+/).map((w, i) => (i > 0 && peq.has(w)) ? w : w.replace(/(^|[-'(\/])([a-zà-ÿ])/g, (m, a, b) => a + b.toUpperCase())).join(' ');
+}
+function nomeBonito(r){
+  const t = String(r || '').trim().replace(/\s+/g, ' ').split(' ');
+  const k = TIPOS_RUA[NORM(t[0])]; if(k && t.length > 1 && NORM(t[0]).length <= 5 && NORM(t[0]) !== k) t[0] = NOME_TIPO[k];
+  return tcase(t.join(' '));
+}
+function distPtLinha(lat, lon, linha){
+  const kx = 111320 * Math.cos(lat * Math.PI / 180), ky = 110540; let m = 1e12;
+  const P = p => [(p[1] - lon) * kx, (p[0] - lat) * ky];
+  for(let i = 0; i < linha.length; i++){
+    const a = P(linha[i]); let d;
+    if(i === 0 && linha.length === 1) d = Math.hypot(a[0], a[1]);
+    if(i > 0){ const b = P(linha[i - 1]), dx = a[0] - b[0], dy = a[1] - b[1], q = dx * dx + dy * dy;
+      let t = q ? ((0 - b[0]) * dx + (0 - b[1]) * dy) / q : 0; t = Math.max(0, Math.min(1, t)); d = Math.hypot(b[0] + t * dx, b[1] + t * dy); }
+    if(d != null && d < m) m = d;
+  }
+  return m;
+}
+async function overpassQ(q){
+  let ult = null;
+  for(const url of OVERPASS){
+    try{ const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'data=' + encodeURIComponent(q)}); if(!r.ok) throw new Error('servidor ' + r.status); return await r.json(); }
+    catch(e){ ult = e; }
+  }
+  throw new Error('os servidores do OpenStreetMap não responderam (' + (ult && ult.message) + '). Tente de novo em alguns minutos.');
+}
+function nomeMunicipio(){ return String(S.cfg.mun || 'Rio das Ostras - RJ').split(/\s+-\s+|,/)[0].trim().replace(/"/g, ''); }
+const OSM = {mun: null, bairros: null, vias: new Map(), chaves: new Set()};
+function regexVia(k){
+  const mapa = {a: 'aáàâãäAÁÀÂÃ', e: 'eéêEÉÊ', i: 'iíIÍ', o: 'oóôõOÓÔÕ', u: 'uúüUÚ', c: 'cçCÇ'};
+  const acc = w => w.replace(/[^a-z0-9]/gi, '.').replace(/[aeiouc]/gi, ch => '[' + mapa[ch.toLowerCase()] + ']');
+  const nuc = k.pal.join(''); 
+  if(nuc.length >= 4){ const w = k.pal.slice().sort((a, b) => b.length - a.length)[0]; return acc(w); }
+  const alts = [...new Set(k.orig.concat(k.pal).map(x => x.toUpperCase()))].join('|');
+  return '^(Rua|Avenida|Travessa|Alameda|Estrada|Via|Beco|Servidão) +(' + alts.replace(/[^A-Z0-9|]/g, '.') + ')$';
+}
+async function carregarBairrosOSM(){
+  const mun = nomeMunicipio();
+  if(OSM.mun === mun && OSM.bairros) return;
+  OSM.mun = mun; OSM.bairros = []; OSM.vias = new Map(); OSM.chaves = new Set();
+  const q = '[out:json][timeout:60];area["boundary"="administrative"]["name"="' + mun + '"]->.a;(nwr["place"~"^(suburb|neighbourhood|quarter|village|hamlet|locality|town|isolated_dwelling)$"]["name"](area.a);rel["boundary"="administrative"]["admin_level"~"^(9|10)$"]["name"](area.a););out center tags;';
+  const j = await overpassQ(q);
+  (j.elements || []).forEach(e => { const lat = e.lat != null ? e.lat : e.center && e.center.lat, lon = e.lon != null ? e.lon : e.center && e.center.lon; if(lat != null && e.tags && e.tags.name) OSM.bairros.push({n: NORM(e.tags.name), lat, lon}); });
+}
+async function centroBairro(nome, cache){
+  const n = NORM(nome); if(!n || /municipio|rio das ostras$/.test(n) && /municipio/.test(n)) return null;
+  if(cache[n] !== undefined) return cache[n];
+  let b = OSM.bairros.find(x => x.n === n) || OSM.bairros.find(x => x.n.includes(n) || n.includes(x.n));
+  if(!b){ try{ await espera(1100); const r = await buscarEndereco(nome + ', ' + nomeMunicipio()); if(r) b = {lat: r.lat, lon: r.lon}; }catch(e){} }
+  return cache[n] = b ? {lat: b.lat, lon: b.lon} : null;
+}
+async function carregarViasOSM(chaves, aoAvancar){
+  const novas = chaves.filter(k => !OSM.chaves.has(k.nucleo + '|' + k.tipo));
+  const distintas = []; novas.forEach(k => { if(!distintas.some(d => d.nucleo === k.nucleo)) distintas.push(k); });
+  const area = 'area["boundary"="administrative"]["name"="' + nomeMunicipio() + '"]->.a;';
+  for(let i = 0; i < distintas.length; i += 10){
+    const lote = distintas.slice(i, i + 10);
+    const re = lote.map(regexVia).join('|');
+    const j = await overpassQ('[out:json][timeout:60];' + area + 'way["highway"]["name"~"' + re.replace(/"/g, '') + '",i](area.a);out geom;');
+    (j.elements || []).forEach(e => { if(!e.geometry || e.geometry.length < 2 || !e.tags || !e.tags.name) return; const k = chaveRua(e.tags.name); OSM.vias.set(e.id, {id: e.id, nome: e.tags.name, tipo: k.tipo, nucleo: k.nucleo, pal: k.pal, geom: e.geometry.map(p => [+p.lat.toFixed(7), +p.lon.toFixed(7)])}); });
+    lote.forEach(k => OSM.chaves.add(k.nucleo + '|' + k.tipo));
+    if(aoAvancar) aoAvancar(Math.min(1, (i + 10) / distintas.length));
+    if(i + 10 < distintas.length) await espera(900);
+  }
+  distintas.forEach(k => novas.forEach(x => { if(x.nucleo === k.nucleo) OSM.chaves.add(x.nucleo + '|' + x.tipo); }));
+}
+function acharVias(k){
+  let c = [...OSM.vias.values()].filter(v => v.nucleo === k.nucleo);
+  if(!c.length && k.pal.length >= 2) c = [...OSM.vias.values()].filter(v => k.pal.filter(w => w.length > 2).every(w => v.pal.includes(w)));
+  const mesmo = c.filter(v => !k.tipo || v.tipo === k.tipo);
+  return mesmo.length ? mesmo : c;
+}
+function escolherCadeias(cad, centro){
+  if(!centro) return {cad, st: cad.length > 1 ? 'aprox' : 'ok'};
+  const d = cad.map(c => ({c, d: distPtLinha(centro.lat, centro.lon, c)})).sort((a, b) => a.d - b.d);
+  if(d[0].d > 6000) return null;
+  return {cad: d.filter(x => x.d <= d[0].d + 400 && x.d <= 6000).map(x => x.c), st: d[0].d <= 2500 ? 'ok' : 'aprox'};
+}
+let localizando = false;
+async function localizarListas(listas){
+  if(localizando) return; localizando = true;
+  const msg = $('msg-listas'); ['bt-pdf-loc-todas'].forEach(id => $(id).disabled = true);
+  try{
+    const itens = [].concat(...listas.map(l => l.itens.filter(i => i.marcar)));
+    if(!itens.length){ msg.innerHTML = '<div class="msg warn">Nenhuma rua marcada para localizar.</div>'; return; }
+    progresso('prog-listas', 0.02); msg.innerHTML = '<div class="msg info">Buscando bairros no OpenStreetMap…</div>';
+    await carregarBairrosOSM();
+    msg.innerHTML = '<div class="msg info">Buscando o traçado das ruas…</div>';
+    await carregarViasOSM(itens.filter(i => i.kind === 'rua').map(i => chaveRua(i.rua)), f => progresso('prog-listas', .1 + f * .6));
+    const cache = {}; let n = 0, ok = 0, ap = 0, bp = 0, nao = 0;
+    for(const i of itens){
+      n++; progresso('prog-listas', .7 + .3 * n / itens.length);
+      i.geo = null; i.pt = null; i.nota = '';
+      const centro = i.bairro ? await centroBairro(i.bairro, cache) : null;
+      let res = null;
+      if(i.kind === 'rua'){
+        const vias = acharVias(chaveRua(i.rua));
+        if(vias.length) res = escolherCadeias(juntarVias(vias.map(v => v.geom)), centro);
+      }
+      if(res){ i.geo = res.cad; i.st = res.st; i.nota = res.st === 'ok' ? 'Traçado do OpenStreetMap' : 'Traçado do OpenStreetMap, longe do centro do bairro: confira'; res.st === 'ok' ? ok++ : ap++; }
+      else if(centro && S.cfg.bairroPonto){ i.pt = [centro.lat, centro.lon]; i.st = 'bairro'; i.nota = i.kind === 'rua' ? 'Rua não encontrada no OpenStreetMap: ponto no centro do bairro' : 'Sem rua específica: ponto no centro do bairro'; bp++; }
+      else { i.st = 'nao'; i.nota = i.kind === 'rua' ? 'Rua não encontrada: corrija o nome ou o bairro' : 'Sem rua específica nem bairro'; nao++; }
+      if(n % 8 === 0) renderListas();
+    }
+    salvar(); renderListas();
+    msg.innerHTML = '<div class="msg ok">Localização pronta: ' + ok + ' rua(s) traçada(s), ' + ap + ' aproximada(s), ' + bp + ' em ponto no bairro, ' + nao + ' não localizada(s). Confira, corrija nomes se precisar e clique em “Criar marcações”.</div>';
+  }catch(e){ console.error(e); msg.innerHTML = '<div class="msg bad">Erro: ' + esc(e.message || e) + '</div>'; }
+  finally{ localizando = false; progresso('prog-listas', null); $('bt-pdf-loc-todas').disabled = false; renderListas(); }
+}
+$('bt-pdf-loc-todas').onclick = () => localizarListas(S.listas);
+
+/* ----- marcações a partir da lista ----- */
+function criarMarcacoesLista(l){
+  S.marc = S.marc.filter(m => m.lista !== l.id);
+  const grupos = new Map();
+  l.itens.filter(i => i.marcar && (i.geo || i.pt) && (i.st !== 'bairro' || S.cfg.bairroPonto)).forEach(i => { const k = NORM(i.rua) + '|' + NORM(i.bairro) + '|' + (i.geo ? 'l' : 'p'); if(!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(i); });
+  const novos = [];
+  grupos.forEach(its => {
+    const a = its[0], dems = [...new Set(its.map(i => tcase(i.demanda)).filter(Boolean))];
+    const com = its.map(i => [i.processo && 'Processo ' + i.processo, i.oficio && 'Ofício ' + i.oficio, i.solicitante && tcase(i.solicitante), ...Object.keys(i.extras || {}).map(k => k + ': ' + i.extras[k])].filter(Boolean).join(' · ')).filter(Boolean);
+    novos.push({id: novoId('m'), nome: nomeBonito(a.rua), tipo: a.geo ? 'caminho' : 'ponto', cor: l.cor, esp: 4, local: tcase(a.bairro),
+      oc: tcase(l.titulo) + (dems.length ? ' – ' + dems.join(', ') : ''), causa: '', sol: '', com: [...new Set(com)].join('\n'),
+      fotos: [], ruaGeo: a.geo || null, pt: a.geo ? null : a.pt, ruaNome: a.rua, lista: l.id, pasta: tcase(l.titulo),
+      aprox: !a.geo ? 'Local aproximado: centro do bairro (a rua não foi localizada no OpenStreetMap).' : (a.st === 'aprox' ? 'Traçado aproximado: confira a posição da rua.' : '')});
+  });
+  let fotos = 0;
+  if(S.cfg.fotoRua){
+    const livres = S.fotos.filter(f => temLocal(f) && !marcDaFoto(f.id));
+    livres.forEach(f => {
+      let melhor = null, dm = 40;
+      novos.forEach(m => { if(!m.ruaGeo) return; m.ruaGeo.forEach(c => { const d = distPtLinha(f.lat, f.lon, c); if(d <= dm){ dm = d; melhor = m; } }); });
+      if(melhor){ melhor.fotos.push(f.id); fotos++; }
+    });
+    novos.forEach(m => { m.fotos = fotosOrdenadas(m.fotos).map(f => f.id); });
+  }
+  S.marc.push(...novos); salvar();
+  return {n: novos.length, fotos, sem: l.itens.filter(i => i.marcar).length - l.itens.filter(i => i.marcar && (i.geo || i.pt) && (i.st !== 'bairro' || S.cfg.bairroPonto)).length};
+}
+
+/* ----- tela ----- */
+const ST_ROT = {ok: 'Rua traçada', aprox: 'Traçado aproximado', bairro: 'Ponto no bairro', nao: 'Não localizada', pend: 'A localizar'};
+function renderListas(){
+  $('cfg-bairroPonto').checked = S.cfg.bairroPonto !== false; $('cfg-fotoRua').checked = S.cfg.fotoRua !== false;
+  const el = $('listas');
+  if(!S.listas.length){ el.innerHTML = '<div class="cartao"><div class="vazio">Nenhuma lista importada. Clique em “Importar PDF”.</div></div>'; return; }
+  el.innerHTML = S.listas.map(l => {
+    const cont = {ok: 0, aprox: 0, bairro: 0, nao: 0, pend: 0}; l.itens.forEach(i => { if(i.marcar) cont[i.st || 'pend']++; });
+    return '<div class="cartao lista-pdf" data-id="' + l.id + '">' +
+      '<div class="cabl"><div class="campo"><label>Título da lista (vira o nome da pasta no Google Earth)</label><input type="text" data-campo="titulo" value="' + esc(l.titulo) + '"></div>' +
+      '<div><div class="rot" style="margin-bottom:4px">Cor</div><div class="cores" id="cores-l-' + l.id + '"></div></div></div>' +
+      '<div class="resumo"><span class="pill">' + l.itens.length + ' linha(s)</span><span class="pill">' + l.itens.filter(i => i.marcar).length + ' marcada(s)</span>' +
+      Object.keys(cont).filter(k => cont[k]).map(k => '<span class="st ' + k + '">' + ST_ROT[k] + ': ' + cont[k] + '</span>').join(' ') + '<span class="pill">Arquivo: ' + esc(l.arquivo || '') + '</span></div>' +
+      '<div class="tab-rolagem"><table class="ruas"><thead><tr><th></th><th>Rua</th><th>Bairro</th><th>Processo</th><th>Ofício</th><th>Solicitante</th><th>Demanda</th><th>Situação</th></tr></thead><tbody>' +
+      l.itens.map(i => '<tr data-i="' + i.id + '"' + (i.marcar ? '' : ' class="off"') + '><td><input type="checkbox" data-campo="marcar"' + (i.marcar ? ' checked' : '') + ' aria-label="Marcar"></td>' +
+        '<td><input type="text" data-campo="rua" value="' + esc(i.rua) + '"></td><td><input type="text" data-campo="bairro" value="' + esc(i.bairro) + '"></td>' +
+        '<td>' + esc(i.processo) + '</td><td>' + esc(i.oficio) + '</td><td>' + esc(i.solicitante) + '</td><td>' + esc(i.demanda) + '</td>' +
+        '<td><span class="st ' + (i.st || 'pend') + '" title="' + esc(i.nota || '') + '">' + ST_ROT[i.st || 'pend'] + '</span></td></tr>').join('') +
+      '</tbody></table></div>' +
+      '<div class="linha" style="margin-top:10px"><button type="button" class="bt" data-acao="loc">📍 Localizar as ruas desta lista</button><button type="button" class="bt pri" data-acao="criar">Criar marcações da lista</button>' +
+      '<button type="button" class="bt peq" data-acao="todas">Marcar todas</button><button type="button" class="bt peq" data-acao="nenhuma">Desmarcar todas</button><button type="button" class="bt peq" data-acao="mapa">Ver no mapa</button><span style="flex:1"></span><button type="button" class="bt peq perigo" data-acao="excluir">Excluir lista</button></div>' +
+      '<div class="msg-lista"></div></div>';
+  }).join('');
+  S.listas.forEach(l => pintarCores('cores-l-' + l.id, l.cor, c => { l.cor = c; salvar(); S.marc.filter(m => m.lista === l.id).forEach(m => m.cor = c); renderListas(); }));
+}
+$('listas').addEventListener('change', e => {
+  const card = e.target.closest('.lista-pdf'); if(!card) return;
+  const l = S.listas.find(x => x.id === card.dataset.id), c = e.target.dataset.campo; if(!l || !c) return;
+  if(c === 'titulo'){ l.titulo = e.target.value.trim() || l.titulo; S.marc.filter(m => m.lista === l.id).forEach(m => m.pasta = tcase(l.titulo)); salvar(); return; }
+  const tr = e.target.closest('tr'); const i = l.itens.find(x => x.id === tr.dataset.i); if(!i) return;
+  if(c === 'marcar'){ i.marcar = e.target.checked; tr.classList.toggle('off', !i.marcar); }
+  else { i[c] = e.target.value.trim(); if(c === 'rua') i.kind = classificarRua(i.rua); i.st = 'pend'; i.geo = null; i.pt = null; i.nota = ''; tr.querySelector('.st').className = 'st pend'; tr.querySelector('.st').textContent = ST_ROT.pend; }
+  salvar();
+});
+$('listas').addEventListener('click', async e => {
+  const b = e.target.closest('[data-acao]'); if(!b) return;
+  const card = b.closest('.lista-pdf'), l = S.listas.find(x => x.id === card.dataset.id); if(!l) return;
+  const ac = b.dataset.acao, ml = card.querySelector('.msg-lista');
+  if(ac === 'loc') await localizarListas([l]);
+  else if(ac === 'todas' || ac === 'nenhuma'){ l.itens.forEach(i => i.marcar = ac === 'todas'); salvar(); renderListas(); }
+  else if(ac === 'excluir'){ if(!confirmarPagina('Excluir a lista “' + l.titulo + '” e as marcações criadas por ela?')) return; S.listas = S.listas.filter(x => x !== l); S.marc = S.marc.filter(m => m.lista !== l.id); salvar(); renderListas(); renderFotos(); }
+  else if(ac === 'criar'){
+    if(l.itens.some(i => i.marcar && (!i.st || i.st === 'pend'))){ ml.innerHTML = '<div class="msg warn">Há ruas ainda não localizadas. Clique em “Localizar as ruas desta lista” primeiro.</div>'; return; }
+    const r = criarMarcacoesLista(l); renderListas(); renderFotos();
+    const novo = document.querySelector('.lista-pdf[data-id="' + l.id + '"] .msg-lista');
+    (novo || ml).innerHTML = '<div class="msg ok">' + r.n + ' marcação(ões) criada(s) na pasta “' + esc(tcase(l.titulo)) + '”' + (r.fotos ? ', com ' + r.fotos + ' foto(s) anexada(s) pela proximidade' : '') + (r.sem ? '. ' + r.sem + ' linha(s) ficaram de fora (não localizadas)' : '') + '. Agora vá em “Gerar KML / KMZ”.</div>';
+  }
+  else if(ac === 'mapa'){
+    irAba('mapa'); const pts = []; l.itens.filter(i => i.marcar).forEach(i => { if(i.geo) i.geo.forEach(c => c.forEach(p => pts.push(p))); else if(i.pt) pts.push(i.pt); });
+    if(pts.length && mapa) mapa.fitBounds(pts, {padding: [50, 50], maxZoom: 17});
+  }
+});
+$('cfg-bairroPonto').onchange = e => { S.cfg.bairroPonto = e.target.checked; salvar(); };
+$('cfg-fotoRua').onchange = e => { S.cfg.fotoRua = e.target.checked; salvar(); };
+
+function renderTudo(){ renderFotos(); renderMarcacoes(); renderListas(); renderExportar(); if(mapa) desenharMapa(); }
 
 /* ---------- início ---------- */
 function iniciar(){
