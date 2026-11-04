@@ -268,7 +268,7 @@ table.ruas tr.off td{opacity:.45}
 
   <div class="cartao">
     <div class="linha">
-      <button type="button" class="bt" id="bt-ocr">🔎 Ler tarja das fotos sem local</button>
+      <button type="button" class="bt" id="bt-ocr">🔎 Ler tarja (endereço e coordenadas)</button>
       <button type="button" class="bt" id="bt-geo">📍 Buscar coordenadas pelo endereço</button>
       <button type="button" class="bt" id="bt-rev">🏠 Endereços por Coordenadas</button>
       <span style="flex:1"></span>
@@ -602,7 +602,20 @@ function lerEnderecoTarja(t){
   const linhas = String(t || '').split(/\n+/).map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean);
   const re = new RegExp('(\\d+\\s+)?(' + TIPO_RUA + '\\s+(?:(?! - )[^,\\n|]){2,60})(?:,\\s*(\\d{1,5})\\b)?', 'i');
   const naoBairro = /^\d|^(lt|qd|lote|quadra|casa|apto?|bloco)\b|rio das ostras|\brj\b|brasil|rio de janeiro|\d{5}-?\d{3}/i;
-  for(let i = 0; i < linhas.length; i++){
+  // várias linhas podem ter nome de rua (o mini-mapa do canto da foto traz "R. Trinta", "R. José…");
+  // escolhe a linha que parece endereço da tarja: tipo por extenso, com número, bairro ou cidade
+  let melhor = -1, nota = -99;
+  linhas.forEach((l, i) => {
+    const m = l.match(re); if(!m) return;
+    let p = 0;
+    if(/^(rua|avenida|alameda|travessa|estrada|rodovia|pra[çc]a|largo|servid[aã]o|beco|via|viela|ladeira|caminho)\b/i.test(m[2])) p += 2; else p -= 3;
+    if(m[3] || m[1]) p += 2;
+    if(/,|\s-\s/.test(l.slice(m.index + m[0].length))) p += 1;
+    if(/rio das ostras|\brj\b|\d{5}-?\d{3}/i.test(l + ' ' + (linhas[i + 1] || ''))) p += 2;
+    if(m[2].length < 9) p -= 1;
+    if(p > nota){ nota = p; melhor = i; }
+  });
+  for(let i = melhor; i >= 0 && i < linhas.length; i = -1){
     const m = linhas[i].match(re);
     if(!m) continue;
     let rua = m[2].replace(/\s+\d{5}-?\d{3}.*$/, '').replace(/\s+(Rio das Ostras|RJ|Brasil).*$/i, '').trim();
@@ -753,7 +766,7 @@ async function lerExif(file){
 async function adicionarArquivos(lista){
   const arqs = [...lista].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name));
   if(!arqs.length){ aviso('Nenhuma imagem encontrada nos arquivos escolhidos.'); return; }
-  let feitos = 0, comGps = 0, comProp = 0, falhas = 0;
+  let feitos = 0, comGps = 0, comProp = 0, falhas = 0; const idsNovos = [];
   progresso('prog-fotos', 0);
   for(const file of arqs){
     try{
@@ -765,14 +778,20 @@ async function adicionarArquivos(lista){
         lat: ex.lat, lon: ex.lon, orig: ex.lat != null ? (ex.via === 'prop' ? 'prop' : 'gps') : null, props: ex.props || {}, end: '', coment: '', tarja: ''};
       BLOBS.set(id, file);
       try{ await DB.put('fotos', id, file); }catch(e){ console.warn(e); }
-      S.fotos.push(f); if(f.orig === 'gps') comGps++; else if(f.orig === 'prop') comProp++;
+      S.fotos.push(f); idsNovos.push(id); if(f.orig === 'gps') comGps++; else if(f.orig === 'prop') comProp++;
     }catch(e){ console.warn('Foto não lida:', file.name, e); falhas++; }
     feitos++; progresso('prog-fotos', feitos / arqs.length);
   }
   S.fotos.sort((a, b) => (a.data || '').localeCompare(b.data || ''));
   progresso('prog-fotos', null);
   salvar(); renderFotos();
-  setTimeout(() => enderecosPorCoord(S.fotos.filter(f => temLocal(f) && !f.end), true), 300);   // coordenada → endereço, sozinho
+  // sozinho: 1º lê a tarja (endereço e coordenada escritos na foto; confere fotos com 2 coordenadas),
+  // 2º só nas que não têm endereço na foto, preenche o endereço pela coordenada
+  const novas = idsNovos.map(fotoPorId).filter(f => f && BLOBS.get(f.id));
+  setTimeout(async () => {
+    try{ await ocrFotos(novas); }catch(e){ console.warn(e); }
+    await enderecosPorCoord(S.fotos.filter(f => temLocal(f) && !f.end), true);
+  }, 300);
   aviso(feitos - falhas + ' foto(s) anexada(s) · ' + comGps + ' com GPS' + (comProp ? ' · ' + comProp + ' com coordenada nas propriedades do arquivo' : '') + (falhas ? ' · ' + falhas + ' não puderam ser lidas (formato não suportado neste navegador)' : ''), 5200);
 }
 $('bt-anexar').onclick = () => $('in-fotos').click();
@@ -806,8 +825,10 @@ function estimarTamanho(){
 const ROT_PROP = {titulo: 'Título', assunto: 'Assunto', comentario: 'Comentários', descricao: 'Descrição', palavras: 'Marcas', autor: 'Autor', local: 'Local', camera: 'Câmera', programa: 'Programa'};
 function blocoProps(f){
   const p = f.props || {}, ks = Object.keys(ROT_PROP).filter(k => p[k]);
-  if(!ks.length) return '';
-  return '<details class="det-props"><summary>Propriedades do arquivo</summary>' + ks.map(k => '<div><b>' + ROT_PROP[k] + ':</b> ' + esc(p[k]) + '</div>').join('') + '</details>';
+  const conf = f.conferencia ? '<div class="det-props" style="color:var(--warn)">⚠️ ' + esc(f.conferencia) + '</div>' : '';
+  const de = f.end ? '<div class="det-props">Endereço: ' + ({tarja: 'escrito na foto', coord: 'pela coordenada (aproximado)', manual: 'digitado'}[f.endOrig] || '—') + '</div>' : '';
+  if(!ks.length) return conf + de;
+  return conf + de + '<details class="det-props"><summary>Propriedades do arquivo</summary>' + ks.map(k => '<div><b>' + ROT_PROP[k] + ':</b> ' + esc(p[k]) + '</div>').join('') + '</details>';
 }
 function renderFotos(){
   const g = $('grade');
@@ -861,7 +882,7 @@ $('grade').addEventListener('change', e => {
     else { const r = lerCoordenadas(v); if(r){ f.lat = r.lat; f.lon = r.lon; f.orig = 'manual'; if(!f.end) setTimeout(() => enderecosPorCoord([f], true), 50); } else { aviso('Coordenadas não reconhecidas. Use -22.5507, -41.9743 ou 22°33\'2,67"S 41°58\'27,6"W.'); return; } }
     renderFotos();
   }
-  else if(c === 'end'){ f.end = e.target.value.trim(); if(f.end && !temLocal(f)){ salvar(); geocodificar([f], true); return; } }
+  else if(c === 'end'){ f.end = e.target.value.trim(); f.endOrig = 'manual'; if(f.end && !temLocal(f)){ salvar(); geocodificar([f], true); return; } }
   else if(c === 'coment') f.coment = e.target.value;
   salvar();
 });
@@ -896,7 +917,7 @@ async function motorOCR(){
 async function textoDaFoto(blob){
   const bmp = await abrirImagem(blob);
   const W = bmp.width, H = bmp.height, k = Math.min(1, 1800 / Math.max(W, H));
-  const pedacos = [[0, 0, 1, .34], [0, .55, 1, .45]];  // faixa de cima e de baixo, onde ficam as tarjas
+  const pedacos = [[0, .55, 1, .45], [0, 0, 1, .34]];  // faixa de baixo primeiro (onde fica o endereço), depois a de cima
   const w = await motorOCR();
   try{ await w.setParameters({tessedit_pageseg_mode: '6', preserve_interword_spaces: '1'}); }catch(e){}
   const ler = async (modo) => {
@@ -928,7 +949,7 @@ async function ocrFotos(lista, umaSo){
   if(!lista.length){ aviso(umaSo ? 'O arquivo original desta foto não está neste aparelho.' : 'Todas as fotos já têm local.'); return; }
   $('txt-acao').textContent = 'Carregando o leitor de texto… (na primeira vez baixa cerca de 15 MB)';
   progresso('prog-acao', 0);
-  let achou = 0, endereco = 0;
+  let achou = 0, endereco = 0; const conflitos = [];
   try{
     for(let i = 0; i < lista.length; i++){
       const f = lista[i];
@@ -936,18 +957,47 @@ async function ocrFotos(lista, umaSo){
       const t = await textoDaFoto(BLOBS.get(f.id));
       f.tarja = t.trim().slice(0, 600);
       const c = lerCoordenadas(t);
-      if(c && (!temLocal(f) || f.orig !== 'gps')){ f.lat = c.lat; f.lon = c.lon; f.orig = 'tarja'; achou++; }
       const d = lerDataTarja(t); if(d && f.dataOrig !== 'exif'){ f.data = d; f.dataOrig = 'tarja'; }
-      const e = lerEnderecoTarja(t); if(e){ if(!f.end) f.end = e.texto; f.cep = e.cep; if(!temLocal(f)) endereco++; }
+      // o endereço escrito na foto vale mais que o "adivinhado" pela coordenada (só não troca o que você digitou)
+      const e = lerEnderecoTarja(t); if(e){ if(f.endOrig !== 'manual'){ f.end = e.texto; f.endOrig = 'tarja'; } f.cep = e.cep; if(!temLocal(f) && !c) endereco++; }
+      if(c){
+        if(temLocal(f) && f.orig !== 'tarja' && f.orig !== 'manual' && dist(f.lat, f.lon, c.lat, c.lon) > 150){
+          f.coords2 = [{lat: f.lat, lon: f.lon, orig: f.orig}, {lat: c.lat, lon: c.lon, orig: 'tarja'}]; conflitos.push(f);
+        }else if(!temLocal(f) || (f.orig !== 'gps' && f.orig !== 'manual')){ f.lat = c.lat; f.lon = c.lon; f.orig = 'tarja'; achou++; }
+      }
       progresso('prog-acao', (i + 1) / lista.length); salvar(); renderFotos();
     }
+    for(let i = 0; i < conflitos.length; i++){ $('txt-acao').textContent = 'Foto com 2 coordenadas: conferindo pelo endereço da foto (' + (i + 1) + ' de ' + conflitos.length + ')…'; await resolverDuasCoords(conflitos[i]); salvar(); }
     const novosEnd = lista.filter(f => !temLocal(f) && f.end);
     if(novosEnd.length){ $('txt-acao').textContent = 'Tarja lida. Buscando as coordenadas dos endereços…'; await geocodificar(novosEnd); }
-    $('txt-acao').textContent = 'Tarja lida: ' + achou + ' foto(s) com coordenadas.' + (endereco ? ' ' + endereco + ' foto(s) só com endereço: use “Buscar coordenadas pelo endereço”.' : '');
+    $('txt-acao').textContent = 'Tarja lida: ' + achou + ' foto(s) com coordenadas.' + (conflitos.length ? ' ' + conflitos.length + ' foto(s) tinham 2 coordenadas e foram conferidas pelo endereço.' : '');
+    renderFotos();
   }catch(e){ $('txt-acao').textContent = 'Erro na leitura da tarja: ' + (e.message || e); }
   progresso('prog-acao', null);
 }
-$('bt-ocr').onclick = () => ocrFotos(S.fotos.filter(f => !temLocal(f) || (f.sel && f.orig !== 'gps')));
+/* foto com 2 coordenadas (GPS/propriedades x tarja): fica a que bate com a rua escrita na foto */
+function nucleoRua(t){ return chaveRua(String(t || '').split(' - ')[0].replace(/,\s*\d+.*$/, '')).nucleo; }
+async function resolverDuasCoords(f){
+  const cs = f.coords2 || []; if(cs.length < 2) return;
+  const rua = f.end ? nucleoRua(f.end) : '';
+  let esc = null, motivo = '';
+  if(rua){
+    for(const c of cs){
+      try{ c.endRev = await enderecoDeCoord(c.lat, c.lon); }catch(e){ c.endRev = ''; }
+      await espera(1100);
+      const r2 = c.endRev ? nucleoRua(c.endRev) : '';
+      if(r2 && (r2 === rua || r2.includes(rua) || rua.includes(r2))){ esc = c; motivo = 'confere com a rua escrita na foto'; break; }
+    }
+    if(!esc){
+      try{ const r = await buscarEndereco(f.end + ', ' + (S.cfg.mun || '')); await espera(1100);
+        if(r){ esc = cs.slice().sort((a, b) => dist(a.lat, a.lon, r.lat, r.lon) - dist(b.lat, b.lon, r.lat, r.lon))[0]; motivo = 'é a mais perto do endereço escrito na foto'; } }catch(e){}
+    }
+  }
+  if(!esc){ esc = cs.find(c => c.orig === 'gps') || cs[0]; motivo = 'sem endereço para conferir: confira no mapa'; }
+  f.lat = esc.lat; f.lon = esc.lon; f.orig = esc.orig;
+  f.conferencia = '2 coordenadas na foto (' + cs.map(c => ORIGEM[c.orig] + ': ' + c.lat.toFixed(6) + ', ' + c.lon.toFixed(6)).join(' | ') + '). Usada a de ' + ORIGEM[esc.orig] + ', que ' + motivo + '.';
+}
+$('bt-ocr').onclick = () => { const sel = S.fotos.filter(f => f.sel); ocrFotos(sel.length ? sel : S.fotos); };
 
 /* ---------- endereço → coordenadas (OpenStreetMap / Nominatim) ---------- */
 async function buscarEndereco(q){
@@ -999,7 +1049,7 @@ async function enderecosPorCoord(alvo, auto){
       const k = f.lat.toFixed(4) + ',' + f.lon.toFixed(4);
       $('txt-acao').textContent = 'Preenchendo endereço pelas coordenadas: ' + (i + 1) + ' de ' + alvo.length + '…';
       if(cache[k] === undefined){ try{ cache[k] = await enderecoDeCoord(f.lat, f.lon); }catch(e){ $('txt-acao').textContent = 'Endereço não preenchido (serviço indisponível): ' + (e.message || e); break; } await espera(1100); }
-      if(cache[k]){ f.end = cache[k]; ok++; const inp = document.querySelector('#grade .foto[data-id="' + f.id + '"] input[data-campo=end]'); if(inp && !inp.value) inp.value = f.end; }
+      if(cache[k] && !f.end){ f.end = cache[k]; f.endOrig = 'coord'; ok++; const inp = document.querySelector('#grade .foto[data-id="' + f.id + '"] input[data-campo=end]'); if(inp && !inp.value) inp.value = f.end; }
       progresso('prog-acao', (i + 1) / alvo.length); salvar();
     }
   } finally { _revRodando = false; progresso('prog-acao', null); $('bt-rev').disabled = false; renderFotos(); }
