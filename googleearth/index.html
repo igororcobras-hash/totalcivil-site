@@ -477,7 +477,7 @@ table.ruas tr.off td{opacity:.45}
    KML / KMZ para o Google Earth Web.
    Dados ficam no próprio aparelho (IndexedDB) e em "Salvar como".
    ============================================================ */
-const VERSAO = '1 · 04/11/2026';
+const VERSAO = '1.1 · 04/11/2026';
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 // padrão de cores do projeto PANORAMA DAS AÇÕES DE DRENAGEM RO (tirado do KML do projeto)
@@ -703,17 +703,22 @@ async function miniatura(blob, lado){
   const w = bmp.width, h = bmp.height; if(bmp.close) bmp.close();
   return {url: c.toDataURL('image/jpeg', .72), w, h};
 }
+const MSG_ILEGIVEL = 'o arquivo original da foto não pode mais ser lido (foi movido, apagado ou alterado depois de anexado)';
 async function abrirImagem(blob){
   try{ return await createImageBitmap(blob, {imageOrientation: 'from-image'}); }
   catch(_){
     try{ return await createImageBitmap(blob); }
     catch(e){
-      return await new Promise((ok, erro) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => erro(new Error('formato de imagem não suportado')); i.src = URL.createObjectURL(blob); });
+      // antes de culpar o formato, confere se o arquivo ainda pode ser lido (original movido, apagado ou alterado depois de anexado)
+      try{ await blob.slice(0, 16).arrayBuffer(); }catch(e2){ throw new Error(MSG_ILEGIVEL); }
+      return await new Promise((ok, erro) => { const u = URL.createObjectURL(blob), i = new Image(); i.onload = () => { URL.revokeObjectURL(u); ok(i); }; i.onerror = () => { URL.revokeObjectURL(u); erro(new Error('formato de imagem não suportado')); }; i.src = u; });
     }
   }
 }
 async function reduzir(blob, maxPx, q){
-  if(!maxPx && /jpe?g/i.test(blob.type || '')) return blob;
+  if(!maxPx && /jpe?g/i.test(blob.type || '')){
+    try{ return new Blob([await blob.arrayBuffer()], {type: blob.type}); }catch(e){ throw new Error(MSG_ILEGIVEL); }
+  }
   const bmp = await abrirImagem(blob);
   let w = bmp.width, h = bmp.height;
   if(maxPx && Math.max(w, h) > maxPx){ const k = maxPx / Math.max(w, h); w = Math.round(w * k); h = Math.round(h * k); }
@@ -776,8 +781,12 @@ async function adicionarArquivos(lista){
       const f = {id, nome: file.name, tam: file.size, w: mi.w, h: mi.h, thumb: mi.url,
         data: ex.data || (file.lastModified ? new Date(file.lastModified).toISOString() : ''), dataOrig: ex.data ? 'exif' : 'arquivo',
         lat: ex.lat, lon: ex.lon, orig: ex.lat != null ? (ex.via === 'prop' ? 'prop' : 'gps') : null, props: ex.props || {}, end: '', coment: '', tarja: ''};
-      BLOBS.set(id, file);
-      try{ await DB.put('fotos', id, file); }catch(e){ console.warn(e); }
+      // guarda uma cópia no aparelho e passa a usar a cópia: se o original for movido ou apagado depois, a foto continua legível
+      // (o navegador pode guardar o File só como referência ao original, então copia os bytes antes)
+      let copia = file;
+      try{ copia = new Blob([await file.arrayBuffer()], {type: file.type || ''}); }catch(e){ console.warn(e); }
+      BLOBS.set(id, copia);
+      try{ await DB.put('fotos', id, copia); }catch(e){ console.warn(e); }
       S.fotos.push(f); idsNovos.push(id); if(f.orig === 'gps') comGps++; else if(f.orig === 'prop') comProp++;
     }catch(e){ console.warn('Foto não lida:', file.name, e); falhas++; }
     feitos++; progresso('prog-fotos', feitos / arqs.length);
@@ -1344,7 +1353,13 @@ async function prepararFotos(ids, modo, aoAvancar){
   for(const id of ids){
     const f = fotoPorId(id), b = BLOBS.get(id);
     if(f && b && modo !== 'url'){
-      const r = await reduzir(b, S.cfg.res, S.cfg.qual);
+      let r = null;
+      try{ r = await reduzir(b, S.cfg.res, S.cfg.qual); }
+      catch(e){
+        // tenta a cópia guardada no aparelho; se nem ela abrir, a foto fica de fora e a geração continua
+        try{ const c = await DB.get('fotos', id); if(c){ r = await reduzir(c, S.cfg.res, S.cfg.qual); BLOBS.set(id, c); } }catch(e2){}
+        if(!r){ console.warn('Foto não lida:', f.nome, e); saida.set(id, {nome: nomeArqFoto(f), falta: true, ilegivel: true, foto: f.nome, motivo: e.message || String(e)}); i++; if(aoAvancar) aoAvancar(i / ids.length); continue; }
+      }
       const o = {nome: nomeArqFoto(f), blob: r};
       if(modo === 'data') o.data = await new Promise(ok => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(r); });
       saida.set(id, o);
@@ -1487,9 +1502,11 @@ async function gerar(tipo, daAbaFotos, abrirLink){
     }else{ blob = new Blob([r.kml], {type: 'application/vnd.google-earth.kml+xml'}); nome = nomeArquivoSaida('kml'); }
     if(onde.h){ const w = await onde.h.createWritable(); await w.write(blob); await w.close(); nome = onde.h.name; }
     else baixar(nome, blob);
-    const faltam = [...r.fotos.values()].filter(o => o.falta).length;
-    msg.innerHTML = avisoDestino + '<div class="msg ok"><b>' + esc(nome) + '</b> ' + (onde.h ? 'salvo no local escolhido' : 'baixado (pasta Downloads; para o navegador perguntar onde salvar, ative “Perguntar onde salvar cada arquivo” nas configurações dele)') + ' (' + kb(blob.size) + '): ' + r.nPm + ' marcação(ões), ' + r.ids.length + ' foto(s).</div>' +
+    const faltam = [...r.fotos.values()].filter(o => o.falta && !o.ilegivel).length;
+    const ilegiveis = [...r.fotos.values()].filter(o => o.ilegivel);
+    msg.innerHTML = avisoDestino + '<div class="msg ok"><b>' + esc(nome) + '</b> ' + (onde.h ? 'salvo no local escolhido' : 'baixado (pasta Downloads; para o navegador perguntar onde salvar, ative “Perguntar onde salvar cada arquivo” nas configurações dele)') + ' (' + kb(blob.size) + '): ' + r.nPm + ' marcação(ões), ' + (r.ids.length - faltam - ilegiveis.length) + ' foto(s).</div>' +
       (S.fotos.some(f => !temLocal(f)) ? '<div class="msg warn">' + S.fotos.filter(f => !temLocal(f)).length + ' foto(s) continuam sem local (sem coordenada, tarja legível ou endereço encontrado) e ficaram fora do arquivo. Marque-as no mapa e gere de novo.</div>' : '') +
+      (ilegiveis.length ? '<div class="msg warn">' + ilegiveis.length + ' foto(s) não puderam ser lidas e ficaram fora do arquivo: ' + esc(ilegiveis.map(o => o.foto).join(', ')) + '. Motivo: ' + esc(ilegiveis[0].motivo) + '. Exclua essas fotos e anexe-as de novo a partir da pasta onde estão agora.</div>' : '') +
       (faltam ? '<div class="msg warn">' + faltam + ' foto(s) sem o arquivo original neste aparelho ficaram fora do carrossel. Anexe-as de novo.</div>' : '') +
       passosEarth(nome) + (blob.size > 20 * 1048576 ? '<div class="msg warn">Arquivo grande. Se o Google Earth Web travar, reduza a resolução na aba Fotos.</div>' : '') +
       (modo === 'url' ? '<div class="msg info">As fotos não estão no arquivo: suba o .zip de fotos reduzidas no endereço informado antes de importar.</div>' : '');
@@ -1632,7 +1649,9 @@ $('e-url').onchange = e => { S.exp.url = e.target.value.trim(); salvar(); };
 $('bt-salvar').onclick = async () => {
   aviso('Preparando o arquivo do trabalho…', 8000);
   const fotos = {};
-  for(const f of S.fotos){ const b = BLOBS.get(f.id); if(b){ const r = await reduzir(b, S.cfg.res || 2048, Math.max(S.cfg.qual, .85)); fotos[f.id] = await new Promise(ok => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(r); }); } }
+  const naoLidas = [];
+  for(const f of S.fotos){ const b = BLOBS.get(f.id); if(b){ try{ const r = await reduzir(b, S.cfg.res || 2048, Math.max(S.cfg.qual, .85)); fotos[f.id] = await new Promise(ok => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(r); }); }catch(e){ console.warn('Foto não lida:', f.nome, e); naoLidas.push(f.nome); } } }
+  if(naoLidas.length) setTimeout(() => aviso(naoLidas.length + ' foto(s) não puderam ser lidas e foram salvas sem a imagem: ' + naoLidas.join(', ') + '. Anexe-as de novo.', 8000), 5200);
   const blob = new Blob([JSON.stringify({programa: 'Imagens GoogleEarth', versao: VERSAO, salvoEm: new Date().toISOString(), estado: S, fotos})], {type: 'application/json'});
   baixar(slug(S.exp.proj || 'Imagens_GoogleEarth') + '_trabalho.json', blob);
   aviso('Trabalho salvo (' + kb(blob.size) + '). Use “Abrir” para continuar depois, em qualquer aparelho.', 5000);
