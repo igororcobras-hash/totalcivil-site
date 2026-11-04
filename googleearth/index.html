@@ -1363,7 +1363,14 @@ async function completarLocais(){
   if(comEnd.length){ try{ await geocodificar(comEnd); }catch(e){ console.warn(e); } }
   renderFotos();
 }
-async function gerar(tipo, daAbaFotos){
+async function escolherOndeSalvar(nome, tipo){
+  // pergunta onde salvar (Chrome/Edge no computador); nos outros navegadores vai para Downloads
+  if(!window.showSaveFilePicker) return {h: null};
+  const tp = tipo === 'kmz' ? {description: 'Arquivo do Google Earth (KMZ)', accept: {'application/vnd.google-earth.kmz': ['.kmz']}} : {description: 'Arquivo do Google Earth (KML)', accept: {'application/vnd.google-earth.kml+xml': ['.kml']}};
+  try{ return {h: await window.showSaveFilePicker({suggestedName: nome, types: [tp]})}; }
+  catch(e){ return e && e.name === 'AbortError' ? {cancelou: true} : {h: null}; }
+}
+async function gerar(tipo, daAbaFotos, abrirLink){
   const msg = msgExp();
   if(daAbaFotos && !S.cfg.avulsas){ S.cfg.avulsas = true; salvar(); }
   if(S.exp.urlOn && !(S.exp.url || '').trim()){ S.exp.urlOn = false; salvar(); renderExportar(); }   // sem endereço público: segue com as fotos dentro do arquivo
@@ -1372,6 +1379,9 @@ async function gerar(tipo, daAbaFotos){
   if(S.exp.destino === 'mesclar' && !projKML){ S.exp.destino = 'pasta'; salvar(); renderExportar(); avisoDestino = '<div class="msg info">Você não enviou o KML do projeto existente, então gerei só a <b>pasta nova</b> (arquivo pequeno) para importar no projeto. Para receber o projeto completo, envie o KML exportado dele.</div>'; }
   const modo = urlOn ? 'url' : (tipo === 'kmz' ? 'kmz' : 'data');
   if(tipo === 'kmz' && typeof JSZip === 'undefined'){ msg.innerHTML = '<div class="msg bad">O compactador não carregou (internet). Gere o KML.</div>'; return; }
+  const onde = await escolherOndeSalvar(nomeArquivoSaida(tipo === 'kmz' ? 'kmz' : 'kml'), tipo);
+  if(onde.cancelou){ msg.innerHTML = '<div class="msg info">Geração cancelada: nenhum local escolhido para salvar.</div>'; return; }
+  if(abrirLink){ try{ const w = window.open(abrirLink, '_blank'); if(w) w.opener = null; }catch(e){} }
   BT_GERAR.forEach(id => $(id).disabled = true);
   msg.innerHTML = '<div class="msg info">Preparando as fotos…</div>'; progExp( 0);
   try{
@@ -1385,9 +1395,10 @@ async function gerar(tipo, daAbaFotos){
       blob = await z.generateAsync({type: 'blob', mimeType: 'application/vnd.google-earth.kmz', compression: 'DEFLATE', compressionOptions: {level: 6}}, m => progExp( .9 + m.percent / 1000));
       nome = nomeArquivoSaida('kmz');
     }else{ blob = new Blob([r.kml], {type: 'application/vnd.google-earth.kml+xml'}); nome = nomeArquivoSaida('kml'); }
-    baixar(nome, blob);
+    if(onde.h){ const w = await onde.h.createWritable(); await w.write(blob); await w.close(); nome = onde.h.name; }
+    else baixar(nome, blob);
     const faltam = [...r.fotos.values()].filter(o => o.falta).length;
-    msg.innerHTML = avisoDestino + '<div class="msg ok"><b>' + esc(nome) + '</b> gerado (' + kb(blob.size) + '): ' + r.nPm + ' marcação(ões), ' + r.ids.length + ' foto(s).</div>' +
+    msg.innerHTML = avisoDestino + '<div class="msg ok"><b>' + esc(nome) + '</b> ' + (onde.h ? 'salvo no local escolhido' : 'baixado (pasta Downloads; para o navegador perguntar onde salvar, ative “Perguntar onde salvar cada arquivo” nas configurações dele)') + ' (' + kb(blob.size) + '): ' + r.nPm + ' marcação(ões), ' + r.ids.length + ' foto(s).</div>' +
       (S.fotos.some(f => !temLocal(f)) ? '<div class="msg warn">' + S.fotos.filter(f => !temLocal(f)).length + ' foto(s) continuam sem local (sem coordenada, tarja legível ou endereço encontrado) e ficaram fora do arquivo. Marque-as no mapa e gere de novo.</div>' : '') +
       (faltam ? '<div class="msg warn">' + faltam + ' foto(s) sem o arquivo original neste aparelho ficaram fora do carrossel. Anexe-as de novo.</div>' : '') +
       passosEarth(nome) + (blob.size > 20 * 1048576 ? '<div class="msg warn">Arquivo grande. Se o Google Earth Web travar, reduza a resolução na aba Fotos.</div>' : '') +
@@ -1457,8 +1468,7 @@ $('f-link').onchange = e => { S.exp.link = e.target.value.trim(); if(S.exp.link 
 $('bt-enviar').onclick = () => {
   const link = (S.exp.link || '').trim();
   if(link && S.exp.destino === 'novo') S.exp.destino = 'pasta';
-  try{ window.open(link || linkEarth(), '_blank', 'noopener'); }catch(e){}   // abre já, antes de gerar (senão o navegador bloqueia)
-  gerar('kmz', true);
+  gerar('kmz', true, link || linkEarth());   // pergunta onde salvar, abre o projeto e gera
 };
 $('f-dentro').onchange = e => { S.exp.dentro = e.target.value; salvar(); renderExportar(); };
 $('f-dest').onchange = e => { S.exp.destino = e.target.value; salvar(); renderGerarAqui(); renderExportar(); };
