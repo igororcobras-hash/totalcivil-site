@@ -284,12 +284,13 @@ table.ruas tr.off td{opacity:.45}
 
   <div class="cartao" id="gerar-aqui">
     <h3>Gerar para o Google Earth</h3>
-    <p class="ajuda" style="margin-top:0">Cada foto com local vira um ponto com a foto no carrossel. Ao anexar, o ponto já aparece na aba <b>Mapa</b>. Caminhos, polígonos, cores e textos ficam na aba <b>Marcações</b>.</p>
+    <p class="ajuda" style="margin-top:0">Tudo pode ser feito aqui: cada foto com local vira um ponto, com a foto no carrossel e o endereço e comentário na descrição. As outras abas são opcionais (ver no mapa, juntar fotos numa rua inteira, listas em PDF).</p>
     <div class="linha">
       <div class="campo"><label for="f-dest">Onde vai entrar</label><select id="f-dest"><option value="novo">Projeto novo</option><option value="pasta">Pasta nova em projeto existente</option><option value="mesclar">Projeto existente completo (aba 5)</option></select></div>
       <div class="campo" style="flex:1;min-width:180px" id="f-c-proj"><label for="f-proj">Nome do projeto</label><input id="f-proj"></div>
       <div class="campo" style="flex:1;min-width:180px"><label for="f-pasta">Nome da pasta nova</label><input id="f-pasta"></div>
     </div>
+    <div style="margin-top:10px"><div class="rot" style="margin-bottom:6px">Cor dos pontos no Google Earth</div><div class="cores" id="f-cores"></div></div>
     <div id="f-c-existente" hidden style="margin-top:10px">
       <div class="linha">
         <div class="campo" style="flex:2;min-width:240px"><label for="f-in-proj">KML exportado do seu projeto (Google Earth: Arquivo › Exportar como arquivo KML)</label><input type="file" id="f-in-proj" accept=".kml,application/vnd.google-earth.kml+xml"></div>
@@ -1362,8 +1363,9 @@ async function completarLocais(){
   if(comEnd.length){ try{ await geocodificar(comEnd); }catch(e){ console.warn(e); } }
   renderFotos();
 }
-async function gerar(tipo){
+async function gerar(tipo, daAbaFotos){
   const msg = msgExp();
+  if(daAbaFotos && !S.cfg.avulsas){ S.cfg.avulsas = true; salvar(); }
   if(S.exp.urlOn && !(S.exp.url || '').trim()){ S.exp.urlOn = false; salvar(); renderExportar(); }   // sem endereço público: segue com as fotos dentro do arquivo
   const urlOn = S.exp.urlOn && (S.exp.url || '').trim();
   let avisoDestino = '';
@@ -1407,7 +1409,7 @@ async function gerarZipFotos(){
   baixar(slug(S.exp.pasta || nomePastaPadrao()) + '_fotos.zip', blob);
   msg.innerHTML = '<div class="msg ok">Fotos reduzidas (' + fotos.size + ', ' + kb(blob.size) + '). Descompacte e suba os arquivos, sem subpastas, no endereço público informado.</div>';
 }
-$('bt-kmz').onclick = () => gerar('kmz'); $('bt-kmz-f').onclick = () => gerar('kmz'); $('bt-kml-f').onclick = () => gerar('kml');
+$('bt-kmz').onclick = () => gerar('kmz'); $('bt-kmz-f').onclick = () => gerar('kmz', true); $('bt-kml-f').onclick = () => gerar('kml', true);
 $('bt-kml').onclick = () => gerar('kml');
 $('bt-zip').onclick = gerarZipFotos;
 
@@ -1446,6 +1448,7 @@ function renderGerarAqui(){
   $('f-txt-proj').textContent = $('txt-proj').textContent;
   $('f-url-on').checked = !!S.exp.urlOn; $('f-c-url').hidden = !S.exp.urlOn; $('f-url').value = S.exp.url || '';
   $('f-link').value = S.exp.link || '';
+  pintarCores('f-cores', S.cfg.corPadrao, c => { S.cfg.corPadrao = c; salvar(); renderGerarAqui(); if(typeof mapa !== 'undefined' && mapa) desenharMapa(false); });
   $('lk-earth').href = (S.exp.link || '').trim() || linkEarth();
 }
 $('f-url-on').onchange = e => { S.exp.urlOn = e.target.checked; salvar(); renderExportar(); };
@@ -1455,7 +1458,7 @@ $('bt-enviar').onclick = () => {
   const link = (S.exp.link || '').trim();
   if(link && S.exp.destino === 'novo') S.exp.destino = 'pasta';
   try{ window.open(link || linkEarth(), '_blank', 'noopener'); }catch(e){}   // abre já, antes de gerar (senão o navegador bloqueia)
-  gerar('kmz');
+  gerar('kmz', true);
 };
 $('f-dentro').onchange = e => { S.exp.dentro = e.target.value; salvar(); renderExportar(); };
 $('f-dest').onchange = e => { S.exp.destino = e.target.value; salvar(); renderGerarAqui(); renderExportar(); };
