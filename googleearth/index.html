@@ -273,6 +273,7 @@ table.ruas tr.off td{opacity:.45}
       <button type="button" class="bt" id="bt-rev">🏠 Endereços por Coordenadas</button>
       <span style="flex:1"></span>
       <button type="button" class="bt peq" id="bt-sel-todas">Selecionar todas</button>
+      <button type="button" class="bt peq" id="bt-sel-com">Selecionar com local</button>
       <button type="button" class="bt peq" id="bt-sel-sem">Selecionar sem local</button>
       <button type="button" class="bt peq" id="bt-sel-nenhuma">Limpar seleção</button>
       <button type="button" class="bt peq perigo" id="bt-rem-sel">Remover selecionadas</button>
@@ -845,6 +846,7 @@ function removerFotos(ids){
 function confirmarPagina(t){ try{ return window.confirm(t); }catch(_){ return true; } }
 $('bt-sel-todas').onclick = () => { S.fotos.forEach(f => f.sel = true); salvar(); renderFotos(); };
 $('bt-sel-sem').onclick = () => { S.fotos.forEach(f => f.sel = !temLocal(f)); salvar(); renderFotos(); };
+$('bt-sel-com').onclick = () => { S.fotos.forEach(f => f.sel = temLocal(f)); salvar(); renderFotos(); };
 $('bt-sel-nenhuma').onclick = () => { S.fotos.forEach(f => f.sel = false); salvar(); renderFotos(); };
 $('bt-rem-sel').onclick = () => removerFotos(S.fotos.filter(f => f.sel).map(f => f.id));
 
@@ -1390,9 +1392,10 @@ async function gerar(tipo, daAbaFotos, abrirLink){
     if(!r.nPm){ msg.innerHTML = '<div class="msg bad">Nada para gerar: nenhuma marcação com local e nenhuma foto avulsa com local.</div>'; return; }
     let blob, nome;
     if(tipo === 'kmz'){
-      const z = new JSZip(); z.file('doc.kml', r.kml);
-      if(modo === 'kmz') r.fotos.forEach(o => { if(o.blob) z.file('files/' + o.nome, o.blob); });
-      blob = await z.generateAsync({type: 'blob', mimeType: 'application/vnd.google-earth.kmz', compression: 'DEFLATE', compressionOptions: {level: 6}}, m => progExp( .9 + m.percent / 1000));
+      // KMZ no formato mais simples possível: doc.kml primeiro, sem registros de pasta, fotos sem recompressão
+      const z = new JSZip(); z.file('doc.kml', r.kml, {compression: 'DEFLATE', createFolders: false});
+      if(modo === 'kmz') r.fotos.forEach(o => { if(o.blob) z.file('files/' + o.nome, o.blob, {binary: true, compression: 'STORE', createFolders: false}); });
+      blob = await z.generateAsync({type: 'blob', mimeType: 'application/vnd.google-earth.kmz', platform: 'DOS', compressionOptions: {level: 6}}, m => progExp( .9 + m.percent / 1000));
       nome = nomeArquivoSaida('kmz');
     }else{ blob = new Blob([r.kml], {type: 'application/vnd.google-earth.kml+xml'}); nome = nomeArquivoSaida('kml'); }
     if(onde.h){ const w = await onde.h.createWritable(); await w.write(blob); await w.close(); nome = onde.h.name; }
