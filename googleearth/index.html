@@ -1325,6 +1325,14 @@ function nomeArquivoSaida(ext){ const base = S.exp.destino === 'novo' ? (S.exp.p
 const BT_GERAR = ['bt-kmz', 'bt-kml', 'bt-zip', 'bt-kmz-f', 'bt-kml-f'];
 function msgExp(){ const a = $('msg-exp'), b = $('msg-exp2'); return {set innerHTML(h){ a.innerHTML = h; b.innerHTML = h; }}; }
 function progExp(f){ progresso('prog-exp', f); progresso('prog-exp2', f); }
+async function completarLocais(){
+  // sem local? tenta pela tarja (texto da foto) e depois pelo endereço; o que não achar fica de fora, sem travar a geração
+  const lerT = S.fotos.filter(f => !temLocal(f) && !f.end && !f.tarja && BLOBS.get(f.id));
+  if(lerT.length){ try{ await ocrFotos(lerT); }catch(e){ console.warn(e); } }
+  const comEnd = S.fotos.filter(f => !temLocal(f) && f.end);
+  if(comEnd.length){ try{ await geocodificar(comEnd); }catch(e){ console.warn(e); } }
+  renderFotos();
+}
 async function gerar(tipo){
   const msg = msgExp();
   const urlOn = S.exp.urlOn && (S.exp.url || '').trim();
@@ -1335,6 +1343,7 @@ async function gerar(tipo){
   BT_GERAR.forEach(id => $(id).disabled = true);
   msg.innerHTML = '<div class="msg info">Preparando as fotos…</div>'; progExp( 0);
   try{
+    if(S.fotos.some(f => !temLocal(f))){ msg.innerHTML = '<div class="msg info">Completando o local das fotos sem coordenada (tarja e endereço)…</div>'; await completarLocais(); }
     const r = await montarKML(modo, f => progExp( f * .9));
     if(!r.nPm){ msg.innerHTML = '<div class="msg bad">Nada para gerar: nenhuma marcação com local e nenhuma foto avulsa com local.</div>'; return; }
     let blob, nome;
@@ -1347,6 +1356,7 @@ async function gerar(tipo){
     baixar(nome, blob);
     const faltam = [...r.fotos.values()].filter(o => o.falta).length;
     msg.innerHTML = '<div class="msg ok"><b>' + esc(nome) + '</b> gerado (' + kb(blob.size) + '): ' + r.nPm + ' marcação(ões), ' + r.ids.length + ' foto(s).</div>' +
+      (S.fotos.some(f => !temLocal(f)) ? '<div class="msg warn">' + S.fotos.filter(f => !temLocal(f)).length + ' foto(s) continuam sem local (sem coordenada, tarja legível ou endereço encontrado) e ficaram fora do arquivo. Marque-as no mapa e gere de novo.</div>' : '') +
       (faltam ? '<div class="msg warn">' + faltam + ' foto(s) sem o arquivo original neste aparelho ficaram fora do carrossel. Anexe-as de novo.</div>' : '') +
       '<div class="msg info">Agora abra o <a href="' + linkEarth() + '" target="_blank" rel="noopener"><b>Google Earth Web neste local</b></a> e importe o arquivo: <b>Arquivo › Abrir arquivo KML local</b> (ou <b>Importar</b> dentro do projeto). O Google não permite enviar o arquivo por link; o importador do Earth precisa ser acionado por você.</div>' + (blob.size > 20 * 1048576 ? '<div class="msg warn">Arquivo grande. Se o Google Earth Web travar, reduza a resolução na aba Fotos.</div>' : '') +
       (modo === 'url' ? '<div class="msg info">As fotos não estão no arquivo: suba o .zip de fotos reduzidas no endereço informado antes de importar.</div>' : '');
