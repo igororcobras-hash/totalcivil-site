@@ -291,7 +291,11 @@ table.ruas tr.off td{opacity:.45}
       <div class="campo" style="flex:1;min-width:180px" id="f-c-proj"><label for="f-proj">Nome do projeto</label><input id="f-proj"></div>
       <div class="campo" style="flex:1;min-width:180px"><label for="f-pasta">Nome da pasta nova</label><input id="f-pasta"></div>
     </div>
-    <div style="margin-top:10px"><div class="rot" style="margin-bottom:6px">Cor dos pontos no Google Earth</div><div class="cores" id="f-cores"></div></div>
+    <div class="linha" style="margin-top:10px;align-items:flex-end">
+      <div class="campo" style="flex:1;min-width:240px"><label for="f-cat">Padrão de cores do projeto</label><select id="f-cat"></select></div>
+      <button type="button" class="bt" id="bt-cor-padrao">🎨 Cor padrão</button>
+    </div>
+    <div style="margin-top:8px"><div class="rot" style="margin-bottom:6px">Cor dos pontos (ou escolha outra)</div><div class="cores" id="f-cores"></div></div>
     <div id="f-c-existente" hidden style="margin-top:10px">
       <div class="linha">
         <div class="campo" style="flex:2;min-width:240px"><label for="f-in-proj">KML exportado do seu projeto (Google Earth: Arquivo › Exportar como arquivo KML)</label><input type="file" id="f-in-proj" accept=".kml,application/vnd.google-earth.kml+xml"></div>
@@ -476,6 +480,17 @@ table.ruas tr.off td{opacity:.45}
 const VERSAO = '1 · 04/11/2026';
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+// padrão de cores do projeto PANORAMA DAS AÇÕES DE DRENAGEM RO (tirado do KML do projeto)
+const PADRAO = [
+  {nome: 'Necessidade de manutenção/investigação', ponto: '#D32F2F', linha: '#EF5350', icone: 2069},
+  {nome: 'Concluído / em andamento', ponto: '#66BB6A', linha: '#66BB6A', icone: 2000},
+  {nome: 'Médio/longo prazo', ponto: '#F57C00', linha: '#F57C00', icone: 2000},
+  {nome: 'Rede de drenagem / deságue existente', ponto: '#FFEE58', linha: '#FFEE58', icone: 2000},
+  {nome: 'Rios e canais', ponto: '#42A5F5', linha: '#42A5F5', icone: 2000},
+  {nome: 'Valas', ponto: '#EEEEEE', linha: '#EEEEEE', icone: 2000},
+  {nome: 'Construções públicas', ponto: '#AB47BC', linha: '#AB47BC', icone: 2000},
+  {nome: 'Pontos de estudo', ponto: '#D32F2F', linha: '#D32F2F', icone: 2000}
+];
 const CORES = [
   {hex:'#FBC02D', nome:'Âmbar'}, {hex:'#F57C00', nome:'Laranja'}, {hex:'#EF5350', nome:'Vermelho'}, {hex:'#D32F2F', nome:'Vermelho escuro'},
   {hex:'#66BB6A', nome:'Verde'}, {hex:'#FFEE58', nome:'Amarelo'}, {hex:'#42A5F5', nome:'Azul'}, {hex:'#1976D2', nome:'Azul escuro'},
@@ -488,7 +503,7 @@ const COR_ORIGEM = {gps:'#16a34a', tarja:'#1E4E8C', endereco:'#F57C00', manual:'
 let S = novoEstado();
 function novoEstado(){
   return {versao:1, amb:'', fotos:[], marc:[], listas:[],
-    cfg:{res:1280, qual:0.8, autor:'', mun:'Rio das Ostras - RJ', avulsas:true, corPadrao:'#FBC02D', bairroPonto:true, fotoRua:true},
+    cfg:{res:1280, qual:0.8, autor:'', mun:'Rio das Ostras - RJ', avulsas:true, corPadrao:'#D32F2F', icone:2069, categoria:0, bairroPonto:true, fotoRua:true},
     exp:{destino:'novo', proj:'Vistoria de campo', pasta:'', dentro:'', urlOn:false, url:''}};
 }
 const BLOBS = new Map();            // id da foto -> Blob original
@@ -1035,7 +1050,7 @@ $('bt-enquadrar').onclick = () => desenharMapa(true);
 /* ============================================================
    3. MARCAÇÕES
    ============================================================ */
-let form = {sel: new Set(), cor: '#FBC02D', editando: null, ruaGeo: null};
+let form = {sel: new Set(), cor: '#EF5350', editando: null, ruaGeo: null};
 function pintarCores(alvo, atual, onPick){
   const el = $(alvo);
   el.innerHTML = CORES.map(c => '<button type="button" class="cor' + (c.hex.toLowerCase() === atual.toLowerCase() ? ' on' : '') + '" style="background:' + c.hex + '" title="' + c.nome + '" aria-label="' + c.nome + '" data-cor="' + c.hex + '"></button>').join('') +
@@ -1228,7 +1243,7 @@ function fotosLivres(){ return S.fotos.filter(f => !marcDaFoto(f.id)); }
 function itensExportacao(){
   const itens = S.marc.map(m => ({m, g: geometriaMarc(m)}));
   if(S.cfg.avulsas) fotosLivres().forEach(f => {
-    const m = {id: 'av_' + f.id, nome: (f.end ? f.end.split(' - ')[0] : '') || f.nome.replace(/\.[^.]+$/, ''), tipo: 'ponto', cor: S.cfg.corPadrao, esp: 4, local: f.end && f.end.includes(' - ') ? f.end.split(' - ').slice(1).join(' - ') : '', oc: '', causa: '', sol: '', com: f.coment || '', fotos: [f.id]};
+    const m = {id: 'av_' + f.id, nome: (f.end ? f.end.split(' - ')[0] : '') || f.nome.replace(/\.[^.]+$/, ''), tipo: 'ponto', cor: S.cfg.corPadrao, icone: S.cfg.icone || 2000, esp: 4, local: f.end && f.end.includes(' - ') ? f.end.split(' - ').slice(1).join(' - ') : '', oc: '', causa: '', sol: '', com: f.coment || '', fotos: [f.id]};
     itens.push({m, g: temLocal(f) ? {tipo: 'ponto', pt: [f.lat, f.lon]} : null});
   });
   return itens;
@@ -1276,7 +1291,8 @@ async function montarKML(modo, aoAvancar){
   const fotos = await prepararFotos(ids, modo, aoAvancar);
   const base = (S.exp.url || '').trim().replace(/\/?$/, '/');
   const estilos = new Map();
-  const estiloDe = m => { const k = 'tc_' + m.cor.replace('#', '') + '_' + m.esp; if(!estilos.has(k)) estilos.set(k, m); return k; };
+  const iconeDe = m => m.icone || (PADRAO.find(p => p.ponto.toLowerCase() === String(m.cor).toLowerCase()) || {}).icone || 2000;
+  const estiloDe = m => { const k = 'tc_' + m.cor.replace('#', '') + '_' + m.esp + '_' + iconeDe(m); if(!estilos.has(k)) estilos.set(k, m); return k; };
   const pms = itens.map(({m, g}) => {
     const fsIds = fotosOrdenadas(m.fotos).map(f => f.id);
     const car = fsIds.length ? '<gx:Carousel>' + fsIds.map(id => {
@@ -1294,7 +1310,7 @@ async function montarKML(modo, aoAvancar){
     return {pasta: m.pasta || '', x: '<Placemark id="pm_' + m.id + '"><name>' + xml(m.nome) + '</name><description>' + cdata(descricao(m)) + '</description>' + lookAt(pts) +
       '<styleUrl>#' + estiloDe(m) + '</styleUrl>' + car + geo + '</Placemark>'};
   });
-  const sty = [...estilos].map(([k, m]) => '<Style id="' + k + '"><IconStyle><color>' + abgr(m.cor) + '</color><scale>1.1</scale></IconStyle><LabelStyle><scale>0.9</scale></LabelStyle><LineStyle><color>' + abgr(m.cor) + '</color><width>' + m.esp + '</width></LineStyle><PolyStyle><color>' + abgr(m.cor, '59') + '</color></PolyStyle></Style>').join('');
+  const sty = [...estilos].map(([k, m]) => '<Style id="' + k + '"><IconStyle><scale>1.2</scale><Icon><href>https://earth.google.com/earth/document/icon?color=' + m.cor.replace('#', '').toLowerCase() + '&amp;id=' + iconeDe(m) + '&amp;scale=4</href></Icon><hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/></IconStyle><LabelStyle><scale>0.9</scale></LabelStyle><LineStyle><color>' + abgr(m.cor) + '</color><width>' + m.esp + '</width></LineStyle><PolyStyle><color>' + abgr(m.cor, '59') + '</color></PolyStyle></Style>').join('');
   const pasta = (S.exp.pasta || '').trim() || nomePastaPadrao();
   const subs = new Map(); pms.filter(p => p.pasta).forEach(p => { if(!subs.has(p.pasta)) subs.set(p.pasta, []); subs.get(p.pasta).push(p.x); });
   const todos = pms.filter(p => !p.pasta).map(p => p.x).join('') + [...subs].map(([n, a]) => '<Folder><name>' + xml(n) + '</name>' + a.join('') + '</Folder>').join('');
@@ -1462,7 +1478,9 @@ function renderGerarAqui(){
   $('f-txt-proj').textContent = $('txt-proj').textContent;
   $('f-url-on').checked = !!S.exp.urlOn; $('f-c-url').hidden = !S.exp.urlOn; $('f-url').value = S.exp.url || '';
   $('f-link').value = S.exp.link || '';
-  pintarCores('f-cores', S.cfg.corPadrao, c => { S.cfg.corPadrao = c; salvar(); renderGerarAqui(); if(typeof mapa !== 'undefined' && mapa) desenharMapa(false); });
+  $('f-cat').innerHTML = PADRAO.map((p, i) => '<option value="' + i + '">' + esc(p.nome) + '</option>').join('') + '<option value="-1">Outra cor (escolhida abaixo)</option>';
+  $('f-cat').value = String(S.cfg.categoria == null ? -1 : S.cfg.categoria);
+  pintarCores('f-cores', S.cfg.corPadrao, c => { S.cfg.corPadrao = c; S.cfg.categoria = -1; S.cfg.icone = 2000; salvar(); renderGerarAqui(); if(typeof mapa !== 'undefined' && mapa) desenharMapa(false); });
   $('lk-earth').href = (S.exp.link || '').trim() || linkEarth();
 }
 $('f-url-on').onchange = e => { S.exp.urlOn = e.target.checked; salvar(); renderExportar(); };
@@ -1474,6 +1492,13 @@ $('bt-enviar').onclick = () => {
   gerar('kmz', true, link || linkEarth());   // pergunta onde salvar, abre o projeto e gera
 };
 $('f-dentro').onchange = e => { S.exp.dentro = e.target.value; salvar(); renderExportar(); };
+function aplicarCategoria(i){
+  const p = PADRAO[i]; if(!p) return;
+  S.cfg.categoria = i; S.cfg.corPadrao = p.ponto; S.cfg.icone = p.icone; form.cor = p.linha;
+  salvar(); renderGerarAqui(); if(typeof mapa !== 'undefined' && mapa) desenharMapa(false);
+}
+$('f-cat').onchange = e => { const i = +e.target.value; if(i >= 0) aplicarCategoria(i); else { S.cfg.categoria = -1; salvar(); } };
+$('bt-cor-padrao').onclick = () => { aplicarCategoria(0); aviso('Cor padrão do projeto: ' + PADRAO[0].nome + '.'); };
 $('f-dest').onchange = e => { S.exp.destino = e.target.value; salvar(); renderGerarAqui(); renderExportar(); };
 $('f-proj').onchange = e => { S.exp.proj = e.target.value.trim(); salvar(); renderExportar(); };
 $('f-pasta').onchange = e => { S.exp.pasta = e.target.value.trim(); salvar(); renderExportar(); };
