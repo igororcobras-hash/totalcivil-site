@@ -2585,6 +2585,169 @@ ACTS.ocExportar = async function () { if (!M || M.t !== 'oc' || M.novo || !can('
   const oc = await exportarRelato(o, x, dest, mot); render();
   toast('Relato nº ' + x.num + ' exportado para “' + dest.nome + '” como relato nº ' + oc.num + '.', 6000); };
 })();
+/* =====================================================================
+   PATCH SP-06 (04/11/2026)
+   12. Vários planejamentos dos mesmos relatos (aba Planejamento).
+       Cada vez que o Planejamento instruído ou o Planejamento por tonelada é aplicado ou salvo,
+       vira um PLANEJAMENTO guardado na obra (o.planejamentos), com nome, data, ocorrências,
+       dias e totais. Se já existir algum planejamento, ao abrir o programa pergunta se o usuário
+       quer planejar os RELATOS RESTANTES (os que ainda não estão em nenhum planejamento) ou
+       REPLANEJAR os relatos (um novo planejamento dos mesmos relatos, para comparar).
+       O card “Planejamentos salvos” compara os planejamentos lado a lado, permite escolher qual
+       vale (“✅ Usar este”) e excluir os selecionados.
+       Estrutura: o.planejamentos = [{id, nome, tipo:'instruido'|'tonelada', modo, criadoEm, por,
+       emUso, itens:[{ocId, num, dia, semana, svc, q, assum}], resumo:{n, dias, m3, t, cargas, custo,
+       ini, fim, resto}}]; a ocorrência programada por um planejamento guarda oc.planId.
+   ===================================================================== */
+(function () {
+const PLS = o => (o.planejamentos = o.planejamentos || []);
+const abertasPI = o => ativas(o).filter(x => x.status !== 'medida' && x.status !== 'executada');
+const temExec = (o, oc) => o.execucoes.some(e => e.ocorrenciaId === oc.id);
+const emAlgum = o => { const s = new Set(); PLS(o).forEach(p => p.itens.forEach(i => s.add(i.ocId))); return s; };
+const restantes = o => { const s = emAlgum(o); return abertasPI(o).filter(x => !x.semana && !s.has(x.id)); };
+const tipoLab = p => p.tipo === 'tonelada' ? '⚖ Por tonelada' : '🧭 Instruído';
+
+/* o relato está no escopo do cálculo? (restantes / replanejar todos / replanejar um planejamento) */
+function noEscopo(o, P, x, ems) {
+  if (P.spModo === 'restantes') return !ems.has(x.id);
+  if (P.spModo === 'replanejar' && P.spBase) { const b = PLS(o).find(p => p.id === P.spBase); return !b || b.itens.some(i => i.ocId === x.id); }
+  return true; }
+
+/* piCalc com o escopo acima; ao replanejar, o custo já programado dos relatos replanejados volta ao saldo livre */
+piCalc = function () { const o = O(), P = M.p, ems = emAlgum(o);
+  const solta = P.spModo === 'replanejar' ? abertasPI(o).filter(x => x.semana && !temExec(o, x) && noEscopo(o, P, x, ems)).map(x => [x, x.semana]) : [];
+  let SP; try { solta.forEach(([x]) => { x.semana = ''; }); SP = saldoPlan(o); } finally { solta.forEach(([x, s]) => { x.semana = s; }); }
+  const cap = P.camDia * P.carga;
+ if(!(cap>0)||!(P.dens>0)||!(P.n>=1)){toast('Informe carga, caminhões por dia, peso específico e o período.');return}
+ const cmp=P.ordem==='antig'?(a,b)=>(a.oc.criadoEm||'').localeCompare(b.oc.criadoEm||'')||a.oc.num-b.oc.num:P.ordem==='vol'?(a,b)=>b.v.m3-a.v.m3||a.oc.num-b.oc.num:(a,b)=>(PRI[priEf(a.oc)].o-PRI[priEf(b.oc)].o)||(a.oc.criadoEm||'').localeCompare(b.oc.criadoEm||'')||a.oc.num-b.oc.num;
+ let pool=ativas(o).filter(x=>x.status!=='medida'&&x.status!=='executada'&&noEscopo(o,P,x,ems)&&P.pris[priEf(x)]&&(!P.soVist||x.vistFiscal)&&(!(P.bairros||[]).length||P.bairros.includes((x.bairro||'').trim()))&&(!P.soSem||!x.semana)&&(!P.soConf||x.priConf)).map(x=>({oc:x,v:piVol(o,x,P)}));pool.sort(cmp);
+ const nTot=pool.length;const nd=P.unid==='dia'?P.n:P.unid==='semana'?P.n*5:P.n*22;const R=Math.max(0,P.raioKm)*1000,RM=Math.max(0,P.raioMax||0)*1000;const budget=P.limSaldo?SP.livre:Infinity;let gasto=0,dia=P.inicio,cnt=0;const dias=[];
+ let guard=0;while(cnt<nd&&pool.length&&guard++<4000){const wd=pd(dia).getUTCDay();if(wd===0||wd===6){dia=addDias(dia,1);continue}
+  let used=0,custo=0,anchor=null,raioU=0;const items=[];
+  if(P.ton){const ai=pool.findIndex(p=>gasto+p.v.custo<=budget+1e-9);if(ai>=0){const a0=pool.splice(ai,1)[0];items.push(a0);used+=a0.v.t;custo=r2(custo+a0.v.custo);gasto=r2(gasto+a0.v.custo);if(a0.oc.lat!=null)anchor={lat:a0.oc.lat,lng:a0.oc.lng};
+   for(;;){let bi=-1,bd=Infinity;pool.forEach((p,i)=>{if(used+p.v.t>cap+1e-9||gasto+p.v.custo>budget+1e-9)return;if(anchor){if(p.oc.lat==null)return;const dd=distM(anchor,{lat:p.oc.lat,lng:p.oc.lng});if(RM>0&&dd>RM)return;if(dd<bd){bd=dd;bi=i}}else if(p.oc.lat==null&&bi<0)bi=i});
+    if(bi<0)break;const p=pool.splice(bi,1)[0];items.push(p);used+=p.v.t;custo=r2(custo+p.v.custo);gasto=r2(gasto+p.v.custo);if(anchor&&isFinite(bd))raioU=Math.max(raioU,bd)}}}
+  else for(;;){const i=pool.findIndex(p=>{if(items.length&&used+p.v.t>cap+1e-9)return false;if(gasto+p.v.custo>budget+1e-9)return false;if(anchor&&R>0&&p.oc.lat!=null&&distM(anchor,{lat:p.oc.lat,lng:p.oc.lng})>R)return false;return true});
+   if(i<0)break;const p=pool.splice(i,1)[0];items.push(p);used+=p.v.t;custo=r2(custo+p.v.custo);gasto=r2(gasto+p.v.custo);if(!anchor&&p.oc.lat!=null)anchor={lat:p.oc.lat,lng:p.oc.lng}}
+  if(!items.length)break;dias.push({dia,items,anchor,raio:raioU,pct:cap>0?used/cap*100:0,t:used,m3:items.reduce((s,p)=>s+p.v.m3,0),cargas:Math.ceil(used/P.carga-1e-9),custo});cnt++;dia=addDias(dia,1)}
+ dias.forEach(d=>{d.rota=piRota(d.items);d.hor=piHoras(P,d.rota)});
+ M.res={dias,resto:pool,nTot,cap,SP};piMostra()};
+
+/* monta o registro do planejamento a partir do cálculo da janela */
+function novoPlano(o, P, res, nome) {
+  const itens = [], tot = {n: 0, m3: 0, t: 0, cargas: 0, custo: 0};
+  res.dias.forEach(d => { tot.m3 += d.m3; tot.t += d.t; tot.cargas += d.cargas; tot.custo = r2(tot.custo + d.custo);
+    d.items.forEach(({oc, v}) => { tot.n++; itens.push({ocId: oc.id, num: oc.num, dia: d.dia, semana: isoWeek(d.dia), svc: oc.servicoId || oc.servSug || P.svcPad || '', q: v.q, assum: !!(v.assum && v.custoOk)}); }); });
+  const n = PLS(o).length + 1;
+  return {id: 'pl' + uid(), nome: nome || ('Planejamento ' + n + ' — ' + (P.ton ? 'por tonelada' : 'instruído')), tipo: P.ton ? 'tonelada' : 'instruido', modo: P.spModo || 'restantes', base: P.spBase || '',
+    criadoEm: new Date().toISOString(), por: (S.nome ? S.nome + ' — ' : '') + (PERFIL[S.perfil] || ''), emUso: false, itens,
+    resumo: Object.assign(tot, {dias: res.dias.length, ini: res.dias.length ? res.dias[0].dia : '', fim: res.dias.length ? res.dias[res.dias.length - 1].dia : '', resto: res.resto.length}),
+    params: {unid: P.unid, n: P.n, inicio: P.inicio, raioKm: P.raioKm, raioMax: P.raioMax, carga: P.carga, camDia: P.camDia, dens: P.dens}}; }
+
+/* tira da programação as ocorrências que um planejamento programou (só as que ainda não têm execução) */
+function soltarPlano(o, p, manter, motivo) { let n = 0;
+  p.itens.forEach(i => { if (manter && manter.has(i.ocId)) return; const oc = o.ocorrencias.find(x => x.id === i.ocId);
+    if (!oc || oc.planId !== p.id || temExec(o, oc) || oc.semana !== i.semana) return;
+    oc.semana = ''; oc.diaPlan = ''; oc.planId = ''; log(oc, motivo + ': “' + p.nome + '”'); recalcStatus(o, oc); n++; });
+  return n; }
+
+/* passa a usar o planejamento: programa as ocorrências dele e desliga os que têm ocorrências em comum */
+function usarPlano(o, p) { const ids = new Set(p.itens.map(i => i.ocId)); let n = 0, pul = 0;
+  PLS(o).forEach(q => { if (q.id !== p.id && q.emUso && q.itens.some(i => ids.has(i.ocId))) { q.emUso = false; soltarPlano(o, q, ids, 'Saiu da programação (trocado por “' + p.nome + '”)'); } });
+  p.itens.forEach(i => { const oc = o.ocorrencias.find(x => x.id === i.ocId);
+    if (!oc || oc.arquivo || temExec(o, oc) || oc.status === 'medida' || oc.status === 'executada') { pul++; return; }
+    if (S.perfil === 'gestor' && !oc.priConf) { oc.priG = priEf(oc); oc.priConf = true; }
+    oc.semana = i.semana; oc.diaPlan = i.dia; oc.planId = p.id;
+    if (!oc.servicoId) oc.servicoId = i.svc || '';
+    if (!(oc.qtdPlan > 0) && oc.qtdFiscal > 0) oc.qtdPlan = oc.qtdFiscal; else if (!(oc.qtdPlan > 0) && oc.servicoId && i.assum) oc.qtdPlan = i.q;
+    log(oc, 'Programada pelo planejamento “' + p.nome + '”: ' + fData(i.dia) + ' (' + labSem(i.semana) + ')'); recalcStatus(o, oc); n++; });
+  p.emUso = true; return {n, pul}; }
+
+function nomeDaJanela() { const e = $('#sp6-nome'); return e ? e.value.trim() : ''; }
+piAplicar = function () { if (!canPI()) { toast('Sem permissão para aplicar o planejamento instruído.'); return; } const o = O();
+  if (!M.res || !M.res.dias.length) { toast('Calcule antes de aplicar.'); return; }
+  const p = novoPlano(o, M.p, M.res, nomeDaJanela()); PLS(o).push(p); const r = usarPlano(o, p);
+  saveObra(o); fecharModal(false); S.tab = 'plan'; render();
+  toast('“' + p.nome + '” salvo e aplicado: ' + r.n + ' ocorrência(s) programadas' + (r.pul ? '; ' + r.pul + ' já tinham execução e ficaram como estavam' : '') + '.', 7000); };
+ACTS.sp6Salvar = function () { if (!M || M.t !== 'pi') return; if (!canPI()) { toast('Sem permissão.'); return; } const o = O();
+  if (!M.res || !M.res.dias.length) { toast('Calcule antes de salvar.'); return; }
+  const p = novoPlano(o, M.p, M.res, nomeDaJanela()); PLS(o).push(p); saveObra(o); fecharModal(false); S.tab = 'plan'; render();
+  toast('“' + p.nome + '” salvo sem aplicar. Compare no card “Planejamentos salvos” e toque em “✅ Usar este” no melhor.', 7000); };
+
+/* janela do planejamento: faixa com o modo, nome do planejamento e botão “Salvar sem aplicar” */
+const _modalPI6 = modalPI;
+modalPI = function () { let h = _modalPI6.apply(this, arguments); const P = M.p, o = O();
+  const base = P.spBase && PLS(o).find(p => p.id === P.spBase);
+  const faixa = P.spModo ? `<div class="alert" style="background:#eef4fb;border-color:#2563a8">${P.spModo === 'restantes' ? '➕ <b>Planejando os relatos restantes</b>: entram só os relatos que ainda não estão em nenhum planejamento salvo.' : '🔁 <b>Replanejando os relatos</b>' + (base ? ' do planejamento “' + esc(base.nome) + '”' : ' (todos os abertos, já planejados ou não)') + ': o resultado vira um planejamento NOVO, para comparar com os outros. Os existentes não mudam até você escolher qual usar.'}</div>` : '';
+  const nome = `<label>Nome deste planejamento<input id="sp6-nome" placeholder="Planejamento ${PLS(o).length + 1} — ${P.ton ? 'por tonelada' : 'instruído'}" value="${esc(P.spNome || '')}" data-inp="sp6Nome"></label>`;
+  h = h.replace('<div class="mb">', '<div class="mb">' + faixa);
+  h = h.replace('<div id="pi-res"></div>', '<div id="pi-res"></div>' + nome);
+  h = h.replace('<button class="btn pri" data-act="piAplicar" id="pi-ap" disabled>', '<button class="btn" data-act="sp6Salvar" id="sp6-salvar" disabled title="Guarda este planejamento para comparar, sem mudar a programação">💾 Salvar sem aplicar</button><button class="btn pri" data-act="piAplicar" id="pi-ap" disabled>');
+  return h; };
+if (typeof INP === 'object' && INP) INP.sp6Nome = el => { if (M && M.p) M.p.spNome = el.value; };
+const _piMostra6 = piMostra;
+piMostra = function () { _piMostra6.apply(this, arguments); const b = $('#sp6-salvar'), a = $('#pi-ap'); if (b && a) b.disabled = a.disabled; };
+
+/* ao abrir: se já houver planejamentos, perguntar “restantes” ou “replanejar” */
+function abrirComPergunta(k, orig) { return function (d, el, ev) { if (!canPI()) return orig.apply(this, arguments); const o = O(), pls = PLS(o);
+  const prep = (modo, base) => { const key = k === 'pt' ? 'pt' : 'pi'; if (!S.f[key]) S.f[key] = key === 'pt' ? Object.assign(piDef(), {ton: true}) : piDef();
+    const P = S.f[key]; P.spModo = modo; P.spBase = base || ''; P.spNome = ''; if (modo === 'restantes') P.soSem = true; if (modo === 'replanejar') P.soSem = false; };
+  if (!pls.length) { prep('', ''); return orig.apply(this, arguments); }
+  const nr = restantes(o).length;
+  M = {t: 'sp6Esc', k, orig};
+  abrirModal(`<div class="mh"><h3>${k === 'pt' ? '⚖ Planejamento por tonelada' : '🧭 Planejamento instruído'}</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+ <p>Esta obra já tem <b>${pls.length}</b> planejamento(s) salvo(s). O que você quer fazer?</p>
+ <label class="chk" style="display:block;margin:8px 0"><input type="radio" name="sp6-modo" value="restantes" ${nr ? 'checked' : ''}> <b>Planejar os relatos restantes</b> <span class="muted small">— ${nr} relato(s) ainda sem planejamento</span></label>
+ <label class="chk" style="display:block;margin:8px 0"><input type="radio" name="sp6-modo" value="replanejar" ${nr ? '' : 'checked'}> <b>Replanejar os relatos</b> <span class="muted small">— cria um planejamento novo dos mesmos relatos, para comparar e escolher o melhor</span></label>
+ <label style="margin-left:26px">Relatos a replanejar<select id="sp6-base"><option value="">Todos os relatos abertos (já planejados ou não)</option>${pls.map(p => `<option value="${p.id}">Os ${p.itens.length} relato(s) de “${esc(p.nome)}”</option>`).join('')}</select></label>
+ <div class="row gap" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mClose">Cancelar</button><button class="btn pri" data-act="sp6Continuar">Continuar</button></div></div>`);
+  M.prep = prep; }; }
+ACTS.ptAbrir = abrirComPergunta('pt', ACTS.ptAbrir);
+ACTS.piAbrir = abrirComPergunta('pi', ACTS.piAbrir);
+ACTS.sp6Continuar = function () { if (!M || M.t !== 'sp6Esc') return; const r = $('input[name="sp6-modo"]:checked'), modo = r ? r.value : 'restantes';
+  if (modo === 'restantes' && !restantes(O()).length && !confirm('Não há relatos restantes sem planejamento. Abrir mesmo assim?')) return;
+  const {k, orig, prep} = M; prep(modo, modo === 'replanejar' ? ($('#sp6-base') || {}).value : ''); orig.call(ACTS); };
+
+/* card “Planejamentos salvos” na aba Planejamento */
+function cardPlanos(o) { const pls = PLS(o); if (!pls.length && !canPI()) return '';
+  const sel = S.f.sp6Sel = S.f.sp6Sel || {}; const ns = pls.filter(p => sel[p.id]).length; const pode = canPI();
+  const melhor = (f, mx) => { const v = pls.map(f).filter(x => x > 0); if (v.length < 2 || Math.min(...v) === Math.max(...v)) return NaN; return mx ? Math.max(...v) : Math.min(...v); };
+  const minC = melhor(p => p.resumo.custo), minD = melhor(p => p.resumo.dias), maxN = melhor(p => p.resumo.n, true);
+  const linhas = pls.map(p => { const R = p.resumo;
+    const det = (() => { const g = new Map(); p.itens.forEach(i => { if (!g.has(i.dia)) g.set(i.dia, []); g.get(i.dia).push(i); });
+      return [...g.entries()].map(([d, its]) => `<p class="small" style="margin:2px 0"><b>${fData(d)}</b>: ${its.map(i => { const oc = o.ocorrencias.find(x => x.id === i.ocId); return '#' + i.num + (oc ? ' ' + esc(ocLocal(oc)) : ' (excluída)'); }).join('; ')}</p>`).join(''); })();
+    return `<tr${p.emUso ? ' style="background:#eef7f0"' : ''}><td><input type="checkbox" data-chg="sp6Sel" data-id="${p.id}" ${sel[p.id] ? 'checked' : ''} title="Selecionar"></td>
+ <td><b>${esc(p.nome)}</b><div class="small muted">${tipoLab(p)} · ${p.modo === 'replanejar' ? 'replanejamento' : 'relatos restantes'} · ${fData(String(p.criadoEm).slice(0, 10))}${p.por ? ' · ' + esc(p.por) : ''}</div>
+ <details><summary class="small">Ver ocorrências por dia</summary>${det || '<p class="small muted">Sem ocorrências.</p>'}</details></td>
+ <td class="r">${R.n}${R.n === maxN ? ' ⭐' : ''}</td><td class="r">${R.dias}${R.dias === minD ? ' ⭐' : ''}</td><td>${R.ini ? fData(R.ini).slice(0, 5) + ' a ' + fData(R.fim).slice(0, 5) : '—'}</td>
+ <td class="r">${fN(R.m3)}</td><td class="r">${fN(R.t, 1)}</td><td class="r">${R.cargas}</td><td class="r">${fN(R.custo)}${R.custo === minC ? ' ⭐' : ''}</td><td class="r">${R.resto}</td>
+ <td>${p.emUso ? '<span class="chip" style="--c:#2e7d4f">✅ em uso</span>' : `<button class="btn sm pri" data-act="sp6Usar" data-id="${p.id}" ${pode ? '' : 'disabled'}>✅ Usar este</button>`} <button class="btn sm" data-act="sp6Renomear" data-id="${p.id}" ${pode ? '' : 'disabled'} title="Renomear">✏</button></td></tr>`; }).join('');
+  return `<div class="card" style="margin-bottom:16px" id="sp6-card"><h3>📚 Planejamentos salvos</h3>
+ <p class="muted small">Cada vez que você aplica ou salva um Planejamento instruído ou por tonelada, ele fica guardado aqui. Faça vários planejamentos dos mesmos relatos, compare (⭐ = mais ocorrências, menos dias ou menor custo) e toque em <b>✅ Usar este</b> no melhor: as ocorrências passam a seguir esse planejamento. Os que não ficaram bons podem ser excluídos.</p>
+ ${pls.length ? `<div class="row gap" style="margin:6px 0"><span class="small muted"><b>${pls.length}</b> planejamento(s) · <b>${ns}</b> selecionado(s)</span><span class="sp"></span><button class="btn sm" data-act="sp6SelTodos">☑ Selecionar todos</button><button class="btn sm" data-act="sp6SelLimpar">☐ Limpar seleção</button><button class="btn sm" data-act="sp6Excluir" style="color:#b42318;border-color:#b42318" ${pode && ns ? '' : 'disabled'}>🗑 Excluir planejamentos selecionados</button></div>
+ <div class="tablewrap"><table class="tb"><thead><tr><th></th><th>Planejamento</th><th class="r">Ocorr.</th><th class="r">Dias</th><th>Período</th><th class="r">m³</th><th class="r">Toneladas</th><th class="r">Cargas</th><th class="r">Custo (R$)</th><th class="r">Ficaram para depois</th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>`
+  : '<p class="muted small">Nenhum planejamento salvo ainda. Use “🧭 Planejamento instruído” ou “⚖ Planejamento por tonelada” abaixo.</p>'}</div>`; }
+const _tPlan6 = tPlan;
+tPlan = function (o) { const h = _tPlan6.apply(this, arguments); const c = cardPlanos(o); if (!c) return h;
+  const i = h.indexOf('<div class="card"><h3>1. Prioridades'); return i < 0 ? c + h : h.slice(0, i) + c + h.slice(i); };
+
+CHG.sp6Sel = function (el, d) { S.f.sp6Sel = S.f.sp6Sel || {}; S.f.sp6Sel[d.id] = el.checked; render(); };
+ACTS.sp6SelTodos = function () { S.f.sp6Sel = {}; PLS(O()).forEach(p => { S.f.sp6Sel[p.id] = true; }); render(); };
+ACTS.sp6SelLimpar = function () { S.f.sp6Sel = {}; render(); };
+ACTS.sp6Usar = function (d) { if (!canPI()) { toast('Só o Gestor / Secretário escolhe o planejamento.'); return; } const o = O(), p = PLS(o).find(x => x.id === d.id); if (!p) return;
+  const ids = new Set(p.itens.map(i => i.ocId)); const conf = PLS(o).filter(q => q.id !== p.id && q.emUso && q.itens.some(i => ids.has(i.ocId)));
+  if (!confirm('Usar “' + p.nome + '”? As ' + p.itens.length + ' ocorrência(s) dele passam a ser programadas pelas datas deste planejamento.' + (conf.length ? '\n\nDeixa de valer: ' + conf.map(q => '“' + q.nome + '”').join(', ') + ' (as ocorrências dele que não estão neste voltam a ficar sem semana).' : '') + '\n\nOcorrências que já têm execução não mudam.')) return;
+  const r = usarPlano(o, p); saveObra(o); render(); toast('“' + p.nome + '” em uso: ' + r.n + ' ocorrência(s) programadas' + (r.pul ? '; ' + r.pul + ' ficaram como estavam (já têm execução)' : '') + '.', 7000); };
+ACTS.sp6Renomear = function (d) { if (!canPI()) return; const o = O(), p = PLS(o).find(x => x.id === d.id); if (!p) return;
+  const n = prompt('Novo nome do planejamento:', p.nome); if (n == null || !n.trim()) return; p.nome = n.trim(); saveObra(o); render(); };
+ACTS.sp6Excluir = function () { if (!canPI()) { toast('Só o Gestor / Secretário exclui planejamentos.'); return; } const o = O(), sel = S.f.sp6Sel || {};
+  const alvo = PLS(o).filter(p => sel[p.id]); if (!alvo.length) { toast('Selecione os planejamentos a excluir.'); return; }
+  const uso = alvo.filter(p => p.emUso);
+  if (!confirm('Excluir ' + alvo.length + ' planejamento(s)?\n\n' + alvo.map(p => '• ' + p.nome + (p.emUso ? ' (EM USO)' : '')).join('\n') + (uso.length ? '\n\nOs que estão em uso deixam de valer: as ocorrências programadas por eles voltam a ficar sem semana (as que já têm execução não mudam).' : '') + '\n\nNão dá para desfazer.')) return;
+  let n = 0; uso.forEach(p => { n += soltarPlano(o, p, null, 'Saiu da programação (planejamento excluído)'); });
+  const ids = new Set(alvo.map(p => p.id)); o.planejamentos = PLS(o).filter(p => !ids.has(p.id)); S.f.sp6Sel = {};
+  saveObra(o); render(); toast(alvo.length + ' planejamento(s) excluído(s).' + (n ? ' ' + n + ' ocorrência(s) voltaram a ficar sem semana.' : ''), 6000); };
+})();
 </script>
 </body>
 </html>
