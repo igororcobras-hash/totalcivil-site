@@ -1358,9 +1358,10 @@ async function completarLocais(){
 }
 async function gerar(tipo){
   const msg = msgExp();
+  if(S.exp.urlOn && !(S.exp.url || '').trim()){ S.exp.urlOn = false; salvar(); renderExportar(); }   // sem endereço público: segue com as fotos dentro do arquivo
   const urlOn = S.exp.urlOn && (S.exp.url || '').trim();
-  if(S.exp.urlOn && !urlOn){ msg.innerHTML = '<div class="msg bad">Informe o endereço da pasta das fotos no campo acima ou desmarque “Usar endereço público para as fotos”.</div>'; return; }
-  if(S.exp.destino === 'mesclar' && !projKML){ msg.innerHTML = '<div class="msg bad">Envie o KML exportado do projeto existente.</div>'; return; }
+  let avisoDestino = '';
+  if(S.exp.destino === 'mesclar' && !projKML){ S.exp.destino = 'pasta'; salvar(); renderExportar(); avisoDestino = '<div class="msg info">Você não enviou o KML do projeto existente, então gerei só a <b>pasta nova</b> (arquivo pequeno) para importar no projeto. Para receber o projeto completo, envie o KML exportado dele.</div>'; }
   const modo = urlOn ? 'url' : (tipo === 'kmz' ? 'kmz' : 'data');
   if(tipo === 'kmz' && typeof JSZip === 'undefined'){ msg.innerHTML = '<div class="msg bad">O compactador não carregou (internet). Gere o KML.</div>'; return; }
   BT_GERAR.forEach(id => $(id).disabled = true);
@@ -1378,7 +1379,7 @@ async function gerar(tipo){
     }else{ blob = new Blob([r.kml], {type: 'application/vnd.google-earth.kml+xml'}); nome = nomeArquivoSaida('kml'); }
     baixar(nome, blob);
     const faltam = [...r.fotos.values()].filter(o => o.falta).length;
-    msg.innerHTML = '<div class="msg ok"><b>' + esc(nome) + '</b> gerado (' + kb(blob.size) + '): ' + r.nPm + ' marcação(ões), ' + r.ids.length + ' foto(s).</div>' +
+    msg.innerHTML = avisoDestino + '<div class="msg ok"><b>' + esc(nome) + '</b> gerado (' + kb(blob.size) + '): ' + r.nPm + ' marcação(ões), ' + r.ids.length + ' foto(s).</div>' +
       (S.fotos.some(f => !temLocal(f)) ? '<div class="msg warn">' + S.fotos.filter(f => !temLocal(f)).length + ' foto(s) continuam sem local (sem coordenada, tarja legível ou endereço encontrado) e ficaram fora do arquivo. Marque-as no mapa e gere de novo.</div>' : '') +
       (faltam ? '<div class="msg warn">' + faltam + ' foto(s) sem o arquivo original neste aparelho ficaram fora do carrossel. Anexe-as de novo.</div>' : '') +
       '<div class="msg info">Agora abra o <a href="' + linkEarth() + '" target="_blank" rel="noopener"><b>Google Earth Web neste local</b></a> e importe o arquivo: <b>Arquivo › Abrir arquivo KML local</b> (ou <b>Importar</b> dentro do projeto). O Google não permite enviar o arquivo por link; o importador do Earth precisa ser acionado por você.</div>' + (blob.size > 20 * 1048576 ? '<div class="msg warn">Arquivo grande. Se o Google Earth Web travar, reduza a resolução na aba Fotos.</div>' : '') +
