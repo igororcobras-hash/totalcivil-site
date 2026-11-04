@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<!-- Acesso: login da página principal e liberação no painel Usuários -->
+<script src="/firebase-config.js"></script>
+<script src="/acesso-programa.js" data-campo="googleearthAtivo" data-pedido="googleearthSolicitado" data-nome="Imagens GoogleEarth" data-voltar="/googleearth/"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Imagens GoogleEarth</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/exifr@7.1.3/dist/lite.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+/* ===== DESIGN TOKENS — Total Civil ===== */
+:root{
+  --bg:#F6F4EF; --surface:#FFFFFF; --ink:#0F1E33; --muted:#6B7689; --line:#E6E0D6;
+  --orange:#FF6B1A; --blue:#12355F; --blue-2:#1E4E8C; --nav-bg:#12355F;
+  --ok:#166534; --ok-bg:#E9F7EE; --warn:#92400E; --warn-bg:#FFF7E0; --bad:#B42318; --bad-bg:#FDECEA; --info:#1E4E8C; --info-bg:#EAF1FB;
+  --disp:'Fraunces',Georgia,serif; --sans:'Plus Jakarta Sans',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  color-scheme:light;
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 var(--sans)}
+button,input,select,textarea{font:inherit;color:inherit}
+a{color:var(--blue-2)}
+
+/* ---------- Tela inicial: ambiente de uso (modelo do Pavimento Flexível) ---------- */
+#splash{position:fixed;inset:0;z-index:9999;overflow-y:auto;background:var(--nav-bg);color:#fff;display:flex;padding:32px 16px}
+.splash-box{width:100%;max-width:760px;margin:auto}
+.splash-norma{font-size:11px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.62)}
+.splash-titulo{font-family:var(--disp);font-size:28px;font-weight:800;line-height:1.2;margin:6px 0 4px;text-wrap:balance}
+.splash-sub{font-size:13.5px;color:rgba(255,255,255,.8)}
+.splash-linha{height:1px;background:rgba(255,255,255,.18);margin:22px 0 18px}
+.splash-prompt{font-size:12px;font-weight:600;letter-spacing:.8px;text-transform:uppercase;color:rgba(255,255,255,.7);margin-bottom:12px}
+.splash-cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+@media(max-width:640px){.splash-cards{grid-template-columns:1fr}}
+.splash-card{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:6px;text-align:left;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.22);border-radius:8px;padding:16px 16px 14px;color:#fff;cursor:pointer;min-height:44px}
+.splash-card:hover,.splash-card:focus-visible{background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.55);outline:none}
+.splash-card.detectado{border-color:#9cc3ff;background:rgba(156,195,255,.1)}
+.splash-card svg{width:28px;height:28px}
+.splash-card-label{font-size:16px;font-weight:700}
+.splash-card-desc{font-size:12px;line-height:1.45;color:rgba(255,255,255,.75)}
+.splash-tag{display:none;position:absolute;top:10px;right:10px;font-size:10px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#0f2340;background:#9cc3ff;border-radius:3px;padding:2px 6px}
+.splash-card.detectado .splash-tag{display:inline-block}
+.splash-note{font-size:11.5px;color:rgba(255,255,255,.6);margin-top:18px;line-height:1.5}
+
+/* ---------- Cabeçalho e abas ---------- */
+.topo{background:var(--nav-bg);color:#fff;padding:12px max(16px,env(safe-area-inset-right)) 0 max(16px,env(safe-area-inset-left))}
+.topo-lin{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.marca{display:flex;align-items:center;gap:10px;min-width:0}
+.marca svg{width:30px;height:30px;flex:none}
+.marca h1{font-family:var(--disp);font-size:21px;font-weight:800;margin:0;line-height:1.15}
+.marca .sub{font-size:12px;color:rgba(255,255,255,.72)}
+.topo-bts{display:flex;gap:6px;flex-wrap:wrap}
+.tbt{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.25);color:#fff;border-radius:6px;padding:6px 11px;font-size:12.5px;font-weight:600;cursor:pointer;text-decoration:none}
+.tbt:hover{background:rgba(255,255,255,.2)}
+.header-nav{display:flex;gap:2px;margin-top:10px;overflow-x:auto}
+.header-nav button{background:none;border:0;color:rgba(255,255,255,.75);padding:10px 14px;font-weight:700;font-size:13.5px;cursor:pointer;border-radius:8px 8px 0 0;white-space:nowrap}
+.header-nav button .n{display:inline-block;width:20px;height:20px;line-height:20px;text-align:center;border-radius:50%;background:rgba(255,255,255,.18);font-size:11px;margin-right:6px}
+.header-nav button.active{background:var(--bg);color:var(--ink)}
+.header-nav button.active .n{background:var(--orange);color:#fff}
+
+main{max-width:1200px;margin:0 auto;padding:18px max(16px,env(safe-area-inset-right)) 90px max(16px,env(safe-area-inset-left))}
+.aba{display:none}.aba.ativa{display:block}
+h2{font-family:var(--disp);font-size:22px;margin:0 0 4px}
+.intro{color:var(--muted);margin:0 0 16px;max-width:75ch}
+.cartao{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
+.cartao h3{font-size:15px;margin:0 0 10px}
+.linha{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.campo{display:flex;flex-direction:column;gap:4px;min-width:0}
+.campo label,.rot{font-size:12px;font-weight:700;color:var(--muted);letter-spacing:.2px}
+.campo input,.campo select,.campo textarea{border:1px solid var(--line);border-radius:7px;padding:8px 10px;background:#fff;min-height:38px}
+.campo textarea{min-height:60px;resize:vertical}
+.campo input:focus,.campo select:focus,.campo textarea:focus{outline:2px solid var(--blue-2);outline-offset:0;border-color:transparent}
+.bt{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:#fff;border-radius:8px;padding:8px 13px;font-weight:700;font-size:13px;cursor:pointer;min-height:38px}
+.bt:hover{border-color:var(--blue-2)}
+.bt.pri{background:var(--orange);border-color:var(--orange);color:#fff}
+.bt.pri:hover{filter:brightness(.95)}
+.bt.az{background:var(--blue);border-color:var(--blue);color:#fff}
+.bt.peq{padding:5px 9px;min-height:30px;font-size:12px}
+.bt.perigo{color:var(--bad)}
+.bt[disabled]{opacity:.5;cursor:default}
+.bt:focus-visible,.header-nav button:focus-visible,.tbt:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+.ajuda{font-size:12.5px;color:var(--muted);margin:6px 0 0}
+.msg{border-radius:8px;padding:10px 12px;font-size:13px;margin:10px 0}
+.msg.info{background:var(--info-bg);color:var(--info)}.msg.warn{background:var(--warn-bg);color:var(--warn)}.msg.ok{background:var(--ok-bg);color:var(--ok)}.msg.bad{background:var(--bad-bg);color:var(--bad)}
+
+/* ---------- Fotos ---------- */
+.solta{border:2px dashed #cfc6b6;border-radius:12px;padding:22px;text-align:center;background:#fbfaf7}
+.solta.sobre{border-color:var(--orange);background:#fff4ec}
+.resumo{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.pill{font-size:12px;font-weight:700;border-radius:99px;padding:3px 10px;background:#eef0f3;color:var(--ink)}
+.pill.gps{background:var(--ok-bg);color:var(--ok)}.pill.tarja{background:var(--info-bg);color:var(--info)}.pill.endereco{background:var(--warn-bg);color:var(--warn)}.pill.manual{background:#F1ECFB;color:#5B3BA0}.pill.sem{background:var(--bad-bg);color:var(--bad)}
+.grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px}
+.foto{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden;display:flex;flex-direction:column;min-width:0}
+.foto.sel{outline:2px solid var(--orange)}
+.foto .img{position:relative;aspect-ratio:4/3;background:#e9e5dc}
+.foto .img img{width:100%;height:100%;object-fit:cover;display:block;cursor:zoom-in}
+.foto .img .ck{position:absolute;top:8px;left:8px;width:22px;height:22px;accent-color:var(--orange)}
+.foto .img .pill{position:absolute;bottom:8px;left:8px}
+.foto .img .grp{position:absolute;top:8px;right:8px;font-size:11px;font-weight:700;color:#fff;border-radius:99px;padding:2px 8px;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.foto .corpo{padding:10px;display:flex;flex-direction:column;gap:7px}
+.foto .nome{font-weight:700;font-size:12.5px;word-break:break-all}
+.foto .campo input,.foto .campo textarea{min-height:32px;padding:6px 8px;font-size:12.5px}
+.foto .campo textarea{min-height:44px}
+.foto .bts{display:flex;flex-wrap:wrap;gap:6px}
+.vazio{color:var(--muted);text-align:center;padding:30px 10px}
+
+/* ---------- Mapa ---------- */
+#mapa{height:min(68vh,640px);border-radius:12px;border:1px solid var(--line)}
+.leaflet-popup-content img{width:220px;max-width:100%;border-radius:6px;display:block;margin-bottom:6px}
+.faixa-marcar{position:sticky;top:0;z-index:500;background:var(--orange);color:#fff;border-radius:8px;padding:9px 12px;font-weight:700;margin-bottom:10px;display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+
+/* ---------- Marcações ---------- */
+.dupla{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:14px}
+@media(max-width:900px){.dupla{grid-template-columns:1fr}}
+.mini{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:8px;max-height:420px;overflow:auto;padding:2px}
+.mini label{position:relative;display:block;border:2px solid transparent;border-radius:8px;overflow:hidden;cursor:pointer;background:#e9e5dc}
+.mini label.on{border-color:var(--orange)}
+.mini img{width:100%;aspect-ratio:1;object-fit:cover;display:block}
+.mini input{position:absolute;top:4px;left:4px;accent-color:var(--orange)}
+.mini span{position:absolute;left:0;right:0;bottom:0;background:rgba(15,30,51,.72);color:#fff;font-size:10.5px;padding:2px 4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mini .semloc{position:absolute;top:4px;right:4px;width:10px;height:10px;border-radius:50%;background:var(--bad)}
+.cores{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.cor{width:30px;height:30px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0}
+.cor.on{box-shadow:0 0 0 2px var(--ink)}
+.tipos{display:flex;gap:6px;flex-wrap:wrap}
+.tipos label{border:1px solid var(--line);border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:700;font-size:13px;background:#fff;display:flex;gap:6px;align-items:center}
+.tipos input{accent-color:var(--orange)}
+.tipos label.on{border-color:var(--orange);background:#fff4ec}
+.lista-marc{display:flex;flex-direction:column;gap:10px}
+.marc{display:flex;gap:12px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px;background:#fff}
+.marc .faixa{width:8px;align-self:stretch;border-radius:4px;flex:none}
+.marc .info{flex:1;min-width:0}
+.marc .tit{font-weight:800}
+.marc .det{font-size:12.5px;color:var(--muted)}
+.marc .bts{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+
+/* ---------- Exportar ---------- */
+.opcoes{display:flex;flex-direction:column;gap:8px}
+.opcao{display:flex;gap:10px;align-items:flex-start;border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;background:#fff}
+.opcao input{margin-top:3px;accent-color:var(--orange)}
+.opcao b{display:block}
+.opcao small{color:var(--muted)}
+.opcao.on{border-color:var(--orange);background:#fff8f2}
+ol.passos{margin:6px 0 0;padding-left:20px}
+ol.passos li{margin:4px 0}
+.barra-prog{height:8px;background:#ece7dd;border-radius:99px;overflow:hidden;margin-top:8px}
+.barra-prog i{display:block;height:100%;width:0;background:var(--orange);transition:width .2s}
+
+/* ---------- Visualizador e aviso ---------- */
+#visor{position:fixed;inset:0;z-index:3000;background:rgba(10,15,25,.9);display:flex;align-items:center;justify-content:center;padding:16px;cursor:zoom-out}
+#visor img{max-width:100%;max-height:100%;border-radius:8px}
+#aviso{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:3500;background:var(--ink);color:#fff;border-radius:10px;padding:10px 16px;font-weight:600;font-size:13.5px;max-width:min(92vw,560px);box-shadow:0 8px 24px rgba(0,0,0,.25);display:none}
+#aviso.on{display:block}
+
+/* ---------- Ambientes ---------- */
+body.amb-android .campo input,body.amb-android .campo select,body.amb-android .campo textarea,body.amb-android .bt{min-height:44px;font-size:15px}
+body.amb-ios .campo input,body.amb-ios .campo select,body.amb-ios .campo textarea{font-size:16px;min-height:44px}
+body.amb-ios .bt{min-height:44px}
+@media(max-width:560px){.grade{grid-template-columns:1fr}.marca h1{font-size:18px}}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+<script src="/assistente-abas.js" data-tabs=".header-nav button" data-auxilio="gerar"></script>
+</head>
+<body>
+
+<!-- TELA INICIAL: Seleção do ambiente de uso -->
+<div id="splash" role="dialog" aria-modal="true" aria-labelledby="splash-titulo" hidden>
+  <div class="splash-box">
+    <div class="splash-norma">Total Civil · Fotos georreferenciadas para o Google Earth</div>
+    <div class="splash-titulo" id="splash-titulo">Imagens GoogleEarth</div>
+    <div class="splash-sub">Anexe dezenas de fotos de uma vez, localize cada uma pelo GPS, pela tarja ou pelo endereço, monte pontos, caminhos e polígonos e gere o KML/KMZ para o Google Earth Web.</div>
+    <div class="splash-linha"></div>
+    <div class="splash-prompt">Selecione o ambiente de uso</div>
+    <div class="splash-cards">
+      <button type="button" class="splash-card" data-modo="desktop">
+        <span class="splash-tag">Este aparelho</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="3.5" width="19" height="13" rx="1.5"/><path d="M8 20.5h8M12 16.5v4"/></svg>
+        <span class="splash-card-label">Computador</span>
+        <span class="splash-card-desc">Windows, macOS ou Linux. Tela completa, com mapa grande e várias fotos lado a lado.</span>
+      </button>
+      <button type="button" class="splash-card" data-modo="android">
+        <span class="splash-tag">Este aparelho</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="1.8"/><path d="M10 18.8h4"/></svg>
+        <span class="splash-card-label">Android</span>
+        <span class="splash-card-desc">Celular ou tablet Android. Botões maiores para toque e câmera direto no programa.</span>
+      </button>
+      <button type="button" class="splash-card" data-modo="ios">
+        <span class="splash-tag">Este aparelho</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M10.5 4.6h3"/><circle cx="12" cy="19" r=".6"/></svg>
+        <span class="splash-card-label">iPhone / iPad</span>
+        <span class="splash-card-desc">iOS e iPadOS, no Safari. Campos ajustados para não ampliar a tela ao digitar.</span>
+      </button>
+    </div>
+    <div class="splash-note">O ambiente pode ser trocado a qualquer momento pelo botão “Ambiente” no cabeçalho.<br>Versão 1 · 04/11/2026</div>
+  </div>
+</div>
+
+<header class="topo">
+  <div class="topo-lin">
+    <div class="marca">
+      <svg viewBox="0 0 32 32" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="16" cy="16" r="12.5"/><path d="M3.5 16h25M16 3.5c-4 4-4 21 0 25M16 3.5c4 4 4 21 0 25"/><path d="M22 6.5l3 3-3 3" stroke="#FF6B1A"/></svg>
+      <div><h1>Imagens GoogleEarth</h1><div class="sub">Fotos de campo → pontos, caminhos e polígonos no Google Earth</div></div>
+    </div>
+    <div class="topo-bts">
+      <button type="button" class="tbt" id="bt-salvar" title="Salvar o trabalho num arquivo do computador">Salvar como</button>
+      <button type="button" class="tbt" id="bt-abrir" title="Abrir um trabalho salvo">Abrir</button>
+      <button type="button" class="tbt" id="bt-novo" title="Começar um trabalho novo">Novo</button>
+      <button type="button" class="tbt" id="bt-ambiente" title="Trocar o ambiente de uso">Ambiente</button>
+      <a class="tbt" href="/">Página principal</a>
+    </div>
+  </div>
+  <nav class="header-nav" aria-label="Abas">
+    <button type="button" data-aba="fotos" class="active"><span class="n">1</span> Fotos</button>
+    <button type="button" data-aba="mapa"><span class="n">2</span> Mapa</button>
+    <button type="button" data-aba="marcacoes"><span class="n">3</span> Marcações</button>
+    <button type="button" data-aba="exportar"><span class="n">4</span> Gerar KML / KMZ</button>
+  </nav>
+</header>
+
+<main>
+<!-- ================= 1. FOTOS ================= -->
+<section class="aba ativa" id="aba-fotos">
+  <h2>Fotos</h2>
+  <p class="intro">Anexe quantas fotos quiser. O programa lê o GPS gravado em cada foto. Se a foto não tiver GPS (fotos enviadas pelo WhatsApp perdem essa informação), use “Ler tarja” para ler as coordenadas ou o endereço escritos na imagem, ou marque o local no mapa.</p>
+
+  <div class="cartao">
+    <div class="solta" id="solta">
+      <div class="linha" style="justify-content:center">
+        <button type="button" class="bt pri" id="bt-anexar">📎 Anexar fotos</button>
+        <button type="button" class="bt" id="bt-camera">📷 Tirar foto</button>
+      </div>
+      <p class="ajuda">ou arraste as fotos para cá · JPG, PNG ou WEBP · sem limite de quantidade</p>
+      <input type="file" id="in-fotos" accept="image/*" multiple hidden>
+      <input type="file" id="in-camera" accept="image/*" capture="environment" hidden>
+    </div>
+    <div class="barra-prog" id="prog-fotos" hidden><i></i></div>
+    <div class="linha" style="margin-top:14px">
+      <div class="campo"><label for="cfg-res">Resolução das fotos no arquivo</label>
+        <select id="cfg-res"><option value="640">640 px (bem leve)</option><option value="800">800 px (leve)</option><option value="1024">1024 px</option><option value="1280" selected>1280 px (recomendado)</option><option value="1600">1600 px</option><option value="2048">2048 px</option><option value="0">Original</option></select></div>
+      <div class="campo"><label for="cfg-qual">Qualidade / tamanho</label>
+        <select id="cfg-qual"><option value="0.6">60% · arquivo menor</option><option value="0.7">70%</option><option value="0.8" selected>80% · equilibrado</option><option value="0.9">90% · melhor imagem</option></select></div>
+      <div class="campo" style="flex:1;min-width:160px"><label for="cfg-autor">Fotos tiradas por</label><input id="cfg-autor" placeholder="Ex.: Victor"></div>
+      <div class="campo" style="flex:1;min-width:180px"><label for="cfg-mun">Município (para buscar endereços)</label><input id="cfg-mun" value="Rio das Ostras - RJ"></div>
+    </div>
+    <p class="ajuda" id="est-tam"></p>
+  </div>
+
+  <div class="cartao">
+    <div class="linha">
+      <button type="button" class="bt" id="bt-ocr">🔎 Ler tarja das fotos sem local</button>
+      <button type="button" class="bt" id="bt-geo">📍 Buscar coordenadas pelo endereço</button>
+      <span style="flex:1"></span>
+      <button type="button" class="bt peq" id="bt-sel-todas">Selecionar todas</button>
+      <button type="button" class="bt peq" id="bt-sel-sem">Selecionar sem local</button>
+      <button type="button" class="bt peq" id="bt-sel-nenhuma">Limpar seleção</button>
+      <button type="button" class="bt peq perigo" id="bt-rem-sel">Remover selecionadas</button>
+    </div>
+    <div class="barra-prog" id="prog-acao" hidden><i></i></div>
+    <p class="ajuda" id="txt-acao"></p>
+    <div class="resumo" id="resumo"></div>
+  </div>
+
+  <div class="grade" id="grade"></div>
+</section>
+
+<!-- ================= 2. MAPA ================= -->
+<section class="aba" id="aba-mapa">
+  <h2>Mapa</h2>
+  <p class="intro">Confira onde cada foto caiu. Arraste um marcador para corrigir. Para posicionar uma foto sem local, clique em “Marcar no mapa” no cartão da foto e depois clique no mapa.</p>
+  <div class="faixa-marcar" id="faixa-marcar" hidden><span id="faixa-txt"></span><button type="button" class="bt peq" id="bt-cancelar-marcar">Cancelar</button></div>
+  <div class="linha" style="margin-bottom:10px">
+    <button type="button" class="bt peq" id="bt-enquadrar">Enquadrar tudo</button>
+    <span class="ajuda" style="margin:0">Verde: GPS · Azul: tarja · Laranja: endereço (aproximado) · Roxo: marcado no mapa</span>
+  </div>
+  <div id="mapa" role="application" aria-label="Mapa das fotos"></div>
+</section>
+
+<!-- ================= 3. MARCAÇÕES ================= -->
+<section class="aba" id="aba-marcacoes">
+  <h2>Marcações</h2>
+  <p class="intro">Junte fotos numa marcação: um <b>ponto</b> (vários ângulos do mesmo local), um <b>caminho</b> (a rua toda) ou um <b>polígono</b> (uma área). Escolha a cor e escreva a ocorrência. As fotos que não estiverem em nenhuma marcação podem sair como um ponto cada.</p>
+  <div class="dupla">
+    <div class="cartao">
+      <h3 id="tit-form">Nova marcação</h3>
+      <div class="rot" style="margin-bottom:6px">1. Escolha as fotos <span id="cont-sel-marc" style="font-weight:600"></span></div>
+      <div class="linha" style="margin-bottom:8px">
+        <button type="button" class="bt peq" id="bt-mm-livres">Marcar fotos livres</button>
+        <button type="button" class="bt peq" id="bt-mm-limpar">Limpar</button>
+      </div>
+      <div class="mini" id="mini"></div>
+      <div class="rot" style="margin:14px 0 6px">2. Tipo de marcação</div>
+      <div class="tipos" id="tipos">
+        <label><input type="radio" name="tipo" value="ponto" checked> 📍 Ponto</label>
+        <label><input type="radio" name="tipo" value="caminho"> 〰️ Caminho</label>
+        <label><input type="radio" name="tipo" value="poligono"> ⬠ Polígono</label>
+      </div>
+      <div id="op-caminho" hidden style="margin-top:10px">
+        <div class="opcoes">
+          <label class="opcao"><input type="radio" name="tracado" value="fotos" checked><span><b>Ligar as fotos</b><small>Linha passando pelas fotos, na ordem em que foram tiradas.</small></span></label>
+          <label class="opcao"><input type="radio" name="tracado" value="rua"><span><b>Rua inteira (OpenStreetMap)</b><small>Busca o traçado real da rua perto das fotos.</small></span></label>
+        </div>
+        <div class="linha" id="op-rua" hidden style="margin-top:8px">
+          <div class="campo" style="flex:1;min-width:200px"><label for="m-rua">Nome da rua</label><input id="m-rua" placeholder="Ex.: Rua Noeli de Oliveira"></div>
+          <button type="button" class="bt" id="bt-buscar-rua">Buscar traçado</button>
+        </div>
+        <p class="ajuda" id="txt-rua"></p>
+      </div>
+      <div class="rot" style="margin:14px 0 6px">3. Cor e espessura</div>
+      <div class="cores" id="cores"></div>
+      <div class="linha" style="margin-top:8px">
+        <div class="campo"><label for="m-esp">Espessura da linha</label><select id="m-esp"><option value="2">Fina</option><option value="4" selected>Média</option><option value="6">Grossa</option><option value="8">Bem grossa</option></select></div>
+      </div>
+      <div class="rot" style="margin:14px 0 6px">4. Descrição (modelo Ocorrência / Causa / Solução)</div>
+      <div class="campo"><label for="m-nome">Nome da marcação</label><input id="m-nome" placeholder="Ex.: Rua Edith Castro Leite"></div>
+      <div class="campo" style="margin-top:8px"><label for="m-local">Local / bairro</label><input id="m-local" placeholder="Ex.: Gelson Apicelo"></div>
+      <div class="campo" style="margin-top:8px"><label for="m-oc">Ocorrência</label><textarea id="m-oc" placeholder="Ex.: Buracos e poças d'água ao longo da pista"></textarea></div>
+      <div class="campo" style="margin-top:8px"><label for="m-causa">Causa</label><textarea id="m-causa" placeholder="Opcional"></textarea></div>
+      <div class="campo" style="margin-top:8px"><label for="m-sol">Solução adotada</label><textarea id="m-sol" placeholder="Opcional"></textarea></div>
+      <div class="campo" style="margin-top:8px"><label for="m-com">Comentário</label><textarea id="m-com" placeholder="Opcional"></textarea></div>
+      <div class="linha" style="margin-top:12px">
+        <button type="button" class="bt pri" id="bt-salvar-marc">Criar marcação</button>
+        <button type="button" class="bt" id="bt-cancelar-marc" hidden>Cancelar edição</button>
+      </div>
+      <div id="msg-marc"></div>
+    </div>
+    <div>
+      <div class="cartao">
+        <h3>Fotos fora das marcações</h3>
+        <label class="opcao" style="margin-bottom:8px"><input type="checkbox" id="cfg-avulsas" checked><span><b>Gerar um ponto para cada foto livre</b><small>Usa a cor padrão abaixo e o comentário da própria foto.</small></span></label>
+        <div class="rot" style="margin-bottom:6px">Cor padrão dos pontos avulsos</div>
+        <div class="cores" id="cores-padrao"></div>
+      </div>
+      <div class="cartao">
+        <h3>Marcações criadas <span id="cont-marc" class="pill"></span></h3>
+        <div class="lista-marc" id="lista-marc"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 4. EXPORTAR ================= -->
+<section class="aba" id="aba-exportar">
+  <h2>Gerar KML / KMZ</h2>
+  <p class="intro">Escolha onde as marcações vão entrar no Google Earth Web e gere o arquivo. As fotos vão no carrossel de cada marcação, como nos projetos feitos no próprio Google Earth.</p>
+  <div class="dupla">
+    <div>
+      <div class="cartao">
+        <h3>Destino</h3>
+        <div class="opcoes" id="destinos">
+          <label class="opcao"><input type="radio" name="destino" value="novo" checked><span><b>Projeto novo</b><small>Arquivo com o nome do projeto e uma pasta com as marcações.</small></span></label>
+          <label class="opcao"><input type="radio" name="destino" value="pasta"><span><b>Pasta nova dentro de um projeto existente</b><small>Arquivo pequeno, só com a pasta nova, para importar no projeto que você já tem (precisa de permissão de edição).</small></span></label>
+          <label class="opcao"><input type="radio" name="destino" value="mesclar"><span><b>Projeto existente completo, com a pasta incluída</b><small>Você envia o KML exportado do projeto e o programa devolve o arquivo inteiro com a pasta nova dentro da pasta escolhida.</small></span></label>
+        </div>
+        <div class="linha" style="margin-top:12px">
+          <div class="campo" style="flex:1;min-width:200px" id="c-proj"><label for="e-proj">Nome do projeto</label><input id="e-proj" value="Vistoria de campo"></div>
+          <div class="campo" style="flex:1;min-width:200px"><label for="e-pasta">Nome da pasta nova</label><input id="e-pasta"></div>
+        </div>
+        <div id="c-existente" hidden style="margin-top:12px">
+          <div class="campo"><label for="in-proj">KML exportado do projeto (Google Earth: Arquivo › Exportar como arquivo KML)</label><input type="file" id="in-proj" accept=".kml,application/vnd.google-earth.kml+xml"></div>
+          <div class="campo" style="margin-top:8px"><label for="e-dentro">Colocar a pasta nova dentro de</label><select id="e-dentro"><option value="">(no início do projeto)</option></select></div>
+          <p class="ajuda" id="txt-proj"></p>
+        </div>
+      </div>
+      <div class="cartao">
+        <h3>Fotos</h3>
+        <label class="opcao"><input type="checkbox" id="e-url-on"><span><b>Usar endereço público para as fotos</b><small>Para quando as fotos ficam num site (ex.: GitHub). O arquivo leva só os links; baixe as fotos reduzidas e suba no endereço informado.</small></span></label>
+        <div class="campo" id="c-url" hidden style="margin-top:8px"><label for="e-url">Endereço da pasta das fotos</label><input id="e-url" placeholder="https://raw.githubusercontent.com/usuario/repositorio/main/fotos/"></div>
+        <p class="ajuda">Sem endereço público: o KMZ leva as fotos dentro do arquivo compactado e o KML leva as fotos embutidas no próprio texto.</p>
+      </div>
+    </div>
+    <div>
+      <div class="cartao">
+        <h3>Resumo</h3>
+        <div id="resumo-exp"></div>
+        <div class="linha" style="margin-top:12px">
+          <button type="button" class="bt pri" id="bt-kmz">⬇ Gerar KMZ</button>
+          <button type="button" class="bt az" id="bt-kml">⬇ Gerar KML</button>
+          <button type="button" class="bt" id="bt-zip">⬇ Fotos reduzidas (.zip)</button>
+        </div>
+        <div class="barra-prog" id="prog-exp" hidden><i></i></div>
+        <div id="msg-exp"></div>
+      </div>
+      <div class="cartao">
+        <h3>Como levar para o Google Earth Web</h3>
+        <ol class="passos" id="passos"></ol>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+
+<div id="visor" hidden><img alt="Foto ampliada"></div>
+<div id="aviso" role="status" aria-live="polite"></div>
+<input type="file" id="in-abrir" accept=".json,application/json" hidden>
+
+<script>
+'use strict';
+/* ============================================================
+   IMAGENS GOOGLEEARTH — Total Civil · Versão 1 (04/11/2026)
+   Fotos → localização (GPS da foto, tarja lida por OCR, endereço,
+   ou clique no mapa) → marcações (ponto, caminho, polígono) →
+   KML / KMZ para o Google Earth Web.
+   Dados ficam no próprio aparelho (IndexedDB) e em "Salvar como".
+   ============================================================ */
+const VERSAO = '1 · 04/11/2026';
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const CORES = [
+  {hex:'#FBC02D', nome:'Âmbar'}, {hex:'#F57C00', nome:'Laranja'}, {hex:'#EF5350', nome:'Vermelho'}, {hex:'#D32F2F', nome:'Vermelho escuro'},
+  {hex:'#66BB6A', nome:'Verde'}, {hex:'#FFEE58', nome:'Amarelo'}, {hex:'#42A5F5', nome:'Azul'}, {hex:'#1976D2', nome:'Azul escuro'},
+  {hex:'#00FFFF', nome:'Ciano'}, {hex:'#AB47BC', nome:'Roxo'}, {hex:'#EEEEEE', nome:'Cinza'}, {hex:'#FFFFFF', nome:'Branco'}
+];
+const ORIGEM = {gps:'GPS da foto', tarja:'Tarja da foto', endereco:'Endereço (aprox.)', manual:'Marcado no mapa', sem:'Sem local'};
+const COR_ORIGEM = {gps:'#16a34a', tarja:'#1E4E8C', endereco:'#F57C00', manual:'#7C3AED', sem:'#B42318'};
+
+/* ---------- estado ---------- */
+let S = novoEstado();
+function novoEstado(){
+  return {versao:1, amb:'', fotos:[], marc:[],
+    cfg:{res:1280, qual:0.8, autor:'', mun:'Rio das Ostras - RJ', avulsas:true, corPadrao:'#FBC02D'},
+    exp:{destino:'novo', proj:'Vistoria de campo', pasta:'', dentro:'', urlOn:false, url:''}};
+}
+const BLOBS = new Map();            // id da foto -> Blob original
+let projKML = null;                 // texto do KML do projeto existente (opção "mesclar")
+
+/* ---------- utilidades ---------- */
+function aviso(t, ms){ const a = $('aviso'); a.textContent = t; a.classList.add('on'); clearTimeout(aviso._t); aviso._t = setTimeout(() => a.classList.remove('on'), ms || 3200); }
+function novoId(p){ return (p || 'f') + Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function semAcento(s){ return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, ''); }
+function slug(s){ return semAcento(s).replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50) || 'foto'; }
+function fmtData(iso){ if(!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}); }
+function fmtHora(iso){ const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'}); }
+function isoLocal(iso){ if(!iso) return ''; const d = new Date(iso); if(isNaN(d)) return ''; const p = n => String(n).padStart(2, '0'); return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + 'T' + p(d.getHours()) + ':' + p(d.getMinutes()); }
+function temLocal(f){ return typeof f.lat === 'number' && typeof f.lon === 'number' && isFinite(f.lat) && isFinite(f.lon); }
+function origemDe(f){ return temLocal(f) ? (f.orig || 'manual') : 'sem'; }
+function fotoPorId(id){ return S.fotos.find(f => f.id === id); }
+function marcDaFoto(id){ return S.marc.find(m => m.fotos.includes(id)); }
+const espera = ms => new Promise(r => setTimeout(r, ms));
+function progresso(elId, frac){ const b = $(elId); if(frac == null){ b.hidden = true; return; } b.hidden = false; b.firstElementChild.style.width = Math.round(Math.max(0, Math.min(1, frac)) * 100) + '%'; }
+function kb(n){ return n > 1048576 ? (n / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'; }
+
+/* ---------- coordenadas: decimal ou graus/minutos/segundos ---------- */
+function numBR(s){ return parseFloat(String(s).replace(',', '.')); }
+function lerCoordenadas(txt){
+  const t = String(txt || '').replace(/[’′]/g, "'").replace(/[”″]/g, '"').replace(/º/g, '°');
+  // 22°33'2,67"S 41°58'27,606"W
+  let m = t.match(/(\d{1,2})\s*°\s*(\d{1,2})\s*'\s*(\d{1,2}(?:[.,]\d+)?)\s*"?\s*([NS])[\s,;]*(\d{1,3})\s*°\s*(\d{1,2})\s*'\s*(\d{1,2}(?:[.,]\d+)?)\s*"?\s*([EWOL])/i);
+  if(m){
+    let lat = +m[1] + +m[2] / 60 + numBR(m[3]) / 3600, lon = +m[5] + +m[6] / 60 + numBR(m[7]) / 3600;
+    if(/s/i.test(m[4])) lat = -lat; if(/[wo]/i.test(m[8])) lon = -lon;
+    return valida(lat, lon);
+  }
+  // 22°33.044'S 41°58.460'W
+  m = t.match(/(\d{1,2})\s*°\s*(\d{1,2}[.,]\d+)\s*'\s*([NS])[\s,;]*(\d{1,3})\s*°\s*(\d{1,2}[.,]\d+)\s*'\s*([EWOL])/i);
+  if(m){
+    let lat = +m[1] + numBR(m[2]) / 60, lon = +m[4] + numBR(m[5]) / 60;
+    if(/s/i.test(m[3])) lat = -lat; if(/[wo]/i.test(m[6])) lon = -lon;
+    return valida(lat, lon);
+  }
+  // -22.550742, -41.974335   ou   Lat -22,5507 Long -41,9743
+  m = t.match(/(-?\d{1,2}[.,]\d{3,})\s*°?\s*([NS])?[\s,;]+(?:long?\w*\s*:?\s*)?(-?\d{1,3}[.,]\d{3,})\s*°?\s*([EWOL])?/i);
+  if(m){
+    let lat = numBR(m[1]), lon = numBR(m[3]);
+    if(m[2] && /s/i.test(m[2]) && lat > 0) lat = -lat; if(m[4] && /[wo]/i.test(m[4]) && lon > 0) lon = -lon;
+    return valida(lat, lon);
+  }
+  return null;
+}
+function valida(lat, lon){ return (isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && !(lat === 0 && lon === 0)) ? {lat, lon} : null; }
+
+/* ---------- texto da tarja: data, endereço ---------- */
+const MESES = {jan:0, fev:1, mar:2, abr:3, mai:4, jun:5, jul:6, ago:7, set:8, out:9, nov:10, dez:11};
+function lerDataTarja(t){
+  const s = semAcento(t).toLowerCase();
+  let m = s.match(/(\d{1,2})\s*(?:de\s*)?(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z]*\.?\s*(?:de\s*)?(\d{4})[,\s]*(\d{1,2})[:h](\d{2})(?::(\d{2}))?/);
+  if(m) return new Date(+m[3], MESES[m[2]], +m[1], +m[4], +m[5], +(m[6] || 0)).toISOString();
+  m = s.match(/(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})[,\s]*(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+  if(m) return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5], +(m[6] || 0)).toISOString();
+  // Timemark: "11:02 | 03 nov. 2026"
+  m = s.match(/(\d{1,2}):(\d{2})[\s|]+(\d{1,2})\s*(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-z]*\.?\s*(\d{4})/);
+  if(m) return new Date(+m[5], MESES[m[4]], +m[3], +m[1], +m[2]).toISOString();
+  return '';
+}
+const TIPO_RUA = '(?:Rua|R\\.|Avenida|Av\\.?|Alameda|Al\\.|Travessa|Tv\\.|Estrada|Estr\\.|Rodovia|Rod\\.|Pra[çc]a|Largo|Servid[aã]o|Beco|Via|Viela|Ladeira|Caminho)';
+function lerEnderecoTarja(t){
+  const linhas = String(t || '').split(/\n+/).map(x => x.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const re = new RegExp('(\\d+\\s+)?(' + TIPO_RUA + '\\s+(?:(?! - )[^,\\n|]){2,60})(?:,\\s*(\\d{1,5})\\b)?', 'i');
+  const naoBairro = /^\d|^(lt|qd|lote|quadra|casa|apto?|bloco)\b|rio das ostras|\brj\b|brasil|rio de janeiro|\d{5}-?\d{3}/i;
+  for(let i = 0; i < linhas.length; i++){
+    const m = linhas[i].match(re);
+    if(!m) continue;
+    let rua = m[2].replace(/\s+\d{5}-?\d{3}.*$/, '').replace(/\s+(Rio das Ostras|RJ|Brasil).*$/i, '').trim();
+    rua = rua.replace(/\s+\d+$/, '');
+    const num = (m[3] || (m[1] || '').trim() || '').trim();
+    const cep = (t.match(/\b(\d{5})-?(\d{3})\b/) || [])[0] || '';
+    let bairro = '';
+    const tr = linhas[i].slice(m.index + m[0].length).replace(/^\s*-\s*/, ', ');
+    const cand = tr.split(',').map(x => x.trim()).filter(x => x && !naoBairro.test(x));
+    if(cand.length) bairro = cand[0];
+    else if(linhas[i + 1] && !/\d{3}/.test(linhas[i + 1]) && !naoBairro.test(linhas[i + 1])) bairro = linhas[i + 1];
+    return {rua, num, bairro, cep, texto: [rua + (num ? ', ' + num : ''), bairro].filter(Boolean).join(' - ')};
+  }
+  return null;
+}
+
+/* ============================================================
+   ARMAZENAMENTO LOCAL (IndexedDB): estado + fotos originais
+   ============================================================ */
+const DB = {
+  db: null,
+  abrir(){
+    if(this.db) return Promise.resolve(this.db);
+    return new Promise((ok, erro) => {
+      let r; try{ r = indexedDB.open('TC_ImagensGoogleEarth', 1); }catch(e){ erro(e); return; }
+      r.onupgradeneeded = () => { const d = r.result; if(!d.objectStoreNames.contains('kv')) d.createObjectStore('kv'); if(!d.objectStoreNames.contains('fotos')) d.createObjectStore('fotos'); };
+      r.onsuccess = () => { this.db = r.result; ok(this.db); };
+      r.onerror = () => erro(r.error);
+    });
+  },
+  async op(loja, modo, fn){
+    const d = await this.abrir();
+    return new Promise((ok, erro) => { const tx = d.transaction(loja, modo); const st = tx.objectStore(loja); const req = fn(st); tx.oncomplete = () => ok(req && req.result); tx.onerror = () => erro(tx.error); });
+  },
+  put(loja, k, v){ return this.op(loja, 'readwrite', st => st.put(v, k)); },
+  get(loja, k){ return this.op(loja, 'readonly', st => st.get(k)); },
+  del(loja, k){ return this.op(loja, 'readwrite', st => st.delete(k)); },
+  limpar(loja){ return this.op(loja, 'readwrite', st => st.clear()); }
+};
+let _salvarT = null;
+function salvar(){ clearTimeout(_salvarT); _salvarT = setTimeout(() => { DB.put('kv', 'estado', JSON.parse(JSON.stringify(S))).catch(e => console.warn('Não foi possível guardar no aparelho:', e)); }, 400); }
+async function carregarLocal(){
+  try{
+    const e = await DB.get('kv', 'estado');
+    if(e && e.fotos){
+      S = Object.assign(novoEstado(), e); S.cfg = Object.assign(novoEstado().cfg, e.cfg || {}); S.exp = Object.assign(novoEstado().exp, e.exp || {});
+      for(const f of S.fotos){ const b = await DB.get('fotos', f.id); if(b) BLOBS.set(f.id, b); }
+    }
+  }catch(e){ console.warn('Armazenamento local indisponível:', e); }
+}
+
+/* ============================================================
+   AMBIENTE (tela inicial)
+   ============================================================ */
+function detectarAmbiente(){ const ua = navigator.userAgent || ''; if(/iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'ios'; if(/Android/i.test(ua)) return 'android'; return 'desktop'; }
+function abrirSelecaoAmbiente(){ const det = detectarAmbiente(); document.querySelectorAll('.splash-card').forEach(c => c.classList.toggle('detectado', c.dataset.modo === det)); $('splash').hidden = false; const alvo = document.querySelector('.splash-card.detectado'); if(alvo) alvo.focus(); }
+function aplicarAmbiente(m){ S.amb = m; document.body.classList.remove('amb-desktop', 'amb-android', 'amb-ios'); document.body.classList.add('amb-' + m); $('splash').hidden = true; $('bt-camera').hidden = m === 'desktop'; salvar(); if(mapa) setTimeout(() => mapa.invalidateSize(), 50); }
+document.querySelectorAll('.splash-card').forEach(c => c.addEventListener('click', () => aplicarAmbiente(c.dataset.modo)));
+$('bt-ambiente').onclick = abrirSelecaoAmbiente;
+
+/* ============================================================
+   ABAS
+   ============================================================ */
+let abaAtual = 'fotos';
+function irAba(a){
+  abaAtual = a;
+  document.querySelectorAll('.header-nav button').forEach(b => b.classList.toggle('active', b.dataset.aba === a));
+  document.querySelectorAll('.aba').forEach(s => s.classList.toggle('ativa', s.id === 'aba-' + a));
+  if(a === 'mapa'){ iniciarMapa(); setTimeout(() => { mapa && mapa.invalidateSize(); desenharMapa(); }, 60); }
+  if(a === 'marcacoes') renderMarcacoes();
+  if(a === 'exportar') renderExportar();
+  window.scrollTo({top: 0});
+}
+document.querySelectorAll('.header-nav button').forEach(b => b.addEventListener('click', () => irAba(b.dataset.aba)));
+
+/* ============================================================
+   1. FOTOS
+   ============================================================ */
+async function miniatura(blob, lado){
+  const bmp = await abrirImagem(blob);
+  const k = Math.min(1, lado / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+  c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+  const w = bmp.width, h = bmp.height; if(bmp.close) bmp.close();
+  return {url: c.toDataURL('image/jpeg', .72), w, h};
+}
+async function abrirImagem(blob){
+  try{ return await createImageBitmap(blob, {imageOrientation: 'from-image'}); }
+  catch(_){
+    try{ return await createImageBitmap(blob); }
+    catch(e){
+      return await new Promise((ok, erro) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => erro(new Error('formato de imagem não suportado')); i.src = URL.createObjectURL(blob); });
+    }
+  }
+}
+async function reduzir(blob, maxPx, q){
+  if(!maxPx && /jpe?g/i.test(blob.type || '')) return blob;
+  const bmp = await abrirImagem(blob);
+  let w = bmp.width, h = bmp.height;
+  if(maxPx && Math.max(w, h) > maxPx){ const k = maxPx / Math.max(w, h); w = Math.round(w * k); h = Math.round(h * k); }
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, w, h); g.drawImage(bmp, 0, 0, w, h);
+  if(bmp.close) bmp.close();
+  return await new Promise(ok => c.toBlob(ok, 'image/jpeg', q));
+}
+async function lerExif(file){
+  const r = {};
+  if(typeof exifr === 'undefined') return r;
+  try{
+    const o = await exifr.parse(file, {tiff: true, exif: true, gps: true});
+    if(o){
+      if(typeof o.latitude === 'number' && typeof o.longitude === 'number'){ const v = valida(o.latitude, o.longitude); if(v){ r.lat = v.lat; r.lon = v.lon; } }
+      const d = o.DateTimeOriginal || o.CreateDate || o.ModifyDate;
+      if(d instanceof Date && !isNaN(d)) r.data = d.toISOString();
+    }
+  }catch(e){ /* foto sem EXIF */ }
+  return r;
+}
+async function adicionarArquivos(lista){
+  const arqs = [...lista].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name));
+  if(!arqs.length){ aviso('Nenhuma imagem encontrada nos arquivos escolhidos.'); return; }
+  let feitos = 0, comGps = 0, falhas = 0;
+  progresso('prog-fotos', 0);
+  for(const file of arqs){
+    try{
+      const id = novoId('f');
+      const ex = await lerExif(file);
+      const mi = await miniatura(file, 360);
+      const f = {id, nome: file.name, tam: file.size, w: mi.w, h: mi.h, thumb: mi.url,
+        data: ex.data || (file.lastModified ? new Date(file.lastModified).toISOString() : ''), dataOrig: ex.data ? 'exif' : 'arquivo',
+        lat: ex.lat, lon: ex.lon, orig: ex.lat != null ? 'gps' : null, end: '', coment: '', tarja: ''};
+      BLOBS.set(id, file);
+      try{ await DB.put('fotos', id, file); }catch(e){ console.warn(e); }
+      S.fotos.push(f); if(f.orig === 'gps') comGps++;
+    }catch(e){ console.warn('Foto não lida:', file.name, e); falhas++; }
+    feitos++; progresso('prog-fotos', feitos / arqs.length);
+  }
+  S.fotos.sort((a, b) => (a.data || '').localeCompare(b.data || ''));
+  progresso('prog-fotos', null);
+  salvar(); renderFotos();
+  aviso(feitos - falhas + ' foto(s) anexada(s) · ' + comGps + ' com GPS' + (falhas ? ' · ' + falhas + ' não puderam ser lidas (formato não suportado neste navegador)' : ''), 5200);
+}
+$('bt-anexar').onclick = () => $('in-fotos').click();
+$('bt-camera').onclick = () => $('in-camera').click();
+$('in-fotos').onchange = e => { adicionarArquivos(e.target.files); e.target.value = ''; };
+$('in-camera').onchange = async e => {
+  const files = [...e.target.files]; e.target.value = '';
+  // foto da câmera: usa o GPS do aparelho se a foto não trouxer
+  await adicionarArquivos(files);
+  const ult = S.fotos.filter(f => files.some(x => x.name === f.nome)).filter(f => !temLocal(f));
+  if(ult.length && navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(p => { ult.forEach(f => { f.lat = p.coords.latitude; f.lon = p.coords.longitude; f.orig = 'gps'; }); salvar(); renderFotos(); aviso('Local do aparelho gravado na foto.'); }, () => {}, {enableHighAccuracy: true, timeout: 15000});
+  }
+};
+const solta = $('solta');
+['dragenter', 'dragover'].forEach(ev => solta.addEventListener(ev, e => { e.preventDefault(); solta.classList.add('sobre'); }));
+['dragleave', 'drop'].forEach(ev => solta.addEventListener(ev, e => { e.preventDefault(); solta.classList.remove('sobre'); }));
+solta.addEventListener('drop', e => { if(e.dataTransfer && e.dataTransfer.files) adicionarArquivos(e.dataTransfer.files); });
+
+['res', 'qual', 'autor', 'mun'].forEach(k => {
+  const el = $('cfg-' + k);
+  el.addEventListener('change', () => { S.cfg[k] = (k === 'res') ? +el.value : (k === 'qual') ? +el.value : el.value.trim(); salvar(); estimarTamanho(); });
+});
+function estimarTamanho(){
+  const n = S.fotos.length; if(!n){ $('est-tam').textContent = ''; return; }
+  const px = S.cfg.res || 3000, q = S.cfg.qual;
+  const porFoto = px * px * 0.75 * (0.05 + q * 0.13);     // estimativa grosseira de JPEG
+  $('est-tam').textContent = 'Tamanho estimado das fotos no arquivo: cerca de ' + kb(porFoto * n) + ' para ' + n + ' foto(s). Arquivos acima de ~20 MB podem demorar ou falhar no Google Earth Web.';
+}
+
+function renderFotos(){
+  const g = $('grade');
+  const cont = {gps: 0, tarja: 0, endereco: 0, manual: 0, sem: 0};
+  S.fotos.forEach(f => cont[origemDe(f)]++);
+  $('resumo').innerHTML = S.fotos.length ? '<span class="pill">' + S.fotos.length + ' foto(s)</span>' +
+    Object.keys(cont).filter(k => cont[k]).map(k => '<span class="pill ' + k + '">' + ORIGEM[k] + ': ' + cont[k] + '</span>').join('') +
+    '<span class="pill">' + S.fotos.filter(f => f.sel).length + ' selecionada(s)</span>' : '';
+  estimarTamanho();
+  if(!S.fotos.length){ g.innerHTML = '<div class="vazio" style="grid-column:1/-1">Nenhuma foto anexada ainda.</div>'; return; }
+  g.innerHTML = S.fotos.map(f => {
+    const o = origemDe(f), m = marcDaFoto(f.id);
+    return '<article class="foto' + (f.sel ? ' sel' : '') + '" data-id="' + f.id + '">' +
+      '<div class="img"><img src="' + f.thumb + '" alt="' + esc(f.nome) + '" data-acao="ver">' +
+      '<input type="checkbox" class="ck" data-acao="sel" aria-label="Selecionar foto"' + (f.sel ? ' checked' : '') + '>' +
+      '<span class="pill ' + o + '">' + ORIGEM[o] + '</span>' +
+      (m ? '<span class="grp" style="background:' + m.cor + ';color:' + corTexto(m.cor) + '">' + esc(m.nome) + '</span>' : '') + '</div>' +
+      '<div class="corpo"><div class="nome">' + esc(f.nome) + '</div>' +
+      '<div class="campo"><label>Data e hora</label><input type="datetime-local" data-campo="data" value="' + isoLocal(f.data) + '"></div>' +
+      '<div class="campo"><label>Coordenadas (lat, long)</label><input data-campo="coord" placeholder="-22.550742, -41.974335 ou 22°33\'2,67&quot;S 41°58\'27,6&quot;W" value="' + (temLocal(f) ? f.lat.toFixed(6) + ', ' + f.lon.toFixed(6) : '') + '"></div>' +
+      '<div class="campo"><label>Endereço</label><input data-campo="end" placeholder="Rua, número - bairro" value="' + esc(f.end) + '"></div>' +
+      '<div class="campo"><label>Comentário</label><textarea data-campo="coment" placeholder="Opcional">' + esc(f.coment) + '</textarea></div>' +
+      '<div class="bts"><button type="button" class="bt peq" data-acao="marcar">📍 Marcar no mapa</button><button type="button" class="bt peq" data-acao="ocr">🔎 Ler tarja</button><button type="button" class="bt peq" data-acao="geo">Buscar endereço</button><button type="button" class="bt peq perigo" data-acao="rem">Remover</button></div>' +
+      '</div></article>';
+  }).join('');
+}
+function corTexto(hex){ const n = parseInt(hex.slice(1), 16); const l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; return l > 0.6 ? '#0F1E33' : '#fff'; }
+
+$('grade').addEventListener('click', async e => {
+  const card = e.target.closest('.foto'); if(!card) return;
+  const f = fotoPorId(card.dataset.id); if(!f) return;
+  const ac = e.target.dataset.acao;
+  if(ac === 'ver') verFoto(f);
+  else if(ac === 'sel'){ f.sel = e.target.checked; card.classList.toggle('sel', f.sel); salvar(); renderResumoSel(); }
+  else if(ac === 'marcar'){ iniciarMarcar(f.id); }
+  else if(ac === 'ocr'){ await ocrFotos([f], true); }
+  else if(ac === 'geo'){ await geocodificar([f], true); }
+  else if(ac === 'rem'){ removerFotos([f.id]); }
+});
+function renderResumoSel(){ const n = S.fotos.filter(x => x.sel).length; const p = $('resumo').lastElementChild; if(p) p.textContent = n + ' selecionada(s)'; }
+$('grade').addEventListener('change', e => {
+  const card = e.target.closest('.foto'); if(!card) return;
+  const f = fotoPorId(card.dataset.id); const c = e.target.dataset.campo; if(!f || !c) return;
+  if(c === 'data'){ const d = new Date(e.target.value); if(!isNaN(d)){ f.data = d.toISOString(); f.dataOrig = 'manual'; } }
+  else if(c === 'coord'){
+    const v = e.target.value.trim();
+    if(!v){ delete f.lat; delete f.lon; f.orig = null; }
+    else { const r = lerCoordenadas(v); if(r){ f.lat = r.lat; f.lon = r.lon; f.orig = 'manual'; } else { aviso('Coordenadas não reconhecidas. Use -22.5507, -41.9743 ou 22°33\'2,67"S 41°58\'27,6"W.'); return; } }
+    renderFotos();
+  }
+  else if(c === 'end') f.end = e.target.value.trim();
+  else if(c === 'coment') f.coment = e.target.value;
+  salvar();
+});
+function verFoto(f){ const v = $('visor'); v.firstElementChild.src = f.thumb; v.hidden = false; const b = BLOBS.get(f.id); if(b){ const u = URL.createObjectURL(b); v.firstElementChild.src = u; v.dataset.url = u; } }
+$('visor').onclick = () => { const v = $('visor'); v.hidden = true; if(v.dataset.url){ URL.revokeObjectURL(v.dataset.url); v.dataset.url = ''; } };
+document.addEventListener('keydown', e => { if(e.key === 'Escape'){ if(!$('visor').hidden) $('visor').click(); if(marcandoId) cancelarMarcar(); } });
+function removerFotos(ids){
+  if(!ids.length) return;
+  if(!confirmarPagina('Remover ' + ids.length + ' foto(s) deste trabalho?')) return;
+  S.fotos = S.fotos.filter(f => !ids.includes(f.id));
+  S.marc.forEach(m => m.fotos = m.fotos.filter(id => !ids.includes(id)));
+  ids.forEach(id => { BLOBS.delete(id); DB.del('fotos', id).catch(() => {}); });
+  salvar(); renderFotos();
+}
+function confirmarPagina(t){ try{ return window.confirm(t); }catch(_){ return true; } }
+$('bt-sel-todas').onclick = () => { S.fotos.forEach(f => f.sel = true); salvar(); renderFotos(); };
+$('bt-sel-sem').onclick = () => { S.fotos.forEach(f => f.sel = !temLocal(f)); salvar(); renderFotos(); };
+$('bt-sel-nenhuma').onclick = () => { S.fotos.forEach(f => f.sel = false); salvar(); renderFotos(); };
+$('bt-rem-sel').onclick = () => removerFotos(S.fotos.filter(f => f.sel).map(f => f.id));
+
+/* ---------- OCR da tarja (Tesseract.js, carregado só quando usado) ---------- */
+let _ocr = null;
+async function motorOCR(){
+  if(_ocr) return _ocr;
+  if(typeof Tesseract === 'undefined'){
+    await new Promise((ok, erro) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js'; s.onload = ok; s.onerror = () => erro(new Error('não foi possível carregar o leitor de texto (verifique a internet)')); document.head.appendChild(s); });
+  }
+  _ocr = await Tesseract.createWorker('por');
+  return _ocr;
+}
+async function textoDaFoto(blob){
+  const bmp = await abrirImagem(blob);
+  const W = bmp.width, H = bmp.height, k = Math.min(1, 1800 / Math.max(W, H));
+  const pedacos = [[0, 0, 1, .34], [0, .55, 1, .45]];  // faixa de cima e de baixo, onde ficam as tarjas
+  const w = await motorOCR();
+  let txt = '';
+  for(const [x, y, ww, hh] of pedacos){
+    const c = document.createElement('canvas'); c.width = Math.round(W * ww * k); c.height = Math.round(H * hh * k);
+    const g = c.getContext('2d'); g.filter = 'grayscale(1) contrast(1.4)';
+    g.drawImage(bmp, W * x, H * y, W * ww, H * hh, 0, 0, c.width, c.height);
+    const r = await w.recognize(c); txt += '\n' + (r && r.data ? r.data.text : '');
+  }
+  if(bmp.close) bmp.close();
+  return txt;
+}
+async function ocrFotos(lista, umaSo){
+  lista = lista.filter(f => BLOBS.get(f.id));
+  if(!lista.length){ aviso(umaSo ? 'O arquivo original desta foto não está neste aparelho.' : 'Todas as fotos já têm local.'); return; }
+  $('txt-acao').textContent = 'Carregando o leitor de texto… (na primeira vez baixa cerca de 15 MB)';
+  progresso('prog-acao', 0);
+  let achou = 0, endereco = 0;
+  try{
+    for(let i = 0; i < lista.length; i++){
+      const f = lista[i];
+      $('txt-acao').textContent = 'Lendo a tarja da foto ' + (i + 1) + ' de ' + lista.length + ': ' + f.nome;
+      const t = await textoDaFoto(BLOBS.get(f.id));
+      f.tarja = t.trim().slice(0, 600);
+      const c = lerCoordenadas(t);
+      if(c && (!temLocal(f) || f.orig !== 'gps')){ f.lat = c.lat; f.lon = c.lon; f.orig = 'tarja'; achou++; }
+      const d = lerDataTarja(t); if(d && f.dataOrig !== 'exif'){ f.data = d; f.dataOrig = 'tarja'; }
+      const e = lerEnderecoTarja(t); if(e){ if(!f.end) f.end = e.texto; f.cep = e.cep; if(!temLocal(f)) endereco++; }
+      progresso('prog-acao', (i + 1) / lista.length); salvar(); renderFotos();
+    }
+    $('txt-acao').textContent = 'Tarja lida: ' + achou + ' foto(s) com coordenadas.' + (endereco ? ' ' + endereco + ' foto(s) só com endereço: use “Buscar coordenadas pelo endereço”.' : '');
+  }catch(e){ $('txt-acao').textContent = 'Erro na leitura da tarja: ' + (e.message || e); }
+  progresso('prog-acao', null);
+}
+$('bt-ocr').onclick = () => ocrFotos(S.fotos.filter(f => !temLocal(f) || (f.sel && f.orig !== 'gps')));
+
+/* ---------- endereço → coordenadas (OpenStreetMap / Nominatim) ---------- */
+async function buscarEndereco(q){
+  const u = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&accept-language=pt-BR&q=' + encodeURIComponent(q);
+  const r = await fetch(u, {headers: {'Accept': 'application/json'}});
+  if(!r.ok) throw new Error('serviço de endereços respondeu ' + r.status);
+  const j = await r.json();
+  return j && j[0] ? {lat: +j[0].lat, lon: +j[0].lon, nome: j[0].display_name} : null;
+}
+async function geocodificar(lista, umaSo){
+  lista = lista.filter(f => f.end);
+  if(!lista.length){ aviso(umaSo ? 'Preencha o endereço da foto primeiro (ou use “Ler tarja”).' : 'Nenhuma foto sem local tem endereço preenchido.'); return; }
+  progresso('prog-acao', 0); let ok = 0;
+  const cache = {};
+  for(let i = 0; i < lista.length; i++){
+    const f = lista[i];
+    $('txt-acao').textContent = 'Buscando endereço ' + (i + 1) + ' de ' + lista.length + ': ' + f.end;
+    const q1 = f.end + ', ' + (S.cfg.mun || ''), q2 = f.end.split(' - ')[0].replace(/,\s*\d+.*$/, '') + ', ' + (S.cfg.mun || '');
+    try{
+      let r = cache[q1] !== undefined ? cache[q1] : (cache[q1] = await buscarEndereco(q1));
+      if(!r){ await espera(1100); r = cache[q2] !== undefined ? cache[q2] : (cache[q2] = await buscarEndereco(q2)); }
+      if(r){ f.lat = r.lat; f.lon = r.lon; f.orig = 'endereco'; ok++; }
+    }catch(e){ $('txt-acao').textContent = 'Erro ao buscar endereço: ' + (e.message || e); break; }
+    progresso('prog-acao', (i + 1) / lista.length); salvar(); renderFotos();
+    await espera(1100);   // limite do serviço gratuito: 1 consulta por segundo
+  }
+  progresso('prog-acao', null);
+  $('txt-acao').textContent = ok + ' de ' + lista.length + ' endereço(s) localizado(s). A posição é aproximada (meio da rua); confira no mapa e arraste se precisar.';
+}
+$('bt-geo').onclick = () => geocodificar(S.fotos.filter(f => !temLocal(f) || f.orig === 'endereco'));
+
+/* ============================================================
+   2. MAPA (Leaflet)
+   ============================================================ */
+let mapa = null, camFotos = null, camMarc = null, marcandoId = null;
+function iniciarMapa(){
+  if(mapa || typeof L === 'undefined'){ if(typeof L === 'undefined') $('mapa').innerHTML = '<div class="vazio">O mapa não carregou. Verifique a internet e recarregue a página.</div>'; return; }
+  mapa = L.map('mapa', {zoomControl: true}).setView([-22.53, -41.95], 13);
+  const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {maxZoom: 20, maxNativeZoom: 19, attribution: 'Imagens © Esri'});
+  const nomes = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {maxZoom: 20, maxNativeZoom: 19});
+  const ruas = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 20, maxNativeZoom: 19, attribution: '© OpenStreetMap'});
+  L.layerGroup([sat, nomes]).addTo(mapa);
+  L.control.layers({'Satélite': L.layerGroup([sat, nomes]), 'Ruas': ruas}, null, {collapsed: true}).addTo(mapa);
+  camMarc = L.layerGroup().addTo(mapa); camFotos = L.layerGroup().addTo(mapa);
+  mapa.on('click', e => {
+    if(!marcandoId) return;
+    const f = fotoPorId(marcandoId); if(f){ f.lat = e.latlng.lat; f.lon = e.latlng.lng; f.orig = 'manual'; salvar(); renderFotos(); }
+    const prox = S.fotos.find(x => x.sel && !temLocal(x) && x.id !== marcandoId);
+    if(prox) iniciarMarcar(prox.id); else cancelarMarcar();
+    desenharMapa(false);
+  });
+}
+function iconeFoto(f){
+  const c = COR_ORIGEM[origemDe(f)];
+  return L.divIcon({className: '', iconSize: [18, 18], iconAnchor: [9, 9], html: '<div style="width:18px;height:18px;border-radius:50%;background:' + c + ';border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.5)"></div>'});
+}
+function desenharMapa(enquadrar){
+  if(!mapa) return;
+  camFotos.clearLayers(); camMarc.clearLayers();
+  const pts = [];
+  S.fotos.filter(temLocal).forEach(f => {
+    const mk = L.marker([f.lat, f.lon], {icon: iconeFoto(f), draggable: true, title: f.nome});
+    mk.bindPopup('<img src="' + f.thumb + '" alt=""><b>' + esc(f.nome) + '</b><br>' + esc(fmtData(f.data)) + '<br>' + ORIGEM[origemDe(f)] + (f.end ? '<br>' + esc(f.end) : ''));
+    mk.on('dragend', () => { const p = mk.getLatLng(); f.lat = p.lat; f.lon = p.lng; f.orig = 'manual'; salvar(); renderFotos(); desenharMapa(false); });
+    camFotos.addLayer(mk); pts.push([f.lat, f.lon]);
+  });
+  S.marc.forEach(m => {
+    const g = geometriaMarc(m); if(!g) return;
+    const est = {color: m.cor, weight: m.esp + 1, opacity: .95};
+    if(g.tipo === 'ponto') camMarc.addLayer(L.circleMarker([g.pt[0], g.pt[1]], {radius: 11, color: '#fff', weight: 2, fillColor: m.cor, fillOpacity: 1}).bindTooltip(m.nome));
+    else if(g.tipo === 'caminho') g.linhas.forEach(l => camMarc.addLayer(L.polyline(l, est).bindTooltip(m.nome)));
+    else camMarc.addLayer(L.polygon(g.anel, Object.assign({fillColor: m.cor, fillOpacity: .3}, est)).bindTooltip(m.nome));
+    if(g.linhas) g.linhas.forEach(l => l.forEach(p => pts.push(p))); if(g.anel) g.anel.forEach(p => pts.push(p));
+  });
+  if(enquadrar !== false && pts.length) mapa.fitBounds(pts, {padding: [40, 40], maxZoom: 18});
+}
+function iniciarMarcar(id){
+  marcandoId = id; const f = fotoPorId(id);
+  irAba('mapa');
+  $('faixa-marcar').hidden = false;
+  $('faixa-txt').textContent = 'Clique no mapa onde a foto “' + (f ? f.nome : '') + '” foi tirada.';
+  if(mapa) mapa.getContainer().style.cursor = 'crosshair';
+}
+function cancelarMarcar(){ marcandoId = null; $('faixa-marcar').hidden = true; if(mapa) mapa.getContainer().style.cursor = ''; }
+$('bt-cancelar-marcar').onclick = cancelarMarcar;
+$('bt-enquadrar').onclick = () => desenharMapa(true);
+
+/* ============================================================
+   3. MARCAÇÕES
+   ============================================================ */
+let form = {sel: new Set(), cor: '#FBC02D', editando: null, ruaGeo: null};
+function pintarCores(alvo, atual, onPick){
+  const el = $(alvo);
+  el.innerHTML = CORES.map(c => '<button type="button" class="cor' + (c.hex.toLowerCase() === atual.toLowerCase() ? ' on' : '') + '" style="background:' + c.hex + '" title="' + c.nome + '" aria-label="' + c.nome + '" data-cor="' + c.hex + '"></button>').join('') +
+    '<label class="bt peq" title="Outra cor">Outra <input type="color" value="' + atual + '" style="width:26px;height:22px;border:0;padding:0;background:none"></label>';
+  el.onclick = e => { const b = e.target.closest('.cor'); if(b){ onPick(b.dataset.cor); } };
+  el.querySelector('input[type=color]').oninput = e => onPick(e.target.value.toUpperCase());
+}
+function renderCoresForm(){ pintarCores('cores', form.cor, c => { form.cor = c; renderCoresForm(); }); }
+function renderCoresPadrao(){ pintarCores('cores-padrao', S.cfg.corPadrao, c => { S.cfg.corPadrao = c; salvar(); renderCoresPadrao(); }); }
+function tipoForm(){ return document.querySelector('input[name=tipo]:checked').value; }
+function tracadoForm(){ return document.querySelector('input[name=tracado]:checked').value; }
+function atualizarOpcoesTipo(){
+  const t = tipoForm();
+  document.querySelectorAll('#tipos label').forEach(l => l.classList.toggle('on', l.querySelector('input').checked));
+  $('op-caminho').hidden = t !== 'caminho';
+  $('op-rua').hidden = !(t === 'caminho' && tracadoForm() === 'rua');
+  if(t === 'caminho' && tracadoForm() === 'rua' && !$('m-rua').value) $('m-rua').value = ruaSugerida([...form.sel]);
+}
+document.querySelectorAll('input[name=tipo], input[name=tracado]').forEach(i => i.addEventListener('change', atualizarOpcoesTipo));
+function ruaSugerida(ids){
+  const cont = {};
+  ids.map(fotoPorId).filter(Boolean).forEach(f => { const e = lerEnderecoTarja(f.end || '') || lerEnderecoTarja(f.tarja || ''); if(e && e.rua) cont[e.rua] = (cont[e.rua] || 0) + 1; });
+  return Object.keys(cont).sort((a, b) => cont[b] - cont[a])[0] || '';
+}
+function renderMini(){
+  const el = $('mini');
+  if(!S.fotos.length){ el.innerHTML = '<div class="vazio" style="grid-column:1/-1">Anexe fotos na aba 1.</div>'; return; }
+  el.innerHTML = S.fotos.map(f => {
+    const m = marcDaFoto(f.id), on = form.sel.has(f.id);
+    return '<label class="' + (on ? 'on' : '') + '" title="' + esc(f.nome) + (m ? ' · em: ' + esc(m.nome) : '') + '"><input type="checkbox" data-id="' + f.id + '"' + (on ? ' checked' : '') + '>' +
+      '<img src="' + f.thumb + '" alt="">' + (temLocal(f) ? '' : '<i class="semloc" title="Sem local"></i>') +
+      '<span style="' + (m && (!form.editando || m.id !== form.editando) ? 'background:' + m.cor + ';color:' + corTexto(m.cor) : '') + '">' + esc(fmtHora(f.data) || f.nome) + (m && (!form.editando || m.id !== form.editando) ? ' · ' + esc(m.nome) : '') + '</span></label>';
+  }).join('');
+  $('cont-sel-marc').textContent = '(' + form.sel.size + ' selecionada' + (form.sel.size === 1 ? '' : 's') + ')';
+}
+$('mini').addEventListener('change', e => { const id = e.target.dataset.id; if(!id) return; e.target.checked ? form.sel.add(id) : form.sel.delete(id); e.target.closest('label').classList.toggle('on', e.target.checked); $('cont-sel-marc').textContent = '(' + form.sel.size + ' selecionada' + (form.sel.size === 1 ? '' : 's') + ')'; form.ruaGeo = null; });
+$('bt-mm-livres').onclick = () => { S.fotos.forEach(f => { if(!marcDaFoto(f.id)) form.sel.add(f.id); }); renderMini(); };
+$('bt-mm-limpar').onclick = () => { form.sel.clear(); renderMini(); };
+
+/* geometria a partir das fotos (ordem do horário) */
+function fotosOrdenadas(ids){ return ids.map(fotoPorId).filter(Boolean).sort((a, b) => (a.data || '').localeCompare(b.data || '')); }
+function geometriaMarc(m){
+  const fs = fotosOrdenadas(m.fotos).filter(temLocal);
+  if(m.tipo === 'ponto'){
+    if(m.pt) return {tipo: 'ponto', pt: m.pt};
+    if(!fs.length) return null;
+    return {tipo: 'ponto', pt: [fs.reduce((s, f) => s + f.lat, 0) / fs.length, fs.reduce((s, f) => s + f.lon, 0) / fs.length]};
+  }
+  if(m.tipo === 'caminho'){
+    if(m.ruaGeo && m.ruaGeo.length) return {tipo: 'caminho', linhas: m.ruaGeo};
+    if(fs.length < 2) return null;
+    return {tipo: 'caminho', linhas: [fs.map(f => [f.lat, f.lon])]};
+  }
+  if(fs.length < 3) return null;
+  const cy = fs.reduce((s, f) => s + f.lat, 0) / fs.length, cx = fs.reduce((s, f) => s + f.lon, 0) / fs.length;
+  const anel = fs.map(f => [f.lat, f.lon]).sort((a, b) => Math.atan2(a[0] - cy, a[1] - cx) - Math.atan2(b[0] - cy, b[1] - cx));
+  return {tipo: 'poligono', anel};
+}
+
+/* traçado real da rua: OpenStreetMap (Overpass) */
+const OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
+function nucleoNome(n){ return semAcento(n).replace(new RegExp('^' + TIPO_RUA + '\\s+', 'i'), '').trim(); }
+function regexOverpass(n){
+  // aceita a palavra com ou sem acento: "Abrico" casa "Abricó"
+  const mapa = {a:'[aáàâã]', e:'[eéê]', i:'[ií]', o:'[oóôõ]', u:'[uúü]', c:'[cç]'};
+  return nucleoNome(n).replace(/[^A-Za-z0-9 ]/g, '.').replace(/[aeiouc]/gi, ch => mapa[ch.toLowerCase()] || ch).replace(/\s+/g, ' ');
+}
+async function tracadoRua(nome, ids){
+  const fs = ids.map(fotoPorId).filter(f => f && temLocal(f));
+  if(!fs.length) throw new Error('as fotos escolhidas não têm local; localize ao menos uma foto antes');
+  const lat = fs.reduce((s, f) => s + f.lat, 0) / fs.length, lon = fs.reduce((s, f) => s + f.lon, 0) / fs.length;
+  let raio = 700; fs.forEach(f => { raio = Math.max(raio, dist(lat, lon, f.lat, f.lon) + 500); });
+  const q = '[out:json][timeout:25];way["highway"]["name"~"' + regexOverpass(nome).replace(/"/g, '') + '",i](around:' + Math.round(raio) + ',' + lat.toFixed(6) + ',' + lon.toFixed(6) + ');out geom;';
+  let ultimoErro = null;
+  for(const url of OVERPASS){
+    try{
+      const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'data=' + encodeURIComponent(q)});
+      if(!r.ok) throw new Error('servidor ' + r.status);
+      const j = await r.json();
+      const vias = (j.elements || []).filter(e => e.geometry && e.geometry.length > 1).map(e => e.geometry.map(p => [+p.lat.toFixed(7), +p.lon.toFixed(7)]));
+      if(!vias.length) return [];
+      return juntarVias(vias);
+    }catch(e){ ultimoErro = e; }
+  }
+  throw new Error('os servidores do OpenStreetMap não responderam (' + (ultimoErro && ultimoErro.message) + '). Tente de novo em alguns minutos.');
+}
+function dist(a, b, c, d){ const R = 6371000, r = Math.PI / 180; const x = (d - b) * r * Math.cos((a + c) / 2 * r), y = (c - a) * r; return Math.sqrt(x * x + y * y) * R; }
+function juntarVias(vias){
+  const k = p => p[0].toFixed(6) + ',' + p[1].toFixed(6);
+  const resto = vias.map(v => v.slice()); const cadeias = [];
+  while(resto.length){
+    let c = resto.shift(), mudou = true;
+    while(mudou){
+      mudou = false;
+      for(let i = 0; i < resto.length; i++){
+        const v = resto[i];
+        if(k(c[c.length - 1]) === k(v[0])) c = c.concat(v.slice(1));
+        else if(k(c[c.length - 1]) === k(v[v.length - 1])) c = c.concat(v.slice(0, -1).reverse());
+        else if(k(c[0]) === k(v[v.length - 1])) c = v.slice(0, -1).concat(c);
+        else if(k(c[0]) === k(v[0])) c = v.slice(1).reverse().concat(c);
+        else continue;
+        resto.splice(i, 1); mudou = true; break;
+      }
+    }
+    cadeias.push(c);
+  }
+  return cadeias;
+}
+$('bt-buscar-rua').onclick = async () => {
+  const nome = $('m-rua').value.trim(); if(!nome){ aviso('Escreva o nome da rua.'); return; }
+  $('txt-rua').textContent = 'Buscando o traçado de “' + nome + '”…';
+  try{
+    const g = await tracadoRua(nome, [...form.sel]);
+    if(!g.length){ form.ruaGeo = null; $('txt-rua').textContent = 'Rua não encontrada perto das fotos. Confira o nome (como aparece no mapa) ou use “Ligar as fotos”.'; return; }
+    form.ruaGeo = g;
+    let m = 0; g.forEach(l => { for(let i = 1; i < l.length; i++) m += dist(l[i - 1][0], l[i - 1][1], l[i][0], l[i][1]); });
+    $('txt-rua').textContent = 'Traçado encontrado: ' + g.length + ' trecho(s), cerca de ' + Math.round(m) + ' m. Ele será usado ao criar a marcação.';
+    if(!$('m-nome').value) $('m-nome').value = nome;
+  }catch(e){ form.ruaGeo = null; $('txt-rua').textContent = 'Erro: ' + (e.message || e); }
+};
+
+function limparForm(){
+  form = {sel: new Set(), cor: form.cor, editando: null, ruaGeo: null};
+  ['m-nome', 'm-local', 'm-oc', 'm-causa', 'm-sol', 'm-com', 'm-rua'].forEach(id => $(id).value = '');
+  document.querySelector('input[name=tipo][value=ponto]').checked = true;
+  document.querySelector('input[name=tracado][value=fotos]').checked = true;
+  $('txt-rua').textContent = ''; $('tit-form').textContent = 'Nova marcação'; $('bt-salvar-marc').textContent = 'Criar marcação'; $('bt-cancelar-marc').hidden = true;
+  atualizarOpcoesTipo(); renderCoresForm(); renderMini();
+}
+$('bt-cancelar-marc').onclick = limparForm;
+$('bt-salvar-marc').onclick = () => {
+  const ids = [...form.sel], tipo = tipoForm(), msg = $('msg-marc');
+  const fs = ids.map(fotoPorId).filter(Boolean), comLocal = fs.filter(temLocal);
+  const erro = t => { msg.innerHTML = '<div class="msg bad">' + esc(t) + '</div>'; };
+  if(!ids.length) return erro('Escolha ao menos uma foto.');
+  const usarRua = tipo === 'caminho' && tracadoForm() === 'rua';
+  if(usarRua && !form.ruaGeo) return erro('Clique em “Buscar traçado” antes de criar o caminho pela rua.');
+  if(tipo === 'ponto' && !comLocal.length) return erro('Nenhuma das fotos tem local. Localize ao menos uma.');
+  if(tipo === 'caminho' && !usarRua && comLocal.length < 2) return erro('Para ligar as fotos, são precisas ao menos 2 fotos com local.');
+  if(tipo === 'poligono' && comLocal.length < 3) return erro('O polígono precisa de ao menos 3 fotos com local.');
+  const nome = $('m-nome').value.trim() || (usarRua ? $('m-rua').value.trim() : '') || ruaSugerida(ids) || ('Marcação ' + (S.marc.length + 1));
+  // uma foto fica em uma só marcação
+  S.marc.forEach(m => { if(m.id !== form.editando) m.fotos = m.fotos.filter(id => !ids.includes(id)); });
+  const dados = {nome, tipo, cor: form.cor, esp: +$('m-esp').value, local: $('m-local').value.trim(), oc: $('m-oc').value.trim(), causa: $('m-causa').value.trim(), sol: $('m-sol').value.trim(), com: $('m-com').value.trim(),
+    fotos: fotosOrdenadas(ids).map(f => f.id), ruaGeo: usarRua ? form.ruaGeo : null, ruaNome: usarRua ? $('m-rua').value.trim() : ''};
+  if(form.editando){ const m = S.marc.find(x => x.id === form.editando); Object.assign(m, dados); }
+  else S.marc.push(Object.assign({id: novoId('m')}, dados));
+  S.marc = S.marc.filter(m => m.fotos.length || m.ruaGeo);
+  salvar(); msg.innerHTML = '<div class="msg ok">Marcação “' + esc(nome) + '” ' + (form.editando ? 'atualizada' : 'criada') + '.</div>';
+  limparForm(); renderListaMarc(); renderFotos();
+};
+function renderListaMarc(){
+  $('cont-marc').textContent = S.marc.length;
+  const el = $('lista-marc');
+  if(!S.marc.length){ el.innerHTML = '<div class="vazio">Nenhuma marcação. Sem marcações, cada foto vira um ponto (se a opção acima estiver marcada).</div>'; return; }
+  const TIP = {ponto: '📍 Ponto', caminho: '〰️ Caminho', poligono: '⬠ Polígono'};
+  el.innerHTML = S.marc.map(m => {
+    const g = geometriaMarc(m);
+    return '<div class="marc" data-id="' + m.id + '"><span class="faixa" style="background:' + m.cor + '"></span><div class="info"><div class="tit">' + esc(m.nome) + '</div>' +
+      '<div class="det">' + TIP[m.tipo] + (m.ruaGeo ? ' (rua inteira)' : '') + ' · ' + m.fotos.length + ' foto(s)' + (m.local ? ' · ' + esc(m.local) : '') + (g ? '' : ' · <b style="color:var(--bad)">sem geometria: localize as fotos</b>') + '</div>' +
+      (m.oc ? '<div class="det">Ocorrência: ' + esc(m.oc) + '</div>' : '') +
+      '<div class="bts"><button type="button" class="bt peq" data-acao="editar">Editar</button><button type="button" class="bt peq" data-acao="mapa">Ver no mapa</button><button type="button" class="bt peq perigo" data-acao="excluir">Excluir</button></div></div></div>';
+  }).join('');
+}
+$('lista-marc').addEventListener('click', e => {
+  const b = e.target.closest('[data-acao]'); if(!b) return;
+  const m = S.marc.find(x => x.id === b.closest('.marc').dataset.id); if(!m) return;
+  if(b.dataset.acao === 'excluir'){ if(!confirmarPagina('Excluir a marcação “' + m.nome + '”? As fotos continuam no trabalho.')) return; S.marc = S.marc.filter(x => x !== m); salvar(); renderMarcacoes(); renderFotos(); }
+  else if(b.dataset.acao === 'mapa'){ irAba('mapa'); const g = geometriaMarc(m); if(g && mapa){ const pts = g.pt ? [g.pt] : (g.linhas ? [].concat(...g.linhas) : g.anel); mapa.fitBounds(pts, {padding: [60, 60], maxZoom: 18}); } }
+  else if(b.dataset.acao === 'editar'){
+    form = {sel: new Set(m.fotos), cor: m.cor, editando: m.id, ruaGeo: m.ruaGeo};
+    $('m-nome').value = m.nome; $('m-local').value = m.local || ''; $('m-oc').value = m.oc || ''; $('m-causa').value = m.causa || ''; $('m-sol').value = m.sol || ''; $('m-com').value = m.com || ''; $('m-esp').value = String(m.esp || 4);
+    document.querySelector('input[name=tipo][value=' + m.tipo + ']').checked = true;
+    document.querySelector('input[name=tracado][value=' + (m.ruaGeo ? 'rua' : 'fotos') + ']').checked = true;
+    $('m-rua').value = m.ruaNome || ''; $('txt-rua').textContent = m.ruaGeo ? 'Usando o traçado da rua já buscado.' : '';
+    $('tit-form').textContent = 'Editar marcação'; $('bt-salvar-marc').textContent = 'Salvar alterações'; $('bt-cancelar-marc').hidden = false;
+    atualizarOpcoesTipo(); renderCoresForm(); renderMini(); $('tit-form').scrollIntoView({behavior: 'smooth', block: 'start'});
+  }
+});
+$('cfg-avulsas').onchange = e => { S.cfg.avulsas = e.target.checked; salvar(); };
+function renderMarcacoes(){ renderMini(); renderCoresForm(); renderCoresPadrao(); renderListaMarc(); $('cfg-avulsas').checked = S.cfg.avulsas; atualizarOpcoesTipo(); }
+
+/* ============================================================
+   4. KML / KMZ
+   ============================================================ */
+function abgr(hex, alfa){ const h = hex.replace('#', ''); return (alfa || 'ff') + h.slice(4, 6) + h.slice(2, 4) + h.slice(0, 2); }
+function xml(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function cdata(s){ return '<![CDATA[' + String(s).replace(/\]\]>/g, ']]&gt;') + ']]>'; }
+function fotosLivres(){ return S.fotos.filter(f => !marcDaFoto(f.id)); }
+function itensExportacao(){
+  const itens = S.marc.map(m => ({m, g: geometriaMarc(m)}));
+  if(S.cfg.avulsas) fotosLivres().forEach(f => {
+    const m = {id: 'av_' + f.id, nome: (f.end ? f.end.split(' - ')[0] : '') || f.nome.replace(/\.[^.]+$/, ''), tipo: 'ponto', cor: S.cfg.corPadrao, esp: 4, local: f.end && f.end.includes(' - ') ? f.end.split(' - ').slice(1).join(' - ') : '', oc: '', causa: '', sol: '', com: f.coment || '', fotos: [f.id]};
+    itens.push({m, g: temLocal(f) ? {tipo: 'ponto', pt: [f.lat, f.lon]} : null});
+  });
+  return itens;
+}
+function descricao(m){
+  const fs = fotosOrdenadas(m.fotos);
+  const datas = fs.map(f => f.data).filter(Boolean).sort();
+  let quando = '';
+  if(datas.length){ const d1 = new Date(datas[0]), d2 = new Date(datas[datas.length - 1]); quando = d1.toLocaleDateString('pt-BR') + ', ' + fmtHora(datas[0]) + (datas.length > 1 && fmtHora(datas[datas.length - 1]) !== fmtHora(datas[0]) ? ' a ' + (d2.toDateString() !== d1.toDateString() ? d2.toLocaleDateString('pt-BR') + ' ' : '') + fmtHora(datas[datas.length - 1]) : ''); }
+  const origens = [...new Set(fs.filter(temLocal).map(f => ORIGEM[f.orig || 'manual']))];
+  const coments = fs.map(f => f.coment).filter(Boolean);
+  const p = (rot, t) => t ? '<p><b>' + rot + ':</b> ' + esc(t).replace(/\n/g, '<br>') + '</p>' : '';
+  return '<p><b><u>' + esc(m.nome) + '</u></b></p>' + (m.local ? '<p>' + esc(m.local) + '.</p>' : '') +
+    p('Ocorrência', m.oc) + p('Causa', m.causa) + p('Solução adotada', m.sol) + p('Comentário', [m.com].concat(String(m.id).startsWith('av_') ? [] : coments).filter(Boolean).join('\n')) +
+    (fs.length ? '<p>Fotos' + (S.cfg.autor ? ': ' + esc(S.cfg.autor) : '') + (quando ? ', ' + quando : '') + ' (' + fs.length + ').</p>' : '') +
+    (m.ruaGeo ? '<p><i>Traçado da rua conforme OpenStreetMap.</i></p>' : '') +
+    (origens.length ? '<p><i>Localização das fotos: ' + origens.join(', ') + '.</i></p>' : '');
+}
+function lookAt(pts){
+  let a = 90, b = -90, c = 180, d = -180; pts.forEach(p => { a = Math.min(a, p[0]); b = Math.max(b, p[0]); c = Math.min(c, p[1]); d = Math.max(d, p[1]); });
+  const lat = (a + b) / 2, lon = (c + d) / 2, ext = Math.max(dist(a, c, b, d), 1);
+  const rng = Math.max(250, Math.min(20000, ext * 2.2));
+  return '<LookAt><longitude>' + lon.toFixed(8) + '</longitude><latitude>' + lat.toFixed(8) + '</latitude><altitude>0</altitude><heading>0</heading><tilt>0</tilt><range>' + Math.round(rng) + '</range><altitudeMode>relativeToGround</altitudeMode></LookAt>';
+}
+const coordsTxt = pts => pts.map(p => p[1].toFixed(7) + ',' + p[0].toFixed(7) + ',0').join(' ');
+function nomeArqFoto(f){ return slug(f.nome.replace(/\.[^.]+$/, '')) + '_' + f.id.slice(-5) + '.jpg'; }
+async function prepararFotos(ids, modo, aoAvancar){
+  // modo: 'kmz' (arquivos), 'data' (embutidas), 'url' (só links) — sempre gera as reduzidas para o zip/kmz
+  const saida = new Map(); let i = 0;
+  for(const id of ids){
+    const f = fotoPorId(id), b = BLOBS.get(id);
+    if(f && b && modo !== 'url'){
+      const r = await reduzir(b, S.cfg.res, S.cfg.qual);
+      const o = {nome: nomeArqFoto(f), blob: r};
+      if(modo === 'data') o.data = await new Promise(ok => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(r); });
+      saida.set(id, o);
+    }else if(f) saida.set(id, {nome: nomeArqFoto(f), falta: !b});
+    i++; if(aoAvancar) aoAvancar(i / ids.length);
+  }
+  return saida;
+}
+async function montarKML(modo, aoAvancar){
+  const itens = itensExportacao().filter(x => x.g);
+  const ids = [...new Set([].concat(...itens.map(x => x.m.fotos)))];
+  const fotos = await prepararFotos(ids, modo, aoAvancar);
+  const base = (S.exp.url || '').trim().replace(/\/?$/, '/');
+  const estilos = new Map();
+  const estiloDe = m => { const k = 'tc_' + m.cor.replace('#', '') + '_' + m.esp; if(!estilos.has(k)) estilos.set(k, m); return k; };
+  const pms = itens.map(({m, g}) => {
+    const fsIds = fotosOrdenadas(m.fotos).map(f => f.id);
+    const car = fsIds.length ? '<gx:Carousel>' + fsIds.map(id => {
+      const o = fotos.get(id); if(!o || o.falta) return '';
+      const url = modo === 'url' ? base + o.nome : modo === 'data' ? o.data : 'files/' + o.nome;
+      return '<gx:Image kml:id="img_' + id + '"><gx:imageUrl>' + xml(url) + '</gx:imageUrl></gx:Image>';
+    }).join('') + '</gx:Carousel>' : '';
+    let geo = '', pts = [];
+    if(g.tipo === 'ponto'){ pts = [g.pt]; geo = '<Point><coordinates>' + coordsTxt(pts) + '</coordinates></Point>'; }
+    else if(g.tipo === 'caminho'){
+      pts = [].concat(...g.linhas);
+      const ls = g.linhas.map(l => '<LineString><tessellate>1</tessellate><coordinates>' + coordsTxt(l) + '</coordinates></LineString>');
+      geo = ls.length === 1 ? ls[0] : '<MultiGeometry>' + ls.join('') + '</MultiGeometry>';
+    }else{ pts = g.anel; geo = '<Polygon><tessellate>1</tessellate><outerBoundaryIs><LinearRing><coordinates>' + coordsTxt(g.anel.concat([g.anel[0]])) + '</coordinates></LinearRing></outerBoundaryIs></Polygon>'; }
+    return '<Placemark id="pm_' + m.id + '"><name>' + xml(m.nome) + '</name><description>' + cdata(descricao(m)) + '</description>' + lookAt(pts) +
+      '<styleUrl>#' + estiloDe(m) + '</styleUrl>' + car + geo + '</Placemark>';
+  });
+  const sty = [...estilos].map(([k, m]) => '<Style id="' + k + '"><IconStyle><color>' + abgr(m.cor) + '</color><scale>1.1</scale></IconStyle><LabelStyle><scale>0.9</scale></LabelStyle><LineStyle><color>' + abgr(m.cor) + '</color><width>' + m.esp + '</width></LineStyle><PolyStyle><color>' + abgr(m.cor, '59') + '</color></PolyStyle></Style>').join('');
+  const pasta = (S.exp.pasta || '').trim() || nomePastaPadrao();
+  const pastaXml = '<Folder><name>' + xml(pasta) + '</name>' + pms.join('') + '</Folder>';
+  const corpo = S.exp.destino === 'pasta' ? pms.join('') : pastaXml;   // "pasta nova": o próprio arquivo vira a pasta ao importar
+  const docNome = S.exp.destino === 'novo' ? ((S.exp.proj || '').trim() || 'Imagens GoogleEarth') : pasta;
+  let kml = '<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2" xmlns:atom="http://www.w3.org/2005/Atom">\n<Document><name>' + xml(docNome) + '</name>' + sty + corpo + '</Document>\n</kml>\n';
+  if(S.exp.destino === 'mesclar') kml = mesclarNoProjeto(sty, pastaXml);
+  return {kml, fotos, nPm: pms.length, ids};
+}
+function nomePastaPadrao(){ const d = S.fotos.map(f => f.data).filter(Boolean).sort()[0]; return 'Fotos ' + (d ? new Date(d).toLocaleDateString('pt-BR').replace(/\//g, '-') : new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')) + (S.cfg.autor ? ' (' + S.cfg.autor + ')' : ''); }
+
+/* projeto existente: lista de pastas e mesclagem */
+const NS = 'http://www.opengis.net/kml/2.2';
+function lerPastasProjeto(txt){
+  const d = new DOMParser().parseFromString(txt, 'application/xml');
+  if(d.getElementsByTagName('parsererror').length) throw new Error('o arquivo não é um KML válido');
+  const doc = d.getElementsByTagNameNS(NS, 'Document')[0]; if(!doc) throw new Error('KML sem Document');
+  const lista = [];
+  const filhos = el => [...el.children].filter(c => c.localName === 'Folder');
+  const nomeDe = el => { const n = [...el.children].find(c => c.localName === 'name'); return n ? n.textContent.trim() : '(sem nome)'; };
+  const rec = (el, cam) => filhos(el).forEach((f, i) => { const c = cam.concat([i]); lista.push({cam: c.join('.'), rot: cam.length ? '\u00a0\u00a0'.repeat(cam.length) + '› ' + nomeDe(f) : nomeDe(f)}); rec(f, c); });
+  rec(doc, []);
+  return {d, doc, lista, nome: nomeDe(doc)};
+}
+function mesclarNoProjeto(sty, pastaXml){
+  if(!projKML) throw new Error('envie o KML exportado do projeto existente');
+  const p = lerPastasProjeto(projKML);
+  const frag = new DOMParser().parseFromString('<kml xmlns="' + NS + '" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="' + NS + '"><Document>' + sty + pastaXml + '</Document></kml>', 'application/xml');
+  const fdoc = frag.getElementsByTagNameNS(NS, 'Document')[0];
+  let alvo = p.doc;
+  if(S.exp.dentro){ S.exp.dentro.split('.').forEach(i => { alvo = [...alvo.children].filter(c => c.localName === 'Folder')[+i] || alvo; }); }
+  const estilosFonte = [...fdoc.children].filter(c => c.localName === 'Style');
+  const pastaNova = [...fdoc.children].find(c => c.localName === 'Folder');
+  const primeiraPasta = [...p.doc.children].find(c => c.localName === 'Folder');
+  estilosFonte.forEach(s => p.doc.insertBefore(p.d.importNode(s, true), primeiraPasta || null));
+  const imp = p.d.importNode(pastaNova, true);
+  if(alvo === p.doc) p.doc.insertBefore(imp, primeiraPasta || null); else alvo.appendChild(imp);
+  let out = new XMLSerializer().serializeToString(p.d);
+  if(!/^<\?xml/.test(out)) out = '<?xml version="1.0" encoding="UTF-8"?>\n' + out;
+  return out;
+}
+$('in-proj').onchange = async e => {
+  const f = e.target.files[0]; if(!f) return;
+  try{
+    projKML = await f.text();
+    const p = lerPastasProjeto(projKML);
+    $('e-dentro').innerHTML = '<option value="">(no início do projeto)</option>' + p.lista.map(o => '<option value="' + o.cam + '">' + esc(o.rot) + '</option>').join('');
+    $('txt-proj').textContent = 'Projeto “' + p.nome + '” lido: ' + p.lista.length + ' pasta(s). Escolha onde a pasta nova vai entrar.';
+    S.exp.dentro = ''; salvar();
+  }catch(err){ projKML = null; $('txt-proj').textContent = 'Erro: ' + (err.message || err); }
+};
+
+function baixar(nome, blob){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 5000); }
+function nomeArquivoSaida(ext){ const base = S.exp.destino === 'novo' ? (S.exp.proj || 'Imagens_GoogleEarth') : S.exp.destino === 'pasta' ? ((S.exp.pasta || nomePastaPadrao()) + '_pasta') : ((S.exp.pasta || nomePastaPadrao()) + '_projeto_completo'); return slug(base) + '.' + ext; }
+async function gerar(tipo){
+  const msg = $('msg-exp');
+  const urlOn = S.exp.urlOn && (S.exp.url || '').trim();
+  if(S.exp.urlOn && !urlOn){ msg.innerHTML = '<div class="msg bad">Informe o endereço da pasta das fotos ou desmarque “Usar endereço público”.</div>'; return; }
+  if(S.exp.destino === 'mesclar' && !projKML){ msg.innerHTML = '<div class="msg bad">Envie o KML exportado do projeto existente.</div>'; return; }
+  const modo = urlOn ? 'url' : (tipo === 'kmz' ? 'kmz' : 'data');
+  if(tipo === 'kmz' && typeof JSZip === 'undefined'){ msg.innerHTML = '<div class="msg bad">O compactador não carregou (internet). Gere o KML.</div>'; return; }
+  ['bt-kmz', 'bt-kml', 'bt-zip'].forEach(id => $(id).disabled = true);
+  msg.innerHTML = '<div class="msg info">Preparando as fotos…</div>'; progresso('prog-exp', 0);
+  try{
+    const r = await montarKML(modo, f => progresso('prog-exp', f * .9));
+    if(!r.nPm){ msg.innerHTML = '<div class="msg bad">Nada para gerar: nenhuma marcação com local e nenhuma foto avulsa com local.</div>'; return; }
+    let blob, nome;
+    if(tipo === 'kmz'){
+      const z = new JSZip(); z.file('doc.kml', r.kml);
+      if(modo === 'kmz') r.fotos.forEach(o => { if(o.blob) z.file('files/' + o.nome, o.blob); });
+      blob = await z.generateAsync({type: 'blob', mimeType: 'application/vnd.google-earth.kmz', compression: 'DEFLATE', compressionOptions: {level: 6}}, m => progresso('prog-exp', .9 + m.percent / 1000));
+      nome = nomeArquivoSaida('kmz');
+    }else{ blob = new Blob([r.kml], {type: 'application/vnd.google-earth.kml+xml'}); nome = nomeArquivoSaida('kml'); }
+    baixar(nome, blob);
+    const faltam = [...r.fotos.values()].filter(o => o.falta).length;
+    msg.innerHTML = '<div class="msg ok"><b>' + esc(nome) + '</b> gerado (' + kb(blob.size) + '): ' + r.nPm + ' marcação(ões), ' + r.ids.length + ' foto(s).</div>' +
+      (faltam ? '<div class="msg warn">' + faltam + ' foto(s) sem o arquivo original neste aparelho ficaram fora do carrossel. Anexe-as de novo.</div>' : '') +
+      (blob.size > 20 * 1048576 ? '<div class="msg warn">Arquivo grande. Se o Google Earth Web travar, reduza a resolução na aba Fotos.</div>' : '') +
+      (modo === 'url' ? '<div class="msg info">As fotos não estão no arquivo: suba o .zip de fotos reduzidas no endereço informado antes de importar.</div>' : '');
+  }catch(e){ console.error(e); msg.innerHTML = '<div class="msg bad">Erro ao gerar: ' + esc(e.message || e) + '</div>'; }
+  finally{ progresso('prog-exp', null); ['bt-kmz', 'bt-kml', 'bt-zip'].forEach(id => $(id).disabled = false); }
+}
+async function gerarZipFotos(){
+  const msg = $('msg-exp');
+  if(typeof JSZip === 'undefined'){ msg.innerHTML = '<div class="msg bad">O compactador não carregou (internet).</div>'; return; }
+  const itens = itensExportacao().filter(x => x.g);
+  const ids = [...new Set([].concat(...itens.map(x => x.m.fotos)))];
+  if(!ids.length){ msg.innerHTML = '<div class="msg bad">Nenhuma foto para exportar.</div>'; return; }
+  progresso('prog-exp', 0);
+  const fotos = await prepararFotos(ids, 'kmz', f => progresso('prog-exp', f * .9));
+  const z = new JSZip(); fotos.forEach(o => { if(o.blob) z.file(o.nome, o.blob); });
+  const blob = await z.generateAsync({type: 'blob', compression: 'STORE'});
+  progresso('prog-exp', null);
+  baixar(slug(S.exp.pasta || nomePastaPadrao()) + '_fotos.zip', blob);
+  msg.innerHTML = '<div class="msg ok">Fotos reduzidas (' + fotos.size + ', ' + kb(blob.size) + '). Descompacte e suba os arquivos, sem subpastas, no endereço público informado.</div>';
+}
+$('bt-kmz').onclick = () => gerar('kmz');
+$('bt-kml').onclick = () => gerar('kml');
+$('bt-zip').onclick = gerarZipFotos;
+
+function renderExportar(){
+  document.querySelectorAll('input[name=destino]').forEach(i => { i.checked = i.value === S.exp.destino; i.closest('.opcao').classList.toggle('on', i.checked); });
+  $('c-proj').hidden = S.exp.destino !== 'novo';
+  $('c-existente').hidden = S.exp.destino !== 'mesclar';
+  $('e-proj').value = S.exp.proj || ''; $('e-pasta').value = S.exp.pasta || ''; $('e-pasta').placeholder = nomePastaPadrao();
+  $('e-url-on').checked = !!S.exp.urlOn; $('c-url').hidden = !S.exp.urlOn; $('e-url').value = S.exp.url || '';
+  const itens = itensExportacao(), ok = itens.filter(x => x.g), sem = itens.filter(x => !x.g);
+  const nFotos = new Set([].concat(...ok.map(x => x.m.fotos))).size;
+  const livresSemLocal = S.cfg.avulsas ? 0 : fotosLivres().length;
+  $('resumo-exp').innerHTML = '<div class="resumo"><span class="pill">' + S.marc.length + ' marcação(ões)</span><span class="pill">' + (ok.length - S.marc.filter(m => geometriaMarc(m)).length) + ' ponto(s) avulso(s)</span><span class="pill gps">' + nFotos + ' foto(s) no arquivo</span></div>' +
+    (sem.length ? '<div class="msg warn">' + sem.length + ' item(ns) sem local ficarão fora do arquivo: ' + esc(sem.slice(0, 6).map(x => x.m.nome).join(', ')) + (sem.length > 6 ? '…' : '') + '. Localize na aba Fotos ou Mapa.</div>' : '') +
+    (livresSemLocal ? '<div class="msg info">' + livresSemLocal + ' foto(s) fora das marcações não entram (a opção de pontos avulsos está desligada).</div>' : '') +
+    (S.exp.destino === 'mesclar' ? '<div class="msg warn">O projeto completo leva também as fotos antigas hospedadas pelo Google. Ao importar como projeto novo, o Google Earth pode avisar “a imagem externa atingiu o limite máximo de busca” nas fotos antigas. Para só acrescentar, prefira “Pasta nova dentro de um projeto existente”.</div>' : '');
+  const passos = {
+    novo: ['Gere o <b>KMZ</b> (fotos dentro do arquivo). Se o Google Earth não mostrar as fotos, gere o <b>KML</b> e teste.', 'Abra <a href="https://earth.google.com/web/" target="_blank" rel="noopener">earth.google.com/web</a> › <b>Arquivo › Novo projeto de mapa</b>.', 'Em <b>Conteúdo do mapa</b>, clique no <b>+</b> e importe o arquivo gerado.', 'Clique numa marcação: as fotos aparecem no painel, com a seta para passar de uma para outra.'],
+    pasta: ['Gere o <b>KMZ</b> ou o <b>KML</b> (só a pasta nova, arquivo pequeno).', 'Abra o projeto existente no Google Earth Web. Você precisa de <b>permissão de edição</b>: se aparecer “Acesso de leitura”, peça acesso ao dono ou use <b>Arquivo › Fazer uma cópia</b>.', 'Em <b>Conteúdo do mapa</b>, clique no <b>+</b> e importe o arquivo. A pasta nova aparece na lista.', 'Se quiser, arraste a pasta nova para dentro de outra pasta do projeto.'],
+    mesclar: ['No projeto existente: <b>Arquivo › Exportar como arquivo KML</b> e envie esse arquivo aqui.', 'Escolha a pasta onde a pasta nova vai entrar e gere o arquivo completo.', 'Abra o arquivo como projeto novo (<b>Arquivo › Abrir arquivo KML local</b> ou importe num projeto novo).']
+  };
+  $('passos').innerHTML = passos[S.exp.destino].map(t => '<li>' + t + '</li>').join('');
+}
+document.querySelectorAll('input[name=destino]').forEach(i => i.addEventListener('change', () => { S.exp.destino = i.value; salvar(); renderExportar(); }));
+$('e-proj').onchange = e => { S.exp.proj = e.target.value.trim(); salvar(); };
+$('e-pasta').onchange = e => { S.exp.pasta = e.target.value.trim(); salvar(); };
+$('e-dentro').onchange = e => { S.exp.dentro = e.target.value; salvar(); };
+$('e-url-on').onchange = e => { S.exp.urlOn = e.target.checked; salvar(); renderExportar(); };
+$('e-url').onchange = e => { S.exp.url = e.target.value.trim(); salvar(); };
+
+/* ============================================================
+   SALVAR COMO / ABRIR / NOVO
+   ============================================================ */
+$('bt-salvar').onclick = async () => {
+  aviso('Preparando o arquivo do trabalho…', 8000);
+  const fotos = {};
+  for(const f of S.fotos){ const b = BLOBS.get(f.id); if(b){ const r = await reduzir(b, S.cfg.res || 2048, Math.max(S.cfg.qual, .85)); fotos[f.id] = await new Promise(ok => { const fr = new FileReader(); fr.onload = () => ok(fr.result); fr.readAsDataURL(r); }); } }
+  const blob = new Blob([JSON.stringify({programa: 'Imagens GoogleEarth', versao: VERSAO, salvoEm: new Date().toISOString(), estado: S, fotos})], {type: 'application/json'});
+  baixar(slug(S.exp.proj || 'Imagens_GoogleEarth') + '_trabalho.json', blob);
+  aviso('Trabalho salvo (' + kb(blob.size) + '). Use “Abrir” para continuar depois, em qualquer aparelho.', 5000);
+};
+$('bt-abrir').onclick = () => $('in-abrir').click();
+$('in-abrir').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if(!f) return;
+  try{
+    const o = JSON.parse(await f.text());
+    if(o.programa !== 'Imagens GoogleEarth' || !o.estado) throw new Error('este arquivo não é um trabalho do Imagens GoogleEarth');
+    if(S.fotos.length && !confirmarPagina('Substituir o trabalho atual pelo arquivo aberto?')) return;
+    await DB.limpar('fotos').catch(() => {}); BLOBS.clear();
+    S = Object.assign(novoEstado(), o.estado); S.cfg = Object.assign(novoEstado().cfg, o.estado.cfg || {}); S.exp = Object.assign(novoEstado().exp, o.estado.exp || {});
+    for(const id of Object.keys(o.fotos || {})){ const b = await (await fetch(o.fotos[id])).blob(); BLOBS.set(id, b); await DB.put('fotos', id, b).catch(() => {}); }
+    salvar(); aplicarConfig(); renderTudo(); aviso('Trabalho aberto: ' + S.fotos.length + ' foto(s), ' + S.marc.length + ' marcação(ões).');
+  }catch(err){ aviso('Não foi possível abrir: ' + (err.message || err), 6000); }
+};
+$('bt-novo').onclick = async () => {
+  if(S.fotos.length && !confirmarPagina('Começar um trabalho novo? As fotos e marcações atuais saem deste aparelho (salve antes, se quiser).')) return;
+  const amb = S.amb; S = novoEstado(); S.amb = amb; BLOBS.clear(); projKML = null;
+  await DB.limpar('fotos').catch(() => {}); salvar(); aplicarConfig(); renderTudo(); irAba('fotos');
+};
+
+function aplicarConfig(){
+  $('cfg-res').value = String(S.cfg.res); $('cfg-qual').value = String(S.cfg.qual); $('cfg-autor').value = S.cfg.autor || ''; $('cfg-mun').value = S.cfg.mun || '';
+}
+function renderTudo(){ renderFotos(); renderMarcacoes(); renderExportar(); if(mapa) desenharMapa(); }
+
+/* ---------- início ---------- */
+function iniciar(){
+  carregarLocal().then(() => {
+    aplicarConfig(); renderTudo();
+    if(S.amb) aplicarAmbiente(S.amb); else abrirSelecaoAmbiente();
+  });
+}
+if(window.TC_ACESSO === 'liberado' || !document.documentElement.classList.contains('tc-trava')) iniciar();
+else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
+</script>
+</body>
+</html>

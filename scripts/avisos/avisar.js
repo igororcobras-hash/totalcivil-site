@@ -2,7 +2,7 @@
    pede acesso teste/pacote ou avisa um pagamento. Roda no GitHub Actions a cada ~10 minutos.
    Chaves e telefone ficam nos segredos do GitHub, nunca no código do site.
    O ponto de partida fica em config/avisos (campo ultimo, em ms). Na 1ª execução só marca o ponto de partida. */
-const NOMES = {orcamento: 'Orçamento', intertravado: 'Intertravado', drenagem: 'Drenagem', visitas: 'Visitas', manutencao: 'Serviços Públicos', estrutura: 'Estrutura'};
+const NOMES = {orcamento: 'Orçamento', intertravado: 'Intertravado', drenagem: 'Drenagem', visitas: 'Visitas', manutencao: 'Serviços Públicos', googleearth: 'Imagens GoogleEarth', estrutura: 'Estrutura'};
 
 function ms(v){ if(!v) return 0; if(typeof v.toMillis === 'function') return v.toMillis(); const d = new Date(v); return isNaN(d.getTime()) ? 0 : d.getTime(); }
 
