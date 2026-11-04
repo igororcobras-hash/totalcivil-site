@@ -180,6 +180,7 @@ table.ruas tr.off td{opacity:.45}
 .st{font-weight:700;font-size:11.5px;border-radius:99px;padding:2px 9px;white-space:nowrap}
 .st.ok{background:var(--ok-bg);color:var(--ok)}.st.aprox{background:var(--warn-bg);color:var(--warn)}.st.bairro{background:#F1ECFB;color:#5B3BA0}.st.nao{background:var(--bad-bg);color:var(--bad)}.st.pend{background:#eef0f3;color:var(--muted)}
 .det-props{font-size:11.5px;color:var(--muted);margin-top:4px}.det-props summary{cursor:pointer;font-weight:700}.det-props div{word-break:break-word}
+.foto .campo input[readonly]{background:#f3f1ec;color:var(--ink);cursor:text}
 </style>
 <script src="/assistente-abas.js" data-tabs=".header-nav button" data-auxilio="gerar"></script>
 </head>
@@ -289,6 +290,16 @@ table.ruas tr.off td{opacity:.45}
       <div class="campo" style="flex:1;min-width:180px" id="f-c-proj"><label for="f-proj">Nome do projeto</label><input id="f-proj"></div>
       <div class="campo" style="flex:1;min-width:180px"><label for="f-pasta">Nome da pasta nova</label><input id="f-pasta"></div>
     </div>
+    <div id="f-c-existente" hidden style="margin-top:10px">
+      <div class="linha">
+        <div class="campo" style="flex:2;min-width:240px"><label for="f-in-proj">KML exportado do seu projeto (Google Earth: Arquivo › Exportar como arquivo KML)</label><input type="file" id="f-in-proj" accept=".kml,application/vnd.google-earth.kml+xml"></div>
+        <div class="campo" style="flex:1;min-width:200px"><label for="f-dentro">Pasta onde a nova entra</label><select id="f-dentro"><option value="">(no início do projeto)</option></select></div>
+      </div>
+      <p class="ajuda" id="f-txt-proj"></p>
+    </div>
+    <div class="campo" style="margin-top:10px"><label for="f-link">Link do seu projeto no Google Earth (opcional — o botão “Abrir” leva direto a ele)</label><input id="f-link" placeholder="https://earth.google.com/earth/d/..."></div>
+    <label class="opcao" style="margin-top:10px"><input type="checkbox" id="f-url-on"><span><b>Usar endereço público para as fotos</b><small>Só se as fotos ficarem hospedadas num site. Normalmente deixe desmarcado: as fotos vão dentro do KMZ.</small></span></label>
+    <div class="campo" id="f-c-url" hidden style="margin-top:8px"><label for="f-url">Endereço da pasta das fotos</label><input id="f-url" placeholder="https://raw.githubusercontent.com/usuario/repositorio/main/fotos/"></div>
     <div class="linha" style="margin-top:10px">
       <button type="button" class="bt pri" id="bt-kmz-f">⬇ Gerar KMZ (com fotos)</button>
       <button type="button" class="bt" id="bt-kml-f">⬇ Gerar KML</button>
@@ -774,7 +785,7 @@ function renderFotos(){
       (m ? '<span class="grp" style="background:' + m.cor + ';color:' + corTexto(m.cor) + '">' + esc(m.nome) + '</span>' : '') + '</div>' +
       '<div class="corpo"><div class="nome">' + esc(f.nome) + '</div>' +
       '<div class="campo"><label>Data e hora</label><input type="datetime-local" data-campo="data" value="' + isoLocal(f.data) + '"></div>' +
-      '<div class="campo"><label>Coordenadas (lat, long)</label><input data-campo="coord" placeholder="-22.550742, -41.974335 ou 22°33\'2,67&quot;S 41°58\'27,6&quot;W" value="' + (temLocal(f) ? f.lat.toFixed(6) + ', ' + f.lon.toFixed(6) : '') + '"></div>' +
+      '<div class="campo"><label>Coordenadas (lat, long)</label><input data-campo="coord" placeholder="-22.550742, -41.974335 ou 22°33\'2,67&quot;S 41°58\'27,6&quot;W" value="' + (temLocal(f) ? f.lat.toFixed(6) + ', ' + f.lon.toFixed(6) : '') + '"' + (temLocal(f) ? ' readonly title="Para mudar o local use “Marcar no mapa”. Você pode selecionar e copiar."' : '') + '></div>' +
       '<div class="campo"><label>Endereço</label><input data-campo="end" placeholder="Rua, número - bairro" value="' + esc(f.end) + '"></div>' +
       '<div class="campo"><label>Comentário</label><textarea data-campo="coment" placeholder="Opcional">' + esc(f.coment) + '</textarea></div>' +
       blocoProps(f) +
@@ -785,6 +796,7 @@ function renderFotos(){
 }
 function corTexto(hex){ const n = parseInt(hex.slice(1), 16); const l = (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255; return l > 0.6 ? '#0F1E33' : '#fff'; }
 
+$('grade').addEventListener('focusin', e => { if(e.target.matches && e.target.matches('input[data-campo=coord][readonly]')) e.target.select(); });
 $('grade').addEventListener('click', async e => {
   const card = e.target.closest('.foto'); if(!card) return;
   const f = fotoPorId(card.dataset.id); if(!f) return;
@@ -1309,16 +1321,20 @@ function mesclarNoProjeto(sty, pastaXml){
   if(!/^<\?xml/.test(out)) out = '<?xml version="1.0" encoding="UTF-8"?>\n' + out;
   return out;
 }
-$('in-proj').onchange = async e => {
-  const f = e.target.files[0]; if(!f) return;
+async function carregarProjeto(f){
+  if(!f) return;
+  const txt = ['txt-proj', 'f-txt-proj'];
   try{
     projKML = await f.text();
     const p = lerPastasProjeto(projKML);
     $('e-dentro').innerHTML = '<option value="">(no início do projeto)</option>' + p.lista.map(o => '<option value="' + o.cam + '">' + esc(o.rot) + '</option>').join('');
-    $('txt-proj').textContent = 'Projeto “' + p.nome + '” lido: ' + p.lista.length + ' pasta(s). Escolha onde a pasta nova vai entrar.';
     S.exp.dentro = ''; salvar();
+    $('txt-proj').textContent = 'Projeto “' + p.nome + '” lido: ' + p.lista.length + ' pasta(s). Escolha onde a pasta nova vai entrar.';
   }catch(err){ projKML = null; $('txt-proj').textContent = 'Erro: ' + (err.message || err); }
-};
+  renderGerarAqui();
+}
+$('in-proj').onchange = e => carregarProjeto(e.target.files[0]);
+$('f-in-proj').onchange = e => carregarProjeto(e.target.files[0]);
 
 function baixar(nome, blob){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 5000); }
 function nomeArquivoSaida(ext){ const base = S.exp.destino === 'novo' ? (S.exp.proj || 'Imagens_GoogleEarth') : S.exp.destino === 'pasta' ? ((S.exp.pasta || nomePastaPadrao()) + '_pasta') : ((S.exp.pasta || nomePastaPadrao()) + '_projeto_completo'); return slug(base) + '.' + ext; }
@@ -1336,7 +1352,7 @@ async function completarLocais(){
 async function gerar(tipo){
   const msg = msgExp();
   const urlOn = S.exp.urlOn && (S.exp.url || '').trim();
-  if(S.exp.urlOn && !urlOn){ msg.innerHTML = '<div class="msg bad">Informe o endereço da pasta das fotos ou desmarque “Usar endereço público”.</div>'; return; }
+  if(S.exp.urlOn && !urlOn){ msg.innerHTML = '<div class="msg bad">Informe o endereço da pasta das fotos no campo acima ou desmarque “Usar endereço público para as fotos”.</div>'; return; }
   if(S.exp.destino === 'mesclar' && !projKML){ msg.innerHTML = '<div class="msg bad">Envie o KML exportado do projeto existente.</div>'; return; }
   const modo = urlOn ? 'url' : (tipo === 'kmz' ? 'kmz' : 'data');
   if(tipo === 'kmz' && typeof JSZip === 'undefined'){ msg.innerHTML = '<div class="msg bad">O compactador não carregou (internet). Gere o KML.</div>'; return; }
@@ -1390,8 +1406,17 @@ function linkEarth(){
 function renderGerarAqui(){
   $('f-dest').value = S.exp.destino; $('f-c-proj').hidden = S.exp.destino !== 'novo';
   $('f-proj').value = S.exp.proj || ''; $('f-pasta').value = S.exp.pasta || ''; $('f-pasta').placeholder = nomePastaPadrao();
-  $('lk-earth').href = linkEarth();
+  $('f-c-existente').hidden = S.exp.destino !== 'mesclar';
+  $('f-dentro').innerHTML = $('e-dentro').innerHTML; $('f-dentro').value = S.exp.dentro || '';
+  $('f-txt-proj').textContent = $('txt-proj').textContent;
+  $('f-url-on').checked = !!S.exp.urlOn; $('f-c-url').hidden = !S.exp.urlOn; $('f-url').value = S.exp.url || '';
+  $('f-link').value = S.exp.link || '';
+  $('lk-earth').href = (S.exp.link || '').trim() || linkEarth();
 }
+$('f-url-on').onchange = e => { S.exp.urlOn = e.target.checked; salvar(); renderExportar(); };
+$('f-url').onchange = e => { S.exp.url = e.target.value.trim(); salvar(); renderExportar(); };
+$('f-link').onchange = e => { S.exp.link = e.target.value.trim(); salvar(); renderGerarAqui(); };
+$('f-dentro').onchange = e => { S.exp.dentro = e.target.value; salvar(); renderExportar(); };
 $('f-dest').onchange = e => { S.exp.destino = e.target.value; salvar(); renderGerarAqui(); renderExportar(); };
 $('f-proj').onchange = e => { S.exp.proj = e.target.value.trim(); salvar(); renderExportar(); };
 $('f-pasta').onchange = e => { S.exp.pasta = e.target.value.trim(); salvar(); renderExportar(); };
