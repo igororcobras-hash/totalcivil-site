@@ -301,7 +301,8 @@ table.ruas tr.off td{opacity:.45}
     <label class="opcao" style="margin-top:10px"><input type="checkbox" id="f-url-on"><span><b>Usar endereço público para as fotos</b><small>Só se as fotos ficarem hospedadas num site. Normalmente deixe desmarcado: as fotos vão dentro do KMZ.</small></span></label>
     <div class="campo" id="f-c-url" hidden style="margin-top:8px"><label for="f-url">Endereço da pasta das fotos</label><input id="f-url" placeholder="https://raw.githubusercontent.com/usuario/repositorio/main/fotos/"></div>
     <div class="linha" style="margin-top:10px">
-      <button type="button" class="bt pri" id="bt-kmz-f">⬇ Gerar KMZ (com fotos)</button>
+      <button type="button" class="bt pri" id="bt-enviar">🚀 Gerar e abrir o projeto no Google Earth</button>
+      <button type="button" class="bt" id="bt-kmz-f">⬇ Só gerar KMZ</button>
       <button type="button" class="bt" id="bt-kml-f">⬇ Gerar KML</button>
       <a class="bt" id="lk-earth" href="https://earth.google.com/web/" target="_blank" rel="noopener">🌍 Abrir no Google Earth Web</a>
     </div>
@@ -736,6 +737,7 @@ async function adicionarArquivos(lista){
   S.fotos.sort((a, b) => (a.data || '').localeCompare(b.data || ''));
   progresso('prog-fotos', null);
   salvar(); renderFotos();
+  setTimeout(() => enderecosPorCoord(S.fotos.filter(f => temLocal(f) && !f.end), true), 300);   // coordenada → endereço, sozinho
   aviso(feitos - falhas + ' foto(s) anexada(s) · ' + comGps + ' com GPS' + (comProp ? ' · ' + comProp + ' com coordenada nas propriedades do arquivo' : '') + (falhas ? ' · ' + falhas + ' não puderam ser lidas (formato não suportado neste navegador)' : ''), 5200);
 }
 $('bt-anexar').onclick = () => $('in-fotos').click();
@@ -821,7 +823,7 @@ $('grade').addEventListener('change', e => {
   else if(c === 'coord'){
     const v = e.target.value.trim();
     if(!v){ delete f.lat; delete f.lon; f.orig = null; }
-    else { const r = lerCoordenadas(v); if(r){ f.lat = r.lat; f.lon = r.lon; f.orig = 'manual'; } else { aviso('Coordenadas não reconhecidas. Use -22.5507, -41.9743 ou 22°33\'2,67"S 41°58\'27,6"W.'); return; } }
+    else { const r = lerCoordenadas(v); if(r){ f.lat = r.lat; f.lon = r.lon; f.orig = 'manual'; if(!f.end) setTimeout(() => enderecosPorCoord([f], true), 50); } else { aviso('Coordenadas não reconhecidas. Use -22.5507, -41.9743 ou 22°33\'2,67"S 41°58\'27,6"W.'); return; } }
     renderFotos();
   }
   else if(c === 'end'){ f.end = e.target.value.trim(); if(f.end && !temLocal(f)){ salvar(); geocodificar([f], true); return; } }
@@ -948,22 +950,26 @@ async function enderecoDeCoord(lat, lon){
   if(!rua && !bairro) return '';
   return [rua + (num ? ', ' + num : ''), bairro].filter(Boolean).join(' - ');
 }
-$('bt-rev').onclick = async () => {
-  const alvo = S.fotos.filter(f => temLocal(f) && !f.end && (!S.fotos.some(x => x.sel) || f.sel));
-  if(!alvo.length){ aviso('Todas as fotos com local já têm endereço (ou não há fotos com local).'); return; }
+let _revRodando = false;
+async function enderecosPorCoord(alvo, auto){
+  alvo = alvo.filter(f => temLocal(f) && !f.end);
+  if(!alvo.length){ if(!auto) aviso('Todas as fotos com local já têm endereço.'); return; }
+  if(_revRodando) return; _revRodando = true;
   progresso('prog-acao', 0); let ok = 0; const cache = {};
   $('bt-rev').disabled = true;
   try{
     for(let i = 0; i < alvo.length; i++){
-      const f = alvo[i], k = f.lat.toFixed(5) + ',' + f.lon.toFixed(5);
-      $('txt-acao').textContent = 'Buscando endereço ' + (i + 1) + ' de ' + alvo.length + '…';
-      if(cache[k] === undefined){ try{ cache[k] = await enderecoDeCoord(f.lat, f.lon); }catch(e){ $('txt-acao').textContent = 'Erro: ' + (e.message || e); break; } await espera(1100); }
-      if(cache[k]){ f.end = cache[k]; ok++; }
+      const f = alvo[i]; if(f.end || !temLocal(f)) continue;
+      const k = f.lat.toFixed(4) + ',' + f.lon.toFixed(4);
+      $('txt-acao').textContent = 'Preenchendo endereço pelas coordenadas: ' + (i + 1) + ' de ' + alvo.length + '…';
+      if(cache[k] === undefined){ try{ cache[k] = await enderecoDeCoord(f.lat, f.lon); }catch(e){ $('txt-acao').textContent = 'Endereço não preenchido (serviço indisponível): ' + (e.message || e); break; } await espera(1100); }
+      if(cache[k]){ f.end = cache[k]; ok++; const inp = document.querySelector('#grade .foto[data-id="' + f.id + '"] input[data-campo=end]'); if(inp && !inp.value) inp.value = f.end; }
       progresso('prog-acao', (i + 1) / alvo.length); salvar();
     }
-  } finally { progresso('prog-acao', null); $('bt-rev').disabled = false; renderFotos(); }
-  if(ok) $('txt-acao').textContent = ok + ' de ' + alvo.length + ' endereço(s) preenchido(s) pelas coordenadas. Confira antes de gerar.';
-};
+  } finally { _revRodando = false; progresso('prog-acao', null); $('bt-rev').disabled = false; renderFotos(); }
+  if(ok) $('txt-acao').textContent = ok + ' endereço(s) preenchido(s) pelas coordenadas.';
+}
+$('bt-rev').onclick = () => enderecosPorCoord(S.fotos.filter(f => !S.fotos.some(x => x.sel) || f.sel));
 $('bt-geo').onclick = () => geocodificar(S.fotos.filter(f => !temLocal(f) || f.orig === 'endereco'));
 
 /* ============================================================
@@ -1345,7 +1351,7 @@ $('f-in-proj').onchange = e => carregarProjeto(e.target.files[0]);
 
 function baixar(nome, blob){ const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = nome; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 5000); }
 function nomeArquivoSaida(ext){ const base = S.exp.destino === 'novo' ? (S.exp.proj || 'Imagens_GoogleEarth') : S.exp.destino === 'pasta' ? ((S.exp.pasta || nomePastaPadrao()) + '_pasta') : ((S.exp.pasta || nomePastaPadrao()) + '_projeto_completo'); return slug(base) + '.' + ext; }
-const BT_GERAR = ['bt-kmz', 'bt-kml', 'bt-zip', 'bt-kmz-f', 'bt-kml-f'];
+const BT_GERAR = ['bt-kmz', 'bt-kml', 'bt-zip', 'bt-kmz-f', 'bt-kml-f', 'bt-enviar'];
 function msgExp(){ const a = $('msg-exp'), b = $('msg-exp2'); return {set innerHTML(h){ a.innerHTML = h; b.innerHTML = h; }}; }
 function progExp(f){ progresso('prog-exp', f); progresso('prog-exp2', f); }
 async function completarLocais(){
@@ -1382,7 +1388,7 @@ async function gerar(tipo){
     msg.innerHTML = avisoDestino + '<div class="msg ok"><b>' + esc(nome) + '</b> gerado (' + kb(blob.size) + '): ' + r.nPm + ' marcação(ões), ' + r.ids.length + ' foto(s).</div>' +
       (S.fotos.some(f => !temLocal(f)) ? '<div class="msg warn">' + S.fotos.filter(f => !temLocal(f)).length + ' foto(s) continuam sem local (sem coordenada, tarja legível ou endereço encontrado) e ficaram fora do arquivo. Marque-as no mapa e gere de novo.</div>' : '') +
       (faltam ? '<div class="msg warn">' + faltam + ' foto(s) sem o arquivo original neste aparelho ficaram fora do carrossel. Anexe-as de novo.</div>' : '') +
-      '<div class="msg info">Agora abra o <a href="' + linkEarth() + '" target="_blank" rel="noopener"><b>Google Earth Web neste local</b></a> e importe o arquivo: <b>Arquivo › Abrir arquivo KML local</b> (ou <b>Importar</b> dentro do projeto). O Google não permite enviar o arquivo por link; o importador do Earth precisa ser acionado por você.</div>' + (blob.size > 20 * 1048576 ? '<div class="msg warn">Arquivo grande. Se o Google Earth Web travar, reduza a resolução na aba Fotos.</div>' : '') +
+      passosEarth(nome) + (blob.size > 20 * 1048576 ? '<div class="msg warn">Arquivo grande. Se o Google Earth Web travar, reduza a resolução na aba Fotos.</div>' : '') +
       (modo === 'url' ? '<div class="msg info">As fotos não estão no arquivo: suba o .zip de fotos reduzidas no endereço informado antes de importar.</div>' : '');
   }catch(e){ console.error(e); msg.innerHTML = '<div class="msg bad">Erro ao gerar: ' + esc(e.message || e) + '</div>'; }
   finally{ progExp( null); BT_GERAR.forEach(id => $(id).disabled = false); }
@@ -1405,6 +1411,15 @@ $('bt-kmz').onclick = () => gerar('kmz'); $('bt-kmz-f').onclick = () => gerar('k
 $('bt-kml').onclick = () => gerar('kml');
 $('bt-zip').onclick = gerarZipFotos;
 
+function passosEarth(nome){
+  const link = (S.exp.link || '').trim(), pasta = esc((S.exp.pasta || '').trim() || nomePastaPadrao());
+  const abrir = link ? '<a href="' + esc(link) + '" target="_blank" rel="noopener"><b>seu projeto</b></a>' : '<a href="' + linkEarth() + '" target="_blank" rel="noopener"><b>Google Earth Web</b></a>';
+  return '<div class="msg info"><b>Falta 1 passo no Google Earth</b> (o Google não deixa outro site gravar no projeto):<ol class="passos">' +
+    (S.exp.destino === 'novo'
+      ? '<li>No ' + abrir + ': <b>Arquivo › Abrir arquivo KML local</b> e escolha <b>' + esc(nome) + '</b>.</li><li>Clique em <b>Salvar no projeto</b>. Para todos verem, use <b>Compartilhar</b> no projeto.</li>'
+      : '<li>No ' + abrir + ' (com permissão de edição), clique em <b>+ Novo › Importar arquivo KML</b> e escolha <b>' + esc(nome) + '</b>.</li><li>Entra a pasta <b>' + pasta + '</b> com as fotos. Para pôr numa pasta que já existe, arraste-a para dentro dela.</li><li>Quem tem o link do projeto passa a ver as fotos.</li>') +
+    '</ol></div>';
+}
 function linkEarthPonto(lat, lon, busca, dist){
   // mesmo modelo dos links do Google Earth Web: /web/search/<busca>/@lat,lon,altitude,distância,35y,0h,0t,0r
   const q = encodeURIComponent(busca || (lat.toFixed(6) + ',' + lon.toFixed(6))).replace(/%20/g, '+');
@@ -1435,7 +1450,13 @@ function renderGerarAqui(){
 }
 $('f-url-on').onchange = e => { S.exp.urlOn = e.target.checked; salvar(); renderExportar(); };
 $('f-url').onchange = e => { S.exp.url = e.target.value.trim(); salvar(); renderExportar(); };
-$('f-link').onchange = e => { S.exp.link = e.target.value.trim(); salvar(); renderGerarAqui(); };
+$('f-link').onchange = e => { S.exp.link = e.target.value.trim(); if(S.exp.link && S.exp.destino === 'novo') S.exp.destino = 'pasta'; salvar(); renderGerarAqui(); renderExportar(); };
+$('bt-enviar').onclick = () => {
+  const link = (S.exp.link || '').trim();
+  if(link && S.exp.destino === 'novo') S.exp.destino = 'pasta';
+  try{ window.open(link || linkEarth(), '_blank', 'noopener'); }catch(e){}   // abre já, antes de gerar (senão o navegador bloqueia)
+  gerar('kmz');
+};
 $('f-dentro').onchange = e => { S.exp.dentro = e.target.value; salvar(); renderExportar(); };
 $('f-dest').onchange = e => { S.exp.destino = e.target.value; salvar(); renderGerarAqui(); renderExportar(); };
 $('f-proj').onchange = e => { S.exp.proj = e.target.value.trim(); salvar(); renderExportar(); };
