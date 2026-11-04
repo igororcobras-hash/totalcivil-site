@@ -2745,7 +2745,7 @@ ACTS.sp6Excluir = function () { if (!canPI()) { toast('Só o Gestor / Secretári
   const uso = alvo.filter(p => p.emUso);
   if (!confirm('Excluir ' + alvo.length + ' planejamento(s)?\n\n' + alvo.map(p => '• ' + p.nome + (p.emUso ? ' (EM USO)' : '')).join('\n') + (uso.length ? '\n\nOs que estão em uso deixam de valer: as ocorrências programadas por eles voltam a ficar sem semana (as que já têm execução não mudam).' : '') + '\n\nNão dá para desfazer.')) return;
   let n = 0; uso.forEach(p => { n += soltarPlano(o, p, null, 'Saiu da programação (planejamento excluído)'); });
-  const ids = new Set(alvo.map(p => p.id)); o.planejamentos = PLS(o).filter(p => !ids.has(p.id)); S.f.sp6Sel = {};
+  const ids = new Set(alvo.map(p => p.id)); o.ocorrencias.forEach(x => { if (x.planId && ids.has(x.planId)) x.planId = ''; }); o.planejamentos = PLS(o).filter(p => !ids.has(p.id)); S.f.sp6Sel = {};
   saveObra(o); render(); toast(alvo.length + ' planejamento(s) excluído(s).' + (n ? ' ' + n + ' ocorrência(s) voltaram a ficar sem semana.' : ''), 6000); };
 })();
 </script>
