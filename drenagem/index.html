@@ -9906,4 +9906,205 @@ function T3qualKnob(box) {
   window.T3build = function () { b0(); if (T3.renderer && T3.scene) T3applyReal(); };
 })();
 </script>
+<script>
+/* =====================================================================
+   PATCH DR-09 (05/11/2026) — Visualização 3D: transparência por componente
+   Cada item de "Mostrar / ocultar componentes" ganha uma barra de correr:
+   para a esquerda o objeto fica transparente, para a direita fica sólido.
+   ↺ volta à transparência padrão do programa. A escolha fica guardada no
+   navegador (localStorage 'tc_dren_t3opa'). Só desenho: nenhum cálculo muda.
+   Substitui funções pelo nome global; o código anterior fica acima.
+   ===================================================================== */
+let T3OPA = {};
+try { const v = JSON.parse(localStorage.getItem('tc_dren_t3opa') || 'null'); if (v && typeof v === 'object') T3OPA = v; } catch (e) {}
+const T3OPDEF = {};   // transparência padrão de cada componente (lida do desenho)
+
+function T3opaSave() { try { localStorage.setItem('tc_dren_t3opa', JSON.stringify(T3OPA)); } catch (e) {} }
+// aplica a opacidade escolhida (ou a padrão) nos materiais de um objeto
+function T3opaObj(o, c) {
+  const mats = o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : [];
+  const v = T3OPA[c];
+  mats.forEach(m => {
+    if (!m || typeof m.opacity !== 'number') return;
+    if (!m.userData.op0) m.userData.op0 = {op: m.opacity, tr: m.transparent, dw: m.depthWrite};
+    const d = m.userData.op0;
+    if (!(c in T3OPDEF)) T3OPDEF[c] = d.op;
+    let op, tr, dw;
+    if (v == null) { op = d.op; tr = d.tr; dw = d.dw; }
+    else { op = v; tr = v < 0.999; dw = (o.isMesh ? v >= 0.999 : d.dw); }
+    if (m.transparent !== tr) m.needsUpdate = true;
+    m.opacity = op; m.transparent = tr; m.depthWrite = dw;
+  });
+}
+function T3opaCotas() {
+  const lay = document.getElementById('t3-labels'); if (!lay) return;
+  const v = T3OPA.cotas; lay.style.opacity = v == null ? '' : String(Math.max(0.05, v));
+}
+// visibilidade + transparência (mantém o que o PATCH DR-08 fazia no realista)
+function T3apply() {
+  for (const k in T3OPDEF) delete T3OPDEF[k];
+  T3.objs.forEach(o => {
+    const c = o.userData && o.userData.comp; o.visible = c ? (T3VIS[c] !== false) : true;
+    if (c === 'outro' && T3.real && (o.type === 'GridHelper' || o.type === 'Line')) o.visible = false;
+    if (T3.real && c === 'outro' && o.isMesh && o.material && o.material.isMeshStandardMaterial && !o.userData.lin) { o.material.color.convertSRGBToLinear(); o.userData.lin = true; }
+    if (c && c !== 'outro') T3opaObj(o, c);
+  });
+  T3opaCotas();
+  T3opaUI();
+}
+// muda a transparência de um componente (v em %, ou null = padrão)
+function T3opaSet(k, v, vivo) {
+  if (v == null || v === '') delete T3OPA[k];
+  else T3OPA[k] = Math.max(0.05, Math.min(1, (+v || 0) / 100));
+  T3apply();
+  if (!vivo) T3opaSave();
+}
+function T3opaTodos(v) {
+  T3COMP.forEach(([k]) => { if (v == null) delete T3OPA[k]; else T3OPA[k] = v; });
+  T3apply(); T3opaSave();
+}
+function T3opaUI() {
+  T3COMP.forEach(([k]) => {
+    const r = document.getElementById('t3-op-r-' + k), lb = document.getElementById('t3-op-' + k); if (!r || !lb) return;
+    const v = T3OPA[k], def = k === 'cotas' ? 1 : T3OPDEF[k];
+    if (v == null) { if (def != null) r.value = Math.round(def * 100); lb.textContent = 'padrão'; lb.style.fontWeight = '400'; }
+    else { r.value = Math.round(v * 100); lb.textContent = Math.round(v * 100) + '%'; lb.style.fontWeight = '700'; }
+  });
+}
+function T3compCard() {
+  const item = ([k, t, c]) => `<div style="border:1px solid var(--line);border-radius:6px;padding:.35rem .5rem;display:flex;flex-direction:column;gap:.25rem">
+        <label style="display:flex;gap:.4rem;align-items:flex-start;cursor:pointer"><input type="checkbox" ${T3VIS[k] ? 'checked' : ''} onchange="T3VIS['${k}']=this.checked;T3apply()" style="margin-top:.15rem"><span style="flex:none;width:12px;height:12px;margin-top:.2rem;border-radius:3px;background:#${c.toString(16).padStart(6, '0')};border:1px solid rgba(0,0,0,.25);display:inline-block"></span><span>${t}</span></label>
+        <div style="display:flex;align-items:center;gap:.3rem;font-size:.72rem;color:var(--muted)" title="Para a esquerda: transparente. Para a direita: sólido. Duplo clique ou ↺ volta ao padrão.">
+          <span>Transparente</span>
+          <input id="t3-op-r-${k}" type="range" min="5" max="100" step="5" value="${T3OPA[k] != null ? Math.round(T3OPA[k] * 100) : 100}" oninput="T3opaSet('${k}', this.value, true)" onchange="T3opaSet('${k}', this.value)" ondblclick="T3opaSet('${k}', null)" style="flex:1;min-width:70px;accent-color:#0e7490">
+          <span>Sólido</span>
+          <b id="t3-op-${k}" style="min-width:3.4em;text-align:right;color:inherit">${T3OPA[k] != null ? Math.round(T3OPA[k] * 100) + '%' : 'padrão'}</b>
+          <button type="button" class="btn btn-secondary btn-sm" title="Voltar à transparência padrão" onclick="T3opaSet('${k}', null)" style="padding:0 .4rem;line-height:1.4">↺</button>
+        </div>
+      </div>`;
+  return `<div class="card" style="margin-top:.8rem"><h4>Mostrar / ocultar componentes</h4>
+    <p style="font-size:.8rem;color:var(--muted);margin:0 0 .5rem">Marque para mostrar. Em cada item, a barra deixa o objeto <b>transparente</b> (para a esquerda) ou <b>sólido</b> (para a direita). ↺ volta ao padrão. Só muda o desenho, não os cálculos.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:.5rem .8rem;font-size:.85rem">
+      ${T3COMP.map(item).join('')}
+    </div>
+    <div style="display:flex;gap:.4rem;margin-top:.6rem;flex-wrap:wrap">
+      <button class="btn btn-secondary btn-sm" onclick="T3ver(true)">Mostrar todos</button>
+      <button class="btn btn-secondary btn-sm" onclick="T3ver(false)">Ocultar todos</button>
+      <button class="btn btn-secondary btn-sm" onclick="T3opaTodos(1)">Tudo sólido</button>
+      <button class="btn btn-secondary btn-sm" onclick="T3opaTodos(0.3)">Tudo transparente (30%)</button>
+      <button class="btn btn-secondary btn-sm" onclick="T3opaTodos(null)">Transparência padrão (todos)</button>
+    </div>
+  </div>`;
+}
+// troca o quadro antigo pelo novo, sem mexer no resto da aba
+(function () {
+  const v0 = window.vTresD;
+  window.vTresD = function () {
+    const h = v0.apply(this, arguments), a = h.indexOf('<h4>Mostrar / ocultar componentes</h4>');
+    if (a < 0) return h;
+    const ini = h.lastIndexOf('<div class="card"', a), fim = h.indexOf('<div class="card"', a);
+    if (ini < 0 || fim < 0) return h;
+    return h.slice(0, ini) + T3compCard() + '\n  ' + h.slice(fim);
+  };
+})();
+</script>
+<script>
+/* =====================================================================
+   PATCH DR-10 (05/11/2026) — Visualização 3D: alerta de enchimento do tubo
+   Tubo de drenagem não trabalha cheio: precisa de folga acima da lâmina
+   para ventilação (ar) e passagem de detritos. Quando a lâmina passa do
+   limite do projeto (y/D máximo da aba de critérios, crit.yD; DNIT 0,75)
+   ou o tubo entra em carga, o 3D mostra:
+   - faixa vermelha piscando em volta do tubo/galeria, com etiqueta;
+   - quadro de alerta dentro do desenho, com os trechos e ramais;
+   - o total na linha de resumo abaixo do desenho.
+   Atualiza sozinho ao mudar a chuva. Não muda nenhum cálculo.
+   ===================================================================== */
+function T3alertas() {
+  if (!T3.scene || !R || !P) return;
+  const lim = P.crit && isNum(P.crit.yD) ? P.crit.yD : 0.75, ex = T3.exag || 1, G = geoRuas(), tol = 5e-4;
+  const pvPos = new Map(); P.pvs.forEach(pv => { const q = posPV(G, pv); if (q) pvPos.set(pv.id, q); });
+  const zt = []; P.pvs.forEach(pv => { const r = R.pv[pv.id]; if (r && isNum(r.tp)) zt.push(r.tp); if (r && isNum(r.fundo)) zt.push(r.fundo); });
+  const base = (zt.length ? Math.min(...zt) : 0) - 2, Y = z => (z - base) * ex;
+  const P3 = (x, z, y) => new THREE.Vector3(x - T3.cx, y, -(z - T3.cz));
+  const lay = document.getElementById('t3-labels'), lst = [];
+  (R.ordem || []).forEach(t => {
+    const r = R.tr[t.id]; if (!r || !r.h || !isNum(r.cm) || !isNum(r.cj)) return;
+    const h = r.h, carga = !!h.carga, over = carga || (isNum(h.yD) && h.yD > lim + tol); if (!over) return;
+    const pa = pvPos.get(t.m), pb = pvPos.get(t.j); if (!pa || !pb) return;
+    const g = galOf(t), D = Math.max(0.1, g ? g.H : (isNum(r.D) ? r.D / 1000 : (num(t.D) || 400) / 1000)), esp = espTr(t) || 0, W = g ? Math.max(g.B, g.H) : D;
+    // mesma geometria do tubo desenhado (termina na face externa dos PVs)
+    const A0 = P3(pa.x, pa.y, Y(r.cm) + D / 2), B0 = P3(pb.x, pb.y, Y(r.cj) + D / 2);
+    const ga = T3pvGeo(t.m), gb = T3pvGeo(t.j), u0 = new THREE.Vector3().subVectors(B0, A0), L0 = u0.length(); u0.normalize();
+    const ea = ga ? ga.m.L / 2 + ga.m.parede : 0, eb = gb ? gb.m.L / 2 + gb.m.parede : 0;
+    const A = ea + eb < L0 - 0.2 ? A0.clone().addScaledVector(u0, ea) : A0, B = ea + eb < L0 - 0.2 ? B0.clone().addScaledVector(u0, -eb) : B0;
+    if (A.distanceTo(B) < 0.05) return;
+    const mat = new THREE.MeshBasicMaterial({color: carga ? 0xff2d20 : 0xff7a1a, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide});
+    const halo = T3link(A, B, W / 2 + esp + 0.08, mat);
+    halo.userData.comp = 'alerta'; halo.userData.alerta = true; halo.renderOrder = 5;
+    T3.scene.add(halo); T3.objs.push(halo);
+    const mid = new THREE.Vector3().addVectors(A, B).multiplyScalar(0.5);
+    const txt = carga ? 'EM CARGA (cheio)' : (g ? 'y/H ' : 'y/D ') + fmt(h.yD, 2) + ' &gt; ' + fmt(lim, 2);
+    lst.push({id: t.id, carga, yD: h.yD, gal: !!g});
+    if (lay) {
+      const d = document.createElement('div'); d.className = 't3-lab t3-lab-pv';
+      d.style.cssText = 'background:rgba(170,20,15,.9);border-color:#ffb4a8;color:#fff;font-weight:600';
+      d.innerHTML = '⚠ ' + esc(t.id) + ': ' + txt; lay.appendChild(d);
+      T3.labels.push({pos: mid.clone().add(new THREE.Vector3(0, W / 2 + esp + 0.35, 0)), el: d});
+    }
+  });
+  const ram = P.bls.map(b => ({b, rb: R.bl[b.id]})).filter(x => x.rb && x.rb.ram && (x.rb.ram.carga || (isNum(x.rb.ram.yD) && x.rb.ram.yD > lim + tol)))
+    .map(x => ({id: x.b.id, carga: !!x.rb.ram.carga, yD: x.rb.ram.yD}));
+  T3.alertas = {lst, ram, lim};
+  T3alertaQuadro();
+  const el = document.getElementById('t3-info');
+  if (el && (lst.length || ram.length)) el.innerHTML += ` · <b style="color:#c62828">Acima de y/D ${fmt(lim, 2)}:</b> <span style="color:#c62828">${lst.length} trecho(s)${ram.length ? ', ' + ram.length + ' ramal(is)' : ''}</span>`;
+  if (typeof T3labelsUpd === 'function') T3labelsUpd();
+}
+// quadro de alerta dentro do desenho (pode ser recolhido)
+function T3alertaQuadro() {
+  const box = document.getElementById('t3-box'); if (!box) return;
+  let q = document.getElementById('t3-alerta');
+  const a = T3.alertas || {lst: [], ram: [], lim: 0.75};
+  if (!a.lst.length && !a.ram.length) { if (q) q.remove(); return; }
+  if (!q) {
+    q = document.createElement('div'); q.id = 't3-alerta';
+    q.style.cssText = 'position:absolute;top:52px;left:50%;transform:translateX(-50%);z-index:7;max-width:min(560px,calc(100% - 360px));min-width:220px;background:rgba(150,18,12,.92);color:#fff;border:1px solid #ffb4a8;border-radius:8px;padding:.45rem .6rem;font:12px/1.35 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.45)';
+    q.addEventListener('pointerdown', e => e.stopPropagation());
+    q.addEventListener('wheel', e => e.stopPropagation(), {passive: true});
+    box.appendChild(q);
+  }
+  const it = x => esc(x.id) + (x.carga ? ' (em carga)' : ' (' + fmt(x.yD, 2) + ')');
+  const n = a.lst.length + a.ram.length;
+  if (T3.alMin) {
+    q.style.maxWidth = '260px'; q.style.minWidth = '0';
+    q.innerHTML = `<div style="display:flex;gap:.5rem;align-items:center;cursor:pointer" onclick="T3.alMin=false;T3alertaQuadro()" title="Mostrar o alerta">⚠ <b>${n} acima do limite de enchimento</b> <span style="opacity:.85">▾</span></div>`;
+    return;
+  }
+  q.style.maxWidth = 'min(560px,calc(100% - 360px))'; q.style.minWidth = '220px';
+  q.innerHTML = `<div style="display:flex;gap:.5rem;align-items:flex-start">
+      <div style="font-size:18px;line-height:1">⚠</div>
+      <div style="flex:1">
+        <b>Lâmina acima do limite: y/D máximo ${fmt(a.lim, 2)}</b><br>
+        Tubo de drenagem não pode trabalhar cheio: precisa de folga acima da água para <b>ventilação</b> (ar) e passagem de detritos.
+        ${a.lst.length ? `<div style="margin-top:.3rem"><b>Trechos (${a.lst.length}):</b> ${a.lst.map(it).join(' · ')}</div>` : ''}
+        ${a.ram.length ? `<div style="margin-top:.2rem"><b>Ramais caixa → PV (${a.ram.length}):</b> ${a.ram.map(it).join(' · ')}</div>` : ''}
+        <div style="margin-top:.3rem;opacity:.9">Aumente o diâmetro ou a declividade (aba 7, Rede tronco) e confira a aba 13, Verificação. O limite é o y/D máximo dos critérios do projeto.</div>
+      </div>
+      <button type="button" title="Recolher o alerta" onclick="T3.alMin=true;T3alertaQuadro()" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:4px;cursor:pointer;padding:0 .35rem">▴</button>
+    </div>`;
+}
+(function () {
+  const b1 = window.T3build;
+  window.T3build = function () { b1(); T3alertas(); };
+  // faixa de alerta piscando
+  const a1 = window.T3animate;
+  window.T3animate = function (t) {
+    a1(t);
+    if (!T3.scene) return;
+    const k = 0.5 + 0.5 * Math.sin(t * 4.5);
+    T3.objs.forEach(o => { if (o.userData && o.userData.alerta && o.material) o.material.opacity = 0.3 + 0.45 * k; });
+  };
+})();
+</script>
 </body></html>
