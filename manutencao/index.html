@@ -2873,6 +2873,44 @@ ACTS.selTodos = function () { const o = O(), l = planLista(o, ativas(o).filter(x
   if (!l.length) { toast('Não há ocorrências neste filtro para selecionar. Em “Mostrar”, escolha “Todas as abertas” ou “Sem semana definida”.', 6000); return; }
   return _selTodos8.apply(this, arguments); };
 
+/* ---------- SP-09 (06/11/2026): editar os dias de cada planejamento
+   ✏ Editar dias: muda a data de um dia inteiro, muda cada ocorrência para outro dia, ou tira ocorrências do planejamento.
+   Se o planejamento está em uso, a programação das ocorrências (semana/dia) acompanha. Ocorrências com execução não mudam. ---------- */
+const wdLab = d => ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][pd(d).getUTCDay()];
+ACTS.sp9Editar = function (d) { if (!podeExc()) { toast('Só o Gestor / Secretário edita planejamentos.'); return; } const o = O(), p = PLS(o).find(x => x.id === d.id); if (!p) return;
+  const g = new Map(); p.itens.slice().sort((a, b) => a.dia.localeCompare(b.dia) || a.num - b.num).forEach(i => { if (!g.has(i.dia)) g.set(i.dia, []); g.get(i.dia).push(i); });
+  const blocos = [...g.entries()].map(([dia, its], k) => `<fieldset style="margin:8px 0"><legend><b>${fData(dia)}</b> (${wdLab(dia)}) · ${its.length} ocorrência(s)</legend>
+ <label class="small">Mudar a data de todo este dia para <input type="date" value="${dia}" data-sp9dia="${dia}" data-chg="sp9Dia" style="max-width:180px"></label>
+ <table class="tb" style="margin-top:6px"><thead><tr><th>Ocorrência</th><th>Data</th><th>Tirar</th></tr></thead><tbody>${its.map(i => { const oc = o.ocorrencias.find(x => x.id === i.ocId), ex = oc && temExec(o, oc);
+   return `<tr><td>#${i.num} ${oc ? esc(ocLocal(oc)) : '(excluída)'}${ex ? ' <span class="chip" style="--c:#2e7d4f">já tem execução</span>' : ''}</td><td><input type="date" value="${i.dia}" data-sp9oc="${i.ocId}" data-g="${dia}" ${ex ? 'disabled' : ''}></td><td><input type="checkbox" data-sp9tira="${i.ocId}" ${ex ? 'disabled' : ''} title="Tirar do planejamento"></td></tr>`; }).join('')}</tbody></table></fieldset>`).join('');
+  M = {t: 'sp9', id: p.id};
+  abrirModal(`<div class="mh"><h3>✏ Editar dias — ${esc(p.nome)}</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+ <p class="small muted">Mude a data de um dia inteiro (todas as ocorrências dele vão juntas) ou de cada ocorrência. Marque “Tirar” para retirar a ocorrência deste planejamento${p.emUso ? ' — ela volta a ficar sem semana' : ''}.${p.emUso ? ' Este planejamento está <b>em uso</b>: a programação semanal acompanha as mudanças.' : ''}</p>
+ <label>Nome do planejamento<input id="sp9-nome" value="${esc(p.nome)}"></label>${blocos || '<p class="muted">Sem ocorrências.</p>'}
+ <div class="row gap" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mClose">Cancelar</button><button class="btn pri" data-act="sp9Salvar">💾 Salvar alterações</button></div></div>`); };
+/* ao mudar a data do dia inteiro, as ocorrências daquele dia acompanham na janela */
+CHG.sp9Dia = function (el) { const g = el.dataset.sp9dia; document.querySelectorAll(`input[data-sp9oc][data-g="${g}"]`).forEach(x => { if (!x.disabled) x.value = el.value; }); };
+ACTS.sp9Salvar = function () { if (!M || M.t !== 'sp9') return; const o = O(), p = PLS(o).find(x => x.id === M.id); if (!p) { fecharModal(false); return; }
+  const novo = {}, tira = new Set(); document.querySelectorAll('input[data-sp9oc]').forEach(x => { if (!x.disabled && x.value) novo[x.dataset.sp9oc] = x.value; });
+  document.querySelectorAll('input[data-sp9tira]').forEach(x => { if (x.checked) tira.add(x.dataset.sp9tira); });
+  let mud = 0, sai = 0, fds = 0;
+  p.itens = p.itens.filter(i => { const oc = o.ocorrencias.find(x => x.id === i.ocId), ex = oc && temExec(o, oc);
+    if (tira.has(i.ocId) && !ex) { if (p.emUso && oc && oc.planId === p.id) { oc.semana = ''; oc.diaPlan = ''; oc.planId = ''; log(oc, 'Saiu da programação (retirada de “' + p.nome + '”)'); recalcStatus(o, oc); } sai++; return false; }
+    const nd = novo[i.ocId]; if (nd && nd !== i.dia && !ex) { const wd = pd(nd).getUTCDay(); if (wd === 0 || wd === 6) fds++;
+      i.dia = nd; i.semana = isoWeek(nd); mud++;
+      if (p.emUso && oc && oc.planId === p.id) { oc.semana = i.semana; oc.diaPlan = nd; log(oc, 'Data alterada no planejamento “' + p.nome + '”: ' + fData(nd) + ' (' + labSem(i.semana) + ')'); recalcStatus(o, oc); } }
+    return true; });
+  const nm = ($('#sp9-nome') || {}).value; if (nm && nm.trim()) p.nome = nm.trim();
+  if (!p.itens.length) o.planejamentos = PLS(o).filter(q => q.id !== p.id); else sp8Resumo(o, p);
+  saveObra(o); fecharModal(false); render();
+  toast((mud ? mud + ' ocorrência(s) mudaram de data. ' : '') + (sai ? sai + ' retirada(s) do planejamento. ' : '') + (fds ? 'Atenção: ' + fds + ' ficaram em sábado/domingo. ' : '') + (!mud && !sai ? 'Nada mudou.' : '') + (p.itens.length ? '' : ' O planejamento ficou vazio e foi removido.'), 6000); };
+/* botão ✏ nos dois lugares: dentro do planejamento aberto e na Programação semanal */
+const _cardPlanos9 = cardPlanos;
+cardPlanos = function (o) { return _cardPlanos9(o).replace(/<button class="btn sm" data-act="sp8DiasTodos" data-id="([^"]+)">/g, '<button class="btn sm pri" data-act="sp9Editar" data-id="$1" ' + (podeExc() ? '' : 'disabled') + '>✏ Editar dias</button><button class="btn sm" data-act="sp8DiasTodos" data-id="$1">'); };
+const _tPlan9 = tPlan;
+tPlan = function (o) { return _tPlan9.apply(this, arguments).replace(/<button class="btn sm" data-act="sp8ExcPlano" data-id="([^"]+)" style="color:#b42318;border-color:#b42318" ([^>]*)title="Exclui o planejamento inteiro \(todas as semanas\)">🗑 Excluir planejamento “([^”]*)”<\/button>/g,
+  (m, id, dis, nm) => `<button class="btn sm pri" data-act="sp9Editar" data-id="${id}" ${dis}>✏ Editar dias de “${nm}”</button>` + m); };
+
 /* ---------- SP-06c (04/11/2026): Registrar execução — nome do serviço com quebra de linha, alinhado à esquerda ---------- */
 (function () { const st = document.createElement('style');
   st.textContent = '.svpk{position:relative;width:100%}.svpk select.it-svc{display:none}' +
