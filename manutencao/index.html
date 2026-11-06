@@ -3053,5 +3053,38 @@ tRel = function (o) { const h = _tRel10.apply(this, arguments); const n = fotosD
 })();
 </script>
 
+<script>
+/* =====================================================================
+   PATCH SP-11 (06/11/2026)
+   Relato (novo e “Abrir / editar”): seção “4. Equipe no local” com “＋ Funcionário” e “＋ Equipamento”
+   (função + quantidade), igual ao registro de execução. Grava em oc.equipe = [{k:'ind'|'dir'|'eqp', i, q}].
+   Não entra no RDO (o RDO continua vindo das execuções). Aparece como etiqueta no cartão da ocorrência.
+   ===================================================================== */
+(function () {
+const eqNome = r => { const l = r.k === 'ind' ? EF_IND : r.k === 'dir' ? EF_DIR : EQ_LIST; return (l && l[r.i]) || '?'; };
+const eqTxt = eq => eq.map(r => r.q + ' ' + eqNome(r)).join(', ');
+const lerEquipe = () => $$('#equipe .eqrow').map(r => { const v = ($('.eq-sel', r).value || '').split(':'); return {k: v[0], i: +v[1], q: parseInt($('.eq-q', r).value) || 0}; }).filter(x => x.k && x.q > 0);
+
+const _modalOc11 = modalOc;
+modalOc = function (d, isNew) { const h = _modalOc11.apply(this, arguments); const dis = can('ocorr') ? '' : 'disabled';
+  const fs = `<fieldset><legend>4. Equipe no local (funcionários e equipamentos)</legend><div id="equipe">${(d.equipe || []).map(eqRow).join('')}</div>
+ <div class="row gap" style="margin-top:8px"><button type="button" class="btn sm" data-act="eqAdd" ${dis}>＋ Funcionário</button><button type="button" class="btn sm" data-act="eqAdd" data-k="eqp" ${dis}>＋ Equipamento</button></div>
+ <p class="small muted">Escolha a função e digite a quantidade; para outra função, toque em ＋ de novo. Fica registrado no relato (não entra no RDO, que vem das execuções).</p></fieldset>`;
+  const a = h.indexOf('<legend>3. Problema identificado'); const i = a < 0 ? -1 : h.indexOf('</fieldset>', a);
+  return i < 0 ? h : h.slice(0, i + 11) + '\n ' + fs + h.slice(i + 11); };
+
+/* guarda a equipe antes de salvar (vale para “Salvar” e “Salvar e registrar a próxima”) */
+const _ocSave11 = ACTS.ocSave;
+ACTS.ocSave = function () { if (M && M.t === 'oc' && M.d && $('#equipe')) M.d.equipe = lerEquipe(); return _ocSave11.apply(this, arguments); };
+
+/* etiqueta no cartão */
+const _ocCard11 = ocCard;
+ocCard = function (o, oc) { const h = _ocCard11.apply(this, arguments); const eq = oc && oc.equipe;
+  if (!eq || !eq.length) return h; const nf = eq.filter(r => r.k !== 'eqp').reduce((s, r) => s + r.q, 0), ne = eq.filter(r => r.k === 'eqp').reduce((s, r) => s + r.q, 0);
+  const chip = `<span class="chip" style="--c:#5a6075" title="${esc(eqTxt(eq))}">👷 ${nf ? nf + ' funcionário(s)' : ''}${nf && ne ? ' · ' : ''}${ne ? ne + ' equipamento(s)' : ''}</span>`;
+  return h.replace('<div class="chips">', '<div class="chips">' + chip); };
+})();
+</script>
+
 </body>
 </html>
