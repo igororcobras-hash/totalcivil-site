@@ -2781,6 +2781,98 @@ ACTS.sp7Ok = function () { if (!M || M.t !== 'sp6Inc') return; const o = O(); co
   prepPI(m, v === 'falta' ? 'restantes' : 'replanejar', v === 'dup' ? ($('#sp7-base') || {}).value : '');
   (m === 'pt' ? _ptOrig6 : _piOrig6).call(ACTS); };
 
+/* ---------- SP-08 (06/11/2026)
+   a) reconhece a programação feita antes da lista de planejamentos (ou à mão) como um planejamento salvo,
+      para poder excluí-la; o que for programado à mão depois entra nesse mesmo planejamento;
+   b) “2. Programação semanal”: caixinhas por ocorrência, excluir selecionadas, excluir a semana inteira
+      e excluir o planejamento inteiro;
+   c) dentro de cada planejamento (“Ver ocorrências por dia”): marcar dias e excluir só esses dias, ou o planejamento todo. ---------- */
+function sp8Resumo(o, p) { const P = Object.assign(piDef(), p.params || {}); const tot = {n: 0, m3: 0, t: 0, cargas: 0, custo: 0}, dias = new Map();
+  p.itens.forEach(i => { const oc = o.ocorrencias.find(x => x.id === i.ocId); tot.n++; if (!oc) return; const v = piVol(o, oc, P);
+    tot.m3 += v.m3 || 0; tot.t += v.t || 0; tot.custo = r2(tot.custo + (v.custo || 0)); dias.set(i.dia, (dias.get(i.dia) || 0) + (v.t || 0)); });
+  dias.forEach(t => { tot.cargas += P.carga > 0 ? Math.ceil(t / P.carga - 1e-9) : 0; }); const ds = [...dias.keys()].sort();
+  p.resumo = Object.assign(tot, {dias: ds.length, ini: ds[0] || '', fim: ds[ds.length - 1] || '', resto: (p.resumo && p.resumo.resto) || 0}); }
+function sp8Reconhece(o) { if (!o) return false; const l = progSolta(o); if (!l.length) return false;
+  let p = PLS(o).find(x => x.auto && x.emUso);
+  if (!p) { p = {id: 'pl' + uid(), nome: 'Programação já definida (reconhecida automaticamente)', tipo: 'manual', modo: 'atual', base: '', auto: true, criadoEm: new Date().toISOString(), por: '', emUso: true, itens: [], resumo: {}}; PLS(o).push(p); }
+  l.forEach(oc => { const dia = oc.diaPlan || weekRange(oc.semana)[0]; p.itens = p.itens.filter(i => i.ocId !== oc.id);
+    p.itens.push({ocId: oc.id, num: oc.num, dia, semana: oc.semana, svc: oc.servicoId || oc.servSug || '', q: oc.qtdPlan || 0, assum: false}); oc.planId = p.id; });
+  sp8Resumo(o, p); saveObra(o); return true; }
+/* tira ocorrências da programação (só as sem execução) e dos planejamentos */
+function sp8Soltar(o, ids, motivo) { let n = 0;
+  ids.forEach(id => { const oc = o.ocorrencias.find(x => x.id === id); if (!oc || temExec(o, oc)) return;
+    PLS(o).forEach(p => { if (p.itens.some(i => i.ocId === id)) { p.itens = p.itens.filter(i => i.ocId !== id); sp8Resumo(o, p); } });
+    if (oc.semana) { oc.semana = ''; oc.diaPlan = ''; oc.planId = ''; log(oc, motivo); recalcStatus(o, oc); n++; } });
+  o.planejamentos = PLS(o).filter(p => p.itens.length); return n; }
+function sp8ExcluirPlano(o, p) { let n = 0; if (p.emUso) n = soltarPlano(o, p, null, 'Saiu da programação (planejamento excluído)');
+  o.ocorrencias.forEach(x => { if (x.planId === p.id) x.planId = ''; }); o.planejamentos = PLS(o).filter(q => q.id !== p.id); return n; }
+const podeExc = () => canPI() || can('plan');
+
+/* c) dias dentro de cada planejamento */
+const _cardPlanos8 = cardPlanos;
+cardPlanos = function (o) { sp8Reconhece(o); let h = _cardPlanos8(o); const ds = S.f.sp8Dias = S.f.sp8Dias || {}, ab = S.f.sp8Ab = S.f.sp8Ab || {};
+  PLS(o).forEach(p => { const k = '<details><summary class="small">Ver ocorrências por dia</summary>'; const i = h.indexOf(k, h.indexOf('data-id="' + p.id + '"')); if (i < 0) return;
+    const j = h.indexOf('</details>', i); let corpo = h.slice(i + k.length, j);
+    corpo = corpo.replace(/<p class="small" style="margin:2px 0"><b>([^<]+)<\/b>/g, (m, dt) => { const dia = p.itens.map(x => x.dia).find(d => fData(d) === dt) || '';
+      return `<p class="small" style="margin:2px 0"><label class="chk" style="display:inline;margin:0"><input type="checkbox" data-chg="sp8Dia" data-id="${p.id}" data-dia="${dia}" ${ds[p.id + '|' + dia] ? 'checked' : ''}> <b>${dt}</b></label>`; });
+    const nd = Object.keys(ds).filter(x => ds[x] && x.startsWith(p.id + '|')).length;
+    const bar = `<div class="row gap" style="margin:6px 0;flex-wrap:wrap"><button class="btn sm" data-act="sp8DiasTodos" data-id="${p.id}">☑ Marcar todos os dias</button><button class="btn sm" data-act="sp8DiasLimpar" data-id="${p.id}">☐ Desmarcar</button><button class="btn sm" data-act="sp8ExcDias" data-id="${p.id}" style="color:#b42318;border-color:#b42318" ${podeExc() && nd ? '' : 'disabled'}>🗑 Excluir os ${nd} dia(s) marcado(s)</button><button class="btn sm" data-act="sp8ExcPlano" data-id="${p.id}" style="color:#b42318;border-color:#b42318" ${podeExc() ? '' : 'disabled'}>🗑 Excluir todo este planejamento</button></div>`;
+    h = h.slice(0, i) + `<details ${ab[p.id] ? 'open' : ''} data-sp8="${p.id}"><summary class="small">Ver ocorrências por dia</summary>` + bar + corpo + h.slice(j); });
+  return h; };
+document.addEventListener('toggle', e => { const d = e.target; if (d && d.dataset && d.dataset.sp8) { S.f.sp8Ab = S.f.sp8Ab || {}; S.f.sp8Ab[d.dataset.sp8] = d.open; } }, true);
+CHG.sp8Dia = function (el, d) { S.f.sp8Dias = S.f.sp8Dias || {}; S.f.sp8Dias[d.id + '|' + d.dia] = el.checked; render(); };
+ACTS.sp8DiasTodos = function (d) { const p = PLS(O()).find(x => x.id === d.id); if (!p) return; S.f.sp8Dias = S.f.sp8Dias || {}; p.itens.forEach(i => { S.f.sp8Dias[p.id + '|' + i.dia] = true; }); render(); };
+ACTS.sp8DiasLimpar = function (d) { const ds = S.f.sp8Dias || {}; Object.keys(ds).forEach(k => { if (k.startsWith(d.id + '|')) delete ds[k]; }); render(); };
+ACTS.sp8ExcDias = function (d) { if (!podeExc()) { toast('Só o Gestor / Secretário exclui planejamentos.'); return; } const o = O(), p = PLS(o).find(x => x.id === d.id); if (!p) return;
+  const ds = S.f.sp8Dias || {}, dias = [...new Set(p.itens.map(i => i.dia))].filter(x => ds[p.id + '|' + x]).sort(); if (!dias.length) { toast('Marque os dias a excluir.'); return; }
+  const its = p.itens.filter(i => dias.includes(i.dia));
+  if (!confirm('Excluir de “' + p.nome + '” os dias:\n' + dias.map(x => '• ' + fData(x)).join('\n') + '\n\n' + its.length + ' ocorrência(s) saem deste planejamento' + (p.emUso ? ' e voltam a ficar sem semana (as que já têm execução não mudam)' : '') + '.\n\nNão dá para desfazer.')) return;
+  let n = 0; const tira = new Set(its.map(i => i.ocId));
+  if (p.emUso) its.forEach(i => { const oc = o.ocorrencias.find(x => x.id === i.ocId); if (!oc || oc.planId !== p.id || temExec(o, oc)) { tira.delete(i.ocId); return; }
+    oc.semana = ''; oc.diaPlan = ''; oc.planId = ''; log(oc, 'Saiu da programação (dia ' + fData(i.dia) + ' excluído de “' + p.nome + '”)'); recalcStatus(o, oc); n++; });
+  p.itens = p.itens.filter(i => !(dias.includes(i.dia) && tira.has(i.ocId))); dias.forEach(x => delete ds[p.id + '|' + x]);
+  if (!p.itens.length) o.planejamentos = PLS(o).filter(q => q.id !== p.id); else sp8Resumo(o, p);
+  saveObra(o); render(); toast(dias.length + ' dia(s) excluído(s) de “' + p.nome + '”.' + (n ? ' ' + n + ' ocorrência(s) voltaram a ficar sem semana.' : '') + (p.itens.length ? '' : ' O planejamento ficou vazio e foi removido.'), 6000); };
+ACTS.sp8ExcPlano = function (d) { if (!podeExc()) { toast('Só o Gestor / Secretário exclui planejamentos.'); return; } const o = O(), p = PLS(o).find(x => x.id === d.id); if (!p) return;
+  if (!confirm('Excluir todo o planejamento “' + p.nome + '” (' + p.itens.length + ' ocorrência(s))?' + (p.emUso ? '\n\nEle está em uso: as ocorrências voltam a ficar sem semana (as que já têm execução não mudam).' : '') + '\n\nNão dá para desfazer.')) return;
+  const n = sp8ExcluirPlano(o, p); saveObra(o); render(); toast('Planejamento “' + p.nome + '” excluído.' + (n ? ' ' + n + ' ocorrência(s) voltaram a ficar sem semana.' : ''), 6000); };
+
+/* b) “2. Programação semanal” */
+const _tPlan8 = tPlan;
+tPlan = function (o) { let h = _tPlan8.apply(this, arguments); const k = '<h3>2. Programação semanal</h3>', i = h.indexOf(k); if (i < 0) return h;
+  const w = isoWeek(S.f.semDia), doW = ativas(o).filter(x => x.semana === w && x.status !== 'medida'), porNum = new Map(doW.map(x => [String(x.num), x]));
+  const sel = S.f.sp8Sem = S.f.sp8Sem || {}; Object.keys(sel).forEach(id => { if (!doW.some(x => x.id === id)) delete sel[id]; });
+  const ns = doW.filter(x => sel[x.id]).length; const pode = podeExc();
+  const plW = PLS(o).filter(p => p.itens.some(it => it.semana === w));
+  let sec = h.slice(i);
+  sec = sec.replace(/<p class="small">((?:(?!<\/p>)[\s\S])*?) #(\d+) /g, (m, pre, num) => { const x = porNum.get(num); if (!x) return m;
+    const pl = x.planId && PLS(o).find(p => p.id === x.planId); const ex = temExec(o, x);
+    return `<p class="small"><input type="checkbox" data-chg="sp8Sel" data-id="${x.id}" ${sel[x.id] ? 'checked' : ''} ${ex ? 'disabled title="Já tem execução — não sai da programação"' : 'title="Selecionar"'}> ${pre} #${num} ${pl ? '<span class="chip" style="--c:#5a6075" title="Planejamento">📚 ' + esc(pl.nome.slice(0, 40)) + '</span> ' : ''}`; });
+  const bar = doW.length ? `<div class="row gap" style="margin:8px 0;flex-wrap:wrap;padding:8px;border:1px dashed #b42318;border-radius:10px"><span class="small muted"><b>${doW.length}</b> nesta semana · <b>${ns}</b> selecionada(s)</span>
+ <button class="btn sm" data-act="sp8SemTodos">☑ Selecionar todas da semana</button><button class="btn sm" data-act="sp8SemLimpar">☐ Limpar seleção</button>
+ <button class="btn sm" data-act="sp8SemExcSel" style="color:#b42318;border-color:#b42318" ${pode && ns ? '' : 'disabled'}>🗑 Excluir da programação as selecionadas</button>
+ <button class="btn sm" data-act="sp8SemExcTudo" style="color:#b42318;border-color:#b42318" ${pode ? '' : 'disabled'}>🗑 Excluir toda a programação desta semana</button>
+ ${plW.map(p => `<button class="btn sm" data-act="sp8ExcPlano" data-id="${p.id}" style="color:#b42318;border-color:#b42318" ${pode ? '' : 'disabled'} title="Exclui o planejamento inteiro (todas as semanas)">🗑 Excluir planejamento “${esc(p.nome.slice(0, 40))}”</button>`).join('')}</div>` : '';
+  const t = sec.indexOf('</div>', sec.indexOf('<div class="toolbar">')); if (t >= 0) sec = sec.slice(0, t + 6) + bar + sec.slice(t + 6);
+  return h.slice(0, i) + sec; };
+CHG.sp8Sel = function (el, d) { S.f.sp8Sem = S.f.sp8Sem || {}; S.f.sp8Sem[d.id] = el.checked; render(); };
+const semAbertas = o => { const w = isoWeek(S.f.semDia); return ativas(o).filter(x => x.semana === w && x.status !== 'medida' && !temExec(o, x)); };
+ACTS.sp8SemTodos = function () { S.f.sp8Sem = {}; semAbertas(O()).forEach(x => { S.f.sp8Sem[x.id] = true; }); render(); };
+ACTS.sp8SemLimpar = function () { S.f.sp8Sem = {}; render(); };
+function sp8SemExc(ids, tudo) { if (!podeExc()) { toast('Só o Gestor / Secretário exclui a programação.'); return; } const o = O();
+  if (!ids.length) { toast(tudo ? 'Não há ocorrências sem execução nesta semana.' : 'Selecione as ocorrências.'); return; }
+  if (!confirm((tudo ? 'Excluir toda a programação de ' + labSem(isoWeek(S.f.semDia)) : 'Excluir da programação ' + ids.length + ' ocorrência(s) selecionada(s)') + '?\n\nElas voltam a ficar sem semana e saem dos planejamentos (as que já têm execução não mudam).\n\nNão dá para desfazer.')) return;
+  const n = sp8Soltar(o, ids, 'Saiu da programação (excluída na Programação semanal)'); S.f.sp8Sem = {}; saveObra(o); render(); toast(n + ' ocorrência(s) saíram da programação.', 5000); }
+ACTS.sp8SemExcSel = function () { const s = S.f.sp8Sem || {}; sp8SemExc(semAbertas(O()).filter(x => s[x.id]).map(x => x.id), false); };
+ACTS.sp8SemExcTudo = function () { sp8SemExc(semAbertas(O()).map(x => x.id), true); };
+
+/* d) seleção da lista “1. Prioridades”: contador atualiza ao marcar; aviso quando a lista está vazia */
+CHG.sel = function (el, d) { S.f.sel[d.id] = el.checked; render(); };
+const _selTodos8 = ACTS.selTodos;
+ACTS.selTodos = function () { const o = O(), l = planLista(o, ativas(o).filter(x => x.status !== 'medida' && x.status !== 'executada'));
+  if (!l.length) { toast('Não há ocorrências neste filtro para selecionar. Em “Mostrar”, escolha “Todas as abertas” ou “Sem semana definida”.', 6000); return; }
+  return _selTodos8.apply(this, arguments); };
+
 /* ---------- SP-06c (04/11/2026): Registrar execução — nome do serviço com quebra de linha, alinhado à esquerda ---------- */
 (function () { const st = document.createElement('style');
   st.textContent = '.svpk{position:relative;width:100%}.svpk select.it-svc{display:none}' +
