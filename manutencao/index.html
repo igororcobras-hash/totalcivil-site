@@ -2938,5 +2938,120 @@ const _itSvc6 = CHG.itSvc;
 CHG.itSvc = function (el) { _itSvc6.apply(this, arguments); const b = el && el.closest('.svpk') && $('.svpk-b', el.closest('.svpk')); if (b) b.innerHTML = svpkTxt(O(), el.value); };
 })();
 </script>
+<script>
+/* =====================================================================
+   PATCH SP-10 (06/11/2026)
+   Download das fotos da obra (aba Relatórios › “📷 Baixar fotos”): todas ou selecionadas, num arquivo .zip
+   com uma pasta por ocorrência e uma planilha lista_fotos.csv (nº, local, fase, data/hora, coordenadas).
+   Foto que não está neste aparelho vem da nuvem (getFoto). Sem biblioteca externa: ZIP sem compressão
+   (JPEG já é comprimido).
+   ===================================================================== */
+(function () {
+const p2 = n => String(n).padStart(2, '0');
+const hora = iso => { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : p2(d.getDate()) + '/' + p2(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes()); };
+const diaISO = iso => { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate()); };
+const limpa = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9 _-]+/g, ' ').trim().replace(/\s+/g, '_').slice(0, 60);
+const FASES = {antes: 'Antes', durante: 'Durante', depois: 'Depois', fiscal: 'Fiscal'};
+
+/* todas as fotos da obra, cada uma com a ocorrência/execução de origem */
+function fotosDaObra(o) { const L = [], visto = new Set();
+  o.ocorrencias.forEach(oc => (oc.fotos || []).forEach(f => { if (visto.has(f.id)) return; visto.add(f.id);
+    L.push({f, oc, ex: null, fase: f.fase || 'antes', orig: 'Relato / fiscal', quando: f.tiradaEm || oc.criadoEm || ''}); }));
+  o.execucoes.forEach(e => { const oc = o.ocorrencias.find(x => x.id === e.ocorrenciaId) || null;
+    (e.fotos || []).forEach(f => { if (visto.has(f.id)) return; visto.add(f.id);
+      L.push({f, oc, ex: e, fase: f.fase || 'depois', orig: 'Execução da empresa', quando: f.tiradaEm || e.data || ''}); }); });
+  return L; }
+const chave = x => x.oc ? 'oc' + x.oc.id : 'ex' + (x.ex ? x.ex.id : '');
+const titulo = (o, x) => x.oc ? '#' + x.oc.num + ' ' + ocLocal(x.oc) : 'Execução avulsa — ' + (x.ex ? localEx(o, x.ex).txt + ' (' + fData(x.ex.data) + ')' : '');
+const pasta = (o, x) => x.oc ? 'Ocorrencia_' + String(x.oc.num).padStart(4, '0') + '_' + limpa(ocLocal(x.oc)) : 'Execucao_avulsa_' + limpa(x.ex ? x.ex.data + ' ' + localEx(o, x.ex).txt : '');
+
+function filtra(o) { const F = S.f.fdl = S.f.fdl || {de: '', ate: '', fase: '', q: ''}; const q = norm(F.q || '');
+  return fotosDaObra(o).filter(x => { const d = diaISO(x.quando);
+    if (F.de && (!d || d < F.de)) return false; if (F.ate && (!d || d > F.ate)) return false;
+    if (F.fase && x.fase !== F.fase) return false;
+    if (q && !norm([titulo(o, x), x.oc ? x.oc.desc : '', x.f.legenda].join(' ')).includes(q)) return false; return true; }); }
+
+/* ---------- janela ---------- */
+function janela() { const o = O(), F = S.f.fdl = S.f.fdl || {de: '', ate: '', fase: '', q: ''}, sel = S.f.fdlSel = S.f.fdlSel || {};
+  const L = filtra(o), tot = fotosDaObra(o).length, g = new Map(); L.forEach(x => { const k = chave(x); if (!g.has(k)) g.set(k, []); g.get(k).push(x); });
+  const ns = L.filter(x => sel[x.f.id]).length;
+  const grupos = [...g.entries()].map(([k, its]) => { const todos = its.every(x => sel[x.f.id]);
+    return `<fieldset style="margin:8px 0"><legend><label class="chk" style="display:inline;margin:0"><input type="checkbox" data-chg="fdlGrp" data-k="${k}" ${todos ? 'checked' : ''}> <b>${esc(titulo(o, its[0]))}</b></label> <span class="muted small">· ${its.length} foto(s)</span></legend>
+ <div style="display:flex;flex-wrap:wrap;gap:8px">${its.map(x => `<label style="width:112px;font-size:11px;line-height:1.25;cursor:pointer;border:2px solid ${sel[x.f.id] ? '#c2410c' : 'transparent'};border-radius:8px;padding:2px">
+  <img data-foto="${x.f.id}" alt="" loading="lazy" style="width:104px;height:78px;object-fit:cover;border-radius:6px;background:#eee;display:block">
+  <input type="checkbox" data-chg="fdlUm" data-id="${x.f.id}" ${sel[x.f.id] ? 'checked' : ''}> ${FASES[x.fase] || esc(x.fase)}<br><span class="muted">${hora(x.quando) || 'sem data'}</span></label>`).join('')}</div></fieldset>`; }).join('');
+  M = {t: 'fdl'};
+  abrirModal(`<div class="mh"><h3>📷 Baixar fotos — ${esc(o.nome)}</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+ <p class="small muted">Sai um arquivo <b>.zip</b> com uma pasta por ocorrência e a planilha <b>lista_fotos.csv</b> (nº, local, fase, data/hora e coordenadas). As fotos saem como estão guardadas: carimbadas, com até 1200 px. Fotos que não estão neste aparelho são buscadas na nuvem (precisa de internet e do login do site).</p>
+ <div class="g4"><label>Data da foto — de<input type="date" value="${F.de}" data-chg="fdlF" data-k="de"></label><label>até<input type="date" value="${F.ate}" data-chg="fdlF" data-k="ate"></label>
+ <label>Fase<select data-chg="fdlF" data-k="fase"><option value="">Todas</option>${Object.entries(FASES).map(([k, v]) => `<option value="${k}" ${F.fase === k ? 'selected' : ''}>${v}</option>`).join('')}</select></label>
+ <label>Palavra-chave<input value="${esc(F.q)}" placeholder="rua, bairro, nº" data-chg="fdlF" data-k="q"></label></div>
+ <div class="row gap" style="margin:10px 0;flex-wrap:wrap"><span class="small muted"><b>${L.length}</b> foto(s) no filtro (de ${tot} na obra) · <b>${ns}</b> selecionada(s)</span><span class="sp"></span>
+ <button class="btn sm" data-act="fdlTodas">☑ Selecionar todas do filtro</button><button class="btn sm" data-act="fdlLimpar">☐ Limpar seleção</button></div>
+ <div class="row gap" style="margin:6px 0 10px;flex-wrap:wrap"><button class="btn pri" data-act="fdlBaixar" data-k="filtro" ${L.length ? '' : 'disabled'}>⬇ Baixar todas do filtro (${L.length})</button><button class="btn pri" data-act="fdlBaixar" data-k="sel" ${ns ? '' : 'disabled'}>⬇ Baixar selecionadas (${ns})</button><button class="btn" data-act="fdlBaixar" data-k="obra" ${tot ? '' : 'disabled'}>⬇ Baixar todas as fotos da obra (${tot})</button></div>
+ <div id="fdl-prog" class="small" style="margin:4px 0"></div>
+ ${grupos || '<p class="muted">Nenhuma foto neste filtro.</p>'}
+ <div class="row gap" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mClose">Fechar</button></div></div>`); }
+function rejanela() { const m = $('#modal'), y = m ? m.scrollTop : 0; janela(); if (m) m.scrollTop = y; }
+ACTS.fdlAbrir = function () { const o = O(); if (!o) return; if (!fotosDaObra(o).length) { toast('Esta obra ainda não tem fotos.'); return; } janela(); };
+CHG.fdlF = function (el, d) { S.f.fdl[d.k] = el.value; rejanela(); };
+CHG.fdlUm = function (el, d) { S.f.fdlSel[d.id] = el.checked; rejanela(); };
+CHG.fdlGrp = function (el, d) { filtra(O()).filter(x => chave(x) === d.k).forEach(x => { S.f.fdlSel[x.f.id] = el.checked; }); rejanela(); };
+ACTS.fdlTodas = function () { filtra(O()).forEach(x => { S.f.fdlSel[x.f.id] = true; }); rejanela(); };
+ACTS.fdlLimpar = function () { S.f.fdlSel = {}; rejanela(); };
+
+/* ---------- ZIP (sem compressão) ---------- */
+const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+const crc32 = b => { let c = 0xFFFFFFFF; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xFF] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; };
+function zipar(arqs) { const enc = new TextEncoder(), partes = [], central = []; let pos = 0; const agora = new Date();
+  const dt = ((agora.getHours() << 11) | (agora.getMinutes() << 5) | (agora.getSeconds() >> 1)) & 0xFFFF, dd = (((agora.getFullYear() - 1980) << 9) | ((agora.getMonth() + 1) << 5) | agora.getDate()) & 0xFFFF;
+  arqs.forEach(a => { const nm = enc.encode(a.nome), c = crc32(a.dados), n = a.dados.length;
+    const h = new DataView(new ArrayBuffer(30)); h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true); h.setUint16(10, dt, true); h.setUint16(12, dd, true);
+    h.setUint32(14, c, true); h.setUint32(18, n, true); h.setUint32(22, n, true); h.setUint16(26, nm.length, true); h.setUint16(28, 0, true);
+    partes.push(h.buffer, nm, a.dados);
+    const z = new DataView(new ArrayBuffer(46)); z.setUint32(0, 0x02014b50, true); z.setUint16(4, 20, true); z.setUint16(6, 20, true); z.setUint16(8, 0x0800, true); z.setUint16(10, 0, true); z.setUint16(12, dt, true); z.setUint16(14, dd, true);
+    z.setUint32(16, c, true); z.setUint32(20, n, true); z.setUint32(24, n, true); z.setUint16(28, nm.length, true); z.setUint32(42, pos, true);
+    central.push(z.buffer, nm); pos += 30 + nm.length + n; });
+  const tamC = central.reduce((s, x) => s + x.byteLength, 0);
+  const e = new DataView(new ArrayBuffer(22)); e.setUint32(0, 0x06054b50, true); e.setUint16(8, arqs.length, true); e.setUint16(10, arqs.length, true); e.setUint32(12, tamC, true); e.setUint32(16, pos, true);
+  return new Blob([...partes, ...central, e.buffer], {type: 'application/zip'}); }
+function bytesDe(dataUrl) { const i = dataUrl.indexOf(','); const meta = dataUrl.slice(5, i), b = dataUrl.slice(i + 1);
+  const ext = /png/.test(meta) ? 'png' : /webp/.test(meta) ? 'webp' : 'jpg';
+  if (!/;base64/.test(meta)) return {ext, dados: new TextEncoder().encode(decodeURIComponent(b))};
+  const s = atob(b), u = new Uint8Array(s.length); for (let k = 0; k < s.length; k++) u[k] = s.charCodeAt(k); return {ext, dados: u}; }
+
+ACTS.fdlBaixar = async function (d) { if (M && M.baixando) return; const o = O(); let L = d.k === 'obra' ? fotosDaObra(o) : filtra(o);
+  if (d.k === 'sel') { const s = S.f.fdlSel || {}; L = L.filter(x => s[x.f.id]); }
+  if (!L.length) { toast('Nenhuma foto para baixar.'); return; }
+  if (L.length > 400 && !confirm(L.length + ' fotos: o arquivo pode ficar grande (cerca de ' + Math.round(L.length * 0.25) + ' MB) e demorar. Continuar?')) return;
+  M.baixando = true; const pr = $('#fdl-prog'), arqs = [], cont = new Map(); let falta = 0;
+  const csv = [['Arquivo', 'Ocorrência', 'Local', 'Origem', 'Fase', 'Data/hora da foto', 'Latitude', 'Longitude', 'Legenda'].join(';')];
+  try { for (let i = 0; i < L.length; i++) { const x = L[i]; if (pr) pr.textContent = '⏳ Preparando foto ' + (i + 1) + ' de ' + L.length + '…';
+      let src = null; try { src = await getFoto(x.f.id); } catch (_) {}
+      if (!src || !/^data:/.test(src)) { falta++; continue; }
+      const {ext, dados} = bytesDe(src), ps = pasta(o, x), n = (cont.get(ps) || 0) + 1; cont.set(ps, n);
+      const nome = ps + '/' + (x.oc ? String(x.oc.num).padStart(4, '0') + '_' : '') + p2(n) + '_' + limpa(FASES[x.fase] || x.fase) + (diaISO(x.quando) ? '_' + diaISO(x.quando) : '') + '.' + ext;
+      arqs.push({nome, dados});
+      csv.push([nome, x.oc ? x.oc.num : '', x.oc ? ocLocal(x.oc) : (x.ex ? localEx(o, x.ex).txt : ''), x.orig, FASES[x.fase] || x.fase, hora(x.quando), x.f.lat != null ? (+x.f.lat).toFixed(6).replace('.', ',') : '', x.f.lng != null ? (+x.f.lng).toFixed(6).replace('.', ',') : '', x.f.legenda || '']
+        .map(v => '"' + String(v).replace(/"/g, '""') + '"').join(';')); }
+    if (!arqs.length) { toast('Nenhuma das fotos foi encontrada neste aparelho nem na nuvem.', 6000); return; }
+    arqs.push({nome: 'lista_fotos.csv', dados: new TextEncoder().encode('﻿' + csv.join('\r\n'))});
+    const blob = zipar(arqs), a = document.createElement('a'), hj = new Date();
+    a.href = URL.createObjectURL(blob); a.download = 'Fotos_' + limpa(o.nome).slice(0, 40) + '_' + hj.getFullYear() + '-' + p2(hj.getMonth() + 1) + '-' + p2(hj.getDate()) + '.zip';
+    document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+    if (pr) pr.textContent = '✅ ' + (arqs.length - 1) + ' foto(s) no arquivo ' + a.download + (falta ? ' · ' + falta + ' não encontrada(s) (não estão neste aparelho nem na nuvem)' : '');
+    toast((arqs.length - 1) + ' foto(s) baixada(s)' + (falta ? '; ' + falta + ' não encontrada(s)' : '') + '.', 6000); }
+  catch (e) { console.warn('Download de fotos:', e); toast('Não foi possível montar o arquivo de fotos: ' + (e && e.message || e), 7000); }
+  finally { if (M) M.baixando = false; } };
+
+/* botão na aba Relatórios (cartão próprio) */
+const _tRel10 = tRel;
+tRel = function (o) { const h = _tRel10.apply(this, arguments); const n = fotosDaObra(o).length;
+  const card = `<div class="card" style="margin-top:16px"><h3>📷 Fotos da obra</h3><p class="muted small">Baixe as fotos desta obra num arquivo .zip: todas, ou só as escolhidas (por data, fase, ocorrência ou uma a uma). Inclui a planilha com local, data/hora e coordenadas de cada foto.</p>
+ <button class="btn pri" data-act="fdlAbrir" ${n ? '' : 'disabled'}>📷 Baixar fotos (${n})</button></div>`;
+  return h + card; };
+})();
+</script>
+
 </body>
 </html>
