@@ -10504,7 +10504,12 @@ function T3vCss() {
     '#t3-box.t3-voando #t3-pad,#t3-box.t3-voando #t3-zoom,#t3-box.t3-voando #t3-dim,#t3-box.t3-voando #t3-alerta{display:none!important}',
     '#t3-box.t3-compacto #t3-vpainel{left:62px;right:6px;bottom:6px;transform:none;width:auto;min-width:0;flex-wrap:wrap;font-size:11px}',
     '#t3-box.t3-compacto #t3-vpainel #t3-vtxt{flex:1 1 100%!important}',
-    '#t3-b-voo.t3-on{background:rgba(14,116,144,.85)!important}'
+    '#t3-b-voo{background:rgba(14,116,144,.92)!important;border-color:#7fd8ee!important;font-weight:700!important}',
+    '#t3-b-voo.t3-on{background:rgba(190,60,20,.92)!important;border-color:#ffb4a8!important}',
+    '#t3-box.t3-compacto #t3-bar{overflow-x:auto;scrollbar-width:none}',
+    '#t3-box.t3-compacto #t3-bar::-webkit-scrollbar{display:none}',
+    '#t3-box.t3-compacto #t3-bar button{flex:none}',
+    '#t3-vdica{position:absolute;z-index:9;background:#0e7490;color:#fff;font:600 12px system-ui,sans-serif;padding:.35rem .55rem;border-radius:6px;box-shadow:0 2px 8px rgba(0,0,0,.45);pointer-events:none;white-space:nowrap}'
   ].join('\n');
   document.head.appendChild(st);
 }
@@ -10514,8 +10519,10 @@ function T3vCss() {
   window.T3barraUpd = function () {
     u0();
     const b = document.getElementById('t3-b-voo'); if (!b) return;
-    const c = typeof T3compacto === 'function' && T3compacto();
-    b.textContent = T3V.on ? (c ? '⏹' : '⏹ Parar voo') : (c ? '✈' : '✈ Voar');
+    const c = typeof T3compacto === 'function' && T3compacto(), bar = document.getElementById('t3-bar');
+    // no celular: com texto quando couber (barra ≥ 290 px), sempre destacado
+    const cabe = !c || (bar && bar.clientWidth >= 290);
+    b.textContent = T3V.on ? (cabe ? '⏹ Parar voo' : '⏹') : (cabe ? '✈️ Voar' : '✈️');
     b.classList.toggle('t3-on', T3V.on);
   };
   const st0 = window.T3start;
@@ -10532,6 +10539,19 @@ function T3vCss() {
       b.onclick = T3vMenu;
       const fit = document.getElementById('t3-b-fit'); if (fit && fit.nextSibling) bar.insertBefore(b, fit.nextSibling); else bar.appendChild(b);
     }
+    // aviso na primeira vez: onde está o botão de voar
+    try {
+      if (!localStorage.getItem('tc_dren_t3voo_dica')) {
+        setTimeout(() => {
+          const v = document.getElementById('t3-b-voo'), bx = document.getElementById('t3-box'); if (!v || !bx) return;
+          const r = v.getBoundingClientRect(), rb = bx.getBoundingClientRect(), d = document.createElement('div'); d.id = 't3-vdica';
+          d.textContent = '▲ Novo: toque em ✈️ para voar sobre as ruas ou pelas redes';
+          d.style.left = Math.max(4, Math.min(rb.width - 250, r.left - rb.left - 10)) + 'px'; d.style.top = (r.bottom - rb.top + 6) + 'px';
+          bx.appendChild(d); setTimeout(() => d.remove(), 7000);
+          localStorage.setItem('tc_dren_t3voo_dica', '1');
+        }, 900);
+      }
+    } catch (e) {}
     // tocar/arrastar o desenho pausa o voo
     T3.renderer.domElement.addEventListener('pointerdown', () => { if (T3V.on && !T3V.pausa) T3vPausa(true); });
     T3barraUpd();
