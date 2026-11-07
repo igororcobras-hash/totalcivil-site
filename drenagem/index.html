@@ -10299,4 +10299,248 @@ function T3dimUI() {
   window.T3resize = function () { r0.apply(this, arguments); T3compactoAplicar(); };
 })();
 </script>
+<script>
+/* =====================================================================
+   PATCH DR-12 (07/11/2026) — Visualização 3D: botão ✈ Voar
+   Ao tocar, pergunta o tipo de voo:
+   - Sobre as ruas: câmera de drone acompanhando o eixo de cada rua;
+   - Por dentro das redes: câmera dentro dos tubos/galerias, seguindo a água
+     de montante para jusante (cada caminho da cabeceira até o deságue);
+   - Ao lado das redes: câmera ao lado dos tubos, com a rua transparente.
+   Durante o voo: painel com a rua ou o trecho atual (Ø, y/D, velocidade da
+   água), pausar/continuar, velocidade do voo, próximo, parar (Esc).
+   Tocar/arrastar o desenho pausa o voo. Só desenho: nenhum cálculo muda.
+   ===================================================================== */
+const T3V = {on: false, modo: null, legs: [], i: 0, d: 0, vel: 1, pausa: false, lastT: null, ant: null, tr: 0, opa: null, from: null};
+const T3V_NOME = {ruas: 'Sobre as ruas', dentro: 'Por dentro das redes', lado: 'Ao lado das redes'};
+function T3vGeo() {
+  const ex = T3.exag || 1, zt = [];
+  P.pvs.forEach(pv => { const r = R.pv[pv.id]; if (r && isNum(r.tp)) zt.push(r.tp); if (r && isNum(r.fundo)) zt.push(r.fundo); });
+  const base = (zt.length ? Math.min(...zt) : 0) - 2;
+  return {ex, Y: z => (z - base) * ex, P3: (x, y, h) => new THREE.Vector3(x - T3.cx, h, -(y - T3.cz))};
+}
+// caminhos: lista de "pernas" com pontos (no chão da rua ou no eixo do tubo)
+function T3vRuas() {
+  const K = T3vGeo(), G = geoRuas(), legs = [];
+  P.ruas.forEach(r => {
+    const g = G[r.id]; if (!g) return;
+    const [e0, e1] = extRua(G, g); if (!(e1 - e0 > 5)) return;
+    const pts = [], n = Math.max(2, Math.ceil((e1 - e0) / 2));
+    for (let k = 0; k <= n; k++) {
+      const s = e0 + (e1 - e0) * k / n, p = g.at(s, 0), z = T3zPista(r, s, 0);
+      if (isNum(z)) pts.push(K.P3(p.x, p.y, K.Y(z)));
+    }
+    if (pts.length > 1) legs.push({nome: (r.id + (r.nome ? ' · ' + r.nome : '')), pts, info: pts.map(() => null)});
+  });
+  return legs;
+}
+function T3vRedes() {
+  const K = T3vGeo(), G = geoRuas(), legs = [], usado = new Set();
+  const pvs = P.pvs.filter(pv => R.pv[pv.id]), pos = id => posPV(G, P.pvs.find(p => p.id === id));
+  const cabeceiras = pvs.filter(pv => R.pv[pv.id].ins.length === 0 && R.pv[pv.id].outs.length > 0);
+  const caminho = ini => {
+    const pts = [], info = []; let id = ini, guard = 0;
+    while (guard++ < 500) {
+      const outs = R.pv[id] ? R.pv[id].outs : []; if (!outs.length) break;
+      const t = outs.find(o => !usado.has(o.id)) || outs[0]; if (usado.has(t.id) && pts.length) break;
+      const r = R.tr[t.id], a = pos(t.m), b = pos(t.j);
+      if (!r || !a || !b || !isNum(r.cm) || !isNum(r.cj)) break;
+      usado.add(t.id);
+      const g = galOf(t), D = Math.max(0.1, g ? g.H : (isNum(r.D) ? r.D / 1000 : (num(t.D) || 400) / 1000));
+      const W = g ? Math.max(g.B, g.H) : D, nfo = {t, r, D, W, g};
+      const A = K.P3(a.x, a.y, K.Y(r.cm) + D / 2), B = K.P3(b.x, b.y, K.Y(r.cj) + D / 2);
+      const n = Math.max(2, Math.ceil(A.distanceTo(B) / 1.5));
+      for (let k = (pts.length ? 1 : 0); k <= n; k++) { pts.push(new THREE.Vector3().lerpVectors(A, B, k / n)); info.push(nfo); }
+      id = t.j;
+    }
+    return {pts, info};
+  };
+  cabeceiras.forEach(pv => {
+    const c = caminho(pv.id); if (c.pts.length < 2) return;
+    const fim = c.info[c.info.length - 1].t.j;
+    legs.push({nome: pv.id + ' → ' + fim, pts: c.pts, info: c.info});
+  });
+  return legs;
+}
+// posição e alvo da câmera em cada modo
+function T3vPose(leg, d) {
+  const cum = leg.cum, n = leg.pts.length;
+  let k = 1; while (k < n - 1 && cum[k] < d) k++;
+  const f = cum[k] > cum[k - 1] ? Math.max(0, Math.min(1, (d - cum[k - 1]) / (cum[k] - cum[k - 1]))) : 0;
+  const p = new THREE.Vector3().lerpVectors(leg.pts[k - 1], leg.pts[k], f), nfo = leg.info[f < 0.5 ? k - 1 : k];
+  const ahead = T3V.modo === 'ruas' ? 14 : T3V.modo === 'dentro' ? 3.5 : 5;
+  let da = d + ahead, j = k; while (j < n - 1 && cum[j] < da) j++;
+  const fa = cum[j] > cum[j - 1] ? Math.max(0, Math.min(1, (da - cum[j - 1]) / (cum[j] - cum[j - 1]))) : 1;
+  const q = new THREE.Vector3().lerpVectors(leg.pts[j - 1], leg.pts[j], fa);
+  const dir = new THREE.Vector3().subVectors(q, p); dir.y = 0; if (dir.lengthSq() < 1e-6) dir.set(1, 0, 0); dir.normalize();
+  const lado = new THREE.Vector3(-dir.z, 0, dir.x);
+  let pos, alvo;
+  if (T3V.modo === 'ruas') { pos = p.clone().addScaledVector(dir, -6).add(new THREE.Vector3(0, 6.5, 0)); alvo = q.clone(); }
+  else if (T3V.modo === 'dentro') { const D = nfo ? nfo.D : 0.4; pos = p.clone().add(new THREE.Vector3(0, D * 0.18, 0)); alvo = q.clone().add(new THREE.Vector3(0, D * 0.1, 0)); }
+  else { const W = nfo ? nfo.W : 0.6; pos = p.clone().addScaledVector(lado, W / 2 + 1.8).add(new THREE.Vector3(0, 0.6, 0)); alvo = q.clone(); }
+  return {pos, alvo, nfo};
+}
+function T3vPreparar(leg) {
+  leg.cum = [0]; for (let k = 1; k < leg.pts.length; k++) leg.cum.push(leg.cum[k - 1] + leg.pts[k].distanceTo(leg.pts[k - 1]));
+  leg.L = leg.cum[leg.cum.length - 1];
+}
+// velocidade base do voo (m/s no desenho)
+function T3vBase() { return T3V.modo === 'ruas' ? 10 : T3V.modo === 'dentro' ? 3 : 4.5; }
+
+function T3vMenu() {
+  const box = document.getElementById('t3-box'); if (!box) return;
+  if (T3V.on) { T3vParar(); return; }
+  let m = document.getElementById('t3-vmenu'); if (m) { m.remove(); return; }
+  m = document.createElement('div'); m.id = 't3-vmenu';
+  m.style.cssText = 'position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:9;background:rgba(14,22,32,.95);color:#e8ecf1;border:1px solid rgba(255,255,255,.3);border-radius:10px;padding:.7rem .8rem;width:min(320px,calc(100% - 24px));box-shadow:0 6px 24px rgba(0,0,0,.5);font:13px/1.35 system-ui,sans-serif';
+  const op = (k, ic, t, d) => `<button type="button" data-v="${k}" style="display:flex;gap:.55rem;align-items:flex-start;width:100%;text-align:left;margin:.3rem 0;padding:.5rem .6rem;border-radius:8px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.07);color:#e8ecf1;cursor:pointer"><span style="font-size:20px;line-height:1">${ic}</span><span><b>${t}</b><br><span style="opacity:.8;font-size:12px">${d}</span></span></button>`;
+  m.innerHTML = '<div style="font-weight:700;margin-bottom:.2rem">✈ Como você quer voar?</div>' +
+    op('ruas', '🛣', 'Sobre as ruas', 'Voo de drone acompanhando cada rua, uma depois da outra.') +
+    op('dentro', '🔵', 'Por dentro das redes', 'Dentro dos tubos e galerias, seguindo a água da cabeceira até o deságue.') +
+    op('lado', '👁', 'Ao lado das redes', 'Ao lado dos tubos, com a rua transparente para ver a rede.') +
+    '<div style="text-align:right;margin-top:.3rem"><button type="button" data-v="x" style="padding:.3rem .7rem;border-radius:6px;border:1px solid rgba(255,255,255,.3);background:transparent;color:#e8ecf1;cursor:pointer">Cancelar</button></div>';
+  m.addEventListener('pointerdown', e => e.stopPropagation());
+  m.addEventListener('click', e => { const b = e.target.closest('[data-v]'); if (!b) return; m.remove(); if (b.dataset.v !== 'x') T3vIniciar(b.dataset.v); });
+  box.appendChild(m);
+}
+function T3vIniciar(modo) {
+  if (!T3.cam || !T3.ctrl || !R || !P) return;
+  T3V.modo = modo;
+  const legs = modo === 'ruas' ? T3vRuas() : T3vRedes();
+  legs.forEach(T3vPreparar);
+  T3V.legs = legs.filter(l => l.L > 1);
+  if (!T3V.legs.length) { toast(modo === 'ruas' ? 'Não há ruas desenhadas para voar.' : 'Não há rede calculada para voar.'); return; }
+  T3V.on = true; T3V.i = 0; T3V.d = 0; T3V.pausa = false; T3V.lastT = null; T3V.tr = 0;
+  T3V.from = {pos: T3.cam.position.clone(), alvo: T3.ctrl.target.clone()};
+  T3V.ant = {fov: T3.cam.fov, near: T3.cam.near};
+  if (modo !== 'ruas') {   // rua transparente para ver a rede (sem gravar a escolha do usuário)
+    T3V.opa = Object.assign({}, T3OPA);
+    ['pavRev', 'pavBase', 'pavSub', 'sarjeta', 'passeio', 'meioFio'].forEach(k => { T3OPA[k] = 0.12; });
+    if (modo === 'dentro') { T3OPA.tubo = 0.8; T3.cam.fov = 70; T3.cam.near = 0.02; T3.cam.updateProjectionMatrix(); if (T3.scene) { T3V.fog = T3.scene.fog; T3.scene.fog = null; } }
+    T3apply();
+  }
+  T3.ctrl.enabled = false;
+  const box = document.getElementById('t3-box'); if (box) box.classList.add('t3-voando');
+  T3vPainel(); T3barraUpd();
+}
+function T3vParar() {
+  if (!T3V.on) return;
+  T3V.on = false;
+  if (T3V.opa) { for (const k in T3OPA) delete T3OPA[k]; Object.assign(T3OPA, T3V.opa); T3V.opa = null; T3apply(); }
+  if (T3.scene && T3V.fog) { T3.scene.fog = T3V.fog; T3V.fog = null; }
+  if (T3.cam && T3V.ant) { T3.cam.fov = T3V.ant.fov; T3.cam.near = T3V.ant.near; T3.cam.updateProjectionMatrix(); }
+  if (T3.ctrl) { T3.ctrl.enabled = true; T3.ctrl.update(); }
+  const box = document.getElementById('t3-box'); if (box) box.classList.remove('t3-voando');
+  const p = document.getElementById('t3-vpainel'); if (p) p.remove();
+  T3barraUpd();
+}
+function T3vPainel() {
+  const box = document.getElementById('t3-box'); if (!box) return;
+  let p = document.getElementById('t3-vpainel');
+  if (!p) {
+    p = document.createElement('div'); p.id = 't3-vpainel';
+    p.addEventListener('pointerdown', e => e.stopPropagation());
+    box.appendChild(p);
+  }
+  const bt = (fn, t, tt) => `<button type="button" onclick="${fn}" title="${tt}">${t}</button>`;
+  p.innerHTML = `<div id="t3-vtxt" style="flex:1;min-width:0"></div><div style="display:flex;gap:4px;flex:none">` +
+    bt('T3vPausa(!T3V.pausa)', T3V.pausa ? '▶' : '⏸', T3V.pausa ? 'Continuar o voo' : 'Pausar o voo') +
+    bt('T3vVel()', '⏩ ' + String(T3V.vel).replace('.', ',') + '×', 'Velocidade do voo') +
+    bt('T3vProx()', '⏭', 'Próxima rua / próximo caminho da rede') +
+    bt('T3vParar()', '⏹', 'Parar o voo (Esc)') + '</div>';
+  T3vTexto();
+}
+function T3vPausa(v) {
+  if (!T3V.on) return;
+  T3V.pausa = !!v;
+  if (T3.ctrl) T3.ctrl.enabled = T3V.pausa;   // pausado: dá para girar e olhar em volta
+  if (!T3V.pausa && T3.cam) { T3V.from = {pos: T3.cam.position.clone(), alvo: T3.ctrl.target.clone()}; T3V.tr = 0; }
+  T3vPainel();
+}
+function T3vVel() { const v = [0.5, 1, 2, 4], i = v.indexOf(T3V.vel); T3V.vel = v[(i + 1) % v.length]; T3vPainel(); }
+function T3vProx() { if (!T3V.on) return; T3V.from = {pos: T3.cam.position.clone(), alvo: T3.ctrl.target.clone()}; T3V.i = (T3V.i + 1) % T3V.legs.length; T3V.d = 0; T3V.tr = 0; T3vTexto(); }
+function T3vTexto(nfo) {
+  const el = document.getElementById('t3-vtxt'); if (!el || !T3V.on) return;
+  const leg = T3V.legs[T3V.i]; if (!leg) return;
+  let s = `<b>✈ ${T3V_NOME[T3V.modo]}</b> · ${T3V.modo === 'ruas' ? 'Rua' : 'Caminho'} ${T3V.i + 1}/${T3V.legs.length}: ${esc(leg.nome)}`;
+  if (nfo && nfo.t) {
+    const h = nfo.r.h || {}, lim = P.crit && isNum(P.crit.yD) ? P.crit.yD : 0.75, acima = h.carga || (isNum(h.yD) && h.yD > lim + 5e-4);
+    s += `<br>Trecho <b>${esc(nfo.t.id)}</b> (${esc(nfo.t.m)} → ${esc(nfo.t.j)}) · ${nfo.g ? 'galeria ' + fmt(nfo.g.B, 2) + '×' + fmt(nfo.g.H, 2) + ' m' : 'Ø ' + fmt(nfo.D * 1000, 0) + ' mm'}` +
+      (isNum(h.V) ? ' · água ' + fmt(h.V, 2) + ' m/s' : '') +
+      ` · <span style="${acima ? 'color:#ffb4a8;font-weight:700' : ''}">${h.carga ? 'EM CARGA' : (isNum(h.yD) ? (nfo.g ? 'y/H ' : 'y/D ') + fmt(h.yD, 2) : '')}${acima ? ' ⚠' : ''}</span>`;
+  }
+  if (T3V.pausa) s += ' · <i>pausado</i>';
+  el.innerHTML = s;
+}
+// avança o voo a cada quadro
+function T3vTick(t) {
+  if (!T3V.on || !T3.cam || !T3.ctrl) return;
+  const dt = T3V.lastT == null ? 0 : Math.max(0, Math.min(0.05, t - T3V.lastT)); T3V.lastT = t;
+  const leg = T3V.legs[T3V.i]; if (!leg) { T3vParar(); return; }
+  if (T3V.pausa) return;
+  {
+    if (T3V.tr < 1) T3V.tr = Math.min(1, T3V.tr + dt / 1.6);
+    else T3V.d += T3vBase() * T3V.vel * dt;
+  }
+  if (T3V.d >= leg.L) {
+    if (T3V.i + 1 >= T3V.legs.length) { toast('Voo concluído'); T3vParar(); return; }
+    T3vProx(); return;
+  }
+  const pz = T3vPose(leg, T3V.d);
+  let pos = pz.pos, alvo = pz.alvo;
+  if (T3V.tr < 1 && T3V.from) {   // transição suave até o começo da perna
+    const k = T3V.tr * T3V.tr * (3 - 2 * T3V.tr);
+    pos = new THREE.Vector3().lerpVectors(T3V.from.pos, pos, k); alvo = new THREE.Vector3().lerpVectors(T3V.from.alvo, alvo, k);
+  }
+  T3.cam.position.copy(pos); T3.ctrl.target.copy(alvo); T3.cam.lookAt(alvo);
+  if ((T3V.fc = (T3V.fc || 0) + 1) % 10 === 0) T3vTexto(pz.nfo);
+}
+function T3vCss() {
+  if (document.getElementById('t3-voo-css')) return;
+  const st = document.createElement('style'); st.id = 't3-voo-css';
+  st.textContent = [
+    '#t3-vpainel{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);z-index:8;width:min(640px,calc(100% - 300px));min-width:280px;display:flex;gap:.5rem;align-items:center;background:rgba(14,22,32,.88);color:#e8ecf1;border:1px solid rgba(255,255,255,.3);border-radius:8px;padding:.4rem .55rem;font:12px/1.35 system-ui,sans-serif}',
+    '#t3-vpainel button{padding:.3rem .5rem;border-radius:6px;border:1px solid rgba(255,255,255,.3);background:rgba(255,255,255,.08);color:#e8ecf1;cursor:pointer;white-space:nowrap;font:600 12px system-ui,sans-serif}',
+    '#t3-box.t3-voando #t3-pad,#t3-box.t3-voando #t3-zoom,#t3-box.t3-voando #t3-dim,#t3-box.t3-voando #t3-alerta{display:none!important}',
+    '#t3-box.t3-compacto #t3-vpainel{left:62px;right:6px;bottom:6px;transform:none;width:auto;min-width:0;flex-wrap:wrap;font-size:11px}',
+    '#t3-box.t3-compacto #t3-vpainel #t3-vtxt{flex:1 1 100%!important}',
+    '#t3-b-voo.t3-on{background:rgba(14,116,144,.85)!important}'
+  ].join('\n');
+  document.head.appendChild(st);
+}
+(function () {
+  // botão ✈ na barra do desenho
+  const u0 = window.T3barraUpd;
+  window.T3barraUpd = function () {
+    u0();
+    const b = document.getElementById('t3-b-voo'); if (!b) return;
+    const c = typeof T3compacto === 'function' && T3compacto();
+    b.textContent = T3V.on ? (c ? '⏹' : '⏹ Parar voo') : (c ? '✈' : '✈ Voar');
+    b.classList.toggle('t3-on', T3V.on);
+  };
+  const st0 = window.T3start;
+  window.T3start = function (box) {
+    T3V.on = false;
+    st0(box);
+    if (!T3.renderer) return;
+    T3vCss();
+    const bar = document.getElementById('t3-bar');
+    if (bar && !document.getElementById('t3-b-voo')) {
+      const b = document.createElement('button'); b.type = 'button'; b.id = 't3-b-voo';
+      b.title = 'Voar automaticamente: sobre as ruas, por dentro das redes ou ao lado das redes';
+      b.style.cssText = 'padding:.35rem .6rem;border-radius:6px;border:1px solid rgba(255,255,255,.3);background:rgba(20,30,40,.7);color:#e8ecf1;cursor:pointer;font-size:.8rem';
+      b.onclick = T3vMenu;
+      const fit = document.getElementById('t3-b-fit'); if (fit && fit.nextSibling) bar.insertBefore(b, fit.nextSibling); else bar.appendChild(b);
+    }
+    // tocar/arrastar o desenho pausa o voo
+    T3.renderer.domElement.addEventListener('pointerdown', () => { if (T3V.on && !T3V.pausa) T3vPausa(true); });
+    T3barraUpd();
+  };
+  const stp0 = window.T3stop;
+  window.T3stop = function () { if (T3V.on) T3vParar(); stp0.apply(this, arguments); };
+  const a0 = window.T3animate;
+  window.T3animate = function (t) { a0(t); T3vTick(t); };
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && T3V.on) T3vParar(); });
+})();
+</script>
 </body></html>
