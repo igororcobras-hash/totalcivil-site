@@ -104,8 +104,20 @@ h2.sec{font-size:1.45rem; margin:56px 0 6px; letter-spacing:-.01em; text-wrap:ba
 .card .rodape-card{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding-top:12px; border-top:1px solid var(--line)}
 .incluir{display:flex; align-items:center; gap:8px; font-weight:650; font-size:.9rem; cursor:pointer; user-select:none}
 .incluir input{width:18px; height:18px; accent-color:var(--accent); cursor:pointer}
-.abrir{font-size:.9rem; font-weight:700; color:var(--accent); text-decoration:none; white-space:nowrap}
-.abrir:hover{text-decoration:underline}
+.botoes-card{display:flex; gap:8px; flex-wrap:wrap; align-items:center}
+.abrir,.video-apr{display:inline-flex; align-items:center; gap:6px; padding:7px 14px; border-radius:9px; border:1.5px solid var(--accent);
+  font:inherit; font-size:.9rem; font-weight:700; color:var(--accent); background:transparent; text-decoration:none; white-space:nowrap; cursor:pointer;
+  transition:background .15s, color .15s}
+.abrir:hover,.abrir:focus-visible{background:var(--accent); color:var(--accent-ink)}
+.botoes-card.com-video{width:100%; justify-content:flex-end; flex-wrap:nowrap}
+.botoes-card.com-video .abrir,.botoes-card.com-video .video-apr{padding:7px 10px; font-size:.86rem}
+.video-apr{border-color:var(--line); color:var(--ink)}
+.video-apr:hover,.video-apr:focus-visible{border-color:var(--accent); color:var(--accent)}
+#dl-video{width:min(960px,calc(100vw - 32px)); padding:0; border:none; border-radius:14px; background:#000; color:#fff}
+#dl-video::backdrop{background:rgba(0,0,0,.75)}
+#dl-video .cab{display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 14px; background:#111; font-weight:700}
+#dl-video .cab button{white-space:nowrap; flex:none; background:none; border:1px solid #555; color:#fff; border-radius:8px; padding:4px 10px; cursor:pointer; font:inherit}
+#dl-video video{display:block; width:100%; max-height:calc(100vh - 120px); background:#000}
 
 /* Como funciona */
 .passos{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:14px; counter-reset:p; padding:0; margin:0; list-style:none}
@@ -456,6 +468,7 @@ const PROGRAMAS = [
    desc:'Dimensionamento de pavimentos de blocos de concreto intertravados conforme IP-06/2004 e ABNT NBR 9781.',
    ico:'<rect x="5" y="10" width="15" height="8" rx="1.5"/><rect x="24" y="10" width="17" height="8" rx="1.5"/><rect x="5" y="22" width="9" height="8" rx="1.5"/><rect x="18" y="22" width="15" height="8" rx="1.5"/><rect x="37" y="22" width="4" height="8" rx="1"/><rect x="5" y="34" width="15" height="6" rx="1.5"/><rect x="24" y="34" width="17" height="6" rx="1.5"/>'},
   {key:'drenagem',     campo:'drenagemAtivo',     solic:'drenagemSolicitado',     nome:'Drenagem Pluvial',            url:'/drenagem/',     disp:true,
+   video:'/videos/drenagem-apresentacao.mp4',
    desc:'Microdrenagem completa: chuva IDF, bacias, sarjetas, bocas-de-lobo, ramais, PVs, rede tronco, linha piezométrica e memorial.',
    ico:'<path d="M23 5C23 5 11 19 11 28a12 12 0 0 0 24 0C35 19 23 5 23 5Z"/><path d="M17 29a6 6 0 0 0 6 6"/>'},
   {key:'estrutura',    campo:'estruturaAtivo',    solic:'estruturaSolicitado',    nome:'Estrutura em Concreto Armado', url:'/concreto/', disp:true,
@@ -529,7 +542,9 @@ function renderProgramas(){
     const lib = p.disp && liberado(eu, p);
     const precoP = p.preco || PRECO;
     const chip = !p.disp ? '<span class="chip soon">Em breve</span>' : lib ? '<span class="chip lib">No seu pacote</span>' : '<span class="chip ok">Disponível</span>';
-    const abrirLink = p.disp ? '<a class="abrir" href="' + p.url + '">Abrir →</a>' : '<span class="mini">Reserve: cobrança só após o lançamento</span>';
+    const abrirLink = p.disp ? '<span class="botoes-card' + (p.video ? ' com-video' : '') + '">' +
+      (p.video ? '<button type="button" class="video-apr" data-video="' + p.key + '">▶ Vídeo de Apresentação</button>' : '') +
+      '<a class="abrir" href="' + p.url + '">Abrir →</a></span>' : '<span class="mini">Reserve: cobrança só após o lançamento</span>';
     return '<li><article class="card' + (p.disp ? '' : ' breve') + (sel.has(p.key) ? ' sel' : '') + '" data-card="' + p.key + '">' +
       '<div class="topo-card"><span class="ico" aria-hidden="true"><svg viewBox="0 0 46 46">' + p.ico + '</svg></span>' + chip + '</div>' +
       '<h3>' + esc(p.nome) + '</h3><p>' + esc(p.desc) + '</p>' +
@@ -540,6 +555,24 @@ function renderProgramas(){
         abrirLink + '</div></article></li>';
   }).join('');
 }
+/* vídeo de apresentação do programa (janela com player) */
+function abrirVideo(k){
+  const p = porKey(k); if(!p || !p.video) return;
+  let d = $('dl-video');
+  if(!d){
+    d = document.createElement('dialog'); d.id = 'dl-video';
+    d.innerHTML = '<div class="cab"><span id="dl-video-tit"></span><button type="button" aria-label="Fechar o vídeo">Fechar ✕</button></div><video controls playsinline preload="metadata"></video>';
+    document.body.appendChild(d);
+    d.querySelector('.cab button').onclick = () => d.close();
+    d.addEventListener('click', e => { if(e.target === d) d.close(); });
+    d.addEventListener('close', () => { const v = d.querySelector('video'); v.pause(); });
+  }
+  $('dl-video-tit').textContent = 'Vídeo de Apresentação · ' + p.nome;
+  const v = d.querySelector('video');
+  if(v.getAttribute('src') !== p.video) v.src = p.video;
+  d.showModal(); v.play().catch(() => {});
+}
+document.addEventListener('click', e => { const b = e.target.closest('[data-video]'); if(b){ e.preventDefault(); abrirVideo(b.dataset.video); } });
 function valores(chaves){
   const disp = chaves.filter(k => porKey(k) && porKey(k).disp).length;
   const breve = chaves.filter(k => porKey(k) && !porKey(k).disp).length;
