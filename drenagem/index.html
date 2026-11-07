@@ -10107,4 +10107,196 @@ function T3alertaQuadro() {
   };
 })();
 </script>
+<script>
+/* =====================================================================
+   PATCH DR-11 (07/11/2026) — Visualização 3D: celular e redimensionamento
+   1. Celular (ambiente Android/iPhone ou tela de toque) e desenho estreito
+      (< 700 px): toque menos sensível (giro, movimento e pinça mais lentos,
+      sem o "deslizar" depois de soltar) e controles reorganizados para não
+      se sobreporem: barra só com ícones, botão da chuva mais estreito,
+      qualidade num botão ⚙ que abre e fecha, setas e zoom menores, alerta
+      recolhido num selo que abre ao tocar.
+   2. Botão 🛠 Redimensionar: refaz o dimensionamento da rede e das caixas
+      para a chuva do 3D, com a mesma correção automática da aba 7
+      (autoCorrigir: tipo de caixa, ramais, declividade ou troca do tubo pela
+      solução de menor custo, e cotas). ↶ Desfazer e ↷ Refazer guardam até
+      10 dimensionamentos (por projeto; troca de projeto zera o histórico).
+   Substitui/envolve funções pelo nome global; o código anterior fica acima.
+   ===================================================================== */
+function T3movel() {
+  return (typeof CFG !== 'undefined' && CFG.device && CFG.device !== 'desktop') || !!(window.matchMedia && matchMedia('(pointer: coarse)').matches);
+}
+function T3compacto() { const b = document.getElementById('t3-box'); return T3movel() || !!(b && b.clientWidth && b.clientWidth < 700); }
+function T3ajusteToque() {
+  if (!T3.ctrl) return;
+  const m = T3movel();
+  T3.ctrl.rotateSpeed = m ? 0.45 : 1;
+  T3.ctrl.panSpeed = m ? 0.6 : 1;
+  T3.ctrl.zoomSpeed = m ? 0.6 : 1.2;
+  T3.ctrl.dampingFactor = m ? 0.2 : 0.05;
+}
+function T3cssMovel() {
+  if (document.getElementById('t3-mob-css')) return;
+  const st = document.createElement('style'); st.id = 't3-mob-css';
+  st.textContent = [
+    '#t3-b-qual{display:none}',
+    '#t3-dim{position:absolute;top:48px;right:10px;z-index:7;display:flex;gap:6px}',
+    '#t3-dim button{padding:.35rem .6rem;border-radius:6px;border:1px solid rgba(255,255,255,.3);background:rgba(20,30,40,.75);color:#e8ecf1;font:600 .78rem system-ui,sans-serif;cursor:pointer;white-space:nowrap}',
+    '#t3-dim button:disabled{opacity:.4;cursor:default}',
+    '#t3-dim button.t3-dim-al{background:rgba(200,90,10,.92);border-color:#ffd2a8}',
+    '#t3-box.t3-compacto #t3-bar{left:6px!important;top:6px!important;right:48px!important;gap:4px!important;flex-wrap:nowrap!important}',
+    '#t3-box.t3-compacto #t3-bar button{padding:.2rem .4rem!important;font-size:1rem!important;min-width:34px;min-height:32px;line-height:1}',
+    '#t3-box.t3-compacto #t3-b-qual{display:inline-block!important}',
+    '#t3-box.t3-compacto .t3-fs-btn{top:6px!important;right:6px!important;padding:.2rem .45rem!important;font-size:1rem!important;min-height:32px;line-height:1}',
+    '#t3-box.t3-compacto #t3-krain{left:4px!important;top:46px!important;bottom:52px!important;width:54px!important;min-height:110px!important;font-size:.6rem!important;gap:2px!important}',
+    '#t3-box.t3-compacto #t3-kqual{display:none!important}',
+    '#t3-box.t3-compacto.t3-qaberto #t3-kqual{display:flex!important;left:60px!important;top:46px!important;bottom:52px!important;width:58px!important;min-height:110px!important;font-size:.6rem!important;gap:2px!important;background:rgba(10,18,28,.6);border-radius:8px;padding:2px 0}',
+    '#t3-box.t3-compacto #t3-pad{transform:scale(.7);transform-origin:100% 100%;right:6px!important;bottom:6px!important}',
+    '#t3-box.t3-compacto #t3-zoom{right:8px!important;bottom:98px!important;gap:4px!important}',
+    '#t3-box.t3-compacto #t3-zoom button{width:32px!important;height:32px!important}',
+    '#t3-box.t3-compacto #t3-alerta{top:46px!important;left:64px!important;right:6px!important;transform:none!important;max-width:none!important;min-width:0!important;max-height:68%;overflow:auto;font-size:11px!important;padding:.3rem .45rem!important}',
+    '#t3-box.t3-compacto.t3-qaberto #t3-alerta{left:124px!important}',
+    '#t3-box.t3-compacto #t3-dim{top:auto;right:auto;bottom:6px;left:62px;gap:4px}',
+    '#t3-box.t3-compacto #t3-dim button{padding:.25rem .5rem;font-size:.95rem;min-height:34px}',
+    '#t3-box.t3-compacto .t3-lab{font-size:9.5px!important;padding:1px 3px!important}'
+  ].join('\n');
+  document.head.appendChild(st);
+}
+function T3compactoAplicar() {
+  const box = document.getElementById('t3-box'); if (!box) return;
+  T3cssMovel();
+  const c = T3compacto();
+  box.classList.toggle('t3-compacto', c);
+  if (!c) box.classList.remove('t3-qaberto');
+  T3ajusteToque();
+  if (typeof T3barraUpd === 'function') T3barraUpd();
+  if (typeof T3fsLabel === 'function') T3fsLabel();
+  T3dimUI();
+}
+// barra: no celular só os ícones (o texto continua na dica do botão)
+(function () {
+  const u0 = window.T3barraUpd;
+  window.T3barraUpd = function () {
+    u0();
+    if (!T3compacto()) return;
+    const s = (id, t) => { const b = document.getElementById(id); if (b) b.textContent = t; };
+    s('t3-b-agua', T3.anim ? '💧' : '⏸'); s('t3-b-pan', T3.pan ? '✋' : '⟳'); s('t3-b-cotas', '📏'); s('t3-b-fit', '⤢');
+  };
+  const f0 = window.T3fsLabel;
+  if (f0) window.T3fsLabel = function () {
+    f0();
+    if (!T3compacto()) return;
+    const on = typeof T3isFs === 'function' && T3isFs();
+    document.querySelectorAll('.t3-fs-btn').forEach(x => { x.textContent = on ? '✕' : '⛶'; });
+  };
+})();
+function T3botaoQual(box) {
+  const bar = document.getElementById('t3-bar'); if (!bar || document.getElementById('t3-b-qual')) return;
+  const b = document.createElement('button'); b.type = 'button'; b.id = 't3-b-qual'; b.textContent = '⚙';
+  b.title = 'Qualidade gráfica (abre e fecha o botão de qualidade)';
+  b.style.cssText = 'padding:.35rem .6rem;border-radius:6px;border:1px solid rgba(255,255,255,.3);background:rgba(20,30,40,.7);color:#e8ecf1;cursor:pointer';
+  b.onclick = () => { box.classList.toggle('t3-qaberto'); b.style.background = box.classList.contains('t3-qaberto') ? 'rgba(14,116,144,.85)' : 'rgba(20,30,40,.7)'; if (typeof T3qualUI === 'function') T3qualUI(); };
+  bar.appendChild(b);
+}
+
+/* ---------- redimensionar para a chuva do 3D, com desfazer/refazer (até 10) ---------- */
+const T3HIST = {des: [], ref: [], proj: null};
+function T3histProj() {
+  const id = typeof DB !== 'undefined' && DB ? DB.cur : null;
+  if (T3HIST.proj !== id) { T3HIST.des = []; T3HIST.ref = []; T3HIST.proj = id; }
+}
+function T3difs(A, B) {
+  let n = 0;
+  const ta = new Map((A.trechos || []).map(t => [t.id, t]));
+  (B.trechos || []).forEach(t => { const o = ta.get(t.id); if (!o || String(o.D) !== String(t.D) || String(o.iFix) !== String(t.iFix) || String(o.mat) !== String(t.mat) || JSON.stringify(o.gal || null) !== JSON.stringify(t.gal || null)) n++; });
+  const ba = new Map((A.bls || []).map(b => [b.id, b]));
+  (B.bls || []).forEach(b => { const o = ba.get(b.id); if (!o || o.tipo !== b.tipo || String(o.L) !== String(b.L) || String(o.rD) !== String(b.rD) || String(o.rI) !== String(b.rI) || o.prox !== b.prox) n++; });
+  return n;
+}
+// conta direto do cálculo (o desenho 3D pode atualizar um instante depois)
+function T3nAlertas() {
+  if (!R || !P) return 0;
+  const lim = P.crit && isNum(P.crit.yD) ? P.crit.yD : 0.75, tol = 5e-4, acima = h => !!h && (h.carga || (isNum(h.yD) && h.yD > lim + tol));
+  return (R.ordem || []).filter(t => R.tr[t.id] && acima(R.tr[t.id].h)).length + P.bls.filter(x => R.bl[x.id] && acima(R.bl[x.id].ram)).length;
+}
+function T3redimensionar() {
+  if (!P || !R) return;
+  T3histProj();
+  const i = idf(P.crit.tcMin), f = typeof RAIN_FATOR === 'number' ? RAIN_FATOR : 1, n0 = T3nAlertas();
+  const msg = 'Redimensionar a rede e as caixas para a chuva atual do 3D (' + fmt(i, 0) + ' mm/h' + (Math.abs(f - 1) > 1e-3 ? ', ' + fmt(f, 2) + '× a chuva de projeto' : ', a chuva de projeto') + ')?\n\n' +
+    'O programa usa a mesma correção automática da aba 7: troca o tipo de caixa, aumenta os ramais, aumenta a declividade ou troca o tubo pela solução de menor custo e refaz as cotas.\n\n' +
+    'Você pode desfazer (↶) e refazer (↷) até 10 vezes.' +
+    (Math.abs(f - 1) > 1e-3 ? '\n\nAtenção: o memorial continua com a chuva de projeto da aba 2. A rede ficará dimensionada para esta chuva maior.' : '');
+  if (!confirm(msg)) return;
+  const antes = JSON.stringify(P);
+  try { autoCorrigir(); }
+  catch (e) { P = migrate(JSON.parse(antes)); calc(); T3build(); toast('Não foi possível redimensionar: ' + e.message); return; }
+  try { closeModal('modal-auto'); } catch (e) {}
+  try { DESFAZER = null; } catch (e) {}
+  const depois = JSON.stringify(P), nm = T3difs(JSON.parse(antes), P);
+  if (depois === antes) { calc(); T3build(); T3dimUI(); toast('Nada a mudar: a rede e as caixas já atendem a esta chuva'); return; }
+  T3HIST.des.push(antes); if (T3HIST.des.length > 10) T3HIST.des.shift();
+  T3HIST.ref = [];
+  save(); calc(); if (typeof refreshRes === 'function') refreshRes(); T3build();
+  const n1 = T3nAlertas();
+  toast('Redimensionado para ' + fmt(i, 0) + ' mm/h: ' + nm + ' trecho(s)/caixa(s) alterado(s). Alertas: ' + n0 + ' → ' + n1 + (n1 ? ' (veja a aba 13)' : '') + '. Use ↶ para desfazer.');
+  T3dimUI();
+}
+function T3restaura(s, txt) {
+  P = migrate(JSON.parse(s)); save(); calc(); if (typeof refreshRes === 'function') refreshRes(); T3build(); T3dimUI();
+  toast(txt + '. Alertas no 3D: ' + T3nAlertas() + '.');
+}
+function T3desfazer() {
+  T3histProj(); if (!T3HIST.des.length) return;
+  T3HIST.ref.push(JSON.stringify(P)); if (T3HIST.ref.length > 10) T3HIST.ref.shift();
+  T3restaura(T3HIST.des.pop(), 'Desfeito: voltou ao dimensionamento anterior');
+}
+function T3refazer() {
+  T3histProj(); if (!T3HIST.ref.length) return;
+  T3HIST.des.push(JSON.stringify(P)); if (T3HIST.des.length > 10) T3HIST.des.shift();
+  T3restaura(T3HIST.ref.pop(), 'Refeito');
+}
+function T3dimGrupo(box) {
+  if (document.getElementById('t3-dim')) return;
+  const g = document.createElement('div'); g.id = 't3-dim';
+  g.innerHTML = '<button type="button" id="t3-dim-go" onclick="T3redimensionar()" title="Redimensiona a rede e as caixas para a chuva atual do 3D (mesma correção automática da aba 7)">🛠 Redimensionar</button>' +
+    '<button type="button" id="t3-dim-un" onclick="T3desfazer()" title="Desfazer: volta ao dimensionamento anterior (até 10 vezes)">↶</button>' +
+    '<button type="button" id="t3-dim-re" onclick="T3refazer()" title="Refazer: avança de novo (até 10 vezes)">↷</button>';
+  g.addEventListener('pointerdown', e => e.stopPropagation());
+  box.appendChild(g);
+  T3dimUI();
+}
+function T3dimUI() {
+  T3histProj();
+  const c = T3compacto(), n = T3nAlertas(), go = document.getElementById('t3-dim-go'), un = document.getElementById('t3-dim-un'), re = document.getElementById('t3-dim-re');
+  if (go) { go.textContent = c ? '🛠' : '🛠 Redimensionar'; go.classList.toggle('t3-dim-al', n > 0); go.title = (n ? n + ' acima do limite de enchimento. ' : '') + 'Redimensiona a rede e as caixas para a chuva atual do 3D (mesma correção automática da aba 7)'; }
+  if (un) { un.disabled = !T3HIST.des.length; un.textContent = '↶' + (T3HIST.des.length ? ' ' + T3HIST.des.length : ''); }
+  if (re) { re.disabled = !T3HIST.ref.length; re.textContent = '↷' + (T3HIST.ref.length ? ' ' + T3HIST.ref.length : ''); }
+}
+// alerta: no celular começa recolhido; o quadro aberto ganha o botão de redimensionar
+(function () {
+  const q0 = window.T3alertaQuadro;
+  window.T3alertaQuadro = function () {
+    if (T3.alMin === undefined) T3.alMin = T3compacto();
+    q0();
+    const q = document.getElementById('t3-alerta');
+    if (q && !T3.alMin && !q.querySelector('.t3-al-dim')) {
+      const d = document.createElement('div'); d.className = 't3-al-dim'; d.style.cssText = 'margin-top:.4rem;display:flex;gap:.4rem;flex-wrap:wrap';
+      d.innerHTML = '<button type="button" onclick="T3redimensionar()" style="background:#fff;color:#8a1710;border:0;border-radius:5px;padding:.3rem .6rem;font-weight:700;cursor:pointer">🛠 Redimensionar para esta chuva</button>';
+      q.appendChild(d);
+    }
+    T3dimUI();
+  };
+  const st0 = window.T3start;
+  window.T3start = function (box) {
+    st0(box);
+    if (!T3.renderer) return;
+    const zb = box.querySelector('button[title="Aproximar (zoom)"]'); if (zb && zb.parentElement) zb.parentElement.id = 't3-zoom';
+    T3botaoQual(box); T3dimGrupo(box); T3compactoAplicar();
+    T3alertaQuadro();
+  };
+  const r0 = window.T3resize;
+  window.T3resize = function () { r0.apply(this, arguments); T3compactoAplicar(); };
+})();
+</script>
 </body></html>
