@@ -10564,4 +10564,58 @@ function T3vCss() {
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && T3V.on) T3vParar(); });
 })();
 </script>
+<script>
+/* =====================================================================
+   PATCH DR-13 (07/11/2026) — Visualização 3D: Enquadrar de verdade
+   O desenho 3D fica centrado na origem (P3 subtrai T3.cx/T3.cz), mas o
+   T3fit/T3view antigos miravam em (T3.cx, 0, T3.cz) — fora do desenho — e
+   a distância não considerava o tamanho da janela. Agora:
+   - caixa de tudo que está visível (ruas, passeios, PVs, tubos, caixas,
+     ramais, água; sem o chão de fundo e sem a chuva);
+   - mira no centro dessa caixa e afasta a câmera até os 8 cantos caberem
+     na tela (com margem), na largura e na altura da janela;
+   - Enquadrar mantém a direção da vista atual; as vistas (Topo, Frente…)
+     usam a mesma conta. Só a câmera muda.
+   ===================================================================== */
+function T3caixa() {
+  const bx = new THREE.Box3(), tmp = new THREE.Box3();
+  (T3.objs || []).forEach(o => {
+    const c = o.userData && o.userData.comp;
+    if (!o.visible || c === 'outro' || c === 'chuva' || o === T3.rainObj) return;
+    tmp.setFromObject(o); if (!tmp.isEmpty()) bx.union(tmp);
+  });
+  if (bx.isEmpty()) { const s = T3.span || 50; bx.set(new THREE.Vector3(-s / 2, 0, -s / 2), new THREE.Vector3(s / 2, 10, s / 2)); }
+  return bx;
+}
+function T3enquadrarDir(dir) {
+  if (!T3.cam || !T3.ctrl) return;
+  const bx = T3caixa(), c = bx.getCenter(new THREE.Vector3());
+  const u = dir.clone().normalize(); if (!isFinite(u.x) || u.lengthSq() < 1e-6) u.set(0.6, 0.55, 0.6).normalize();
+  const cant = []; for (let i = 0; i < 8; i++) cant.push(new THREE.Vector3(i & 1 ? bx.max.x : bx.min.x, i & 2 ? bx.max.y : bx.min.y, i & 4 ? bx.max.z : bx.min.z));
+  const cam = T3.cam, mg = 0.9;
+  const cabe = d => { cam.position.copy(c).addScaledVector(u, d); cam.lookAt(c); cam.updateMatrixWorld(); cam.updateProjectionMatrix();
+    return cant.every(p => { const q = p.clone().project(cam); return q.z < 1 && Math.abs(q.x) <= mg && Math.abs(q.y) <= mg; }); };
+  const sz = bx.getSize(new THREE.Vector3()).length() || 50;
+  let lo = 0.5, hi = sz * 4; while (!cabe(hi) && hi < 2e4) hi *= 2;
+  for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (cabe(m)) hi = m; else lo = m; }
+  if (cam.far < hi * 4) { cam.far = hi * 4; }
+  cam.position.copy(c).addScaledVector(u, hi);
+  T3.ctrl.target.copy(c);
+  if (T3.ctrl.maxDistance && T3.ctrl.maxDistance < hi * 1.5) T3.ctrl.maxDistance = hi * 3;
+  cam.updateProjectionMatrix(); T3.ctrl.update();
+}
+function T3fit() {
+  if (!T3.cam || !T3.ctrl) return;
+  const d = new THREE.Vector3().subVectors(T3.cam.position, T3.ctrl.target);
+  // vista atual quase de lado (ou indefinida) → isométrica padrão
+  if (d.lengthSq() < 1e-6 || d.y < 0.05 * d.length()) d.set(0.9, 0.8, 0.9);
+  T3enquadrarDir(d);
+}
+function T3view(v) {
+  if (!T3.cam || !T3.ctrl) return;
+  const dir = {topo: [0, 1, 0.0005], frente: [0, 0.3, 1], tras: [0, 0.3, -1], direita: [1, 0.3, 0], esquerda: [-1, 0.3, 0], iso: [0.7, 0.7, 0.7]}[v];
+  if (!dir) return;
+  T3enquadrarDir(new THREE.Vector3(...dir));
+}
+</script>
 </body></html>
