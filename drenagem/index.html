@@ -10618,4 +10618,296 @@ function T3view(v) {
   T3enquadrarDir(new THREE.Vector3(...dir));
 }
 </script>
+<script>
+/* =====================================================================
+   PATCH DR-14 (08/11/2026)
+   1. PV: pescoço (chaminé em anéis de concreto Ø0,60, mesmo Ø do tampão)
+      com altura mínima entre a laje da tampa e o pavimento (crit.
+      pvEmopChamMin, padrão 0,50 m): a câmara baixa (até o tubo mais alto
+      + folga, nunca menos de 1,00 m) para a laje ficar mais enterrada.
+   2. Redimensionar no 3D: falta de capacidade troca primeiro o DIÂMETRO
+      (ou a aduela) em vez de aprofundar a rede; depois roda a correção da
+      aba 7. Rede funda (PV ≥ 2,5 m com tubo ≥ Ø800) ganha SUGESTÃO de
+      galeria de aduelas mais baixa (não aplica sozinho).
+   3. Gerador (3 opções): escolhe PV quadrado (blocos, padrão de drenagem)
+      ou redondo (anéis pré-moldados, mais usado em esgoto) e o banco do
+      orçamento (EMOP, SINAPI RJ, SCO-Rio). Cada opção mostra o orçamento
+      licitável da Solução recomendada no banco escolhido, com os itens —
+      o mesmo das "3 soluções" e da exportação para o programa de Orçamento.
+   4. Orçamento conferido com os modelos dren-01/dren-07 do programa de
+      Orçamento (orcamento/dados/modelos.json): códigos que faltavam.
+   ===================================================================== */
+Object.assign(EMOP_CRIT, {pvEmopChamMin: 0.50});
+Object.assign(CRITR, {pvEmopChamMin: [0.30, 1.20]});
+HELP['crit.pvEmopChamMin'] = 'Altura mínima do pescoço (chaminé em anéis de concreto Ø0,60, o mesmo Ø do tampão) entre a laje da tampa do PV e o pavimento. Garante aterro sobre a laje. Se o PV for raso, a câmara é reduzida até o tubo mais alto + folga (mínimo 0,80 m).';
+const pvChamMin = () => { const v = num(P && P.crit && P.crit.pvEmopChamMin); return isNum(v) && v > 0 ? v : 0.50; };
+const _emopMed14 = emopMedidas;
+emopMedidas = function (pv, r, E) {
+  const m = _emopMed14.apply(this, arguments);
+  try {
+    if (m && !m.Hdig && isNum(m.disp)) {
+      const cm = pvChamMin();
+      if (m.disp - m.Hi < cm - 1e-6) {
+        const piso = Math.max(0.80, sobe10(m.HiNeed || 0)), novo = Math.max(piso, Math.floor((m.disp - cm) * 10 + 1e-6) / 10);
+        if (novo < m.Hi - 1e-6) {
+          m.Hi = novo; m.hc = m.disp - novo; m.hMot = 'chamMin';
+          m.q = Object.assign({}, m.q, {alv: 4 * (m.L + m.parede) * m.Hi, cham: Math.max(0, m.hc)});
+        }
+      }
+      m.chamCurta = m.disp - m.Hi < cm - 1e-6;
+    }
+  } catch (e) { console.error('DR-14 chaminé', e); }
+  return m;
+};
+const _motCam14 = motivoCam;
+motivoCam = function (m) {
+  if (!m || m.hMot !== 'chamMin') return _motCam14.apply(this, arguments);
+  return _motCam14.call(this, Object.assign({}, m, {hMot: 'tubo'})) + ' · câmara reduzida para ' + fmt(m.Hi, 2) + ' m para o pescoço em anéis Ø0,60 ter ' + fmt(m.hc, 2) + ' m de altura (mínimo ' + fmt(pvChamMin(), 2) + ' m de aterro sobre a laje)';
+};
+pvCircMedidas = function (Ld, tp, f) {
+  const parede = +P.crit.pvParede || 0.15, prof = tp - f;
+  return {L: Ld, parede, eF: parede, eT: 0.15, Hi: Math.max(0.30, Math.min(prof - 0.35, Math.max(0.80, prof - 0.15 - pvChamMin())))};
+};
+
+/* verificação: pescoço curto = rede rasa (pouco aterro sobre a laje do PV) — um aviso só, com a lista */
+const _calc14 = calc;
+calc = function () {
+  const res = _calc14.apply(this, arguments);
+  try { const cm = pvChamMin(), L = P.pvs.map(pv => ({pv, m: res.pv[pv.id] && res.pv[pv.id].emop})).filter(x => x.m && x.m.chamCurta && isNum(x.m.hc));
+    if (L.length) res.checks.push({tab: 'pvs', el: L[0].pv.id, par: 'Pescoço curto (anéis Ø0,60 entre a laje da tampa e o tampão) em ' + L.length + ' PV(s)', val: L.slice(0, 12).map(x => x.pv.id + ' ' + fmt(Math.max(0, x.m.hc), 2) + ' m').join(' · ') + (L.length > 12 ? ' …' : ''), lim: '≥ ' + fmt(cm, 2) + ' m', st: 'warn',
+      nota: 'Rede rasa: a câmara já foi reduzida até o tubo ou ramal mais alto + folga e ainda sobra pouco aterro sobre a laje. Para aumentar, aprofunde a rede (recobrimento mínimo nos critérios) ou baixe a chegada dos ramais; ou confira a laje para a carga do tráfego.'}); } catch (e) { console.error(e); }
+  return res;
+};
+/* ---------- 2. redimensionar no 3D: diâmetro primeiro + sugestão de galeria ---------- */
+function T3diamPrimeiro() {
+  const mot = [];
+  for (let it = 0; it < 4; it++) {
+    calc(); autoCotas(true); calc(); let mudou = false;
+    for (const t0 of R.ordem.slice()) {
+      const t = P.trechos.find(x => x.id === t0.id), r = R.tr[t.id]; if (!r || !r.h || !isNum(r.S) || !(r.Q > 0)) continue;
+      const c = P.crit; if (!(r.h.carga || r.h.yD > c.yD + 1e-9)) continue;
+      let Dmin = c.dmin, Amin = 0; R.ordem.filter(u => u.j === t.m).forEach(u => { Dmin = Math.max(Dmin, num(u.D) || 0); Amin = Math.max(Amin, aIntTr(u)); });
+      const tr = redimTrecho(t, r.Q, r.S, Math.max(Dmin, num(t.D) || 0), Math.max(Amin, aIntTr(t)));
+      if (tr) { t.iFix = ''; mot.push(t.id + ': ' + tr); mudou = true; calc(); }
+    }
+    if (!mudou) break;
+  }
+  calc(); autoCotas(true); calc();
+  return mot;
+}
+function T3sugGalerias() {
+  calc(); const out = [], lim = 2.5;
+  (R.ordem || []).forEach(t0 => {
+    const t = P.trechos.find(x => x.id === t0.id), r = R.tr[t.id]; if (!t || !r || galOf(t) || !(r.Q > 0) || !isNum(r.S) || !(r.S > 0)) return;
+    const D = (num(t.D) || 0) / 1000; if (D < 0.8) return;
+    const prof = Math.max((R.pv[t.m] || {}).prof || 0, (R.pv[t.j] || {}).prof || 0); if (prof < lim) return;
+    const tc = Object.assign({}, t, {sec: 'gal', galE: ''}); let best = null;
+    [1, 2, 3].forEach(N => GAL_PAD.forEach(([B, H]) => {
+      tc.galN = N; tc.galB = B; tc.galH = H; const g = galOf(tc); if (!g || g.H > D - 0.05) return;
+      const h = rectFlow(r.Q, g, r.S, P.crit.nTubo); if (h.carga || h.yD == null || h.yD > P.crit.yD + 1e-9) return;
+      if (!best || g.H < best.H - 1e-6 || (Math.abs(g.H - best.H) < 1e-6 && g.N * g.B < best.N * best.B)) best = {N: g.N, B: g.B, H: g.H, e: g.e};
+    }));
+    if (best) out.push({id: t.id, D: num(t.D), prof, N: best.N, B: best.B, H: best.H, ganho: (D + 2 * (espTr(t) || 0)) - (best.H + 2 * best.e)});
+  });
+  return out;
+}
+function T3sugQuadro(sug, mot) {
+  const box = document.getElementById('t3-box'); if (!box) return;
+  let q = document.getElementById('t3-sug'); if (q) q.remove();
+  if (!sug.length && !mot.length) return;
+  q = document.createElement('div'); q.id = 't3-sug';
+  q.style.cssText = 'position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:8;max-width:min(620px,calc(100% - 40px));max-height:45%;overflow:auto;background:rgba(10,40,70,.94);color:#fff;border:1px solid #9cd3ff;border-radius:8px;padding:.5rem .7rem;font:12px/1.4 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.45)';
+  q.addEventListener('pointerdown', e => e.stopPropagation()); q.addEventListener('wheel', e => e.stopPropagation(), {passive: true});
+  q.innerHTML = '<div style="display:flex;gap:.5rem;align-items:flex-start"><div style="flex:1">' +
+    (mot.length ? '<b>Diâmetros aumentados (' + mot.length + '):</b> ' + mot.map(esc).join(' · ') : '') +
+    (sug.length ? '<div style="margin-top:.35rem"><b>Sugestão — galeria de aduelas para não aprofundar a rede:</b><br>' + sug.map(s => esc(s.id) + ' (Ø' + s.D + ', PV a ' + fmt(s.prof, 2) + ' m): ' + (s.N > 1 ? s.N + ' células de ' : '') + fmt(s.B, 2) + ' × ' + fmt(s.H, 2) + ' m — seção ' + fmt(Math.max(0, s.ganho), 2) + ' m mais baixa').join('<br>') +
+      '<div style="opacity:.85;margin-top:.25rem">Para usar, troque a seção do trecho para galeria na aba 7 (Rede tronco). Nada foi trocado sozinho.</div></div>' : '') +
+    '</div><button type="button" onclick="this.closest(\'#t3-sug\').remove()" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:4px;cursor:pointer;padding:0 .4rem">✕</button></div>';
+  box.appendChild(q);
+}
+T3redimensionar = function () {
+  if (!P || !R) return;
+  T3histProj();
+  const i = idf(P.crit.tcMin), f = typeof RAIN_FATOR === 'number' ? RAIN_FATOR : 1, n0 = T3nAlertas();
+  const msg = 'Redimensionar a rede e as caixas para a chuva atual do 3D (' + fmt(i, 0) + ' mm/h' + (Math.abs(f - 1) > 1e-3 ? ', ' + fmt(f, 2) + '× a chuva de projeto' : ', a chuva de projeto') + ')?\n\n' +
+    'Trechos sem capacidade: o programa aumenta primeiro o DIÂMETRO (ou a aduela da galeria), para não aprofundar a rede. Depois faz a correção da aba 7 (caixas, ramais, velocidade mínima) e refaz as cotas. Rede funda ganha sugestão de galeria.\n\n' +
+    'Você pode desfazer (↶) e refazer (↷) até 10 vezes.' +
+    (Math.abs(f - 1) > 1e-3 ? '\n\nAtenção: o memorial continua com a chuva de projeto da aba 2. A rede ficará dimensionada para esta chuva maior.' : '');
+  if (!confirm(msg)) return;
+  const antes = JSON.stringify(P); let mot = [];
+  try { gerSemUI(() => { mot = T3diamPrimeiro(); autoCorrigir(); }); }
+  catch (e) { P = migrate(JSON.parse(antes)); calc(); T3build(); toast('Não foi possível redimensionar: ' + e.message); return; }
+  try { closeModal('modal-auto'); } catch (e) {}
+  try { DESFAZER = null; } catch (e) {}
+  const depois = JSON.stringify(P), nm = T3difs(JSON.parse(antes), P);
+  if (depois === antes) { calc(); T3build(); T3dimUI(); T3sugQuadro(T3sugGalerias(), []); toast('Nada a mudar: a rede e as caixas já atendem a esta chuva'); return; }
+  T3HIST.des.push(antes); if (T3HIST.des.length > 10) T3HIST.des.shift();
+  T3HIST.ref = [];
+  save(); calc(); if (typeof refreshRes === 'function') refreshRes(); T3build();
+  const n1 = T3nAlertas(), sug = T3sugGalerias();
+  toast('Redimensionado para ' + fmt(i, 0) + ' mm/h: ' + nm + ' trecho(s)/caixa(s) alterado(s), ' + mot.length + ' diâmetro(s) aumentado(s). Alertas: ' + n0 + ' → ' + n1 + (sug.length ? '. ' + sug.length + ' sugestão(ões) de galeria' : '') + '. Use ↶ para desfazer.');
+  T3dimUI(); T3sugQuadro(sug, mot);
+};
+
+/* ---------- 4. orçamento: regras de preço (aba Custos) ---------- */
+const PVC_D = {1000: {s: '1,0', a: '1', h: 1.35}, 1200: {s: '1,20', a: '1,2', h: 1.60}, 1500: {s: '1,50', a: '1,5', h: 1.35}};
+const _regras14 = regras;
+regras = function (cfg) {
+  const L = _regras14.apply(this, arguments);
+  L.forEach(x => { if (/^bl:gr:/.test(x.k)) { const c = x.k.split(':')[2];
+    x.sinapi = [[/^CAIXA COM GRELHA SIMPLES RETANGULAR/, c === 'Pré-moldada' ? /PRÉ-MOLDADO/ : /tijolo/i.test(c) ? /TIJOLOS/ : /BLOCOS DE CONCRETO/], []]; } });
+  Object.entries(PVC_D).forEach(([d, v]) => {
+    L.push({k: 'pvc:' + d, nome: 'Poço de visita circular de drenagem Ø' + d + ' em concreto pré-moldado — base h ' + fmt(v.h, 2) + ' m (sem tampão)',
+      sinapi: [[/^BASE PARA POÇO DE VISITA CIRCULAR PARA DRENAGEM, EM CONCRETO PRÉ-MOLDADO/, new RegExp('DIÂMETRO INTERNO = ' + v.s + ' M')], []]});
+    L.push({k: 'pvca:' + d, nome: 'Acréscimo de poço de visita circular de drenagem Ø' + d + ' (por metro)',
+      sinapi: [[/^ACRÉSCIMO PARA POÇO DE VISITA CIRCULAR PARA DRENAGEM, EM CONCRETO PRÉ-MOLDADO/, new RegExp('DIÂMETRO INTERNO = ' + v.a + ' M')], []]});
+  });
+  return L;
+};
+Object.assign(REF_UNIT, {pvc: 3500, pvca: 1500});
+const pvCircD = pv => { const d = num(pv.dpv) || 1000; return [1000, 1200, 1500].find(x => x >= d - 1e-6) || null; };
+const ehCirc = pv => pv && !ehEmop(pv) && pvCircD(pv);
+function pvCircQuant(pv, r) {
+  const d = pvCircD(pv), v = PVC_D[d], m = pvCircMedidas(d / 1000, r.tp, r.fundo), prof = r.prof;
+  return {d, base: 1, acr: Math.max(0, m.Hi - v.h), cham: Math.max(0, prof - m.Hi - 0.15), Hi: m.Hi, hBase: v.h};
+}
+const _orc14 = orcamento;
+orcamento = function () {
+  const o = _orc14.apply(this, arguments); if (!o || !o.linhas) return o;
+  const circ = P.pvs.filter(pv => ehCirc(pv) && R.pv[pv.id] && isNum(R.pv[pv.id].prof)); if (!circ.length) return o;
+  const cfg = custosCfg(), idx = {}; let linhas = o.linhas.slice(); linhas.forEach(x => { idx[x.k] = x; });
+  const sub = (k, q) => { const x = idx[k]; if (x) x.q -= q; };
+  const add = (k, q) => { if (!(q > 0)) return; const p = preco(k); const x = idx[k] || (idx[k] = {k, p, q: 0}); if (!linhas.includes(x)) linhas.push(x); x.q += q; };
+  circ.forEach(pv => { const r = R.pv[pv.id];
+    // tira o que o PV quadrado equivalente tinha posto
+    const lado = (num(pv.dpv) || 1000) / 1000, cat = PV_CAT[cfg.banco] || PV_CAT.sinapi, mod = cat.find(x => x.L >= lado - 1e-6) || cat.slice(-1)[0];
+    const mm = Math.round(mod.L * 1000), Hi = Math.min(r.prof, 1.40), hc = Math.max(0, r.prof - Hi - 0.15);
+    sub('pvq:' + mm, 1); if (!mod.H) sub('pvqa:' + mm, Math.max(0, Hi - (mod.hBase || 1.40))); sub('pvch', hc);
+    const c = pvCircQuant(pv, r); add('pvc:' + c.d, 1); add('pvca:' + c.d, c.acr); add('pvch', c.cham); });
+  linhas = linhas.filter(x => !(x.q > -1e-9 && x.q < 1e-9) && x.q > 0);
+  linhas.forEach(x => { x.total = x.q * (x.p.preco || 0); });
+  const ordem = ['terra', 'tubo', 'prot', 'gal', 'esc', 'berco', 'reat', 'escor', 'pvq', 'pvqa', 'pvc', 'pvca', 'pvch', 'bl', 'ala'];
+  linhas.sort((a, b) => ordem.indexOf(a.k.split(':')[0]) - ordem.indexOf(b.k.split(':')[0]) || a.k.localeCompare(b.k, 'pt', {numeric: true}));
+  const s = linhas.reduce((a, x) => a + x.total, 0);
+  return Object.assign(o, {linhas, sub: s, total: s * (1 + (o.bdi || 0) / 100)});
+};
+
+/* ---------- 4. orçamento licitável (3 soluções / exportação): conferido com os modelos ---------- */
+const ALA_SINAPI = {cic: 'SC-102487', aco: 'SC-104920', lastro: 'SC-96616', esc: 'SC-93358'};
+const ALA_SCO = {conc: 'SCO-ET 45.10.0067', forma: 'SCO-ET 15.10.0050', aco: 'SCO-ET 10.05.0109', esc: 'SCO-MT 05.05.0050', enr: 'SCO-DR 55.05.0503'};
+const _itensLic14 = itensLic;
+itensLic = function (sol, bank) {
+  const L = _itensLic14.apply(this, arguments); if (!Array.isArray(L)) return L;
+  const g = GRUPOS_LIC, alaK = Object.fromEntries(Object.entries(ALA_NOME).map(([k, n]) => [n, k]));
+  const out = [];
+  L.forEach(it => {
+    it.cod = it.cod || {}; it.qb = it.qb || {};
+    if (/^Cerca protetora de borda de vala/.test(it.nome)) { it.cod.sco = 'SCO-MT 05.40.0050'; it.qb.sco = it.q / 1.2; }
+    else if (it.nome === 'Pintura de ligação') it.cod.sco = 'SCO-BP 10.05.0400';
+    else if (/^Tampão de ferro fundido/.test(it.nome)) it.cod.sinapi = 'SC-98114';
+    else if (alaK[it.nome]) { const k = alaK[it.nome]; if (ALA_SINAPI[k] && it.cod.sinapi == null) it.cod.sinapi = ALA_SINAPI[k]; if (ALA_SCO[k] && it.cod.sco == null) it.cod.sco = ALA_SCO[k]; }
+    out.push(it);
+    // caixa de ralo: na SINAPI a caixa com grelha não traz a grelha de ferro fundido (modelo dren-01: SC-103003 à parte); SCO e EMOP já incluem
+    if (it.g === g[6] && /^Caixa de ralo/.test(it.nome)) {
+      const c = /pré-mold/i.test(it.nome) ? /PRÉ-MOLDADO/ : /tijolo/i.test(it.nome) ? /TIJOLOS/ : /BLOCOS DE CONCRETO/;
+      it.cod.sinapi = {re: [/^CAIXA COM GRELHA SIMPLES RETANGULAR/, c]};
+      out.push({g: g[6], nome: 'Grelha de ferro fundido 300 × 1000 mm com requadro (caixa de ralo)', un: 'un', q: it.q, cod: {sinapi: 'SC-103003', sco: false, emop: false}, qb: {}, memo: it.memo});
+    }
+  });
+  // PVs redondos: base + acréscimo circulares (SINAPI; SCO e EMOP não têm PV circular de drenagem e usam o equivalente SINAPI)
+  const circ = new Map(P.pvs.filter(pv => ehCirc(pv) && R.pv[pv.id] && isNum(R.pv[pv.id].prof)).map(pv => [pv.id, pv]));
+  if (!circ.size) return out;
+  const res = out.filter(it => !(it.g === g[5] && it.memo && circ.has(String(it.memo).split(':')[0]) && String(it.memo).includes(':')));
+  circ.forEach(pv => { const r = R.pv[pv.id], c = pvCircQuant(pv, r), v = PVC_D[c.d];
+    res.push({g: g[5], nome: 'Poço de visita circular de drenagem Ø' + fmt(c.d / 1000, 2) + ' m em concreto pré-moldado — base h ' + fmt(v.h, 2) + ' m', un: 'un', q: 1,
+      cod: {sinapi: {re: [/^BASE PARA POÇO DE VISITA CIRCULAR PARA DRENAGEM, EM CONCRETO PRÉ-MOLDADO/, new RegExp('DIÂMETRO INTERNO = ' + v.s + ' M')]}}, qb: {}, memo: pv.id + ': PV redondo Ø' + c.d + ' mm, profundidade ' + fmt(r.prof, 2) + ' m'});
+    if (c.acr > 0.05) res.push({g: g[5], nome: 'Acréscimo de poço de visita circular de drenagem Ø' + fmt(c.d / 1000, 2) + ' m', un: 'm', q: c.acr,
+      cod: {sinapi: {re: [/^ACRÉSCIMO PARA POÇO DE VISITA CIRCULAR PARA DRENAGEM, EM CONCRETO PRÉ-MOLDADO/, new RegExp('DIÂMETRO INTERNO = ' + v.a + ' M')]}}, qb: {}, memo: pv.id + ': câmara ' + fmt(c.Hi, 2) + ' m − ' + fmt(v.h, 2) + ' m da base'});
+    if (c.cham > 0.05) res.push({g: g[5], nome: 'Chaminé do PV Ø0,60 m em anéis pré-moldados', un: 'm', q: c.cham, cod: {sinapi: 'SC-99318', emop: '06.017.0080'}, qb: {}, memo: pv.id + ': pescoço entre a laje e o tampão'});
+  });
+  return res;
+};
+
+/* ---------- 3. gerador: PV quadrado/redondo e banco do orçamento ---------- */
+if (!GER.pv) GER.pv = 'quad';
+const BANCO_GER = [['emop', 'EMOP-RJ'], ['sinapi', 'SINAPI RJ'], ['sco', 'SCO-Rio']];
+const _gerSemUI14 = gerSemUI;
+gerSemUI = function (fn) {
+  if (window.__gerCirc && P && P.pvs) { window.__gerCirc = false;
+    P.pvs.forEach(pv => { pv.modelo = 'circ'; pv.tipo = PVTIPOS[0]; pv.dpv = 1000; pv.pvL = ''; pv.pvHi = ''; }); }
+  return _gerSemUI14.apply(this, arguments);
+};
+const _gerProj14 = gerProjeto;
+gerProjeto = function (op) {
+  const banco = GER.banco || (P.custos && P.custos.banco) || 'sinapi', b0 = P.custos ? P.custos.banco : undefined;
+  if (P.custos) P.custos.banco = banco;
+  window.__gerCirc = GER.pv === 'circ';
+  let x;
+  try { x = _gerProj14.apply(this, arguments); } finally { window.__gerCirc = false; if (P.custos) P.custos.banco = b0; }
+  if (x && x.p) {
+    x.p.custos = Object.assign({}, x.p.custos, {banco});
+    const P0 = P;
+    try { P = x.p; calc(); const sol = SOLUCOES.find(s => s.k === 'rec') || SOLUCOES[0], o = orcLic(sol, banco);
+      x.info.orc = {banco, sol: sol.curto || sol.nome, total: o.total, sub: o.sub, bdi: o.bdi, semPreco: o.semPreco, ref: (LIC.refs || {})[banco] || '',
+        linhas: o.linhas.map(L => ({g: L.g, nome: L.nome, un: L.un, q: L.q, cod: L.r ? (L.b !== banco ? (BANCO_NOME[L.b] || L.b) + ' ' : '') + L.r.cod : '—', preco: L.preco, total: L.total}))};
+      x.info.pvTipo = GER.pv;
+    } catch (e) { console.error('DR-14 orçamento da opção', e); }
+    finally { P = P0; calc(); }
+  }
+  return x;
+};
+const _gerCalc14 = gerCalcular;
+gerCalcular = async function () {
+  if (!GER.disp) return _gerCalc14.apply(this, arguments);
+  if (!GER.banco) GER.banco = (P.custos && P.custos.banco) || 'sinapi';
+  if (!LIC.BK || (!LIC.BK.sinapi && !LIC.BK.sco)) {
+    const el = $('ger-res'); if (el) el.innerHTML = '<div class="msg info">⏳ <span>Lendo os bancos de preços (EMOP, SINAPI e SCO-Rio)…</span></div>';
+    try { await carregarBancosLic(); } catch (e) { console.error(e); }
+  }
+  return _gerCalc14.apply(this, arguments);
+};
+function gerBanco(v) { GER.banco = v; if (GER.ops) gerCalcular(); else gerTela(); }
+const _gerTela14 = gerTela;
+gerTela = function () {
+  if (!GER.banco) GER.banco = (P.custos && P.custos.banco) || 'sinapi';
+  _gerTela14.apply(this, arguments);
+  const sel = $('ger-disp'), f = sel && sel.closest('.field');
+  if (f) {
+    const d = document.createElement('div'); d.style.cssText = 'display:contents';
+    d.innerHTML = `<div class="field" style="grid-column:span 2"><label>Poço de visita</label><select id="ger-pv" onchange="gerSet('pv',this.value)">
+        <option value="quad"${GER.pv !== 'circ' ? ' selected' : ''}>Quadrado — blocos de concreto (padrão de drenagem)</option>
+        <option value="circ"${GER.pv === 'circ' ? ' selected' : ''}>Redondo — anéis de concreto pré-moldado (mais usado em esgoto)</option></select></div>
+      <div class="field" style="grid-column:span 2"><label>Banco de preços do orçamento</label><select id="ger-banco" onchange="gerBanco(this.value)">${BANCO_GER.map(([k, n]) => `<option value="${k}"${GER.banco === k ? ' selected' : ''}>${n}</option>`).join('')}</select></div>`;
+    f.after(...d.childNodes);
+  }
+  if (!GER.ops) return;
+  const cards = [...document.querySelectorAll('#ger-res > div > .card')];
+  cards.forEach((card, i) => {
+    const x = GER.ops[i], o = x && x.info && x.info.orc; if (!o) return;
+    const bn = (BANCO_GER.find(b => b[0] === o.banco) || [0, o.banco])[1];
+    const tr = [...card.querySelectorAll('tr')].find(t => /Custo estimado da rede/.test(t.textContent));
+    const semP = o.semPreco ? ` <span class="badge badge-warn" title="Itens sem preço no banco">${o.semPreco} sem preço</span>` : '';
+    const val = o.total > 0 ? `<b>${R$L(o.total)}</b>` : '<b>—</b>';
+    if (tr) tr.innerHTML = `<td>Orçamento ${esc(bn)}${o.ref ? ' ' + esc(o.ref) : ''} (Solução ${esc(o.sol)}, c/ BDI ${fmt(o.bdi, 2)}%)</td><td class="td-num" style="color:var(--agua)">${val}${semP}</td>`;
+    const tb = card.querySelector('tbody');
+    if (tb) { const r = document.createElement('tr'); r.innerHTML = `<td>Tipo de PV</td><td class="td-num">${x.info.pvTipo === 'circ' ? 'redondos (anéis)' : 'quadrados (blocos)'}</td>`; tb.insertBefore(r, tb.children[1] || null); }
+    const grupos = [...new Set(o.linhas.map(L => L.g))];
+    const det = document.createElement('details'); det.style.cssText = 'margin:.3rem 0;font-size:.74rem';
+    det.innerHTML = `<summary style="cursor:pointer;color:var(--agua)">Ver os ${o.linhas.length} itens do orçamento (${esc(bn)})</summary>
+      <div style="max-height:260px;overflow:auto;margin-top:.3rem"><table style="width:100%;font-size:.72rem"><thead><tr><th style="text-align:left">Código</th><th style="text-align:left">Serviço</th><th>Un</th><th>Quant.</th><th>Total</th></tr></thead><tbody>
+      ${grupos.map(gn => `<tr><td colspan="5" style="font-weight:700;padding-top:.3rem">${esc(gn)}</td></tr>` + o.linhas.filter(L => L.g === gn).map(L =>
+        `<tr><td style="white-space:nowrap">${esc(L.cod)}</td><td>${esc(L.nome)}</td><td>${esc(L.un || '')}</td><td class="td-num">${fmt(L.q, 2)}</td><td class="td-num">${L.total != null ? fmt(L.total, 2) : '<span style="color:#c62828">sem preço</span>'}</td></tr>`).join('')).join('')}
+      </tbody></table></div>`;
+    const bt = card.querySelector('.bar-btns'); card.insertBefore(det, bt);
+  });
+  const hint = [...document.querySelectorAll('#ger-res p.hint')].pop();
+  if (hint) hint.innerHTML = 'Orçamento licitável da <b>Solução Recomendada</b> no banco escolhido (com BDI da aba Custos): mesmos itens e códigos de <b>💰 3 soluções com orçamento</b> e da exportação para o programa de <b>Orçamento de Obras</b>. Itens que o banco não tem usam o equivalente de outro banco (indicado no código). EMOP sem preço: só administradores veem a EMOP embutida; os demais importam a EMOP no programa de Orçamento.';
+};
+const _gerUsar14 = gerUsar;
+gerUsar = function (k) {
+  const r = _gerUsar14.apply(this, arguments);
+  try { if (typeof atualizarCustos === 'function') atualizarCustos(true); } catch (e) {}
+  return r;
+};
+</script>
 </body></html>
