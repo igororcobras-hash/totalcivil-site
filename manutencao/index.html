@@ -3288,13 +3288,14 @@ function ptDe(c) { if (!c) return [null, null]; if (typeof c[0] === 'number') re
 function semearSp12(o) {
   const cam = camada(o); if (!cam || !o.ocorrencias) return 0;
   const tem = new Set(o.ocorrencias.map(x => x.ext).filter(Boolean)); let n = 0;
-  const novo = (ext, rua, bairro, ref, desc, sug, c, vm, sub) => {
+  const novo = (ext, rua, bairro, ref, desc, sug, c, vm, sub, fx) => {
     if (tem.has(ext)) return; const p = ptDe(c);
-    const oc = { id: 'c' + uid(), num: ++o.seq, ext, kid: null, criadoEm: '2026-11-09T08:00:00.000Z', criadoPor: 'Importado das marcações do Google Earth (KML)', rua: rua || '', bairro: bairro || '', ref: ref || '', lat: p[0], lng: p[1], origem: p[0] != null ? 'importado' : null, fotos: [], desc, sug: sug || '', servSug: '', med: { c: 0, l: 0 }, priF: 'media', priG: null, priConf: false, semana: '', servicoId: '', qtdPlan: 0, solucao: '', obsG: '', status: 'relato', hist: [], kml: vm, pastaSub: sub || bairro || 'Sem bairro' };
+    const oc = { id: 'c' + uid(), num: ++o.seq, ext, kid: null, criadoEm: '2026-11-09T08:00:00.000Z', criadoPor: 'Importado das marcações do Google Earth (KML)', rua: rua || '', bairro: bairro || '', ref: ref || '', lat: p[0], lng: p[1], origem: p[0] != null ? 'importado' : null, fotos: [], desc, sug: sug || '', servSug: '', med: { c: 0, l: 0 }, priF: 'media', priG: null, priConf: false, semana: '', servicoId: '', qtdPlan: 0, solucao: '', obsG: '', status: 'relato', hist: [], kml: vm, pastaSub: sub || bairro || 'Sem bairro', fotosKml: (vm !== 'prop' && fx) ? fx : [] };
     log(oc, 'Ocorrência trazida das marcações do Google Earth (KML) em 09/11/2026 — ' + ext); o.ocorrencias.push(oc); n++ };
   if (cam === 'prop') PROP.imoveis.forEach((m, i) => novo('KML-prop-' + i, '', '', (m.tipologia || '') + (m.endereco ? ' · ' + m.endereco : ''), m.nome + ' — ' + (m.desc || 'Imóvel cadastrado, sem demanda de manutenção registrada.'), '', m.linha || [m.lat, m.lng], cam, m.tipologia));
-  else itensRua(cam).forEach((m, i) => novo('KML-' + cam + '-' + (m.tp === 'van' ? 'van-' : '') + i, m.rua, m.b, m.ext || '', m.n + '. ' + m.s + ' ' + m.q + (m.ds ? ' — ' + m.ds : ''), m.s, m.c, cam));
-  if (n) { o.semeadoSp12 = '2026-11-09'; saveObra(o) } return n }
+  else itensRua(cam).forEach((m, i) => novo('KML-' + cam + '-' + (m.tp === 'van' ? 'van-' : '') + i, m.rua, m.b, m.ext || '', m.n + '. ' + m.s + ' ' + m.q + (m.ds ? ' — ' + m.ds : ''), m.s, m.c, cam, null, m.f));
+  let bf = 0; if (cam !== 'prop') { const mp = {}; itensRua(cam).forEach((m, i) => { mp['KML-' + cam + '-' + (m.tp === 'van' ? 'van-' : '') + i] = m.f || [] }); o.ocorrencias.forEach(x => { if (x.ext && mp[x.ext] && !x.fotosKml) { x.fotosKml = mp[x.ext]; bf++ } }) }
+  if (n || bf) { o.semeadoSp12 = '2026-11-09'; saveObra(o) } return n }
 const _semOc = semearOcMapa;
 semearOcMapa = function (o) { const r = _semOc.apply(this, arguments); semearSp12(o); return r || 0 };
 const _tO2 = telaObra;
@@ -3318,6 +3319,12 @@ function painelPastas(o) {
 const _tV = tVistoria;
 tVistoria = function (o) { const h = _tV.apply(this, arguments); return camada(o) ? painelPastas(o) + h : h };
 CHG.sp12Pasta = el => { off()[el.dataset.k] = !el.checked; render() };
+
+/* ---------- fotos do KML nas ocorrências ---------- */
+const _ocCard = ocCard;
+ocCard = function (o, oc) { let h = _ocCard.apply(this, arguments); const t = oc && oc.fotosKml; if (!t || !t.length) return h;
+  const bloco = `<div style="margin:6px 0">${t.map(x => foto(x, 150)).join('')}<div class="muted small">Fotos do Google Earth (KML)</div></div>`;
+  const i = h.lastIndexOf('</article>'); return i < 0 ? h + bloco : h.slice(0, i) + bloco + h.slice(i) };
 })();
 </script>
 </body>
