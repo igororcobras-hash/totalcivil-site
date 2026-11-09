@@ -42,6 +42,11 @@ video{display:block; width:100%; height:100%; background:#000}
   background:rgba(0,0,0,.6); color:#fff; font:inherit; font-weight:700; font-size:.95rem; cursor:pointer; backdrop-filter:blur(3px)}
 .comp:hover,.comp:focus-visible{background:rgba(0,0,0,.82)}
 @media (max-width:560px){ .comp{top:8px; right:8px; padding:7px} .comp span{display:none} }
+.menu-comp{position:absolute; top:52px; right:12px; z-index:3; display:none; flex-direction:column; min-width:210px; padding:6px; border-radius:14px; background:rgba(12,20,30,.96); box-shadow:0 8px 30px rgba(0,0,0,.5)}
+.menu-comp.vis{display:flex}
+.menu-comp a,.menu-comp button{display:flex; align-items:center; gap:10px; width:100%; padding:11px 12px; border:none; border-radius:9px; background:none; color:#fff; font:inherit; font-size:.95rem; font-weight:600; text-align:left; text-decoration:none; cursor:pointer}
+.menu-comp a:hover,.menu-comp button:hover,.menu-comp a:focus-visible,.menu-comp button:focus-visible{background:rgba(255,255,255,.12)}
+@media (max-width:560px){ .menu-comp{top:46px; right:8px} }
 #som{position:absolute; left:50%; bottom:64px; transform:translateX(-50%); display:none; padding:12px 20px; border-radius:999px; border:none;
   background:rgba(0,0,0,.72); color:#fff; font:inherit; font-weight:700; font-size:1rem; cursor:pointer; white-space:nowrap}
 #som.vis{display:inline-flex; align-items:center; gap:8px}
@@ -66,6 +71,7 @@ footer{padding:6px 16px 14px; text-align:center; color:var(--mut); font-size:.85
   <div class="palco">
     <video id="v" src="/videos/drenagem-apresentacao.mp4" poster="/videos/drenagem-capa.jpg" controls playsinline autoplay preload="auto"></video>
     <button type="button" id="bt-comp" class="comp" aria-label="Compartilhar o vídeo" title="Compartilhar"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M14 5l7 7-7 7v-4.1c-5 0-8.5 1.6-11 5.1 1-5 4-10 11-11V5z"/></svg><span>Compartilhar</span></button>
+    <div class="menu-comp" id="menu-comp" role="menu"><a id="mc-wa" href="#" target="_blank" rel="noopener" role="menuitem">🟢 WhatsApp</a><button type="button" id="mc-copiar" role="menuitem">📋 Copiar link</button><button type="button" id="mc-mais" role="menuitem" style="display:none">↗ Mais opções…</button></div>
     <button type="button" id="som">🔊 Toque para ativar o som</button>
     <button type="button" id="play" aria-label="Assistir ao vídeo"><span>▶</span></button>
   </div>
@@ -96,13 +102,22 @@ footer{padding:6px 16px 14px; text-align:center; color:var(--mut); font-size:.85
 
   var aviso = document.getElementById('aviso');
   function avisar(t){ aviso.textContent = t; mostra(aviso, true); setTimeout(function(){ mostra(aviso, false); }, 2500); }
-  document.getElementById('bt-comp').onclick = function(){
-    var url = 'https://totalcivil.com.br/videos/drenagem/';
-    var dados = {title:'Drenagem Pluvial — Vídeo de Apresentação', text:'Veja o vídeo de apresentação do programa Drenagem Pluvial (Total Civil):', url:url};
-    if(navigator.share){ navigator.share(dados).catch(function(){}); return; }
-    if(navigator.clipboard){ navigator.clipboard.writeText(url).then(function(){ avisar('Link copiado!'); }, function(){ prompt('Copie o link:', url); }); }
-    else prompt('Copie o link:', url);
-  };
+  var URL_V = 'https://totalcivil.com.br/videos/drenagem/';
+  var TXT = 'Veja o vídeo de apresentação do programa Drenagem Pluvial (Total Civil): ';
+  var menu = document.getElementById('menu-comp'), bt = document.getElementById('bt-comp');
+  document.getElementById('mc-wa').href = 'https://wa.me/?text=' + encodeURIComponent(TXT + URL_V);
+  function copiar(){
+    function ok(){ avisar('Link copiado!'); }
+    function velho(){ var t = document.createElement('textarea'); t.value = URL_V; t.style.position='fixed'; t.style.opacity='0'; document.body.appendChild(t); t.select();
+      try{ document.execCommand('copy'); ok(); }catch(e){ prompt('Copie o link:', URL_V); } document.body.removeChild(t); }
+    if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(URL_V).then(ok, velho); else velho();
+  }
+  if(navigator.share) document.getElementById('mc-mais').style.display = 'flex';
+  document.getElementById('mc-mais').onclick = function(){ mostra(menu, false); navigator.share({title:'Drenagem Pluvial — Vídeo de Apresentação', text:TXT, url:URL_V}).catch(function(){}); };
+  document.getElementById('mc-copiar').onclick = function(){ mostra(menu, false); copiar(); };
+  document.getElementById('mc-wa').addEventListener('click', function(){ mostra(menu, false); });
+  bt.onclick = function(e){ e.stopPropagation(); menu.classList.toggle('vis'); };
+  document.addEventListener('click', function(e){ if(!menu.contains(e.target)) mostra(menu, false); });
 })();
 </script>
 </body>
