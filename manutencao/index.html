@@ -3471,6 +3471,108 @@ ACTS.sp12ModeloTodas = () => { const al = obrasTP().filter(o => camada(o)); if (
 ACTS.sp12Logo = function () { if (!S.obraId && !S.sp12Todas) { location.href = '/'; return } return ACTS.home.apply(this, arguments) };
 const _rTop = renderTop;
 renderTop = function () { _rTop.apply(this, arguments); const a = document.querySelector('#top a.brand'); if (a) { a.dataset.act = 'sp12Logo'; a.title = S.obraId || S.sp12Todas ? 'Voltar à lista de obras' : 'Ir para a página inicial do Total Civil'; } };
+
+/* ---------- SP-12f (09/11/2026): 🎨 paleta de planejamentos no mapa + relatório completo do planejamento ---------- */
+const PLC = ['#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4', '#0aa5a5', '#c71585', '#7a9a01', '#b8860b', '#1e3a8a', '#8b4513', '#008b8b'];
+const corPl = (o, p) => { const i = (o.planejamentos || []).indexOf(p); return p.cor || PLC[(i < 0 ? 0 : i) % PLC.length] };
+const PV = () => { if (!S.sp12PV) { S.sp12PV = {}; try { Object.assign(S.sp12PV, JSON.parse(localStorage.getItem('tc_sp12_pv') || '{}')) } catch (e) { } } return S.sp12PV };
+const pvSalva = () => { try { localStorage.setItem('tc_sp12_pv', JSON.stringify(PV())) } catch (e) { } };
+/* planejamento novo (gerado agora) já entra visível no mapa */
+function plSync() { const v = PV(); S.sp12PS = S.sp12PS || new Set(); let novos = [];
+  Object.values(S.obras || {}).forEach(o => (o.planejamentos || []).forEach(p => { if (S.sp12PS.has(p.id)) return; S.sp12PS.add(p.id);
+    if (v[p.id] === undefined) { v[p.id] = S.sp12PSok ? true : !!p.emUso; if (S.sp12PSok) novos.push(p) } }));
+  S.sp12PSok = true; if (novos.length) { pvSalva(); setTimeout(() => toast('🎨 ' + (novos.length === 1 ? '“' + novos[0].nome.slice(0, 60) + '” já aparece no mapa' : novos.length + ' planejamentos novos já aparecem no mapa') + '. Use o botão 🎨 Planejamentos para escolher o que mostrar.', 6000), 300) } }
+const ocsDoPlano = (o, p) => { const mp = new Map(o.ocorrencias.map(x => [x.id, x])); return p.itens.map(it => ({ it, x: mp.get(it.ocId) })).filter(r => r.x && !r.x.arquivo) };
+function custoOc(o, x) { try { if (x.ext && String(x.ext).startsWith('KML-')) return sp12Custo(o, x, sp12Mapa(o)) } catch (e) { }
+  try { const v = piVol(o, x, piDef()); return v && v.custoOk !== false ? (v.custo || 0) : 0 } catch (e) { return 0 } }
+/* desenha os planejamentos visíveis num mapa Leaflet */
+function desenhaPlanos(map, lista) { if (!map || typeof L === 'undefined') return null; const g = L.featureGroup().addTo(map); const gc = verCusto();
+  lista.forEach(({ o, p }) => { const cor = corPl(o, p); const rs = ocsDoPlano(o, p).filter(r => r.x.lat != null).sort((a, b) => a.it.dia.localeCompare(b.it.dia) || a.x.num - b.x.num);
+    const dias = {}; rs.forEach(r => { (dias[r.it.dia] = dias[r.it.dia] || []).push(r) });
+    Object.keys(dias).sort().forEach((d, k) => { const pts = dias[d].map(r => [r.x.lat, r.x.lng]); if (pts.length > 1) L.polyline(pts, { color: cor, weight: 2, opacity: .55, dashArray: '4 4' }).addTo(g);
+      dias[d].forEach(r => L.circleMarker([r.x.lat, r.x.lng], { radius: 8, fillColor: cor, color: '#fff', weight: 2, fillOpacity: .95 }).addTo(g)
+        .bindTooltip(`${fdB(d)} · #${r.x.num}`, { direction: 'top' })
+        .bindPopup(`<div style="max-width:250px"><b style="color:${cor}">■ ${esc(p.nome)}</b><br>${esc(o.nome)}<br><b>Dia ${k + 1}: ${fdB(d)}</b> (semana ${isoWeek(d).split('-W')[1]})<br>#${r.x.num} ${esc(ocLocal(r.x))}<br><span style="font-size:11px">${esc((r.x.desc || '').slice(0, 160))}</span>${gc ? '<br>Custo estimado: <b>' + fR(custoOc(o, r.x)) + '</b>' : ''}</div>`)) }) });
+  return g }
+/* a paleta (lista de planejamentos com cor e caixinha) */
+function paleta(obras, onde) { const v = PV(); const aberta = S.sp12Pal === onde;
+  const linhas = obras.map(o => { const pls = o.planejamentos || []; if (!pls.length) return obras.length > 1 ? `<div class="small muted" style="margin:4px 0">${esc(o.nome)}: nenhum planejamento ainda.</div>` : '<p class="muted small">Nenhum planejamento salvo ainda.</p>';
+    return (obras.length > 1 ? `<div style="font-weight:700;margin:8px 0 2px">${esc(o.nome)}</div>` : '') + pls.map(p => { const c = corPl(o, p), r = p.resumo || {};
+      return `<div class="row gap" style="align-items:center;flex-wrap:wrap;margin:3px 0"><label class="chk" style="margin:0;flex:1;min-width:240px"><input type="checkbox" data-chg="sp12PV" data-id="${p.id}" ${v[p.id] ? 'checked' : ''}> <input type="color" value="${c}" data-chg="sp12PC" data-o="${o.id}" data-id="${p.id}" title="Trocar a cor" style="width:26px;height:20px;padding:0;border:0;vertical-align:middle;background:none"> ${esc(p.nome.slice(0, 80))} <span class="muted small">(${p.itens.length} ocorr. · ${r.dias || 0} dia(s)${r.ini ? ' · ' + fdB(r.ini) + '–' + fdB(r.fim) : ''}${p.emUso ? ' · <b>em uso</b>' : ''})</span></label>
+        <button class="btn sm" data-act="sp12RelPl" data-o="${o.id}" data-id="${p.id}">📄 Relatório completo</button></div>` }).join('') }).join('');
+  const nVis = obras.reduce((s, o) => s + (o.planejamentos || []).filter(p => v[p.id]).length, 0);
+  return `<div class="card" style="margin:10px 0;padding:10px 14px;border-left:4px solid #b8450f"><div class="row gap" style="align-items:center;flex-wrap:wrap"><button class="btn pri" data-act="sp12Pal" data-k="${onde}">🎨 Planejamentos no mapa ${aberta ? '▲' : '▼'}</button><span class="small muted">${nVis} planejamento(s) aparecendo no mapa</span><span class="sp"></span>
+    <button class="btn sm" data-act="sp12PVtodos" data-k="${onde}" data-v="1">Mostrar todos</button><button class="btn sm" data-act="sp12PVtodos" data-k="${onde}" data-v="0">Esconder todos</button>${nVis ? `<button class="btn sm pri" data-act="sp12RelVis" data-k="${onde}">📄 Relatório completo dos que estão no mapa</button>` : ''}</div>
+    ${aberta ? `<div style="margin-top:8px">${linhas}</div>` : ''}</div>` }
+const visDe = obras => obras.flatMap(o => (o.planejamentos || []).filter(p => PV()[p.id]).map(p => ({ o, p })));
+const obrasDe = onde => onde === 'todas' ? obrasTP() : [O()].filter(Boolean);
+/* (a) aba Planejamento: paleta + mapa dos planejamentos acima do “3.” */
+const _tPlanY = tPlan;
+tPlan = function (o) { const h = _tPlanY.apply(this, arguments); const bloco = paleta([o], 'obra') + `<div id="sp12pmap" class="mapbox" style="height:440px;margin-bottom:6px"></div><p class="muted small" style="margin:0 0 10px">Cada planejamento na sua cor; a linha tracejada liga as ocorrências do mesmo dia na ordem do planejamento. Toque num ponto para ver dia, local e custo.</p>`;
+  const i0 = h.indexOf('📚 Planejamentos salvos'); const i = i0 < 0 ? -1 : h.indexOf('<div class="card"', i0); return i < 0 ? h + bloco : h.slice(0, i) + bloco + h.slice(i) };
+function initPlanMap() { const el = $('#sp12pmap'); if (!el) return; if (typeof L === 'undefined') { el.innerHTML = '<div class="nomap">Mapa indisponível (sem internet).</div>'; return }
+  const c = S.settings.mapa; const map = L.map(el).setView([c.lat, c.lng], c.zoom); L.tileLayer(OSM, { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
+  const o = O(); const g = desenhaPlanos(map, visDe([o])); const at = L.featureGroup().addTo(map);
+  if (!g || !g.getLayers().length) ativas(o).filter(x => x.lat != null).forEach(x => L.circleMarker([x.lat, x.lng], { radius: 4, color: '#888', weight: 1, fillOpacity: .6 }).addTo(at));
+  const b = g && g.getLayers().length ? g.getBounds() : at.getLayers().length ? at.getBounds() : null; if (b) map.fitBounds(b, { padding: [30, 30], maxZoom: 15, animate: false });
+  S.sp12PMap = map; setTimeout(() => map.invalidateSize({ animate: false }), 80) }
+/* (b) aba Mapa: paleta e camada dos planejamentos */
+const _tMapaY = tMapa;
+tMapa = function (o) { const h = _tMapaY.apply(this, arguments); return h.replace('<div id="mapa"', paleta([o], 'mapa') + '<div id="mapa"') };
+const _initMapaY = initMapa;
+initMapa = function () { _initMapaY.apply(this, arguments); if (S.mapObj && O()) desenhaPlanos(S.mapObj, visDe([O()])) };
+/* (c) Todas as obras: paleta + camada */
+const _telaTodasY = telaTodas;
+telaTodas = function () { const h = _telaTodasY.apply(this, arguments); const i = h.indexOf('<div id="sp12all"'); const pl = paleta(obrasVisiveis().filter(o => !(S.sp12Obs && S.sp12Obs[o.id] === false)), 'todas'); return i < 0 ? h + pl : h.slice(0, i) + pl + h.slice(i) };
+const _initTodasY = initTodas;
+initTodas = function () { _initTodasY.apply(this, arguments); if (S.mapObj) desenhaPlanos(S.mapObj, visDe(obrasVisiveis().filter(o => !(S.sp12Obs && S.sp12Obs[o.id] === false)))) };
+const ___render = _render;
+_render = function () { try { plSync() } catch (e) { } ___render.apply(this, arguments); if (S.obraId && S.tab === 'plan' && O()) setTimeout(initPlanMap, 60) };
+CHG.sp12PV = el => { PV()[el.dataset.id] = el.checked; pvSalva(); render() };
+CHG.sp12PC = el => { const o = S.obras[el.dataset.o]; const p = o && (o.planejamentos || []).find(x => x.id === el.dataset.id); if (!p) return; p.cor = el.value; saveObra(o); render() };
+ACTS.sp12Pal = d => { S.sp12Pal = S.sp12Pal === d.k ? null : d.k; render() };
+ACTS.sp12PVtodos = d => { const v = PV(); (d.k === 'todas' ? obrasVisiveis() : [O()]).forEach(o => (o.planejamentos || []).forEach(p => { v[p.id] = d.v === '1' })); pvSalva(); render() };
+ACTS.sp12RelPl = d => { const o = S.obras[d.o]; const p = o && (o.planejamentos || []).find(x => x.id === d.id); if (p) relPlanos([{ o, p }]) };
+ACTS.sp12RelVis = d => { const l = visDe(d.k === 'todas' ? obrasVisiveis().filter(o => !(S.sp12Obs && S.sp12Obs[o.id] === false)) : [O()]); if (l.length) relPlanos(l) };
+/* mapa estático do relatório: blocos do OpenStreetMap + pontos (aparece no navegador e na impressão) */
+function mapaRel(pts, W, H) { if (!pts.length) return '<p class="muted">Sem ocorrências com coordenadas.</p>';
+  const lx = lng => (lng + 180) / 360, ly = lat => { const s = Math.sin(lat * Math.PI / 180); return .5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI) };
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; pts.forEach(p => { const x = lx(p.lng), y = ly(p.lat); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y) });
+  let z = 17; while (z > 3 && ((x1 - x0) * 256 * 2 ** z > W * .85 || (y1 - y0) * 256 * 2 ** z > H * .85)) z--;
+  const T = 256 * 2 ** z, cx = (x0 + x1) / 2 * T - W / 2, cy = (y0 + y1) / 2 * T - H / 2; let tiles = '';
+  for (let tx = Math.floor(cx / 256); tx <= Math.floor((cx + W) / 256); tx++) for (let ty = Math.floor(cy / 256); ty <= Math.floor((cy + H) / 256); ty++)
+    tiles += `<img src="https://tile.openstreetmap.org/${z}/${tx}/${ty}.png" style="position:absolute;left:${Math.round(tx * 256 - cx)}px;top:${Math.round(ty * 256 - cy)}px;width:256px;height:256px" alt="" onerror="this.style.visibility='hidden'">`;
+  const dots = pts.map(p => { const x = lx(p.lng) * T - cx, y = ly(p.lat) * T - cy; return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="6" fill="${p.cor}" stroke="#fff" stroke-width="2"/>${p.lab ? `<text x="${(x + 8).toFixed(1)}" y="${(y + 4).toFixed(1)}" font-size="10" font-weight="700" fill="#111" stroke="#fff" stroke-width="3" paint-order="stroke">${esc(p.lab)}</text>` : ''}` }).join('');
+  return `<div style="position:relative;width:${W}px;height:${H}px;overflow:hidden;border:1px solid #999;background:#e8e4dc;margin:6px 0">${tiles}<svg width="${W}" height="${H}" style="position:absolute;left:0;top:0">${dots}</svg><div style="position:absolute;right:4px;bottom:2px;font-size:9px;background:#fff9">© OpenStreetMap</div></div>` }
+/* relatório completo de um ou mais planejamentos */
+function relPlanos(lista) { const gc = verCusto(); const hoje = new Date().toLocaleString('pt-BR');
+  const blocos = lista.map(({ o, p }) => { const cor = corPl(o, p); const rs = ocsDoPlano(o, p).sort((a, b) => a.it.dia.localeCompare(b.it.dia) || a.x.num - b.x.num);
+    rs.forEach(r => { r.c = custoOc(o, r.x); r.sv = svcOf(o, r.it.svc || r.x.servicoId || r.x.servSug) });
+    const tot = rs.reduce((s, r) => s + r.c, 0); const dias = [...new Set(rs.map(r => r.it.dia))].sort();
+    const ag = (k) => { const m = {}; rs.forEach(r => { const kk = k(r); const a = m[kk] = m[kk] || { n: 0, c: 0, d: new Set() }; a.n++; a.c += r.c; a.d.add(r.it.dia) }); return m };
+    const porB = ag(r => r.x.bairro || r.x.pastaSub || 'Sem bairro'), porM = ag(r => r.it.dia.slice(0, 7).split('-').reverse().join('/')), porS = ag(r => isoWeek(r.it.dia)), porP = ag(r => pastaDe(r.x) === 'ATUAL' ? 'Ocorrências atuais' : 'Marcações do Google Earth'), porSt = ag(r => (ST[r.x.status] || {}).l || r.x.status);
+    let acum = 0; const ordM = k => k.split('/').reverse().join('-'); const meses = Object.keys(porM).sort((a, b) => ordM(a).localeCompare(ordM(b)));
+    const tbl = (tit, m, ord, lab) => `<h3>${tit}</h3><table><thead><tr><th>${lab}</th><th class="r">Ocorrências</th><th class="r">Dias</th>${gc ? '<th class="r">Custo estimado (R$)</th><th class="r">%</th>' : ''}</tr></thead><tbody>${Object.entries(m).sort(ord).map(([k, a]) => `<tr><td>${esc(k)}</td><td class="r">${a.n}</td><td class="r">${a.d.size}</td>${gc ? `<td class="r">${fN(a.c)}</td><td class="r">${tot ? fN(a.c / tot * 100, 1) : '—'}</td>` : ''}</tr>`).join('')}</tbody></table>`;
+    const pts = rs.filter(r => r.x.lat != null).map(r => ({ lat: r.x.lat, lng: r.x.lng, cor: PLC[dias.indexOf(r.it.dia) % PLC.length], lab: '' }));
+    const fotosN = r => (r.x.fotos || []).length + (r.x.fotosKml || []).length + fcDaOc(o, r.x).length;
+    const semC = rs.filter(r => r.x.lat == null);
+    return `<section class="pl"><h1 style="border-left:8px solid ${cor};padding-left:8px">${esc(p.nome)}</h1>
+     <p class="n">Obra: <b>${esc(o.nome)}</b>${o.contrato ? ' · Contrato nº ' + esc(o.contrato) : ''}${o.contratada ? ' · ' + esc(o.contratada) : ''} · ${p.emUso ? '<b>em uso</b>' : 'não está em uso (simulação)'} · criado em ${p.criadoEm ? new Date(p.criadoEm).toLocaleDateString('pt-BR') : '—'}${p.por ? ' por ' + esc(p.por) : ''}</p>
+     <div class="kp"><div><b>${rs.length}</b>ocorrências</div><div><b>${dias.length}</b>dias úteis com serviço</div><div><b>${fdB(dias[0]) || '—'}</b>início</div><div><b>${fdB(dias[dias.length - 1]) || '—'}</b>término</div><div><b>${Object.keys(porB).length}</b>bairros</div>${gc ? `<div><b>${fR(tot)}</b>custo estimado</div>` : ''}</div>
+     <h2>1. Mapa do planejamento</h2><p class="n">Pontos coloridos pelo dia do planejamento (as cores se repetem a cada 12 dias). ${semC.length ? semC.length + ' ocorrência(s) sem coordenadas não aparecem no mapa (lista no item 6).' : ''}</p>${mapaRel(pts, 760, 520)}
+     <h2>2. Resumo</h2>${tbl('Por mês', porM, (a, b) => ordM(a[0]).localeCompare(ordM(b[0])), 'Mês')}
+     ${gc ? `<h3>Curva de custo acumulado</h3><table><thead><tr><th>Mês</th><th class="r">No mês (R$)</th><th class="r">Acumulado (R$)</th><th class="r">% acumulado</th></tr></thead><tbody>${meses.map(m => { acum += porM[m].c; return `<tr><td>${m}</td><td class="r">${fN(porM[m].c)}</td><td class="r">${fN(acum)}</td><td class="r">${tot ? fN(acum / tot * 100, 1) : '—'}</td></tr>` }).join('')}</tbody></table>` : ''}
+     ${tbl('Por semana', porS, (a, b) => a[0].localeCompare(b[0]), 'Semana')}${tbl('Por bairro', porB, (a, b) => b[1].c - a[1].c || b[1].n - a[1].n, 'Bairro')}${tbl('Por pasta', porP, (a, b) => b[1].n - a[1].n, 'Pasta')}${tbl('Por situação', porSt, (a, b) => b[1].n - a[1].n, 'Situação')}
+     <h2>3. Programação dia a dia</h2>${dias.map((d, k) => { const l = rs.filter(r => r.it.dia === d); return `<h3><span style="color:${PLC[k % PLC.length]}">●</span> Dia ${k + 1} — ${fdB(d)} (${['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][pd(d).getUTCDay()]}, semana ${isoWeek(d).split('-W')[1]}) · ${l.length} ocorrência(s)${gc ? ' · ' + fR(l.reduce((s, r) => s + r.c, 0)) : ''}</h3>
+       <table><thead><tr><th>Nº</th><th>Local</th><th>Bairro / pasta</th><th>Relato / serviço previsto</th><th>Prior.</th><th>Situação</th><th class="r">Fotos</th>${gc ? '<th class="r">Custo (R$)</th>' : ''}</tr></thead><tbody>${l.map(r => `<tr><td>#${r.x.num}</td><td>${esc(ocLocal(r.x))}${r.x.lat != null ? '<br><span class="n">' + fN(r.x.lat, 5) + ', ' + fN(r.x.lng, 5) + '</span>' : ''}</td><td>${esc(r.x.bairro || '')}<br><span class="n">${esc(pastaDe(r.x) === 'ATUAL' ? 'Ocorrências atuais' : 'KML · ' + pastaDe(r.x).slice(4))}</span></td><td>${esc((r.x.desc || '').slice(0, 220))}${r.sv ? '<br><b>Serviço:</b> ' + esc(r.sv.descricao) : ''}${r.it.q ? ' · ' + fN(r.it.q) + (r.sv ? ' ' + esc(r.sv.unidade) : '') : ''}</td><td>${esc((PRI[priEf(r.x)] || {}).l || '')}</td><td>${esc((ST[r.x.status] || {}).l || r.x.status)}</td><td class="r">${fotosN(r)}</td>${gc ? `<td class="r">${fN(r.c)}</td>` : ''}</tr>`).join('')}</tbody></table>` }).join('')}
+     <h2>4. Premissas</h2><ul><li>Datas em dias úteis (sem sábado e domingo) e sem feriados; confira o calendário municipal.</li><li>${p.modelo ? 'Planejamento modelo: 1 frente de serviço, agrupado por bairro e prioridade; produção adotada: tapa-buraco 15 pontos/dia, recapeamento 1.500 m²/dia, não pavimentadas 2.500 m²/dia, próprios R$ 12 mil/dia de serviço.' : 'Datas e ordem conforme o planejamento salvo (' + esc(tipoNome(p)) + ').'}</li>${gc ? '<li>Custos: marcações do KML pela estimativa do relatório de manutenção (EMOP out/2024 e SINAPI 09/2026, com BDI de 25%); demais ocorrências pelo serviço e quantidade levantados no contrato (sem levantamento, R$ 0). Estimativa de planejamento, não é preço contratado nem medição.</li>' : '<li>Custos não aparecem neste perfil.</li>'}<li>Ocorrências já executadas ou medidas não entram em planejamentos novos.</li></ul>
+     ${semC.length ? `<h2>5. Ocorrências sem coordenadas</h2><p>${semC.map(r => '#' + r.x.num + ' ' + esc(ocLocal(r.x))).join(' · ')}</p>` : ''}</section>` }).join('<div style="page-break-after:always"></div>');
+  const resumo = lista.length > 1 ? `<h1>Relatório dos planejamentos no mapa</h1><p class="n">${lista.length} planejamento(s) · gerado em ${hoje}</p><table><thead><tr><th>Cor</th><th>Obra</th><th>Planejamento</th><th class="r">Ocorrências</th><th class="r">Dias</th><th>Período</th>${gc ? '<th class="r">Custo (R$)</th>' : ''}</tr></thead><tbody>${lista.map(({ o, p }) => { const rs = ocsDoPlano(o, p); const c = gc ? rs.reduce((s, r) => s + custoOc(o, r.x), 0) : 0; const r = p.resumo || {}; return `<tr><td style="background:${corPl(o, p)}"></td><td>${esc(o.nome)}</td><td>${esc(p.nome)}</td><td class="r">${rs.length}</td><td class="r">${r.dias || 0}</td><td>${fdB(r.ini)} a ${fdB(r.fim)}</td>${gc ? '<td class="r">' + fN(c) + '</td>' : ''}</tr>` }).join('')}</tbody></table>
+    ${mapaRel(lista.flatMap(({ o, p }) => ocsDoPlano(o, p).filter(r => r.x.lat != null).map(r => ({ lat: r.x.lat, lng: r.x.lng, cor: corPl(o, p) }))), 760, 520)}<div style="page-break-after:always"></div>` : '';
+  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Relatório do planejamento</title><style>body{font:11px/1.4 Arial,sans-serif;margin:22px;color:#111}h1{font-size:18px;margin:0 0 4px}h2{font-size:14px;margin:18px 0 6px;border-bottom:2px solid #b8450f;padding-bottom:2px}h3{font-size:12px;margin:12px 0 4px}table{border-collapse:collapse;width:100%;margin:4px 0}th,td{border:1px solid #aaa;padding:3px 5px;text-align:left;vertical-align:top}th{background:#eee}.r{text-align:right}.n{color:#555;font-size:10px}.kp{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}.kp div{border:1px solid #ccc;border-radius:6px;padding:6px 10px;min-width:110px}.kp b{display:block;font-size:15px}@media print{h2,h3{break-after:avoid}tr{break-inside:avoid}}</style></head><body>
+   <p class="n">Total Civil · Serviços Públicos · gerado em ${hoje}</p>${resumo}${blocos}</body></html>`;
+  abrirPreview(lista.length > 1 ? 'Relatório dos planejamentos no mapa' : 'Relatório — ' + lista[0].p.nome, html, false) }
+const tipoNome = p => p.modelo ? 'modelo' : p.tipo === 'tonelada' ? 'por tonelada' : p.tipo === 'manual' ? 'programação já definida' : 'instruído';
 })();
 </script>
 </body>
