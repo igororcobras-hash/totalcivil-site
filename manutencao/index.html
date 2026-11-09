@@ -3151,7 +3151,7 @@ function tabSp12(o) {
   const tot = L_.reduce((s, m) => s + cb(m), 0), totD = L_.reduce((s, m) => s + (cam === 'prop' ? m.dir : m.cd), 0);
   const prevTot = cam === 'prop' ? L_.reduce((s, m) => s + m.prevBDI, 0) : 0;
   const bs = bairrosDe(cam);
-  const kp = (v, l) => `<div class="kpi"><div class="v" style="font-size:clamp(16px,2vw,22px);white-space:nowrap">${v}</div><div class="l">${l}</div></div>`;
+  const kp = (v, l) => `<div class="kpi" style="min-width:190px"><div class="v" style="font-size:clamp(16px,2.2vw,22px);white-space:nowrap">${v}</div><div class="l">${l}</div></div>`;
   const dem = cam === 'prop' ? L_.filter(m => m.sit === 'demanda').length : 0;
   const lista = L_.slice().sort((a, b) => cb(b) - cb(a));
   const linhas = lista.map(m => { const i = L_.indexOf(m); return cam === 'prop' ?
@@ -3231,7 +3231,7 @@ telaObra = function (o) {
   const cam = camada(o); if (!cam) return _telaObra.apply(this, arguments);
   const sp = S.tab === 'sp12', ant = S.tab; if (sp) S.tab = 'painel'; let h; try { h = _telaObra.call(this, o) } finally { S.tab = ant }
   const i = h.indexOf('</nav>'); if (i < 0) return h; let head = h.slice(0, i); if (sp) head = head.replace('class="tab on"', 'class="tab"');
-  h = head + `<button class="tab ${sp ? 'on' : ''}" data-act="tab" data-k="sp12">📍 Marcações (KML)</button>` + h.slice(i);
+  h = head + `<button class="tab ${sp ? 'on' : ''}" data-act="tab" data-k="sp12">📂 Ocorrências (KML)</button>` + h.slice(i);
   if (sp) { const j = h.indexOf('</nav>') + 6; h = h.slice(0, j) + tabSp12(o) + '</section>' } return h };
 
 const _tMapa = tMapa;
@@ -3282,8 +3282,43 @@ CHG.sp12b = el => { (S.sp12 = S.sp12 || {}).b = el.value; render() };
 CHG.sp12Lay = el => { S.f.sp12Map = el.checked; render() };
 CHG.sp12Obra = (el, d) => { (S.sp12Obs = S.sp12Obs || {})[d.id] = el.checked; render() };
 INP.sp12q = el => { (S.sp12 = S.sp12 || {}).q = el.value; clearTimeout(S.sp12t); S.sp12t = setTimeout(render, 350) };
+
+/* ---------- virar ocorrências reais (09/11/2026): cada marcação entra na lista de relatos da obra ---------- */
+function ptDe(c) { if (!c) return [null, null]; if (typeof c[0] === 'number') return c; const a = Array.isArray(c[0][0]) ? c[0] : c; const m = a[Math.floor(a.length / 2)]; return m }
+function semearSp12(o) {
+  const cam = camada(o); if (!cam || !o.ocorrencias) return 0;
+  const tem = new Set(o.ocorrencias.map(x => x.ext).filter(Boolean)); let n = 0;
+  const novo = (ext, rua, bairro, ref, desc, sug, c, vm, sub) => {
+    if (tem.has(ext)) return; const p = ptDe(c);
+    const oc = { id: 'c' + uid(), num: ++o.seq, ext, kid: null, criadoEm: '2026-11-09T08:00:00.000Z', criadoPor: 'Importado das marcações do Google Earth (KML)', rua: rua || '', bairro: bairro || '', ref: ref || '', lat: p[0], lng: p[1], origem: p[0] != null ? 'importado' : null, fotos: [], desc, sug: sug || '', servSug: '', med: { c: 0, l: 0 }, priF: 'media', priG: null, priConf: false, semana: '', servicoId: '', qtdPlan: 0, solucao: '', obsG: '', status: 'relato', hist: [], kml: vm, pastaSub: sub || bairro || 'Sem bairro' };
+    log(oc, 'Ocorrência trazida das marcações do Google Earth (KML) em 09/11/2026 — ' + ext); o.ocorrencias.push(oc); n++ };
+  if (cam === 'prop') PROP.imoveis.forEach((m, i) => novo('KML-prop-' + i, '', '', (m.tipologia || '') + (m.endereco ? ' · ' + m.endereco : ''), m.nome + ' — ' + (m.desc || 'Imóvel cadastrado, sem demanda de manutenção registrada.'), '', m.linha || [m.lat, m.lng], cam, m.tipologia));
+  else itensRua(cam).forEach((m, i) => novo('KML-' + cam + '-' + (m.tp === 'van' ? 'van-' : '') + i, m.rua, m.b, m.ext || '', m.n + '. ' + m.s + ' ' + m.q + (m.ds ? ' — ' + m.ds : ''), m.s, m.c, cam));
+  if (n) { o.semeadoSp12 = '2026-11-09'; saveObra(o) } return n }
+const _semOc = semearOcMapa;
+semearOcMapa = function (o) { const r = _semOc.apply(this, arguments); semearSp12(o); return r || 0 };
+const _tO2 = telaObra;
+telaObra = function (o) { try { semearSp12(o) } catch (e) { } return _tO2.apply(this, arguments) };
+
+/* ---------- pastas dentro de cada obra (como no Google Earth) ---------- */
+const pastaDe = x => (x.ext && String(x.ext).startsWith('KML-')) ? 'KML|' + (x.pastaSub || 'Sem bairro') : 'ATUAL';
+const off = () => (S.f.pOff = S.f.pOff || {});
+const _fOc = filtraOc;
+filtraOc = function (o) { const l = _fOc.apply(this, arguments); if (!camada(o)) return l; const of = off(); return l.filter(x => { const k = pastaDe(x); return !of[k] && !(k.startsWith('KML|') && of['KML']) }) };
+function painelPastas(o) {
+  const cam = camada(o); if (!cam) return ''; const of = off(); const all = ativas(o);
+  const at = all.filter(x => pastaDe(x) === 'ATUAL').length; const subs = {};
+  all.forEach(x => { const k = pastaDe(x); if (k !== 'ATUAL') subs[k] = (subs[k] || 0) + 1 });
+  const ks = Object.keys(subs).sort((a, b) => a.localeCompare(b, 'pt-BR')); const nk = ks.reduce((s, k) => s + subs[k], 0);
+  const cb = (k, t, n, ind) => `<label class="chk" style="margin:2px 0 2px ${ind}px"><input type="checkbox" data-chg="sp12Pasta" data-k="${esc(k)}" ${of[k] ? '' : 'checked'}> ${t} <span class="muted small">(${n})</span></label>`;
+  return `<details open class="card" style="margin-bottom:12px;padding:10px 14px"><summary style="cursor:pointer;font-weight:700">📁 Pastas desta obra</summary>
+   <div style="margin-top:6px">${cb('ATUAL', '📁 Ocorrências atuais', at, 0)}
+   ${cb('KML', '📁 Marcações do Google Earth — ' + tit[cam], nk, 0)}
+   <div style="columns:2;column-gap:20px">${ks.map(k => cb(k, '📂 ' + esc(k.slice(4)), subs[k], 22)).join('')}</div></div></details>` }
+const _tV = tVistoria;
+tVistoria = function (o) { const h = _tV.apply(this, arguments); return camada(o) ? painelPastas(o) + h : h };
+CHG.sp12Pasta = el => { off()[el.dataset.k] = !el.checked; render() };
 })();
 </script>
-
 </body>
 </html>
