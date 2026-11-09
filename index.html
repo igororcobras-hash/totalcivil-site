@@ -126,6 +126,7 @@ h2.sec{font-size:1.45rem; margin:56px 0 6px; letter-spacing:-.01em; text-wrap:ba
 #dl-video .menu-comp-v a:hover,#dl-video .menu-comp-v button:hover{background:rgba(255,255,255,.14)}
 #dl-video .comp-video:hover,#dl-video .comp-video:focus-visible{background:rgba(0,0,0,.85)}
 @media (max-width:560px){ #dl-video .comp-video{padding:7px} #dl-video .comp-video span{display:none} }
+@media (max-width:560px){ #dl-video .menu-comp-v{position:fixed; top:auto; left:12px; right:12px; bottom:12px; min-width:0; padding:8px} #dl-video .menu-comp-v a,#dl-video .menu-comp-v button{padding:14px 12px; font-size:1.02rem} }
 
 /* Como funciona */
 .passos{display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr)); gap:14px; counter-reset:p; padding:0; margin:0; list-style:none}
@@ -569,7 +570,7 @@ function abrirVideo(k){
   let d = $('dl-video');
   if(!d){
     d = document.createElement('dialog'); d.id = 'dl-video';
-    d.innerHTML = '<div class="cab"><span id="dl-video-tit"></span><button type="button" id="dl-video-fechar" aria-label="Fechar o vídeo">Fechar ✕</button></div><div style="position:relative"><video controls playsinline preload="metadata"></video><button type="button" id="dl-video-comp" class="comp-video" aria-label="Compartilhar o vídeo" title="Compartilhar"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M14 5l7 7-7 7v-4.1c-5 0-8.5 1.6-11 5.1 1-5 4-10 11-11V5z"/></svg><span>Compartilhar</span></button><div class="menu-comp-v" role="menu"><a id="mcv-wa" href="#" target="_blank" rel="noopener" role="menuitem">🟢 WhatsApp</a><button type="button" id="mcv-copiar" role="menuitem">📋 Copiar link</button><button type="button" id="mcv-mais" role="menuitem" style="display:none">↗ Mais opções…</button></div></div>';
+    d.innerHTML = '<div class="cab"><span id="dl-video-tit"></span><button type="button" id="dl-video-fechar" aria-label="Fechar o vídeo">Fechar ✕</button></div><div style="position:relative"><video controls playsinline preload="metadata"></video><button type="button" id="dl-video-comp" class="comp-video" aria-label="Compartilhar o vídeo" title="Compartilhar"><svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path fill="currentColor" d="M14 5l7 7-7 7v-4.1c-5 0-8.5 1.6-11 5.1 1-5 4-10 11-11V5z"/></svg><span>Compartilhar</span></button><div class="menu-comp-v" role="menu"><a id="mcv-wa" href="#" target="_blank" rel="noopener" role="menuitem">🟢 WhatsApp</a><a id="mcv-fb" href="#" target="_blank" rel="noopener" role="menuitem">🔵 Facebook</a><button type="button" id="mcv-ig" role="menuitem">🟣 Instagram</button><button type="button" id="mcv-copiar" role="menuitem">📋 Copiar link</button><a id="mcv-baixar" href="/videos/drenagem-apresentacao.mp4" download="Drenagem-Pluvial-Total-Civil.mp4" role="menuitem">⬇ Baixar vídeo</a><button type="button" id="mcv-mais" role="menuitem" style="display:none">↗ Mais opções…</button></div></div>';
     document.body.appendChild(d);
     d.querySelector('#dl-video-fechar').onclick = () => d.close();
     const menu = d.querySelector('.menu-comp-v');
@@ -577,9 +578,13 @@ function abrirVideo(k){
     const url = () => location.origin + (d.dataset.pagina || '/');
     const txt = () => 'Veja o vídeo de apresentação do programa Drenagem Pluvial (Total Civil): ';
     d.querySelector('#mcv-wa').addEventListener('click', ev => { ev.currentTarget.href = 'https://wa.me/?text=' + encodeURIComponent(txt() + url()); menu.classList.remove('vis'); });
+    d.querySelector('#mcv-fb').addEventListener('click', ev => { ev.currentTarget.href = 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(url()); menu.classList.remove('vis'); });
+    d.querySelector('#mcv-baixar').addEventListener('click', () => menu.classList.remove('vis'));
+    let msgIg = false;
+    d.querySelector('#mcv-ig').onclick = () => { msgIg = true; d.querySelector('#mcv-copiar').click(); };
     d.querySelector('#mcv-copiar').onclick = () => {
       menu.classList.remove('vis');
-      const ok = () => { const t = $('dl-video-tit'); const o = t.textContent; t.textContent = '✔ Link copiado!'; setTimeout(() => t.textContent = o, 2200); };
+      const ok = () => { const t = $('dl-video-tit'); const o = t.dataset.orig || t.textContent; t.dataset.orig = o; t.textContent = msgIg ? '✔ Link copiado! No Instagram, cole no story, na bio ou no direct' : '✔ Link copiado!'; msgIg = false; clearTimeout(t._t); t._t = setTimeout(() => { t.textContent = o; }, 4500); };
       const velho = () => { const t = document.createElement('textarea'); t.value = url(); t.style.cssText = 'position:fixed;opacity:0'; d.appendChild(t); t.select(); try{ document.execCommand('copy'); ok(); }catch(e){ prompt('Copie o link:', url()); } t.remove(); };
       if(navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url()).then(ok, velho); else velho();
     };
