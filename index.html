@@ -481,6 +481,7 @@ const PROGRAMAS = [
    desc:'Microdrenagem completa: chuva IDF, bacias, sarjetas, bocas-de-lobo, ramais, PVs, rede tronco, linha piezométrica e memorial.',
    ico:'<path d="M23 5C23 5 11 19 11 28a12 12 0 0 0 24 0C35 19 23 5 23 5Z"/><path d="M17 29a6 6 0 0 0 6 6"/>'},
   {key:'estrutura',    campo:'estruturaAtivo',    solic:'estruturaSolicitado',    nome:'Estrutura em Concreto Armado', url:'/concreto/', disp:true,
+   video:'/videos/concreto-apresentacao.mp4',
    desc:'Dimensionamento de fundações e estruturas de concreto armado. Sapatas, estacas, radier, corrida. NBR 6118:2023 · NBR 6122:2022.',
    ico:'<path d="M10 6v34M36 6v34M4 14h38M4 32h38"/><circle cx="10" cy="14" r="1.6"/><circle cx="36" cy="14" r="1.6"/><circle cx="10" cy="32" r="1.6"/><circle cx="36" cy="32" r="1.6"/>'},
   {key:'manutencao',   campo:'manutencaoAtivo',   solic:'manutencaoSolicitado',   nome:'Serviços Públicos',           url:'/manutencao/',   disp:true,
@@ -576,7 +577,7 @@ function abrirVideo(k){
     const menu = d.querySelector('.menu-comp-v');
     d.querySelector('#dl-video-comp').onclick = e => { e.stopPropagation(); menu.classList.toggle('vis'); };
     const url = () => location.origin + (d.dataset.pagina || '/');
-    const txt = () => 'Veja o vídeo de apresentação do programa Drenagem Pluvial (Total Civil): ';
+    const txt = () => 'Veja o vídeo de apresentação do programa ' + (d.dataset.nome || '') + ' (Total Civil): ';
     d.querySelector('#mcv-wa').addEventListener('click', ev => { ev.currentTarget.href = 'https://wa.me/?text=' + encodeURIComponent(txt() + url()); menu.classList.remove('vis'); });
     d.querySelector('#mcv-fb').addEventListener('click', ev => { ev.currentTarget.href = 'https://www.facebook.com/sharer/sharer.php?u=' + encodeURIComponent(url()); menu.classList.remove('vis'); });
     d.querySelector('#mcv-baixar').addEventListener('click', () => menu.classList.remove('vis'));
@@ -594,6 +595,8 @@ function abrirVideo(k){
     d.addEventListener('close', () => { const v = d.querySelector('video'); v.pause(); });
   }
   $('dl-video-tit').textContent = 'Vídeo de Apresentação · ' + p.nome;
+  d.dataset.nome = p.nome;
+  { const bx = d.querySelector('#mcv-baixar'); bx.href = p.video; bx.download = p.nome.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^A-Za-z0-9]+/g,'-') + '-Total-Civil.mp4'; }
   d.dataset.pagina = p.video.replace(/-apresentacao\.mp4$/, '/');  /* ex.: /videos/drenagem/ (página que já abre o vídeo tocando) */
   const v = d.querySelector('video');
   if(v.getAttribute('src') !== p.video) v.src = p.video;
