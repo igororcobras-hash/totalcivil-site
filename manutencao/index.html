@@ -3508,7 +3508,7 @@ const visDe = obras => obras.flatMap(o => (o.planejamentos || []).filter(p => PV
 const obrasDe = onde => onde === 'todas' ? obrasTP() : [O()].filter(Boolean);
 /* (a) aba Planejamento: paleta + mapa dos planejamentos acima do “3.” */
 const _tPlanY = tPlan;
-tPlan = function (o) { const h = _tPlanY.apply(this, arguments); const bloco = paleta([o], 'obra') + `<div id="sp12pmap" class="mapbox" style="height:440px;margin-bottom:6px"></div><p class="muted small" style="margin:0 0 10px">Cada planejamento na sua cor; a linha tracejada liga as ocorrências do mesmo dia na ordem do planejamento. Toque num ponto para ver dia, local e custo.</p>`;
+tPlan = function (o) { const h = _tPlanY.apply(this, arguments); const bloco = paleta([o], 'obra') + `<div id="sp12pmap" class="mapbox" style="height:440px;margin-bottom:6px"></div><p class="muted small" style="margin:0 0 10px">Cada planejamento na sua cor. Linha = rota do período escolhido (dia, semana ou mês, na ordem de menor caminho); círculo tracejado = raio de atendimento. Toque num ponto para ver dia, local, custo e fotos, e para anexar fotos.</p>`;
   const i0 = h.indexOf('📚 Planejamentos salvos'); const i = i0 < 0 ? -1 : h.indexOf('<div class="card"', i0); return i < 0 ? h + bloco : h.slice(0, i) + bloco + h.slice(i) };
 function initPlanMap() { const el = $('#sp12pmap'); if (!el) return; if (typeof L === 'undefined') { el.innerHTML = '<div class="nomap">Mapa indisponível (sem internet).</div>'; return }
   const c = S.settings.mapa; const map = L.map(el).setView([c.lat, c.lng], c.zoom); L.tileLayer(OSM, { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map);
@@ -3573,6 +3573,83 @@ function relPlanos(lista) { const gc = verCusto(); const hoje = new Date().toLoc
    <p class="n">Total Civil · Serviços Públicos · gerado em ${hoje}</p>${resumo}${blocos}</body></html>`;
   abrirPreview(lista.length > 1 ? 'Relatório dos planejamentos no mapa' : 'Relatório — ' + lista[0].p.nome, html, false) }
 const tipoNome = p => p.modelo ? 'modelo' : p.tipo === 'tonelada' ? 'por tonelada' : p.tipo === 'manual' ? 'programação já definida' : 'instruído';
+
+/* ---------- SP-12g (09/11/2026): prazo em meses, rotas diária/semanal/mensal com raio de atendimento e fotos nos balões do mapa ---------- */
+const RT = () => (S.sp12R = S.sp12R || { modo: 'dia', sel: '', raio: true, fotos: true });
+const chaveG = (modo, d) => modo === 'sem' ? isoWeek(d) : modo === 'mes' ? d.slice(0, 7) : d;
+const rotG = (modo, k) => modo === 'sem' ? 'Semana ' + k.split('-W')[1] + '/' + k.split('-W')[0] + ' (' + fdB(weekRange(k)[0]) + ' a ' + fdB(weekRange(k)[1]) + ')' : modo === 'mes' ? MESES[+k.slice(5, 7) - 1] + ' de ' + k.slice(0, 4) : fdB(k) + ' (' + ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][pd(k).getUTCDay()] + ')';
+function prazo(p) { const r = p.resumo || {}; if (!r.ini) return null; const dc = Math.round((pd(r.fim) - pd(r.ini)) / 864e5) + 1; return { du: r.dias || 0, dc, meses: dc / 30.44, ini: r.ini, fim: r.fim } }
+const prazoTxt = p => { const z = prazo(p); return z ? `prazo ${z.du} dia(s) úteis ≈ ${fN(z.meses, 1)} ${z.meses < 1.05 ? 'mês' : 'meses'} (${fdB(z.ini)} a ${fdB(z.fim)})` : 'sem datas' };
+/* grupos de rota (dia / semana / mês) de um planejamento */
+function gruposRota(o, p, modo) { const rs = ocsDoPlano(o, p).sort((a, b) => a.it.dia.localeCompare(b.it.dia) || a.x.num - b.x.num); const g = {};
+  rs.forEach(r => { const k = chaveG(modo, r.it.dia); (g[k] = g[k] || []).push(r) });
+  return Object.keys(g).sort().map(k => { const l = g[k]; const rot = piRota(l.map(r => ({ oc: r.x, r }))); const com = rot.ord.filter(q => q.oc.lat != null);
+    let raio = 0, cen = null; if (com.length) { cen = { lat: com.reduce((s, q) => s + q.oc.lat, 0) / com.length, lng: com.reduce((s, q) => s + q.oc.lng, 0) / com.length }; com.forEach(q => { raio = Math.max(raio, distM(cen, q.oc)) }) }
+    return { k, l, ord: rot.ord.map(q => q.r), km: rot.km, cen, raio, custo: l.reduce((s, r) => s + custoOc(o, r.x), 0) } }) }
+/* balão com fotos (como no Google Earth) */
+function balao(o, p, r, cor, extra) { const x = r.x, gc = verCusto(); const ft = RT().fotos;
+  const fl = ft ? [(x.fotos || []).slice(0, 3).map(f => `<img data-foto="${f.id}" style="width:110px;height:82px;object-fit:cover;margin:3px 3px 0 0;border-radius:5px" alt="">`).join(''), (x.fotosKml || []).slice(0, 3).map(t => foto(t, 110)).join(''), fcDaOc(o, x).slice(0, 3).map(q => fcFoto(q, 110)).join('')].join('') : '';
+  return `<div style="max-width:350px"><b style="color:${cor}">■ ${esc(p.nome.slice(0, 70))}</b><br><span style="font-size:11px">${esc(o.nome)}</span><br>${extra || ''}<b>#${x.num} ${esc(ocLocal(x))}</b><br><span style="font-size:11px">${esc((x.desc || '').slice(0, 200))}</span>${gc ? '<br>Custo estimado: <b>' + fR(custoOc(o, x)) + '</b>' : ''}${fl ? '<div style="margin-top:4px">' + fl + '</div>' : ''}
+   <div style="margin-top:6px"><button class="btn sm" data-act="sp12OcAbrir" data-o="${o.id}" data-id="${x.id}">📷 Abrir / anexar fotos</button></div></div>` }
+/* novo desenho: rotas por dia/semana/mês, raio de atendimento, fotos */
+desenhaPlanos = function (map, lista) { if (!map || typeof L === 'undefined') return null; const g = L.featureGroup().addTo(map); const R0 = RT();
+  map.on('popupopen', e => { try { hydrate(e.popup.getElement()) } catch (er) { } });
+  lista.forEach(({ o, p }) => { const cor = corPl(o, p); const gs = gruposRota(o, p, R0.modo === 'nao' ? 'dia' : R0.modo);
+    gs.forEach((gr, gi) => { if (R0.sel && R0.modo !== 'nao' && gr.k !== R0.sel) return; const com = gr.ord.filter(r => r.x.lat != null); const lab = R0.modo === 'nao' ? '' : rotG(R0.modo, gr.k);
+      if (R0.modo !== 'nao' && com.length > 1) L.polyline(com.map(r => [r.x.lat, r.x.lng]), { color: cor, weight: 3, opacity: .8 }).addTo(g).bindTooltip(`${lab} · rota ≈ ${fN(gr.km, 1)} km · ${gr.l.length} ocorr.`, { sticky: true });
+      if (R0.modo !== 'nao' && R0.raio && gr.cen && com.length > 1) L.circle([gr.cen.lat, gr.cen.lng], { radius: Math.max(gr.raio, 60), color: cor, weight: 1.5, dashArray: '6 5', fillOpacity: .06 }).addTo(g)
+        .bindTooltip(`${lab} · raio de atendimento ${fN(gr.raio / 1000, 2)} km · ${gr.l.length} ocorr.${verCusto() ? ' · ' + fR(gr.custo) : ''}`, { sticky: true });
+      com.forEach((r, i) => { const m = L.circleMarker([r.x.lat, r.x.lng], { radius: 8, fillColor: cor, color: '#fff', weight: 2, fillOpacity: .95 }).addTo(g);
+        if (R0.modo !== 'nao' && R0.sel) m.bindTooltip(String(i + 1), { permanent: true, direction: 'center', className: 'sp12num' }); else m.bindTooltip(`${fdB(r.it.dia)} · #${r.x.num}`, { direction: 'top' });
+        m.bindPopup(balao(o, p, r, cor, `<b>${fdB(r.it.dia)}</b>${lab ? ' · ' + esc(lab) : ''}${R0.modo !== 'nao' ? ' · parada ' + (i + 1) + ' de ' + com.length : ''}<br>`), { maxWidth: 370 }) }) }) });
+  return g };
+/* controles de rota na paleta + prazo de cada planejamento */
+const _paleta0 = paleta;
+paleta = function (obras, onde) { let h = _paleta0(obras, onde); const R0 = RT(); const lista = visDe(obras);
+  const ks = new Set(); if (R0.modo !== 'nao') lista.forEach(({ o, p }) => ocsDoPlano(o, p).forEach(r => ks.add(chaveG(R0.modo, r.it.dia))));
+  const sel = [...ks].sort(); if (R0.sel && !ks.has(R0.sel)) R0.sel = '';
+  const resumoSel = R0.sel ? lista.map(({ o, p }) => gruposRota(o, p, R0.modo).find(g => g.k === R0.sel)).filter(Boolean) : [];
+  const ctl = `<div class="toolbar" style="flex-wrap:wrap;margin-top:8px"><label>Rota e raio por<select data-chg="sp12R" data-k="modo"><option value="dia" ${R0.modo === 'dia' ? 'selected' : ''}>Dia (rota diária)</option><option value="sem" ${R0.modo === 'sem' ? 'selected' : ''}>Semana (rota semanal)</option><option value="mes" ${R0.modo === 'mes' ? 'selected' : ''}>Mês (rota mensal)</option><option value="nao" ${R0.modo === 'nao' ? 'selected' : ''}>Só os pontos</option></select></label>
+    ${R0.modo !== 'nao' ? `<label>Mostrar<select data-chg="sp12R" data-k="sel"><option value="">Todos os períodos</option>${sel.map(k => `<option value="${k}" ${R0.sel === k ? 'selected' : ''}>${esc(rotG(R0.modo, k))}</option>`).join('')}</select></label>
+    <button class="btn sm" data-act="sp12Rpasso" data-v="-1" ${sel.length ? '' : 'disabled'}>◀</button><button class="btn sm" data-act="sp12Rpasso" data-v="1" ${sel.length ? '' : 'disabled'}>▶</button>
+    <label class="chk" style="align-self:end"><input type="checkbox" data-chg="sp12Rc" data-k="raio" ${R0.raio ? 'checked' : ''}> Raios de atendimento</label>` : ''}
+    <label class="chk" style="align-self:end"><input type="checkbox" data-chg="sp12Rc" data-k="fotos" ${R0.fotos ? 'checked' : ''}> Fotos nos balões</label></div>
+    ${resumoSel.length ? `<div class="small" style="margin-top:4px">${resumoSel.map(g => `<b>${esc(rotG(R0.modo, g.k))}</b>: ${g.l.length} ocorrência(s) · rota ≈ ${fN(g.km, 1)} km · raio ${fN(g.raio / 1000, 2)} km${verCusto() ? ' · ' + fR(g.custo) : ''}`).join('<br>')}</div>` : ''}
+    <div class="small muted" style="margin-top:4px">${lista.map(({ o, p }) => `<span style="color:${corPl(o, p)}">■</span> ${esc(p.nome.slice(0, 50))}: ${prazoTxt(p)}`).join('<br>') || 'Marque um planejamento para ver o prazo e as rotas.'}</div>`;
+  return h.replace(/<\/div>\s*$/, ctl + '</div>') };
+CHG.sp12R = el => { const R0 = RT(); R0[el.dataset.k] = el.value; if (el.dataset.k === 'modo') R0.sel = ''; render() };
+CHG.sp12Rc = el => { RT()[el.dataset.k] = el.checked; render() };
+ACTS.sp12Rpasso = d => { const R0 = RT(); const obras = S.obraId ? [O()] : obrasTP(); const ks = new Set(); visDe(obras).forEach(({ o, p }) => ocsDoPlano(o, p).forEach(r => ks.add(chaveG(R0.modo, r.it.dia)))); const l = [...ks].sort(); if (!l.length) return;
+  let i = l.indexOf(R0.sel); i = i < 0 ? (+d.v > 0 ? 0 : l.length - 1) : Math.min(l.length - 1, Math.max(0, i + (+d.v))); R0.sel = l[i]; render() };
+ACTS.sp12OcAbrir = d => { if (S.obraId !== d.o) { ACTS.abrir({ id: d.o }) } try { S.mapObj && S.mapObj.closePopup() } catch (e) { } setTimeout(() => ACTS.ocEdit({ id: d.id }), 60) };
+/* estilo do número da parada */
+(() => { const st = document.createElement('style'); st.textContent = '.sp12num{background:transparent;border:0;box-shadow:none;color:#fff;font-weight:800;font-size:10px;padding:0}.sp12num:before{display:none}'; document.head.appendChild(st) })();
+/* prazo em meses no cartão do modelo */
+const _tabS2 = tabSp12;
+tabSp12 = function (o) { const h = _tabS2.apply(this, arguments); const p = (o.planejamentos || []).find(x => x.modelo); if (!p) return h; return h.replace('📐 <b>Planejamento modelo</b>: ', '📐 <b>Planejamento modelo</b> (' + prazoTxt(p) + '): ') };
+/* relatório: prazo, resultado por mês, rotas e raios por dia e mapa com rotas */
+const _mapaRel0 = mapaRel;
+mapaRel = function (pts, W, H, linhas, circ) { let h = _mapaRel0(pts, W, H); if (!pts.length || (!linhas && !circ)) return h;
+  const lx = lng => (lng + 180) / 360, ly = lat => { const s = Math.sin(lat * Math.PI / 180); return .5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI) };
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; pts.forEach(p => { const x = lx(p.lng), y = ly(p.lat); x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y) });
+  let z = 17; while (z > 3 && ((x1 - x0) * 256 * 2 ** z > W * .85 || (y1 - y0) * 256 * 2 ** z > H * .85)) z--;
+  const T = 256 * 2 ** z, cx = (x0 + x1) / 2 * T - W / 2, cy = (y0 + y1) / 2 * T - H / 2; const P = q => [(lx(q.lng) * T - cx).toFixed(1), (ly(q.lat) * T - cy).toFixed(1)];
+  const ln = (linhas || []).map(l => `<polyline points="${l.pts.map(q => P(q).join(',')).join(' ')}" fill="none" stroke="${l.cor}" stroke-width="2.5" stroke-opacity=".85"/>`).join('');
+  const cc = (circ || []).map(c => { const [x, y] = P(c); const mpp = 156543.03 * Math.cos(c.lat * Math.PI / 180) / 2 ** z; return `<circle cx="${x}" cy="${y}" r="${(Math.max(c.r, 60) / mpp).toFixed(1)}" fill="${c.cor}" fill-opacity=".06" stroke="${c.cor}" stroke-dasharray="5 4" stroke-width="1.3"/>` }).join('');
+  return h.replace(/(<svg[^>]*>)/, '$1' + cc + ln) };
+const _relPlanos0 = relPlanos;
+relPlanos = function (lista) { const R0 = RT(); const modo = R0.modo === 'nao' ? 'dia' : R0.modo; const gc = verCusto();
+  const orig = abrirPreview; let cap = null; abrirPreview = (t, h) => { cap = [t, h] }; try { _relPlanos0(lista) } finally { abrirPreview = orig } if (!cap) return;
+  let html = cap[1];
+  lista.forEach(({ o, p }) => { const gs = gruposRota(o, p, 'dia'), gm = gruposRota(o, p, modo); const z = prazo(p); const nM = z ? z.meses : 0; const rs = ocsDoPlano(o, p); const tot = gc ? rs.reduce((s, r) => s + custoOc(o, r.x), 0) : 0;
+    const head = `<h2>Resultado do planejamento (prazo)</h2><div class="kp"><div><b>${z ? z.du : 0}</b>dias úteis</div><div><b>${z ? z.dc : 0}</b>dias corridos</div><div><b>${fN(nM, 1)}</b>${nM < 1.05 ? 'mês' : 'meses'}</div><div><b>${fN(nM ? rs.length / nM : 0, 1)}</b>ocorrências por mês (média)</div><div><b>${fN(z && z.du ? rs.length / z.du : 0, 1)}</b>ocorrências por dia útil</div><div><b>${fN(gs.reduce((s, g) => s + g.km, 0), 1)} km</b>de rota somada (dias)</div>${gc ? `<div><b>${fR(nM ? tot / nM : 0)}</b>custo médio por mês</div>` : ''}</div>
+      <h3>Rotas e raios de atendimento — por ${modo === 'sem' ? 'semana' : modo === 'mes' ? 'mês' : 'dia'}</h3><table><thead><tr><th>Período</th><th class="r">Ocorrências</th><th class="r">Rota (km)</th><th class="r">Raio de atendimento (km)</th>${gc ? '<th class="r">Custo (R$)</th>' : ''}<th>Ordem das paradas</th></tr></thead><tbody>${gm.map(g => `<tr><td>${esc(rotG(modo, g.k))}</td><td class="r">${g.l.length}</td><td class="r">${fN(g.km, 1)}</td><td class="r">${fN(g.raio / 1000, 2)}</td>${gc ? `<td class="r">${fN(g.custo)}</td>` : ''}<td>${g.ord.map(r => '#' + r.x.num).join(' → ')}</td></tr>`).join('')}</tbody></table>
+      <h3>Mapa das rotas por ${modo === 'sem' ? 'semana' : modo === 'mes' ? 'mês' : 'dia'} (linha = rota, círculo tracejado = raio de atendimento)</h3>${mapaRel(rs.filter(r => r.x.lat != null).map(r => ({ lat: r.x.lat, lng: r.x.lng, cor: PLC[gm.findIndex(g => g.k === chaveG(modo, r.it.dia)) % PLC.length] })), 760, 520,
+        gm.map((g, i) => ({ cor: PLC[i % PLC.length], pts: g.ord.filter(r => r.x.lat != null).map(r => ({ lat: r.x.lat, lng: r.x.lng })) })).filter(l => l.pts.length > 1),
+        gm.filter(g => g.cen && g.l.length > 1).map((g, i) => ({ lat: g.cen.lat, lng: g.cen.lng, r: g.raio, cor: PLC[gm.indexOf(g) % PLC.length] })))}`;
+    const k = `${esc(p.nome)}</h1>`; const i = html.indexOf(k); if (i < 0) return; const j = html.indexOf('<h2>1. Mapa do planejamento</h2>', i); if (j < 0) return;
+    html = html.slice(0, j) + head + html.slice(j) });
+  orig(cap[0], html) };
 })();
 </script>
 </body>
