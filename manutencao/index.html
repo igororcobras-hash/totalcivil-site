@@ -3104,8 +3104,8 @@ const camada = o => { if (!o || o.demo) return null;
 const tit = { np: 'Ruas não pavimentadas e rotas de van', p: 'Ruas pavimentadas', prop: 'Próprios municipais' };
 const R = fR;
 const fotoUrl = t => `https://earth.usercontent.google.com/hostedimage/e/*/${t}?authuser=0&fife=s500`;
-const fotoFalha = el => { try { const a = document.createElement('a'); a.href = el.src; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = '📷 foto do Google Earth (não carregou aqui — abrir)'; a.style.cssText = 'display:inline-block;font-size:11px;margin:4px 6px 0 0;max-width:150px'; el.replaceWith(a) } catch (e) { el.style.display = 'none' } };
-const foto = (t, w) => `<img src="${fotoUrl(t)}" referrerpolicy="no-referrer" style="width:${w || 200}px;margin:4px 4px 0 0;border-radius:6px" loading="lazy" onerror="(window.__sp12FF||function(e){e.style.display='none'})(this)">`;
+const fotoFalha = el => { try { const p = el.parentNode; el.remove(); if (p && p.tagName === 'A' && !p.querySelector('img')) p.remove() } catch (e) { el.style.display = 'none' } };
+const foto = (t, w) => `<img src="${fotoUrl(t)}" referrerpolicy="no-referrer" onclick="window.__sp12Ver&&__sp12Ver(this.src)" style="cursor:zoom-in;width:${w || 200}px;margin:4px 4px 0 0;border-radius:6px" loading="lazy" onerror="(window.__sp12FF||function(e){e.style.display='none'})(this)">`;
 window.__sp12FF = fotoFalha;
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
@@ -3594,7 +3594,7 @@ function gruposRota(o, p, modo) { const rs = ocsDoPlano(o, p).sort((a, b) => a.i
     return { k, l, ord: rot.ord.map(q => q.r), km: rot.km, cen, raio, custo: l.reduce((s, r) => s + custoOc(o, r.x), 0) } }) }
 /* balão com fotos (como no Google Earth) */
 function balao(o, p, r, cor, extra) { const x = r.x, gc = verCusto(); const ft = RT().fotos;
-  const fl = ft ? [(x.fotos || []).slice(0, 3).map(f => `<img data-foto="${f.id}" style="width:110px;height:82px;object-fit:cover;margin:3px 3px 0 0;border-radius:5px" alt="">`).join(''), (x.fotosKml || []).slice(0, 3).map(t => foto(t, 110)).join(''), fcDaOc(o, x).slice(0, 3).map(q => fcFoto(q, 110)).join('')].join('') : '';
+  const fl = ft ? [(x.fotos || []).slice(0, 3).map(f => `<img data-foto="${f.id}" data-act="zoom" style="width:110px;height:82px;object-fit:cover;margin:3px 3px 0 0;border-radius:5px" alt="">`).join(''), (x.fotosKml || []).slice(0, 3).map(t => foto(t, 110)).join(''), fcDaOc(o, x).slice(0, 3).map(q => fcFoto(q, 110)).join('')].join('') : '';
   return `<div style="max-width:350px"><b style="color:${cor}">■ ${esc(p.nome.slice(0, 70))}</b><br><span style="font-size:11px">${esc(o.nome)}</span><br>${extra || ''}<b>#${x.num} ${esc(ocLocal(x))}</b><br><span style="font-size:11px">${esc((x.desc || '').slice(0, 200))}</span>${gc ? '<br>Custo estimado: <b>' + fR(custoOc(o, x)) + '</b>' : ''}${fl ? '<div style="margin-top:4px">' + fl + '</div>' : ''}
    <div style="margin-top:6px"><button class="btn sm" data-act="sp12OcAbrir" data-o="${o.id}" data-id="${x.id}">📷 Abrir / anexar fotos</button></div></div>` }
 /* novo desenho: rotas por dia/semana/mês, raio de atendimento, fotos */
@@ -3783,6 +3783,15 @@ painelPastas = function (o) { let h = _pp2(o); if (!h || !camada(o)) return h; c
 
 /* sem o contorno de foco do navegador (quadro preto) ao tocar em linhas e pontos do mapa */
 try { const st = document.createElement('style'); st.textContent = '.leaflet-container .leaflet-interactive:focus,.leaflet-container path:focus{outline:none}'; document.head.appendChild(st) } catch (e) { }
+
+/* foto que não existe (no aparelho, na nuvem ou no link) não deixa quadro vazio; foto que existe abre grande ao tocar */
+window.__sp12Ver = src => { try { if (!src) return; $('#lb img').src = src; $('#lb').classList.remove('hidden') } catch (e) { } };
+const _hyd = hydrate;
+hydrate = function (root) { try { (root ? root.querySelectorAll('img[data-foto]') : document.querySelectorAll('img[data-foto]')).forEach(async img => {
+    const noModal = !!img.closest('#modal'); /* nas janelas de edição a foto continua, para poder ser trocada ou excluída */
+    if (!noModal) img.style.visibility = 'hidden';
+    const d = await getFoto(img.dataset.foto).catch(() => null);
+    if (d) { img.src = d; img.style.visibility = '' } else if (!noModal) { const f = img.closest('figure.th'); (f || img).remove() } }) } catch (e) { return _hyd.apply(this, arguments) } };
 })();
 </script>
 
