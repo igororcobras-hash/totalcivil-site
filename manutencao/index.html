@@ -2507,9 +2507,10 @@ async function dupArq(lista, destId, pref) { const out = [];
 async function exportarRelato(o, x, dest, mot) {
   const oc = {id: 'c' + uid(), num: ++dest.seq, rua: x.rua || '', bairro: x.bairro || '', ref: x.ref || '', lat: x.lat ?? null, lng: x.lng ?? null, origem: x.origem || null,
     desc: x.desc || '', sug: x.sug || '', constat: x.constat || '', tipo: x.tipo || '', med: x.med ? Object.assign({}, x.med) : {c: 0, l: 0}, priF: x.priF || 'media',
-    fotos: await dupArq(x.fotos, dest.id, 'f'), docs: await dupArq(x.docs, dest.id, 'd'), criadoEm: x.criadoEm || new Date().toISOString(), criadoPor: x.criadoPor || '', ext: x.ext || '',
+    fotos: await dupArq(x.fotos, dest.id, 'f'), docs: await dupArq(x.docs, dest.id, 'd'), criadoEm: x.criadoEm || new Date().toISOString(), criadoPor: x.criadoPor || '', ext: x.ext || '', pastaSub: x.pastaSub || '', fotosKml: (x.fotosKml || []).slice(),
     hist: [], status: 'relato', veioDe: {obraId: o.id, obra: o.nome, num: x.num, orgao: 'Exportado'}};
   if (x.vistFiscal) oc.vistFiscal = Object.assign({}, x.vistFiscal);
+  ['insu', 'equipe', 'servsFiscal'].forEach(k => { if (x[k] != null) oc[k] = JSON.parse(JSON.stringify(x[k])) }); /* SP-30: materiais/equipe/serviços seguem junto */
   dest.ocorrencias.push(oc); recalcStatus(dest, oc);
   log(oc, 'Recebido por exportação do relato nº ' + x.num + ' da obra “' + o.nome + '”' + (mot ? ' — ' + mot : ''));
   const em = new Date().toISOString();
@@ -3315,7 +3316,7 @@ const _tO2 = telaObra;
 telaObra = function (o) { try { semearSp12(o) } catch (e) { } return _tO2.apply(this, arguments) };
 
 /* ---------- pastas dentro de cada obra (como no Google Earth) ---------- */
-const pastaDe = x => (x.ext && String(x.ext).startsWith('KML-')) ? 'KML|' + (x.pastaSub || 'Sem bairro') : 'ATUAL';
+const pastaDe = x => (x.ext && String(x.ext).startsWith('KML-')) ? 'KML|' + (x.pastaSub || x.bairro || 'Sem bairro') : 'ATUAL';
 const off = () => (S.f.pOff = S.f.pOff || {});
 const _fOc = filtraOc;
 filtraOc = function (o) { const l = _fOc.apply(this, arguments); if (!camada(o)) return l; const of = off(), K = k => o.id + '§' + k; return l.filter(x => { const k = pastaDe(x); return !of[K('@obra')] && !of[K(k)] && !(k.startsWith('KML|') && of[K('KML')]) }) };
@@ -3330,7 +3331,7 @@ function painelPastas(o) {
    ${cb('KML', '📁 Marcações do Google Earth — ' + tit[cam], nk, 0)}
    <div style="columns:2;column-gap:20px">${ks.map(k => cb(k, '📂 ' + esc(k.slice(4)), subs[k], 22)).join('')}</div></div></details>` }
 const _tV = tVistoria;
-tVistoria = function (o) { const h = _tV.apply(this, arguments); return camada(o) ? painelPastas(o) + h : h };
+tVistoria = function (o) { const h = _tV.apply(this, arguments); return tipoVia(o) || (o && !o.demo && Object.keys(o.fcLig || {}).length) ? painelPastas(o) + h : h };
 CHG.sp12Pasta = el => { off()[el.dataset.k] = !el.checked; render() };
 
 /* ---------- fotos do KML nas ocorrências ---------- */
@@ -3929,17 +3930,33 @@ fcDaOc = function (o, oc) { const r = _fcd14.apply(this, arguments); try { const
 
 /* ---------- SP-17 (10/11/2026): toda foto de campo com coordenada fica LIGADA à ocorrência mais próxima (de qualquer obra) e aparece no balão dela; nada de ponto de foto solto ---------- */
 let __fcA = null, __fcAk = '';
-function fcAuto() { fcLocAplica(); const obras = Object.values(S.obras || {}).filter(o => camada(o));
-  const k = obras.map(o => o.id + ':' + (o.ocorrencias || []).length + ':' + Object.keys(o.fcLig || {}).length + ':' + Object.values(o.fcLoc || {}).map(v => v.em).join(',')).join('|'); if (__fcA && k === __fcAk) return __fcA;
+/* SP-30: tipo de via de obra criada pelo usuário (sem camada do KML), pelo nome: paralelepípedo/intertravado/asfalto = pavimentada */
+function tipoVia(o) { return camada(o) || (!o || o.demo ? null : /pr[óo]prio|predial|edifica/i.test(o.nome || '') ? 'prop' : /n[ãa]o[\s-]*pav|terra|cascalh/i.test((o.nome || '') + ' ' + (o.tipo || '')) ? 'np' : /paralelep|intertrav|bloquete|asfalt|pavim|cbuq|pedra/i.test(o.nome || '') ? 'p' : null) }
+function fcAuto() { fcLocAplica(); const obras = Object.values(S.obras || {}).filter(o => tipoVia(o));
+  const k = obras.map(o => o.id + ':' + (o.ocorrencias || []).length + ':' + (o.ocorrencias || []).filter(q => q.arquivo).length + ':' + Object.keys(o.fcLig || {}).length + ':' + Object.values(o.fcLoc || {}).map(v => v.em).join(',')).join('|'); if (__fcA && k === __fcAk) return __fcA;
   const m = {}; FC.forEach(x => { if (x.lat == null) return;
     if (obras.some(o => { const v = (o.fcLig || {})[x.a]; return v === '-' || (v && v !== '-') })) return; /* o usuário já ligou ou desligou à mão */
+    if (fcExpMap()[x.a]) return; /* SP-30: a ocorrência dela foi exportada para outra obra: a foto vai junto */
     if (x.o && x.e && obras.some(o => camada(o) === x.o && (o.ocorrencias || []).some(q => q.ext === x.e || (o.extAlias || {})[x.e] === q.ext))) return; /* já ligada pela leitura do carimbo */
-    let best = null; const alvo = x.sup || x.o; obras.forEach(o => { if (alvo && camada(o) !== alvo) return; let l = []; try { l = ativas(o) } catch (e) { l = o.ocorrencias || [] }
+    let best = null; const alvo = x.sup || x.o; obras.forEach(o => { if (alvo && tipoVia(o) !== alvo) return; let l = []; try { l = ativas(o) } catch (e) { l = o.ocorrencias || [] }
       l.forEach(q => { if (q.lat == null || q.lng == null) return; const d = distM(x, q); if (!best || d < best.d) best = { o: o.id, id: q.id, d } }) });
     if (best && best.d <= 400) m[x.a] = best });
   __fcA = m; __fcAk = k; return m }
 const _fcOk17 = fcOk;
 fcOk = function (o, x) { if (_fcOk17(o, x)) return true; const a = fcAuto()[x.a]; return !!(a && a.o === o.id) };
+/* SP-30: foto de campo cuja ocorrência foi EXPORTADA para outra obra (ex.: paralelepípedo/intertravado saindo do 078/2026)
+   vai junto: { arquivo: { o: obra destino, id: ocorrência destino } }. Vale para ligação pelo carimbo (ext) e ligação à mão. */
+var __fcX = null, __fcXk = '';
+function fcExpMap() { const obs = todasObras(); const k = obs.map(o => o.id + ':' + (o.ocorrencias || []).length + ':' + (o.ocorrencias || []).filter(q => q.arquivo).length + ':' + Object.keys(o.fcLig || {}).length).join('|');
+  if (__fcX && k === __fcXk) return __fcX; const m = {};
+  const segue = (o, q) => { for (let i = 0; i < 6 && q && q.arquivo && q.arquivo.enviadoPara && q.arquivo.enviadoPara.tipo === 'exportado'; i++) { const ep = q.arquivo.enviadoPara, d = S.obras[ep.obraId]; if (!d) return null; const n = (d.ocorrencias || []).find(c => c.num === ep.num && c.veioDe && c.veioDe.obraId === o.id); if (!n) return null; o = d; q = n } return q && o ? { o: o.id, id: q.id, oc: q } : null };
+  FC.forEach(x => { let o0 = null, q0 = null;
+    obs.forEach(o => { const v = (o.fcLig || {})[x.a]; if (v && v !== '-' && v !== '@') { const q = (o.ocorrencias || []).find(c => c.id === v); if (q) { o0 = o; q0 = q } } });
+    if (!o0 && x.o && x.e && !obs.some(o => (o.fcLig || {})[x.a])) obs.forEach(o => { if (q0 || camada(o) !== x.o) return; const al = o.extAlias || {}; const q = (o.ocorrencias || []).find(c => c.ext === x.e || (al[x.e] && c.ext === al[x.e])); if (q) { o0 = o; q0 = q } });
+    if (!o0 || !q0 || !q0.arquivo) return; const r = segue(o0, q0); if (r && r.o !== o0.id) m[x.a] = r });
+  __fcX = m; __fcXk = k; return m }
+const _fcd30 = fcDaOc;
+fcDaOc = function (o, oc) { const r = _fcd30.apply(this, arguments); if (!oc) return r; const X = fcExpMap(); const mais = FC.filter(x => { const e = X[x.a]; return e && e.o === o.id && e.id === oc.id && r.indexOf(x) < 0 }); return mais.length ? r.concat(mais) : r };
 const _fcd17 = fcDaOc;
 fcDaOc = function (o, oc) { const r = _fcd17.apply(this, arguments); if (!oc) return r; const A = fcAuto(); const mais = FC.filter(x => { const a = A[x.a]; return a && a.o === o.id && a.id === oc.id && r.indexOf(x) < 0 }); return mais.length ? r.concat(mais) : r };
 window.__sp17Fotos = (o, x) => { const fs = (x.fotos || []).map(f => `<img data-foto="${f.id}" data-act="zoom" style="width:110px;height:82px;object-fit:cover;margin:3px 3px 0 0;border-radius:5px" alt="">`).join('') + kmlPend(x).map(t => foto(t, 110)).join('') + fcDaOc(o, x).map(q => fcFoto(q, 110)).join('');
@@ -4151,7 +4168,8 @@ const todasObras = () => Object.values(S.obras || {});
 function fcLocAplica() { const L0 = {}; todasObras().forEach(o => Object.entries(o.fcLoc || {}).forEach(([a, v]) => { L0[a] = v }));
   FC.forEach(x => { const v = L0[x.a]; if (v) { if (x.__orig === undefined) x.__orig = { lat: x.lat, lng: x.lng }; x.lat = v.lat; x.lng = v.lng; x.locUser = true; if (v.sup) { if (x.__sup0 === undefined) x.__sup0 = x.sup || null; x.sup = v.sup } if (v.rua && !x.rua) x.rua = v.rua } else if (x.locUser) { x.lat = x.__orig.lat; x.lng = x.__orig.lng; x.locUser = false } }) }
 /* a foto é desta obra? (ligada à mão a uma ocorrência dela, pelo carimbo na mesma camada, ou pela ocorrência mais próxima) */
-function fcDaObra(o, x) { fcAuto(); const v = (o.fcLig || {})[x.a]; if (v) return v !== '-';
+function fcDaObra(o, x) { fcAuto(); const ex = fcExpMap()[x.a]; if (ex) return ex.o === o.id; /* SP-30: foi junto com a ocorrência exportada */
+  const v = (o.fcLig || {})[x.a]; if (v) return v !== '-';
   if (todasObras().some(q => q !== o && (q.fcLig || {})[x.a])) return false;
   if (x.o) return x.o === camada(o); const a = fcAuto()[x.a]; return !!(a && a.o === o.id) }
 /* fotos sem localização nenhuma (em qualquer obra) */
@@ -4197,15 +4215,15 @@ const _sem26 = semearSp12;
 semearSp12 = function (o) { const n = _sem26.apply(this, arguments); try { if (camada(o)) { let ch = false; (o.planejamentos || []).forEach(q => { const e = plEstado(o, q); if (q.modelo) { if (!q.emUso && (e.sobra || e.falta)) { sp12Modelo(o, true); ch = true } } else if (e.sobra) { plSincroniza(o, q); ch = true } }); if (ch) saveObra(o) } } catch (e) { console.warn('plAuto', e) } return n };
 function arvore(o, todas) { const cam = camada(o), of = off(), K = k => o.id + '§' + k, on = k => !of[K(k)];
   const cb = (k, t, n, ind) => `<label class="chk" style="margin:2px 0 2px ${ind}px"><input type="checkbox" data-chg="sp12Pasta" data-o="${o.id}" data-k="${esc(k)}" ${on(k) ? 'checked' : ''}> ${t} <span class="muted small">(${n})</span></label>`;
-  const na = ativas(o).filter(x => pastaDe(x) === 'ATUAL').length, ks = cam ? pastasKml(o) : [], nk = ks.reduce((s0, q) => s0 + q[1], 0), dias = cam ? fcDias(o) : {}, nf = Object.values(dias).reduce((s0, q) => s0 + q.length, 0);
+  const na = ativas(o).filter(x => pastaDe(x) === 'ATUAL').length, ks = pastasKml(o), nk = ks.reduce((s0, q) => s0 + q[1], 0), dias = fcDias(o), nf = Object.values(dias).reduce((s0, q) => s0 + q.length, 0);
   const fotos = Object.keys(dias).sort().map(d => `<div style="margin:2px 0 4px 22px">${cb('FC|' + d, '📂 ' + (d === 'sem-data' ? 'sem data' : fdB(d)), dias[d].length + ' foto(s)', 0)}${on('FC|' + d) ? `<div style="margin-left:22px">${dias[d].map(x => `<div style="display:inline-block;vertical-align:top;width:156px;margin-right:4px">${fcThumb(x, 150)}<div class="small" style="line-height:1.25">${fcInfo(x)}${x.conf ? `<br><span style="color:#c0392b">⚠ ${esc(x.conf)}</span>` : ''}<br><button class="btn sm" data-act="sp12FcLigar" data-a="${x.a}" data-o="${o.id}">📌 Trocar</button> <button class="btn sm" data-act="sp19Loc" data-a="${x.a}">📍 Corrigir local</button></div></div>`).join('')}</div>` : ''}</div>`).join('');
   const corpo = `${cb('ATUAL', '📁 Ocorrências atuais', na, 0)}${on('ATUAL') ? listaOc(o, 'ATUAL', na) : ''}
-   ${cam ? cb('KML', '📁 Marcações do Google Earth — ' + tit[cam], nk, 0) + `<div style="columns:2;column-gap:20px">${ks.map(q => `<div style="break-inside:avoid">${cb(q[0], '📂 ' + esc(q[0].slice(4)), q[1], 22)}${on(q[0]) && on('KML') ? listaOc(o, q[0], q[1]) : ''}</div>`).join('')}</div>` : ''}
+   ${ks.length ? cb('KML', '📁 Marcações do Google Earth' + (cam ? ' — ' + tit[cam] : ' (vindas de outra obra)'), nk, 0) + `<div style="columns:2;column-gap:20px">${ks.map(q => `<div style="break-inside:avoid">${cb(q[0], '📂 ' + esc(q[0].slice(4)), q[1], 22)}${on(q[0]) && on('KML') ? listaOc(o, q[0], q[1]) : ''}</div>`).join('')}</div>` : ''}
    ${nf ? cb('FC', '📁 Fotos de campo — WhatsApp (Igor Rabelo, 03 a 09/11/2026)', nf, 0) + (on('FC') ? fotos : '') : ''}
    ${(cam || (o.planejamentos || []).length) ? pastaPlan(o, cb, on) : ''}`;
   if (!todas) return `<details open class="card" style="margin-bottom:12px;padding:10px 14px"><summary style="cursor:pointer;font-weight:700">📁 Pastas desta obra</summary><div style="margin-top:6px">${corpo}</div></details>`;
-  return `<details open style="border-top:1px solid var(--line);padding:6px 0"><summary style="cursor:pointer"><label class="chk" style="display:inline-flex;margin:0" onclick="event.stopPropagation()"><input type="checkbox" data-chg="sp12Pasta" data-o="${o.id}" data-k="@obra" ${on('@obra') ? 'checked' : ''}></label> <b>📂 ${esc(o.nome)}</b> <span class="muted small">— ${na} ocorrência(s) atuais${cam ? ' · ' + nk + ' marcação(ões) do Google Earth · ' + nf + ' foto(s) de campo' : ''}</span></summary><div style="margin:6px 0 0 14px">${on('@obra') ? corpo : '<p class="small muted">Obra desmarcada.</p>'}</div></details>` }
-painelPastas = function (o) { return camada(o) ? arvore(o, false) : '' };
+  return `<details open style="border-top:1px solid var(--line);padding:6px 0"><summary style="cursor:pointer"><label class="chk" style="display:inline-flex;margin:0" onclick="event.stopPropagation()"><input type="checkbox" data-chg="sp12Pasta" data-o="${o.id}" data-k="@obra" ${on('@obra') ? 'checked' : ''}></label> <b>📂 ${esc(o.nome)}</b> <span class="muted small">— ${na} ocorrência(s) atuais${(cam || nk) ? ' · ' + nk + ' marcação(ões) do Google Earth · ' + nf + ' foto(s) de campo' : nf ? ' · ' + nf + ' foto(s) de campo' : ''}</span></summary><div style="margin:6px 0 0 14px">${on('@obra') ? corpo : '<p class="small muted">Obra desmarcada.</p>'}</div></details>` }
+painelPastas = function (o) { return (camada(o) || (o && !o.demo && fcPasta(o).length)) ? arvore(o, false) : '' };
 CHG.sp12Pasta = el => { const o = el.dataset.o ? S.obras[el.dataset.o] : O(); if (!o) return; const of = off(), K = k => o.id + '§' + k, k = el.dataset.k, on = el.checked; of[K(k)] = !on;
   const filhos = k === 'KML' ? pastasKml(o).map(q => q[0]) : k === 'FC' ? Object.keys(fcDias(o)).map(d => 'FC|' + d) : k === 'PL' ? (o.planejamentos || []).map(q => 'PL|' + q.id) : k === '@obra' ? ['ATUAL', 'KML', 'FC', 'PL'].concat(pastasKml(o).map(q => q[0]), Object.keys(fcDias(o)).map(d => 'FC|' + d), (o.planejamentos || []).map(q => 'PL|' + q.id)) : [];
   filhos.forEach(f => { of[K(f)] = !on });
@@ -4224,7 +4242,8 @@ telaTodas = function () { const h = _telaTodasFC.apply(this, arguments); const i
 ACTS.sp19Loc = d => { const x = FC.find(f => f.a === d.a); if (!x) return; M = { t: 'sp19fc', a: x.a, pos: x.lat != null ? { lat: x.lat, lng: x.lng } : null, rua: '' };
   abrirModal(`<div class="mh"><h3>📍 Locar foto no mapa</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
    <div class="row gap" style="align-items:flex-start;flex-wrap:wrap"><img src="${FCURL + x.a}" style="max-width:100%;max-height:40vh;border-radius:8px;cursor:zoom-in" onclick="__sp12Ver('${FCURL + x.a}')" alt=""><div class="small muted">${esc(x.leg || '')}<br>${fcData(x)}<br>${esc(x.rua || '')}${x.locUser ? '<br><b>Localizada à mão</b>' : ''}</div></div>
-   <label>Tipo de via / obra desta foto<select id="fl-sup"><option value="">Automático (a ocorrência mais próxima)</option><option value="p" ${(x.sup || x.o) === 'p' ? 'selected' : ''}>Ruas pavimentadas</option><option value="np" ${(x.sup || x.o) === 'np' ? 'selected' : ''}>Ruas não pavimentadas</option><option value="prop" ${(x.sup || x.o) === 'prop' ? 'selected' : ''}>Imóveis próprios</option></select></label>
+   <label>Tipo de via / obra desta foto<select id="fl-sup"><option value="">Automático (a ocorrência mais próxima)</option><option value="p" ${(x.sup || x.o) === 'p' ? 'selected' : ''}>Ruas pavimentadas</option><option value="np" ${(x.sup || x.o) === 'np' ? 'selected' : ''}>Ruas não pavimentadas</option><option value="prop" ${(x.sup || x.o) === 'prop' ? 'selected' : ''}>Imóveis próprios</option>${(() => { const ob = obrasVisiveis().filter(q => !q.demo); if (!ob.length) return ''; let at = ''; const ex = fcExpMap()[x.a]; if (ex) at = ex.o; else todasObras().forEach(q => { const v = (q.fcLig || {})[x.a]; if (v && v !== '-') at = q.id; if (q.fcLoc && q.fcLoc[x.a] && q.fcLoc[x.a].obra) at = q.id });
+     return '<optgroup label="Obra escolhida (a foto vai para esta obra)">' + ob.map(q => `<option value="o:${q.id}" ${at === q.id ? 'selected' : ''}>${esc(q.nome)}</option>`).join('') + '</optgroup>' })()}</select></label>
    <label>Buscar pelo endereço<div class="row gap"><input id="fl-q" value="${esc(x.rua ? x.rua + (x.b ? ', ' + x.b : '') : '')}" placeholder="Rua, bairro" style="flex:1"><button class="btn" data-act="sp19Busca">🔎 Buscar</button></div></label><div id="fl-res"></div>
    <p class="small muted" style="margin:6px 0 0">Ou toque no mapa no local onde a foto foi tirada. Arraste o pino para ajustar.</p><div id="fl-map" class="pickmap"></div><p id="fl-st" class="small" style="margin:4px 0 0;color:#2563a8"></p></div>
    <div class="mf">${x.locUser ? `<button class="btn dan" data-act="sp19Limpa" data-a="${x.a}">Remover localização</button><span class="sp"></span>` : ''}<button class="btn" data-act="mClose">Cancelar</button><button class="btn pri" data-act="sp19Salva">Salvar localização</button></div>`);
@@ -4239,12 +4258,24 @@ ACTS.sp19Busca = () => { const q = ($('#fl-q').value || '').trim(); if (!q) { to
     M.geo = r; $('#fl-res').innerHTML = '<div class="geo">' + r.map((x, i) => `<button data-act="sp19Esc" data-i="${i}">${esc(x.display_name)}</button>`).join('') + '</div>' }).catch(() => { $('#fl-res').innerHTML = '<p class="small muted">Busca indisponível (sem internet?). Toque no mapa para marcar o ponto.</p>' }) };
 ACTS.sp19Esc = d => { const x = M.geo && M.geo[+d.i]; if (!x || !M.setPin) return; M.rua = String(x.display_name || '').split(',')[0]; M.setPin(parseFloat(x.lat), parseFloat(x.lon), true); $('#fl-res').innerHTML = '' };
 ACTS.sp19Salva = () => { if (!M || M.t !== 'sp19fc') return; if (!M.pos) { toast('Marque o local no mapa ou escolha um resultado da busca.'); return } const x = FC.find(f => f.a === M.a); if (!x) return;
-  const supEsc = ($('#fl-sup') && $('#fl-sup').value) || ''; let best = null; todasObras().forEach(o => { if (supEsc && camada(o) !== supEsc) return; let l = []; try { l = ativas(o) } catch (e) { l = o.ocorrencias || [] } l.forEach(q => { if (q.lat == null || q.lng == null) return; const dd = distM(M.pos, q); if (!best || dd < best.d) best = { o, q, d: dd } }) });
+  const sel0 = ($('#fl-sup') && $('#fl-sup').value) || '', obEsc = sel0.startsWith('o:') ? S.obras[sel0.slice(2)] : null, supEsc = obEsc ? '' : sel0;
+  if (obEsc) return sp30SalvaObra(x, obEsc);
+  let best = null; todasObras().forEach(o => { if (supEsc && camada(o) !== supEsc) return; let l = []; try { l = ativas(o) } catch (e) { l = o.ocorrencias || [] } l.forEach(q => { if (q.lat == null || q.lng == null) return; const dd = distM(M.pos, q); if (!best || dd < best.d) best = { o, q, d: dd } }) });
   const host = best ? best.o : (obrasVisiveis().find(o => !supEsc || camada(o) === supEsc) || O() || obrasVisiveis()[0]); if (!host) { toast('Nenhuma obra disponível para guardar a localização.'); return }
   todasObras().forEach(o => { let ch = false; if (o !== host && o.fcLoc && o.fcLoc[M.a]) { delete o.fcLoc[M.a]; ch = true } if ((o.fcLig || {})[M.a] === '-') { delete o.fcLig[M.a]; ch = true } if (ch) saveObra(o) });
   host.fcLoc = host.fcLoc || {}; host.fcLoc[M.a] = { lat: +M.pos.lat.toFixed(6), lng: +M.pos.lng.toFixed(6), rua: M.rua || '', sup: supEsc || undefined, em: SP19_ISO(), quem: quem() }; saveObra(host);
   const msg = best ? 'Foto localizada e ligada à ocorrência nº ' + best.q.num + ' da obra “' + host.nome + '” (a ' + Math.round(best.d) + ' m).' : 'Foto localizada.'; fecharModal(false); render(); toast(msg, 5000) };
-ACTS.sp19Limpa = d => { if (!confirm('Remover a localização desta foto?')) return; todasObras().forEach(o => { if (o.fcLoc && o.fcLoc[d.a]) { delete o.fcLoc[d.a]; saveObra(o) } }); fecharModal(false); render(); toast('Localização removida.') };
+/* SP-30: foto levada para a obra escolhida na lista (obras novas, ex.: Manutenção paralelepípedos / intertravados): liga à ocorrência
+   mais próxima DESSA obra (até 400 m) ou, sem ocorrência perto, fica na obra sem ocorrência (fcLig = '@'). Tira a foto das outras obras. */
+function sp30SalvaObra(x, host) { let best = null; let l = []; try { l = ativas(host) } catch (e) { l = host.ocorrencias || [] } l.forEach(q => { if (q.lat == null || q.lng == null) return; const dd = distM(M.pos, q); if (!best || dd < best.d) best = { q, d: dd } });
+  if (best && best.d > 400) best = null;
+  todasObras().forEach(o => { if (o === host) return; let ch = false; if (o.fcLoc && o.fcLoc[M.a]) { delete o.fcLoc[M.a]; ch = true } if (o.fcLig && o.fcLig[M.a]) { delete o.fcLig[M.a]; ch = true }
+    /* a foto saiu desta obra de propósito: desliga aqui para a ligação pelo carimbo não puxá-la de volta */
+    if (!ch && fcDaObra(o, x)) { o.fcLig = o.fcLig || {}; o.fcLig[M.a] = '-'; ch = true } if (ch) saveObra(o) });
+  host.fcLoc = host.fcLoc || {}; host.fcLoc[M.a] = { lat: +M.pos.lat.toFixed(6), lng: +M.pos.lng.toFixed(6), rua: M.rua || '', obra: host.id, sup: tipoVia(host) || undefined, em: SP19_ISO(), quem: quem() };
+  host.fcLig = host.fcLig || {}; host.fcLig[M.a] = best ? best.q.id : '@'; saveObra(host);
+  fecharModal(false); render(); toast(best ? 'Foto levada para a obra “' + host.nome + '”, na ocorrência nº ' + best.q.num + ' (a ' + Math.round(best.d) + ' m).' : 'Foto levada para a obra “' + host.nome + '” (sem ocorrência a até 400 m; fica na pasta de fotos de campo da obra).', 6000) }
+ACTS.sp19Limpa = d => { if (!confirm('Remover a localização desta foto?')) return; const eraObra = todasObras().some(o => o.fcLoc && o.fcLoc[d.a] && o.fcLoc[d.a].obra); todasObras().forEach(o => { let ch = false; if (o.fcLoc && o.fcLoc[d.a]) { delete o.fcLoc[d.a]; ch = true } if (eraObra && o.fcLig && o.fcLig[d.a]) { delete o.fcLig[d.a]; ch = true } if (ch) saveObra(o) }); fecharModal(false); render(); toast('Localização removida.') };
 /* PATCH SP-28 (10/11/2026): “🔎 Buscar” da janela “Locar foto” não achava nada com o endereço do carimbo (“Rua Des. Elis
    Hermidyo Figueira, 2013, Jardim Campomar”) e, quando achava, só dava zoom depois de tocar no resultado. Agora:
    1) procura primeiro nas ruas que o programa já conhece (ocorrências de todas as obras, marcações do Google Earth e fotos
