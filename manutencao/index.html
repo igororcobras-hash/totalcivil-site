@@ -3883,10 +3883,18 @@ function sp14Dedup(o) {
   (o.planejamentos || []).forEach(p => { const vis = new Set(); p.itens = (p.itens || []).map(it => remap[it.ocId] ? Object.assign({}, it, { ocId: remap[it.ocId] }) : it).filter(it => { if (vis.has(it.ocId)) return false; vis.add(it.ocId); return true }) });
   Object.keys(o.fcLig || {}).forEach(a => { if (remap[o.fcLig[a]]) o.fcLig[a] = remap[o.fcLig[a]] });
   o.dedup14 = { n: (o.dedup14 ? o.dedup14.n : 0) + n, em: '2026-11-10' };
-  try { (o.planejamentos || []).filter(p => p.modelo).forEach(() => { sp12Modelo(o) }) } catch (e) { }
+  try { if ((o.planejamentos || []).some(p => p.modelo)) sp12Modelo(o, true) } catch (e) { }
   return n }
 const _sem14 = semearSp12;
-semearSp12 = function (o) { const r = _sem14.apply(this, arguments); try { if (sp14Dedup(o)) saveObra(o) } catch (e) { console.warn('dedup', e) } return r };
+/* planejamentos repetidos: mesmo nome e mesmas ocorrências (ou mais de um “modelo”) ficam só com um */
+function sp14DedupPlanos(o) { const L = o.planejamentos || []; if (L.length < 2) return 0; const sig = p => (p.modelo ? 'MODELO' : p.nome) + '|' + (p.itens || []).map(i => i.ocId + '@' + i.dia).sort().join(','); const sigM = p => p.modelo ? 'MODELO' : null;
+  const manter = new Map(); L.forEach(p => { const k = p.modelo ? 'MODELO' : sig(p); const a = manter.get(k); if (!a || (p.emUso && !a.emUso) || (!!p.emUso === !!a.emUso && String(p.criadoEm || '') > String(a.criadoEm || ''))) manter.set(k, p) });
+  const fora = L.filter(p => manter.get(p.modelo ? 'MODELO' : sig(p)) !== p); if (!fora.length) return 0;
+  const ids = new Set(fora.map(p => p.id)); o.planejamentos = L.filter(p => !ids.has(p.id));
+  (o.ocorrencias || []).forEach(x => { if (ids.has(x.planId)) { const k = L.find(p => p.id === x.planId); const q = k && manter.get(k.modelo ? 'MODELO' : sig(k)); x.planId = q && q.emUso ? q.id : undefined } });
+  try { (o.ocorrencias || []).forEach(x => { if (x.planId === undefined) delete x.planId }) } catch (e) { }
+  o.dedupPlanos14 = { n: (o.dedupPlanos14 ? o.dedupPlanos14.n : 0) + fora.length, em: '2026-11-10' }; return fora.length }
+semearSp12 = function (o) { const r = _sem14.apply(this, arguments); try { const a = sp14Dedup(o), b = sp14DedupPlanos(o); if (a || b) saveObra(o) } catch (e) { console.warn('dedup', e) } return r };
 /* fotos de campo ligadas a marcações removidas passam para a marcação mantida */
 const _fcd14 = fcDaOc;
 fcDaOc = function (o, oc) { const r = _fcd14.apply(this, arguments); try { const al = o.extAlias || {}; if (!oc || !oc.ext || !Object.keys(al).length) return r; const cam = camada(o); const mais = FC.filter(x => !(o.fcLig || {})[x.a] && cam && x.o === cam && al[x.e] === oc.ext); return r.concat(mais) } catch (e) { return r } };
