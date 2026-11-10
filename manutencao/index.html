@@ -3598,11 +3598,13 @@ function balao(o, p, r, cor, extra) { const x = r.x, gc = verCusto(); const ft =
    <div style="margin-top:6px"><button class="btn sm" data-act="sp12OcAbrir" data-o="${o.id}" data-id="${x.id}">📷 Abrir / anexar fotos</button></div></div>` }
 /* novo desenho: rotas por dia/semana/mês, raio de atendimento, fotos */
 desenhaPlanos = function (map, lista) { if (!map || typeof L === 'undefined') return null; const g = L.featureGroup().addTo(map); const R0 = RT();
+  /* rotas e raios ficam numa camada de baixo e o raio não recebe toque: o toque vai sempre para o ponto (no celular o toque no raio só mostrava um quadro vazio) */
+  const fundo = 'sp12fundo'; if (!map.getPane(fundo)) { map.createPane(fundo).style.zIndex = 350 }
   map.on('popupopen', e => { try { hydrate(e.popup.getElement()) } catch (er) { } });
   lista.forEach(({ o, p }) => { const cor = corPl(o, p); const gs = gruposRota(o, p, R0.modo === 'nao' ? 'dia' : R0.modo);
     gs.forEach((gr, gi) => { if (R0.sel && R0.modo !== 'nao' && gr.k !== R0.sel) return; const com = gr.ord.filter(r => r.x.lat != null); const lab = R0.modo === 'nao' ? '' : rotG(R0.modo, gr.k);
-      if (R0.modo !== 'nao' && com.length > 1) L.polyline(com.map(r => [r.x.lat, r.x.lng]), { color: cor, weight: 3, opacity: .8 }).addTo(g).bindTooltip(`${lab} · rota ≈ ${fN(gr.km, 1)} km · ${gr.l.length} ocorr.`, { sticky: true });
-      if (R0.modo !== 'nao' && R0.raio && gr.cen && com.length > 1) L.circle([gr.cen.lat, gr.cen.lng], { radius: Math.max(gr.raio, 60), color: cor, weight: 1.5, dashArray: '6 5', fillOpacity: .06 }).addTo(g)
+      if (R0.modo !== 'nao' && com.length > 1) L.polyline(com.map(r => [r.x.lat, r.x.lng]), { color: cor, weight: 3, opacity: .8, pane: fundo }).addTo(g).bindTooltip(`${lab} · rota ≈ ${fN(gr.km, 1)} km · ${gr.l.length} ocorr.`, { sticky: true });
+      if (R0.modo !== 'nao' && R0.raio && gr.cen && com.length > 1) L.circle([gr.cen.lat, gr.cen.lng], { radius: Math.max(gr.raio, 60), color: cor, weight: 1.5, dashArray: '6 5', fillOpacity: .06, pane: fundo, interactive: false }).addTo(g)
         .bindTooltip(`${lab} · raio de atendimento ${fN(gr.raio / 1000, 2)} km · ${gr.l.length} ocorr.${verCusto() ? ' · ' + fR(gr.custo) : ''}`, { sticky: true });
       com.forEach((r, i) => { const m = L.circleMarker([r.x.lat, r.x.lng], { radius: 8, fillColor: cor, color: '#fff', weight: 2, fillOpacity: .95 }).addTo(g);
         if (R0.modo !== 'nao' && R0.sel) m.bindTooltip(String(i + 1), { permanent: true, direction: 'center', className: 'sp12num' }); else m.bindTooltip(`${fdB(r.it.dia)} · #${r.x.num}`, { direction: 'top' });
@@ -3773,6 +3775,9 @@ ACTS.sp12FcSem = () => { const o = O(); if (!o) return; const l = fotosSemLocal(
 const _pp2 = painelPastas;
 painelPastas = function (o) { let h = _pp2(o); if (!h || !camada(o)) return h; const n = fotosSemLocal(o).length; if (!n) return h;
   return h.replace(/<\/div><\/details>$/, `<div class="small" style="margin:6px 0 0 22px">⚠ ${n} foto(s) de campo sem rua nem coordenada legível <button class="btn sm" data-act="sp12FcSem">📋 Ver quais são</button></div></div></details>`) };
+
+/* sem o contorno de foco do navegador (quadro preto) ao tocar em linhas e pontos do mapa */
+try { const st = document.createElement('style'); st.textContent = '.leaflet-container .leaflet-interactive:focus,.leaflet-container path:focus{outline:none}'; document.head.appendChild(st) } catch (e) { }
 })();
 </script>
 
