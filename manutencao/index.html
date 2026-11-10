@@ -3421,9 +3421,10 @@ function sp12Custo(o, oc, mp) { const m = mp[oc.ext]; if (!m) return 0; return c
 /* SP-31: toda obra real com ocorrências tem planejamento modelo (não só as do KML), para entrar em “🗺 Todas as obras” e na união */
 function sp30Mod(o) { return !!o && !o.demo && !!(camada(o) || (o.ocorrencias || []).length) }
 function sp12Mapa(o) { const cam = camada(o) || tipoVia(o), mp = {}; if (cam === 'prop') PROP.imoveis.forEach((m, i) => { mp['KML-prop-' + i] = m }); else itensRua(cam).forEach((m, i) => { mp['KML-' + cam + '-' + (m.tp === 'van' ? 'van-' : '') + i] = m }); return mp }
-function sp12Modelo(o, forca, filtro) {
+function sp12Modelo(o, forca, filtro, cfg) {
   const cam = camada(o) || (sp30Mod(o) ? (tipoVia(o) || 'outra') : null); if (!cam) return null; o.planejamentos = o.planejamentos || [];
   const velho = o.planejamentos.find(p => p.modelo); if (velho && !forca) return null; if (velho && velho.emUso) return 'uso';
+  cfg = cfg || (velho && velho.frentes ? { frentes: velho.frentes, rec: velho.recursos } : null); const N = Math.max(1, Math.min(20, Math.round(+(cfg && cfg.frentes) || 1)));
   const mp = sp12Mapa(o);
   const ab = ativas(o).filter(x => x.status !== 'medida' && x.status !== 'executada' && !o.execucoes.some(e => e.ocorrenciaId === x.id))
     .filter(x => !(cam === 'prop' && mp[x.ext] && mp[x.ext].sit === 'cadastro')).filter(x => !filtro || filtro(x));
@@ -3433,13 +3434,14 @@ function sp12Modelo(o, forca, filtro) {
   let dia = '2026-11-16', carga = 0; const util = d => { while ([0, 6].includes(pd(d).getUTCDay())) d = addDias(d, 1); return d };
   dia = util(dia); const itens = [], ds = new Set(); let custo = 0;
   ab.forEach(oc => { let du = sp12Dur(o, oc, mp);
-    if (carga > 0 && carga + du > 1.0001) { dia = util(addDias(dia, 1)); carga = 0 }
-    itens.push({ ocId: oc.id, num: oc.num, dia, semana: isoWeek(dia), svc: oc.servicoId || oc.servSug || '', q: 0, assum: false }); ds.add(dia); custo += sp12Custo(o, oc, mp);
-    carga += du; while (carga >= 1 - 1e-9) { carga -= 1; dia = util(addDias(dia, 1)); if (carga > 1e-9) ds.add(dia); else carga = 0 } });
+    if (carga > 0 && carga + du > N + 0.0001) { dia = util(addDias(dia, 1)); carga = 0 }
+    itens.push({ ocId: oc.id, num: oc.num, frente: Math.min(N, Math.floor(carga + 1e-9) + 1), dia, semana: isoWeek(dia), svc: oc.servicoId || oc.servSug || '', q: 0, assum: false }); ds.add(dia); custo += sp12Custo(o, oc, mp);
+    carga += du; while (carga >= N - 1e-9) { carga -= N; dia = util(addDias(dia, 1)); if (carga > 1e-9) ds.add(dia); else carga = 0 } });
   const dl = [...ds].sort();
-  const p = { id: 'pl' + uid(), modelo: true, nome: '📐 Planejamento modelo — todas as ocorrências (1 frente de serviço, a partir de 16/11/2026)', tipo: 'instruido', modo: 'todos', base: '', criadoEm: new Date().toISOString(), por: 'Gerado automaticamente como modelo (ponto de partida)', emUso: false, itens,
+  const p = { id: 'pl' + uid(), modelo: true, nome: '📐 Planejamento modelo — todas as ocorrências (' + N + (N > 1 ? ' frentes' : ' frente') + ' de serviço, a partir de 16/11/2026)', frentes: N, recursos: (cfg && cfg.rec) || null, tipo: 'instruido', modo: 'todos', base: '', criadoEm: new Date().toISOString(), por: 'Gerado automaticamente como modelo (ponto de partida)', emUso: false, itens,
     resumo: { n: itens.length, dias: dl.length, m3: 0, t: 0, cargas: 0, custo: Math.round(custo * 100) / 100, ini: dl[0] || '', fim: dl[dl.length - 1] || '', resto: 0 } };
   if (velho) o.planejamentos = o.planejamentos.filter(q => q !== velho); o.planejamentos.push(p); return p }
+window.__sp12Modelo = sp12Modelo;
 const _sem2 = semearSp12;
 semearSp12 = function (o) { const n = _sem2(o); try { if (sp30Mod(o) && !(o.planejamentos || []).some(p => p.modelo)) { if (sp12Modelo(o)) saveObra(o) } } catch (e) { console.warn('modelo', e) } return n };
 ACTS.sp12Modelo = function () { const o = O(); if (!(typeof canPI === 'function' ? canPI() : can('medicao'))) { toast('Só o Gestor / Secretário refaz o planejamento modelo.'); return }
@@ -3449,7 +3451,7 @@ ACTS.sp12Modelo = function () { const o = O(); if (!(typeof canPI === 'function'
 const _tabS = tabSp12;
 tabSp12 = function (o) { const h = _tabS.apply(this, arguments); const p = (o.planejamentos || []).find(x => x.modelo);
   const fd2 = d => (d || '').split('-').reverse().join('/');
-  const card = `<div class="alert" style="margin:0 0 12px">📐 <b>Planejamento modelo</b>: ${p ? `${p.itens.length} ocorrência(s) em ${p.resumo.dias} dia(s) úteis (${fd2(p.resumo.ini)} a ${fd2(p.resumo.fim)}), 1 frente de serviço, agrupado por bairro (produção adotada: tapa-buraco 15 pontos/dia; recapeamento 1.500 m²/dia; não pavimentadas 2.500 m²/dia; próprios R$ 12 mil/dia de serviço). Está na aba <b>Planejamento › 📚 Planejamentos salvos</b>: use “✅ Usar este” para adotar como está, ou “Duplicar” para partir dele.` : 'ainda não gerado.'} <button class="btn" data-act="sp12Modelo" style="margin-left:8px">↻ Refazer modelo</button></div>`;
+  const card = `<div class="alert" style="margin:0 0 12px">📐 <b>Planejamento modelo</b>: ${p ? `${p.itens.length} ocorrência(s) em ${p.resumo.dias} dia(s) úteis (${fd2(p.resumo.ini)} a ${fd2(p.resumo.fim)}), ${p.frentes || 1} frente(s) de serviço${p.recursos ? ' · recursos escolhidos: ' + (p.recursos.eq || []).length + ' equip., ' + (p.recursos.mat || []).length + ' mat., ' + (p.recursos.mo || []).length + ' mão de obra' : ''}, agrupado por bairro (produção adotada: tapa-buraco 15 pontos/dia; recapeamento 1.500 m²/dia; não pavimentadas 2.500 m²/dia; próprios R$ 12 mil/dia de serviço). Está na aba <b>Planejamento › 📚 Planejamentos salvos</b>: use “✅ Usar este” para adotar como está, ou “Duplicar” para partir dele.` : 'ainda não gerado.'} <button class="btn" data-act="sp12Modelo" style="margin-left:8px">↻ Refazer modelo</button></div>`;
   return h.replace('<div class="kpis">', card + '<div class="kpis">') };
 
 /* ---------- SP-12d (09/11/2026): programação mensal / de data a data e planejamento em “🗺 Todas as obras” ---------- */
@@ -3629,7 +3631,7 @@ function relPlanos(lista) { const gc = verCusto(); const hoje = new Date().toLoc
      ${tbl('Por semana', porS, (a, b) => a[0].localeCompare(b[0]), 'Semana')}${tbl('Por bairro', porB, (a, b) => b[1].c - a[1].c || b[1].n - a[1].n, 'Bairro')}${tbl('Por pasta', porP, (a, b) => b[1].n - a[1].n, 'Pasta')}${tbl('Por situação', porSt, (a, b) => b[1].n - a[1].n, 'Situação')}
      <h2>3. Programação dia a dia</h2>${dias.map((d, k) => { const l = rs.filter(r => r.it.dia === d); return `<h3><span style="color:${PLC[k % PLC.length]}">●</span> Dia ${k + 1} — ${fdB(d)} (${['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][pd(d).getUTCDay()]}, semana ${isoWeek(d).split('-W')[1]}) · ${l.length} ocorrência(s)${gc ? ' · ' + fR(l.reduce((s, r) => s + r.c, 0)) : ''}</h3>
        <table><thead><tr><th>Nº</th><th>Local</th><th>Bairro / pasta</th><th>Relato / serviço previsto</th><th>Prior.</th><th>Situação</th><th class="r">Fotos</th>${gc ? '<th class="r">Custo (R$)</th>' : ''}</tr></thead><tbody>${l.map(r => `<tr><td>#${r.x.num}</td><td>${esc(ocLocal(r.x))}${r.x.lat != null ? '<br><span class="n">' + fN(r.x.lat, 5) + ', ' + fN(r.x.lng, 5) + '</span>' : ''}</td><td>${esc(r.x.bairro || '')}<br><span class="n">${esc(pastaDe(r.x) === 'ATUAL' ? 'Ocorrências atuais' : 'KML · ' + pastaDe(r.x).slice(4))}</span></td><td>${esc((r.x.desc || '').slice(0, 220))}${r.sv ? '<br><b>Serviço:</b> ' + esc(r.sv.descricao) : ''}${r.it.q ? ' · ' + fN(r.it.q) + (r.sv ? ' ' + esc(r.sv.unidade) : '') : ''}</td><td>${esc((PRI[priEf(r.x)] || {}).l || '')}</td><td>${esc((ST[r.x.status] || {}).l || r.x.status)}</td><td class="r">${fotosN(r)}</td>${gc ? `<td class="r">${fN(r.c)}</td>` : ''}</tr>`).join('')}</tbody></table>` }).join('')}
-     <h2>4. Premissas</h2><ul><li>Datas em dias úteis (sem sábado e domingo) e sem feriados; confira o calendário municipal.</li><li>${p.modelo ? 'Planejamento modelo: 1 frente de serviço, agrupado por bairro e prioridade; produção adotada: tapa-buraco 15 pontos/dia, recapeamento 1.500 m²/dia, não pavimentadas 2.500 m²/dia, próprios R$ 12 mil/dia de serviço.' : 'Datas e ordem conforme o planejamento salvo (' + esc(tipoNome(p)) + ').'}</li>${gc ? '<li>Custos: marcações do KML pela estimativa do relatório de manutenção (EMOP out/2024 e SINAPI 09/2026, com BDI de 25%); demais ocorrências pelo serviço e quantidade levantados no contrato (sem levantamento, R$ 0). Estimativa de planejamento, não é preço contratado nem medição.</li>' : '<li>Custos não aparecem neste perfil.</li>'}<li>Ocorrências já executadas ou medidas não entram em planejamentos novos.</li></ul>
+     <h2>4. Premissas</h2><ul><li>Datas em dias úteis (sem sábado e domingo) e sem feriados; confira o calendário municipal.</li><li>${p.modelo ? 'Planejamento modelo: ' + (p.frentes || 1) + ' frente(s) de serviço, agrupado por bairro e prioridade; produção adotada: tapa-buraco 15 pontos/dia, recapeamento 1.500 m²/dia, não pavimentadas 2.500 m²/dia, próprios R$ 12 mil/dia de serviço.' : 'Datas e ordem conforme o planejamento salvo (' + esc(tipoNome(p)) + ').'}</li>${gc ? '<li>Custos: marcações do KML pela estimativa do relatório de manutenção (EMOP out/2024 e SINAPI 09/2026, com BDI de 25%); demais ocorrências pelo serviço e quantidade levantados no contrato (sem levantamento, R$ 0). Estimativa de planejamento, não é preço contratado nem medição.</li>' : '<li>Custos não aparecem neste perfil.</li>'}<li>Ocorrências já executadas ou medidas não entram em planejamentos novos.</li></ul>
      ${semC.length ? `<h2>5. Ocorrências sem coordenadas</h2><p>${semC.map(r => '#' + r.x.num + ' ' + esc(ocLocal(r.x))).join(' · ')}</p>` : ''}</section>` }).join('<div style="page-break-after:always"></div>');
   const resumo = lista.length > 1 ? `<h1>Relatório dos planejamentos no mapa</h1><p class="n">${lista.length} planejamento(s) · gerado em ${hoje}</p><table><thead><tr><th>Cor</th><th>Obra</th><th>Planejamento</th><th class="r">Ocorrências</th><th class="r">Dias</th><th>Período</th>${gc ? '<th class="r">Custo (R$)</th>' : ''}</tr></thead><tbody>${lista.map(({ o, p }) => { const rs = ocsDoPlano(o, p); const c = gc ? rs.reduce((s, r) => s + custoOc(o, r.x), 0) : 0; const r = p.resumo || {}; return `<tr><td style="background:${corPl(o, p)}"></td><td>${esc(o.nome)}</td><td>${esc(p.nome)}</td><td class="r">${rs.length}</td><td class="r">${r.dias || 0}</td><td>${fdB(r.ini)} a ${fdB(r.fim)}</td>${gc ? '<td class="r">' + fN(c) + '</td>' : ''}</tr>` }).join('')}</tbody></table>
     ${mapaRel(lista.flatMap(({ o, p }) => ocsDoPlano(o, p).filter(r => r.x.lat != null).map(r => ({ lat: r.x.lat, lng: r.x.lng, cor: corPl(o, p) }))), 760, 520)}<div style="page-break-after:always"></div>` : '';
@@ -4982,6 +4984,60 @@ ocCard = function (o, oc) { const h = _card18.apply(this, arguments); if (!oc ||
     pronto = true; rola(r.y || 0); return true;
   }
   var n = 0, iv = setInterval(function () { if (tenta() || ++n > 100) { clearInterval(iv); pronto = true; } }, 300);
+})();
+</script>
+<script>
+/* SP-33 (10/11/2026): “↻ Refazer modelo” pergunta quantas frentes e quais equipamentos, materiais e mão de obra; item novo digitado entra no catálogo (aparelho + cada obra, que vai à nuvem) */
+(function () {
+  var K = { eq: 'Equipamentos', mat: 'Materiais', mo: 'Mão de obra' };
+  function catalogo() {
+    var out = { eq: [], mat: [], mo: [] }, vis = { eq: {}, mat: {}, mo: {} };
+    function add(k, n, u) { n = String(n || '').trim(); if (!n) return; var c = n.toLowerCase(); if (vis[k][c]) return; vis[k][c] = 1; out[k].push([n, u || '']) }
+    try { Object.keys(SUG17).forEach(function (k) { SUG17[k].forEach(function (r) { add(k, r[0], r[1]) }) }) } catch (e) { }
+    var fontes = [S.settings && S.settings.catRec].concat(Object.keys(S.obras || {}).map(function (id) { return S.obras[id].catRec }));
+    fontes.forEach(function (c) { if (c) Object.keys(K).forEach(function (k) { (c[k] || []).forEach(function (r) { add(k, r[0], r[1]) }) }) });
+    Object.keys(S.obras || {}).forEach(function (id) { (S.obras[id].ocorrencias || []).forEach(function (x) { var i = x.insu; if (i) Object.keys(K).forEach(function (k) { (i[k] || []).forEach(function (r) { add(k, r[0], r[2]) }) }) }) });
+    Object.keys(out).forEach(function (k) { out[k].sort(function (a, b) { return a[0].localeCompare(b[0], 'pt-BR') }) });
+    return out;
+  }
+  function linha(k, n, u, ck) { return '<label class="chk" style="display:block;margin:2px 0"><input type="checkbox" class="s33c" data-k="' + k + '" data-n="' + esc(n) + '" data-u="' + esc(u) + '"' + (ck ? ' checked' : '') + '> ' + esc(n) + (u ? ' <span class="muted small">(' + esc(u) + ')</span>' : '') + '</label>' }
+  var _m = ACTS.sp12Modelo;
+  ACTS.sp12Modelo = function () {
+    var o = O(); if (!o) return;
+    if (!(typeof canPI === 'function' ? canPI() : can('medicao'))) { toast('Só o Gestor / Secretário refaz o planejamento modelo.'); return }
+    var velho = (o.planejamentos || []).find(function (p) { return p.modelo }), rec = (velho && velho.recursos) || {}, cat = catalogo();
+    var marc = function (k, n) { return (rec[k] || []).some(function (r) { return String(r[0]).toLowerCase() === n.toLowerCase() }) };
+    M = { t: 'sp33' };
+    abrirModal('<div class="mh"><h3>📐 Planejamento modelo</h3><button class="x" data-act="mCancel">×</button></div><div class="mb">' +
+      '<label>Quantas frentes de serviço?<input id="s33-fr" type="number" min="1" max="20" step="1" value="' + ((velho && velho.frentes) || 1) + '" style="width:90px"></label>' +
+      '<p class="small muted">Cada frente atende uma ocorrência por vez; mais frentes = mais ocorrências por dia e prazo menor.</p>' +
+      Object.keys(K).map(function (k) {
+        return '<h4 style="margin-top:12px">' + K[k] + '</h4><div id="s33-' + k + '" style="max-height:170px;overflow:auto;border:1px solid var(--line);border-radius:6px;padding:4px 8px">' + cat[k].map(function (r) { return linha(k, r[0], r[1], marc(k, r[0])) }).join('') + '</div>' +
+          '<div class="row gap" style="margin-top:4px"><input id="s33n-' + k + '" placeholder="Digitar novo (ex.: ' + (k === 'eq' ? 'Escavadeira' : k === 'mat' ? 'Pedrisco' : 'Calceteiro') + ')" style="flex:1"><input id="s33u-' + k + '" placeholder="unidade" value="' + (k === 'mo' ? 'homem-dia' : k === 'eq' ? 'diária' : '') + '" style="width:90px"><button class="btn sm" data-act="sp33Novo" data-k="' + k + '">＋ Incluir na lista</button></div>'
+      }).join('') +
+      '<p class="small muted" style="margin-top:8px">O item novo fica salvo na lista para os próximos planejamentos e para as demais obras.</p>' +
+      '<div class="row gap" style="justify-content:flex-end;margin-top:12px"><button class="btn" data-act="mCancel">Cancelar</button><button class="btn pri" data-act="sp33Ok">Gerar planejamento modelo</button></div></div>');
+  };
+  ACTS.sp33Novo = function (d) {
+    var k = d.k, n = (($('#s33n-' + k) || {}).value || '').trim(), u = (($('#s33u-' + k) || {}).value || '').trim(); if (!n) { toast('Digite o nome.'); return }
+    var ja = Array.prototype.some.call(document.querySelectorAll('#s33-' + k + ' .s33c'), function (c) { return c.dataset.n.toLowerCase() === n.toLowerCase() });
+    if (!ja) {
+      S.settings.catRec = S.settings.catRec || { eq: [], mat: [], mo: [] }; (S.settings.catRec[k] = S.settings.catRec[k] || []).push([n, u]); saveSettings();
+      Object.keys(S.obras || {}).forEach(function (id) { var ob = S.obras[id]; if (ob.demo) return; ob.catRec = ob.catRec || { eq: [], mat: [], mo: [] }; (ob.catRec[k] = ob.catRec[k] || []).push([n, u]); saveObra(ob) });
+      $('#s33-' + k).insertAdjacentHTML('afterbegin', linha(k, n, u, true));
+    } else { Array.prototype.forEach.call(document.querySelectorAll('#s33-' + k + ' .s33c'), function (c) { if (c.dataset.n.toLowerCase() === n.toLowerCase()) c.checked = true }) }
+    $('#s33n-' + k).value = ''; toast(ja ? 'Já estava na lista: marcado.' : 'Incluído na lista e salvo.');
+  };
+  ACTS.sp33Ok = function () {
+    if (!M || M.t !== 'sp33') return; var o = O(); if (!o) return;
+    var N = Math.max(1, Math.min(20, Math.round(+($('#s33-fr').value) || 1))), rec = { eq: [], mat: [], mo: [] };
+    document.querySelectorAll('#modalBody .s33c:checked').forEach(function (c) { rec[c.dataset.k].push([c.dataset.n, c.dataset.u]) });
+    var r = window.__sp12Modelo(o, true, undefined, { frentes: N, rec: rec });
+    if (r === 'uso') { toast('O planejamento modelo está em uso. Duplique-o ou deixe de usá-lo antes de refazer.', 6000); return }
+    if (!r) { toast('Não há ocorrências abertas para planejar.'); return }
+    saveObra(o); fecharModal(false); render();
+    toast('Planejamento modelo: ' + r.itens.length + ' ocorrência(s), ' + N + ' frente(s), ' + r.resumo.dias + ' dia(s) úteis.', 6000);
+  };
 })();
 </script>
 </body>
