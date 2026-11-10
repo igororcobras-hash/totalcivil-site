@@ -4463,5 +4463,109 @@ processarFoto = async function (file, camera) {
 })();
 </script>
 
+<script>
+/* =====================================================================
+   PATCH SP-18 (10/11/2026): aviso de ocorrência repetida.
+   Ao SALVAR um relato NOVO, procura na obra uma ocorrência igual (mesmo ponto até 15 m pelas coordenadas, ou mesma
+   rua/endereço + bairro) e, se achar, avisa com a data em que ela foi incluída e pergunta:
+     • “Incluir como retrabalho” → grava o relato novo com oc.retrabalho = {de, num, em} (etiqueta 🔁 no cartão);
+     • “Não incluir”            → descarta o relato novo (e as fotos novas);
+     • “Só adicionar mais fotos” → leva as fotos novas para a ocorrência existente e não cria outra.
+   Só desenho/aviso: não muda cálculo, planejamento nem custo. Relato editado (não novo) não passa por aqui.
+   ===================================================================== */
+(function () {
+const RAIO = 15; /* metros */
+const norm = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[.,;:\-–/]/g, ' ').replace(/\b(rua|r|avenida|av|estrada|estr|rodovia|rod|travessa|tv|praca|pca|alameda|al)\b/g, ' ').replace(/\s+/g, ' ').trim();
+const metros = (a, b, c, d) => { const R = 6371000, t = x => x * Math.PI / 180, dl = t(c - a), dn = t(d - b);
+  const h = Math.sin(dl / 2) ** 2 + Math.cos(t(a)) * Math.cos(t(c)) * Math.sin(dn / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(h)); };
+const dataDe = oc => oc.criadoEm || (oc.hist && oc.hist[0] && oc.hist[0].q) || '';
+const fData = iso => { if (!iso) return ''; const d = new Date(iso); return isNaN(d) ? '' : d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'}); };
+
+function achaIguais(o, d) {
+  const rua = norm(d.rua), bai = norm(d.bairro), r = [];
+  (o.ocorrencias || []).forEach(x => {
+    if (x.id === d.id) return;
+    let igual = false, dist = null;
+    if (d.lat != null && d.lng != null && x.lat != null && x.lng != null) { dist = metros(+d.lat, +d.lng, +x.lat, +x.lng); if (dist <= RAIO) igual = true; }
+    if (!igual && rua && norm(x.rua) === rua && norm(x.bairro) === bai) igual = true;
+    if (igual) r.push({oc: x, dist});
+  });
+  r.sort((a, b) => String(dataDe(b.oc)).localeCompare(String(dataDe(a.oc))));
+  return r;
+}
+
+let pend = false, proximo = false;
+const _save18 = ACTS.ocSave;
+ACTS.ocSave = function () {
+  if (pend) return;
+  if (!(M && M.t === 'oc' && M.novo && !M.sp18ok)) return _save18.apply(this, arguments);
+  /* lê o formulário nos campos do relato antes de comparar (rua, bairro, coordenadas já estão em M.d) */
+  const d = M.d; d.rua = ($('#oc-rua') && $('#oc-rua').value.trim()) || d.rua; d.bairro = ($('#oc-bairro') && $('#oc-bairro').value.trim()) || d.bairro;
+  if (!d.rua && d.lat == null) return _save18.apply(this, arguments); /* deixa a validação original reclamar */
+  const o = O(), ig = achaIguais(o, d);
+  if (!ig.length) return _save18.apply(this, arguments);
+  aviso(o, d, ig);
+};
+
+const ACOES = {
+  retr(o, d, ant) {
+    d.retrabalho = {de: ant.id, num: ant.num, em: new Date().toISOString()};
+    d.hist = d.hist || []; log(d, 'Retrabalho: já existia a ocorrência nº ' + ant.num + (dataDe(ant) ? ' (incluída em ' + fData(dataDe(ant)) + ')' : ''));
+    M.sp18ok = true; const n = proximo; proximo = false;
+    _save18.call(ACTS);
+    if (n && O().ocorrencias.some(x => x.id === d.id)) ACTS.ocRapido();
+  },
+  nao() { proximo = false; fecharModal(true); toast('Relato não incluído.'); },
+  fotos(o, d, ant) {
+    const fs = d.fotos || [];
+    if (!fs.length) { toast('Este relato não tem fotos para adicionar. Tire ou escolha as fotos primeiro.'); return false; }
+    ant.fotos = ant.fotos || []; const tem = new Set(ant.fotos.map(f => f.id)); let n = 0;
+    fs.forEach(f => { if (!tem.has(f.id)) { ant.fotos.push(f); n++ } });
+    ant.hist = ant.hist || []; log(ant, n + ' foto(s) adicionada(s) por novo relato do mesmo local');
+    M.novas = []; saveObra(o); proximo = false; fecharModal(); render(); toast(n + ' foto(s) adicionada(s) à ocorrência nº ' + ant.num + '.');
+  }
+};
+
+function aviso(o, d, ig) {
+  pend = true;
+  const ant = ig[0].oc, em = fData(dataDe(ant)), nFotos = (d.fotos || []).length;
+  const ov = document.createElement('div'); ov.id = 'sp18';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:70;background:rgba(10,12,20,.6);display:flex;align-items:center;justify-content:center;padding:12px;overflow:auto';
+  const lista = ig.slice(1, 4).map(x => `<li>nº ${x.oc.num} — ${esc(fData(dataDe(x.oc)) || 'data não registrada')}</li>`).join('');
+  ov.innerHTML = `<div style="background:var(--card,#fff);color:inherit;border-radius:16px;max-width:520px;width:100%;padding:18px 20px;box-shadow:0 10px 40px rgba(0,0,0,.35)">
+    <h3 style="margin:0 0 8px">⚠ Ocorrência igual já cadastrada</h3>
+    <p style="margin:0 0 6px">Já existe a ocorrência <b>nº ${ant.num}</b> neste local${ig[0].dist != null ? ' (a ' + Math.round(ig[0].dist) + ' m)' : ''}: <b>${esc(ocLocal(ant))}</b>.</p>
+    <p style="margin:0 0 6px"><b>Incluída em: ${esc(em || 'data não registrada')}</b>${ant.status ? ' · situação: ' + esc(String(ant.status)) : ''}.</p>
+    ${ant.desc ? `<p class="small muted" style="margin:0 0 6px">${esc(String(ant.desc).slice(0, 160))}</p>` : ''}
+    ${lista ? `<p class="small muted" style="margin:0">Outras parecidas:</p><ul class="small muted" style="margin:2px 0 6px 18px;padding:0">${lista}</ul>` : ''}
+    <p style="margin:8px 0 12px">O que fazer com este relato novo?</p>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button class="btn pri" data-sp18="retr">🔁 Incluir como retrabalho</button>
+      <button class="btn" data-sp18="fotos">📷 Só adicionar mais fotos à nº ${ant.num}${nFotos ? ' (' + nFotos + ' foto' + (nFotos > 1 ? 's' : '') + ')' : ''}</button>
+      <button class="btn dan" data-sp18="nao">🚫 Não incluir</button>
+      <button class="btn sm" data-sp18="voltar">← Voltar e editar o relato</button>
+    </div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', e => {
+    const b = e.target.closest('[data-sp18]'); if (!b) return;
+    const a = b.dataset.sp18;
+    if (a === 'voltar') { ov.remove(); pend = false; proximo = false; return; }
+    const r = ACOES[a](o, d, ant); if (r === false) return;
+    ov.remove(); pend = false;
+  });
+}
+
+/* “Salvar e registrar a próxima”: só abre a câmera depois que o usuário escolher incluir */
+const _next18 = ACTS.ocSaveNext;
+ACTS.ocSaveNext = function () { proximo = true; try { _next18.apply(this, arguments) } finally { if (!pend) proximo = false } };
+
+/* etiqueta no cartão */
+const _card18 = ocCard;
+ocCard = function (o, oc) { const h = _card18.apply(this, arguments); if (!oc || !oc.retrabalho) return h;
+  const chip = `<span class="chip" style="--c:#b8450f" title="Retrabalho da ocorrência nº ${oc.retrabalho.num}">🔁 retrabalho da nº ${oc.retrabalho.num}</span>`;
+  return h.replace('<div class="chips">', '<div class="chips">' + chip); };
+})();
+</script>
+
 </body>
 </html>
