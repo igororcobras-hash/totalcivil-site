@@ -4325,6 +4325,93 @@ ACTS.sp19Esc = d => { const x = M && M.geo && M.geo[+d.i]; if (!x || !M.setPin) 
   $$('#fl-res .geo button').forEach((b, i) => { b.textContent = (i === +d.i ? '✔ ' : '') + b.textContent.replace(/^✔ /, '') }) };
 /* Enter no campo de endereço = Buscar */
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target && e.target.id === 'fl-q') { e.preventDefault(); ACTS.sp19Busca() } });
+/* PATCH SP-29 (10/11/2026): busca do “Locar foto” com o texto do carimbo SEM vírgulas (“2003 Rua Des. Elis Hermydio
+   Figueira Jardim Campomar Rio das Ostras Rio de Janeiro”) não achava nada: número, bairro, cidade e estado entravam como
+   nome da rua. Agora: (1) separa número, bairro (pelos bairros que o programa conhece), cidade/estado e o tipo de via
+   (Rua × Alameda × Avenida não precisa bater); (2) aceita COORDENADA no campo (decimal, graus/min/seg ou link do Google
+   Maps/Earth) e tem os botões “📍 Coordenada da foto” (já gravada) e “🔎 Ler na foto” (lê o carimbo, SP-13); (3) quando não
+   acha o endereço exato, mostra os ENDEREÇOS SEMELHANTES (ruas do programa e do OpenStreetMap) para escolher. */
+const SP29_CID = /\b(rio das ostras|rio de janeiro|estado do rio|brasil|brazil|cep\s*\d{5}-?\d{3}|\d{5}-\d{3})\b|\brj\b(?!\s*-?\s*\d)/g;
+const SP29_TIT = /^(desembargador|doutor|doutora|prefeito|professor|professora|engenheiro|governador|presidente|senador|deputado|vereador|coronel|capitao|general|marechal|tenente|sargento|comandante|padre|frei|dom|santa|santo|sao|nossa|senhora)$/;
+function sp29coord(q) { const t = String(q || '').trim(); let m = t.match(/^\s*(-?\d{1,2}[.,]\d{3,})\s*[,; ]\s*(-?\d{1,3}[.,]\d{3,})\s*$/);
+  let r = m ? { lat: +m[1].replace(',', '.'), lng: +m[2].replace(',', '.') } : null;
+  if (!r && window.__sp13) { try { const a = __sp13.coords1 && __sp13.coords1(t); if (a && a.lat != null) r = { lat: +a.lat, lng: +(a.lng != null ? a.lng : a.lon) } } catch (e) { }
+    if (!r) try { const g = __sp13.lerCoordenadas && __sp13.lerCoordenadas(t); if (g) r = { lat: +g.lat, lng: +(g.lon != null ? g.lon : g.lng) } } catch (e) { } }
+  if (r && r.lat > 0 && r.lat < 30 && r.lng > 30) { r.lat = -r.lat; r.lng = -r.lng }   /* carimbo sem sinal: Brasil é S/W */
+  return r && isFinite(r.lat) && isFinite(r.lng) && Math.abs(r.lat) <= 90 && Math.abs(r.lng) <= 180 ? r : null }
+let SP29_B = null;
+function sp29bairros() { if (SP29_B) return SP29_B; const s = {}; sp28fonte().forEach(v => { const b = sp28nz(v.b).replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim(); if (b.length >= 3) s[b] = v.b }); SP29_B = Object.keys(s).sort((a, b) => b.length - a.length).map(k => [k, s[k]]); return SP29_B }
+/* separa rua, número e bairro, com ou sem vírgulas */
+function sp29parte(q) { const P0 = sp28parte(q); let n = ' ' + sp28nz(q).replace(SP29_CID, ' ').replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim() + ' ';
+  let bairro = '', bz = ''; for (const [k, orig] of sp29bairros()) { if (n.includes(' ' + k + ' ')) { bairro = orig; bz = k; n = n.replace(' ' + k + ' ', ' '); break } }
+  if (!bairro && P0.bairro && !/rio das ostras|rio de janeiro/i.test(P0.bairro)) { bairro = P0.bairro; bz = P0.bz; n = n.replace(' ' + sp28nz(P0.bairro).replace(/[^a-z0-9 ]/g, ' ').trim() + ' ', ' ') }
+  let num = ''; n = n.replace(/\b(rj|br)\s+(\d{2,3})\b/g, '$1_$2').replace(/\b(n|no|numero)?\s*(\d{1,5})\b/g, (a, p, d) => { if (!num) num = d; return ' ' }).replace(/_/g, ' ');
+  const tk = n.split(/\s+/).filter(Boolean).map(t => SP28_ABR[t] || t); const sig = tk.filter(t => !SP28_TIPO.test(t) && !SP28_PAR.test(t));
+  const tipo = tk.find(t => SP28_TIPO.test(t)) || '';
+  return { rua: tk.join(' '), num, bairro, bz, tk, sig, tipo } }
+/* semelhança entre o que foi digitado e um nome de rua: 1 = todos os nomes batem */
+const sp29igual = (a, b) => a === b || (Math.min(a.length, b.length) >= 8 && sp28lev(a, b) <= 2) || (Math.min(a.length, b.length) >= 5 && sp28lev(a, b) <= 1) || (Math.min(a.length, b.length) >= 5 && (a.startsWith(b) || b.startsWith(a)));
+function sp29sim(P, nome) { const t = sp28tk(String(nome).split(/[,–—]/)[0].replace(/\s-\s.*$/, '')).filter(x => !/^\d+$/.test(x) && !SP28_TIPO.test(x) && !SP28_PAR.test(x)); if (!t.length || !P.sig.length) return { s: 0 };
+  const ok = P.sig.filter(a => t.some(b => sp29igual(a, b))); const raro = ok.filter(a => a.length >= 4 && !SP29_TIT.test(a) && !/^(jardim|parque|vila|centro|nova|novo|bela|boa)$/.test(a)).length;
+  const okT = t.filter(b => P.sig.some(a => sp29igual(a, b))).length;
+  return { s: (ok.length + okT) / (P.sig.length + t.length), exato: okT === t.length && ok.length >= P.sig.length - (P.sig.length >= 4 ? 1 : 0), raro } }
+function sp29local(P) { const vis = {}; sp28fonte().forEach(it => { const m = sp29sim(P, it.nome); if (!m.raro) return; const bOk = !!(P.bz && it.b && sp28nz(it.b).includes(P.bz));
+    const nOk = P.num && new RegExp('\\b' + P.num + '\\b').test(it.nome); const sc = m.s * 100 + (bOk ? 15 : 0) + (nOk ? 6 : 0) + (m.exato ? 30 : 0);
+    const k = sp28nz(String(it.nome).split(/[,–—]/)[0]).replace(/[^a-z]/g, '') + '|' + sp28nz(it.b); if (vis[k] && vis[k].sc >= sc) return; vis[k] = Object.assign({}, it, { sc, exato: m.exato && (!P.bz || bOk || !it.b), bOk }) });
+  return Object.values(vis).sort((a, b) => b.sc - a.sc) }
+function sp29formas(P) { const cap = s => s.replace(/\b[a-z]/g, c => c.toUpperCase()); const nome = cap(P.sig.join(' ')); const nom = P.sig.filter(t => !SP29_TIT.test(t)); const f = [];
+  if (nome) { if (P.num) f.push(nome + ', ' + P.num); f.push(nome); ['Rua', 'Alameda', 'Avenida'].forEach(t => f.push(t + ' ' + nome)) }
+  if (nom.length >= 2) { f.push(cap(nom.join(' '))); if (nom.length >= 3) f.push(cap(nom[0] + ' ' + nom[nom.length - 1])) }
+  const v = {}; return f.filter(s => s && !v[s.toLowerCase()] && (v[s.toLowerCase()] = 1)) }
+/* semelhantes no OpenStreetMap: cada nome “raro” sozinho (Hermydio, Figueira…) */
+function sp29formasSem(P) { const cap = s => s.replace(/\b[a-z]/g, c => c.toUpperCase()); return P.sig.filter(t => t.length >= 4 && !SP29_TIT.test(t)).sort((a, b) => b.length - a.length).slice(0, 3).map(cap) }
+ACTS.sp19Busca = async () => { const q = ($('#fl-q').value || '').trim(); if (!q) { toast('Digite a rua, o bairro ou a coordenada.'); return } const res = $('#fl-res'); if (!res) return;
+  const meu = (M && M.t === 'sp19fc') ? M : null; if (!meu) return; const seq = ++sp28seq; const vivo = () => M === meu && seq === sp28seq && $('#fl-res');
+  /* coordenada digitada/colada */
+  const co = sp29coord(q); if (co) { meu.rua = ''; meu.setPin(co.lat, co.lng, true); meu.geo = []; res.innerHTML = `<p class="small" style="margin:4px 0;color:#2563a8">📍 Mapa levado até a coordenada ${co.lat.toFixed(6)}, ${co.lng.toFixed(6)}. Arraste o pino se precisar.</p>`; return }
+  const P = sp29parte(q); res.innerHTML = '<p class="small muted">Buscando…</p>';
+  const lim = s => String(s).split(',').filter(x => !/^\s*(Rio das Ostras|Região|Rio de Janeiro|Brasil|\d{5}-?\d{3})/i.test(x)).slice(0, 4).join(',');
+  const cvOsm = j => (j || []).map(x => ({ lat: +x.lat, lon: +x.lon, rua: String(x.display_name).split(',')[0], display_name: lim(x.display_name) + ' — OpenStreetMap', sim: sp29sim(P, String(x.display_name).split(',')[0]) }));
+  const lista = (l, cab, cor) => { meu.geo = l; res.innerHTML = `<p class="small" style="margin:4px 0;color:${cor || '#2563a8'}">${cab}</p>` + (l.length ? '<div class="geo">' + l.map((x, i) => `<button data-act="sp19Esc" data-i="${i}">${x.sel ? '✔ ' : ''}${esc(x.display_name)}</button>`).join('') + '</div>' : '') };
+  const vai = x => { x.sel = true; meu.rua = String(x.rua || x.display_name || '').split(',')[0]; meu.setPin(+x.lat, +x.lon, true) };
+  const loc = sp29local(P).map(v => ({ lat: v.lat, lon: v.lng, rua: v.nome, exato: v.exato, display_name: v.nome + (v.b ? ', ' + v.b : '') + ' — ' + v.de }));
+  const locEx = loc.filter(x => x.exato), locSem = loc.filter(x => !x.exato);
+  /* 1) endereço exato nas ruas do programa */
+  if (locEx.length) { const l = locEx.concat(locSem).slice(0, 10); vai(l[0]); lista(l, '📍 Mapa levado até “' + esc(l[0].display_name) + '”. Confira e arraste o pino até o ponto exato da foto, ou escolha outro:');
+    try { const o2 = cvOsm(await sp28osm(sp29formas(P)[0] || q, true)); if (o2.length && vivo()) lista(l.concat(o2).slice(0, 12), res.querySelector('p').innerHTML) } catch (e) { } return }
+  /* 2) OpenStreetMap, várias formas */
+  let osm = [], semNet = false; const fs = sp29formas(P);
+  for (let i = 0; i < fs.length && !osm.length; i++) { if (!vivo()) return; try { if (i) await sp28dorme(1050); osm = cvOsm(await sp28osm(fs[i], true)).filter(x => x.sim.raro) } catch (e) { semNet = true; break } }
+  if (!vivo()) return;
+  if (osm.length) { const l = osm.concat(locSem).slice(0, 10); vai(l[0]); lista(l, '📍 Mapa levado até “' + esc(l[0].display_name) + '”. Confira e arraste o pino, ou escolha outro:'); return }
+  /* 3) endereços SEMELHANTES para escolher */
+  let sem = locSem.slice(0, 8);
+  if (!semNet) for (const f of sp29formasSem(P)) { if (!vivo()) return; try { await sp28dorme(1050); cvOsm(await sp28osm(f, true)).forEach(x => { if (x.sim.raro && !sem.some(y => y.display_name === x.display_name)) sem.push(x) }) } catch (e) { semNet = true; break } if (sem.length >= 12) break }
+  if (!vivo()) return;
+  if (sem.length) { sem = sem.slice(0, 12); lista(sem, `Não achei exatamente “${esc(q)}”. Endereços <b>semelhantes</b> — toque no certo para levar o mapa até ele (ou toque no mapa):`, '#b45309');
+    const bl = P.bz ? sp28fonte().filter(v => v.b && sp28nz(v.b).includes(P.bz)) : []; if (bl.length) meu.map.setView([bl.reduce((s, v) => s + v.lat, 0) / bl.length, bl.reduce((s, v) => s + v.lng, 0) / bl.length], 16); return }
+  /* 4) só o bairro */
+  if (P.bairro) { const bl = sp28fonte().filter(v => v.b && sp28nz(v.b).includes(P.bz)); let b = bl.length ? { lat: bl.reduce((s, v) => s + v.lat, 0) / bl.length, lon: bl.reduce((s, v) => s + v.lng, 0) / bl.length } : null;
+    if (!b && !semNet) { try { await sp28dorme(1050); const j = await sp28osm(P.bairro + ', Rio das Ostras', true); if (j[0]) b = { lat: +j[0].lat, lon: +j[0].lon } } catch (e) { } }
+    if (!vivo()) return; if (b) { meu.map.setView([b.lat, b.lon], 16); meu.geo = []; res.innerHTML = `<p class="small" style="margin:4px 0;color:#b45309">Rua não encontrada. Mostrando o bairro <b>${esc(P.bairro)}</b>: toque no local da foto para marcar o ponto.</p>`; return } }
+  res.innerHTML = semNet ? '<p class="small muted">Busca indisponível (sem internet?). Toque no mapa para marcar o ponto.</p>' : '<p class="small muted">Nenhum resultado nem endereço parecido. Toque no mapa para marcar o ponto.</p>' };
+ACTS.sp19Esc = d => { const l = (M && M.geo) || [], x = l[+d.i]; if (!x || !M.setPin) return; l.forEach(y => y.sel = false); x.sel = true; M.rua = String(x.rua || x.display_name || '').split(',')[0]; M.setPin(+x.lat, +x.lon, true);
+  $$('#fl-res .geo button').forEach((b, i) => { b.textContent = (i === +d.i ? '✔ ' : '') + b.textContent.replace(/^✔ /, '') });
+  const p = $('#fl-res > p'); if (p) { p.style.color = '#2563a8'; p.innerHTML = '📍 Mapa levado até “' + esc(x.display_name) + '”. Arraste o pino até o ponto exato da foto.' } };
+/* botões de coordenada na janela */
+const _sp29Loc = ACTS.sp19Loc;
+ACTS.sp19Loc = d => { _sp29Loc(d); const x = FC.find(f => f.a === d.a), q = $('#fl-q'); if (!x || !q) return; q.placeholder = 'Rua, nº, bairro — ou coordenada (-22.53, -41.96)';
+  const row = q.parentElement; const box = document.createElement('div'); box.className = 'row gap'; box.style.cssText = 'margin-top:6px;flex-wrap:wrap';
+  const tem = x.lat != null && x.lng != null; box.innerHTML = (tem ? `<button class="btn sm" data-act="sp29Coord">📍 Coordenada da foto (${(+x.lat).toFixed(5)}, ${(+x.lng).toFixed(5)})</button>` : '') + `<button class="btn sm" data-act="sp29Ler" data-a="${esc(x.a)}">🔎 Ler coordenada e endereço escritos na foto</button>`;
+  row.parentElement.insertBefore(box, row.nextSibling) };
+ACTS.sp29Coord = () => { const x = M && FC.find(f => f.a === M.a); if (!x || x.lat == null) return; M.rua = ''; M.setPin(+x.lat, +x.lng, true); $('#fl-res').innerHTML = '<p class="small" style="margin:4px 0;color:#2563a8">📍 Mapa levado até a coordenada gravada da foto.</p>' };
+ACTS.sp29Ler = async d => { const meu = M; const res = $('#fl-res'); if (!meu || !res) return; if (!window.__sp13 || !__sp13.lerCarimbo) { toast('Leitura da foto indisponível.'); return }
+  res.innerHTML = '<p class="small muted">🔎 Lendo o texto escrito na foto (pode levar até 15 s na 1ª vez)…</p>';
+  try { const bl = await (await fetch(FCURL + d.a)).blob(); const t = await __sp13.lerCarimbo(bl); if (M !== meu) return;
+    if (t && t.lat != null) { meu.rua = t.rua || ''; meu.setPin(+t.lat, +(t.lng != null ? t.lng : t.lon), true); res.innerHTML = `<p class="small" style="margin:4px 0;color:#2563a8">📍 Coordenada lida na foto: ${(+t.lat).toFixed(6)}, ${(+(t.lng != null ? t.lng : t.lon)).toFixed(6)}${t.rua ? ' — ' + esc(t.rua) : ''}. Confira o pino.</p>`; return }
+    if (t && t.rua) { $('#fl-q').value = t.rua + (t.bairro ? ', ' + t.bairro : ''); res.innerHTML = '<p class="small muted">A foto não tem coordenada escrita; buscando pelo endereço lido…</p>'; ACTS.sp19Busca(); return }
+    res.innerHTML = '<p class="small" style="color:#b45309">Não consegui ler coordenada nem endereço nesta foto. Digite o endereço ou toque no mapa.</p>' }
+  catch (e) { if (M === meu) res.innerHTML = '<p class="small" style="color:#b45309">Não foi possível ler a foto (sem internet para carregar o leitor?). Digite o endereço ou toque no mapa.</p>' } };
 })();
 </script>
 
@@ -4561,7 +4648,7 @@ async function lerCarimbo(file) { const w = await leitor(); const cs = await fai
   const dt = dataHora1(um) || (lerDataTarja(txt) || null), en = endereco1(txt);
   if (!co && !dt && !en) return null;
   return Object.assign({ txt }, co || {}, dt ? { data: dt } : {}, en || {}) }
-window.__sp13 = { coords1, lerCoordenadas, dataHora1, lerDataTarja, endereco1 };
+window.__sp13 = { coords1, lerCoordenadas, dataHora1, lerDataTarja, endereco1, lerCarimbo };
 /* aviso na janela */
 function aviso(msg) { const e = $('#oc-endst'); if (e) { e.innerHTML = msg; return } toast(msg.replace(/<[^>]+>/g, '')) }
 function preenche(id, v) { const e = $('#' + id); if (!e || !v || (e.value || '').trim()) return false; e.value = v; e.style.background = '#fff7d6'; e.title = 'Preenchido pela foto — confira'; return true }
