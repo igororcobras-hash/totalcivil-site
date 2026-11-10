@@ -550,7 +550,7 @@ function tMapa(o){const f=S.f;const n=ativas(o).filter(x=>x.lat!=null).length;
  <div class="legend"><span><i style="background:${PRI.alta.c}"></i>Alta</span><span><i style="background:${PRI.media.c}"></i>Média</span><span><i style="background:${PRI.baixa.c}"></i>Baixa</span><span><i style="background:#2e7d4f;border:2px solid #fff;box-shadow:0 0 0 1px #2e7d4f"></i>Executada/medida</span>${(o.externas||[]).length?`<label class="chk" style="margin:0"><input type="checkbox" data-chg="mapExt" ${f.mapExt===false?'':'checked'}> <i style="background:#7a8396"></i>Esgoto Rio+ — fora do contrato (${o.externas.length})</label>`:''}</div><div id="mapa" class="mapbox"></div>`}
 function initMapa(){const el=$('#mapa');if(!el)return;if(typeof L==='undefined'){el.innerHTML='<div class="nomap">Mapa indisponível (sem internet).</div>';return}
  const o=O();const c=S.settings.mapa;const map=L.map(el).setView([c.lat,c.lng],c.zoom);L.tileLayer(OSM,{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);S.mapObj=map;
- const pts=[];ativas(o).filter(x=>x.lat!=null&&(!S.f.mapSt||x.status===S.f.mapSt)).forEach(x=>{const feito=x.status==='executada'||x.status==='medida';
+ const pts=[];ativas(o).filter(x=>x.lat!=null&&(!S.f.mapSt||x.status===S.f.mapSt)&&(!window.__sp15Pri||window.__sp15Pri(x))).forEach(x=>{const feito=x.status==='executada'||x.status==='medida';
   const m=L.circleMarker([x.lat,x.lng],{radius:10,fillColor:feito?'#2e7d4f':PRI[priEf(x)].c,color:'#fff',weight:3,fillOpacity:.95}).addTo(map);pts.push([x.lat,x.lng]);try{if(window.__sp14Foto&&window.__sp14Foto(o,x))L.circleMarker([x.lat,x.lng],{radius:3.5,fillColor:'#fff',color:'#111',weight:1.5,fillOpacity:1,interactive:false}).addTo(map)}catch(e){}
   m.bindPopup(`<b>#${x.num} ${esc(ocLocal(x))}</b><br>${PRI[priEf(x)].l} · ${ST[x.status].l}<br>${esc((x.desc||'').slice(0,100))}${x.fotos[0]?'<br><img data-foto="'+x.fotos[0].id+'" style="width:180px;margin-top:6px;border-radius:6px">':''}<br><a href="#" data-act="ocEdit" data-id="${x.id}">Abrir ocorrência</a>`)});
  if(S.f.mapExt!==false)(o.externas||[]).forEach(x=>{L.circleMarker([x.lat,x.lng],{radius:6,fillColor:'#7a8396',color:'#fff',weight:2,fillOpacity:.85}).addTo(map).bindPopup('<b>'+esc(x.name)+'</b><br>'+esc(x.tema)+' — fora do contrato de pavimento<br>'+esc(x.lugar||'')+(x.rel?'<br>'+x.rel+' relato(s)'+(x.ult?', último '+x.ult:''):'')+(/aprox/i.test(x.prec||'')?'<br><i>Local aproximado (só o bairro)</i>':''))});
@@ -3605,10 +3605,10 @@ desenhaPlanos = function (map, lista) { if (!map || typeof L === 'undefined') re
   map.on('popupopen', e => { try { hydrate(e.popup.getElement()) } catch (er) { } });
   lista.forEach(({ o, p }) => { const cor = corPl(o, p); const gs = gruposRota(o, p, R0.modo === 'nao' ? 'dia' : R0.modo);
     gs.forEach((gr, gi) => { if (R0.sel && R0.modo !== 'nao' && gr.k !== R0.sel) return; const com = gr.ord.filter(r => r.x.lat != null); const lab = R0.modo === 'nao' ? '' : rotG(R0.modo, gr.k);
-      if (R0.modo !== 'nao' && R0.traj && com.length > 1) L.polyline(com.map(r => [r.x.lat, r.x.lng]), { color: cor, weight: 3, opacity: .8, pane: fundo }).addTo(g).bindTooltip(`${lab} · rota ≈ ${fN(gr.km, 1)} km · ${gr.l.length} ocorr.`, { sticky: true });
-      if (R0.modo !== 'nao' && R0.raio && gr.cen && com.length > 1) L.circle([gr.cen.lat, gr.cen.lng], { radius: Math.max(gr.raio, 60), color: cor, weight: 1.5, dashArray: '6 5', fillOpacity: .06, pane: fundo, interactive: false }).addTo(g)
+      if (R0.modo !== 'nao' && R0.traj && LGp(p).tr && com.length > 1) L.polyline(com.map(r => [r.x.lat, r.x.lng]), { color: cor, weight: 3, opacity: .8, pane: fundo }).addTo(g).bindTooltip(`${lab} · rota ≈ ${fN(gr.km, 1)} km · ${gr.l.length} ocorr.`, { sticky: true });
+      if (R0.modo !== 'nao' && R0.raio && LGp(p).ra && gr.cen && com.length > 1) L.circle([gr.cen.lat, gr.cen.lng], { radius: Math.max(gr.raio, 60), color: cor, weight: 1.5, dashArray: '6 5', fillOpacity: .06, pane: fundo, interactive: false }).addTo(g)
         .bindTooltip(`${lab} · raio de atendimento ${fN(gr.raio / 1000, 2)} km · ${gr.l.length} ocorr.${verCusto() ? ' · ' + fR(gr.custo) : ''}`, { sticky: true });
-      com.forEach((r, i) => { const m = L.circleMarker([r.x.lat, r.x.lng], { radius: 8, fillColor: cor, color: '#fff', weight: 2, fillOpacity: .95 }).addTo(g);
+      (LGp(p).pt ? com : []).forEach((r, i) => { const m = L.circleMarker([r.x.lat, r.x.lng], { radius: 8, fillColor: cor, color: '#fff', weight: 2, fillOpacity: .95 }).addTo(g);
         if (R0.modo !== 'nao' && R0.sel) m.bindTooltip(String(i + 1), { permanent: true, direction: 'center', className: 'sp12num' }); else m.bindTooltip(`${fdB(r.it.dia)} · #${r.x.num}`, { direction: 'top' });
         m.bindPopup(balao(o, p, r, cor, `<b>${fdB(r.it.dia)}</b>${lab ? ' · ' + esc(lab) : ''}${R0.modo !== 'nao' ? ' · parada ' + (i + 1) + ' de ' + com.length : ''}<br>`), { maxWidth: 370 }) }) }) });
   /* fotos de campo com coordenada lida no carimbo, mas sem ocorrência por perto: aparecem como ponto próprio */
@@ -3633,7 +3633,7 @@ paleta = function (obras, onde) { let h = _paleta0(obras, onde); const R0 = RT()
     <button class="btn sm" data-act="sp12SoPontos">📍 Só os pontos</button>
     <label class="chk" style="align-self:end"><input type="checkbox" data-chg="sp12Rc" data-k="fotos" ${R0.fotos ? 'checked' : ''}> Fotos nos balões</label></div>
     ${resumoSel.length ? `<div class="small" style="margin-top:4px">${resumoSel.map(g => `<b>${esc(rotG(R0.modo, g.k))}</b>: ${g.l.length} ocorrência(s) · rota ≈ ${fN(g.km, 1)} km · raio ${fN(g.raio / 1000, 2)} km${verCusto() ? ' · ' + fR(g.custo) : ''}`).join('<br>')}</div>` : ''}
-    <div class="small muted" style="margin-top:4px">${lista.map(({ o, p }) => `<span style="color:${corPl(o, p)}">■</span> ${esc(p.nome.slice(0, 50))}: ${prazoTxt(p)}`).join('<br>') || 'Marque um planejamento para ver o prazo e as rotas.'}</div>`;
+    <div class="small muted" style="margin-top:4px">${lista.map(({ o, p }) => { const g = LGp(p); const ck = k => `<label class="chk" style="display:inline-flex;margin:0 6px 0 0"><input type="checkbox" data-chg="sp14LP" data-id="${p.id}" data-k="${k}" ${g[k] ? 'checked' : ''}>${{ pt: 'pontos', tr: 'linhas', ra: 'raios' }[k]}</label>`; return `<span style="color:${corPl(o, p)}">■</span> ${esc(p.nome.slice(0, 50))}: ${prazoTxt(p)}<br><span style="margin-left:16px">${ck('pt')}${ck('tr')}${ck('ra')}</span>` }).join('<br>') || 'Marque um planejamento para ver o prazo e as rotas.'}</div>`;
   return h.replace(/<\/div>\s*$/, ctl + '</div>') };
 CHG.sp12R = el => { const R0 = RT(); R0[el.dataset.k] = el.value; if (el.dataset.k === 'modo') { R0.sel = ''; if (el.value === 'per' && !(R0.de && R0.ate)) { let a = '9999-99-99', b = '0000-00-00'; try { visDe(S.obraId ? [O()] : obrasTP()).forEach(({ p }) => (p.itens || []).forEach(i => { if (i.dia < a) a = i.dia; if (i.dia > b) b = i.dia })) } catch (e) { } if (a <= b) { R0.de = a; R0.ate = b } } } if (R0.modo === 'per') R0.sel = R0.de && R0.ate ? R0.de + '|' + R0.ate : ''; render() };
 CHG.sp12Rc = el => { const R0 = RT(); R0[el.dataset.k] = el.checked; if (el.checked && R0.modo === 'nao' && (el.dataset.k === 'traj' || el.dataset.k === 'raio')) R0.modo = 'dia'; render() };
@@ -3864,20 +3864,39 @@ relPlanos = function (lista) { const orig = abrirPreview; let cap = null; abrirP
 /* ---------- SP-14c: duplicadas, ponto central nas marcações com foto, estimativa editável e custo real ---------- */
 const temFotoOc = (o, x) => !!((x.fotos || []).length || (x.fotosKml || []).length || fcDaOc(o, x).length);
 window.__sp14Foto = temFotoOc;
+
+/* SP-15c: reúne duas cópias da mesma marcação em UMA, sem perder nem repetir informação (fotos, documentos, histórico, equipe, serviços, planejamento, situação) */
+const ST_ORD = ['relato', 'vistoriada', 'planejada', 'em_execucao', 'executada', 'medida'];
+const vazio = v => v == null || v === '' || v === 0 || (Array.isArray(v) && !v.length) || (typeof v === 'object' && !Array.isArray(v) && !Object.values(v).some(q => !vazio(q)));
+function sp15Une(kp, x, mesmo) {
+  const uniq = (a, b, f) => { const v = new Set((a || []).map(f)); const r = (a || []).slice(); (b || []).forEach(q => { const k = f(q); if (!v.has(k)) { v.add(k); r.push(q) } }); return r };
+  const J = q => typeof q === 'string' ? q : JSON.stringify(q);
+  /* fotos do aparelho/nuvem (por id, e por arquivo+hora quando o id mudou), fotos do KML (por link), documentos */
+  kp.fotos = uniq(kp.fotos, x.fotos, f => f.id); kp.fotosKml = uniq(kp.fotosKml, x.fotosKml, J); kp.docs = uniq(kp.docs, x.docs, f => f.id || J(f));
+  kp.hist = uniq(kp.hist, x.hist, h => h.q + '|' + h.acao).sort((a, b) => String(a.q).localeCompare(String(b.q)));
+  ['equipe', 'servsFiscal'].forEach(k => { if ((x[k] || []).length) kp[k] = uniq(kp[k], x[k], J) });
+  /* descrição: acrescenta só o que a outra cópia tem de diferente */
+  if (x.desc && String(x.desc).trim()) { const a = String(kp.desc || ''), b = String(x.desc).trim(); if (!a) kp.desc = b; else if (a.indexOf(b) >= 0) { } else if (b.indexOf(a) >= 0) kp.desc = b; else kp.desc = a + (String(x.ext).startsWith('MAPA-') && !mesmo ? ' | Relato repetido (' + x.ext + (x.criadoEm ? ', ' + String(x.criadoEm).slice(0, 10) : '') + '): ' + b.slice(0, 220) : ' | ' + b) }
+  /* situação mais adiantada */
+  const ra = ST_ORD.indexOf(kp.status), rb = ST_ORD.indexOf(x.status); if (rb > ra) kp.status = x.status;
+  /* demais campos: só preenche o que está vazio */
+  Object.keys(x).forEach(k => { if (['id', 'num', 'ext', 'fotos', 'fotosKml', 'docs', 'hist', 'equipe', 'servsFiscal', 'desc', 'status', 'arquivo'].indexOf(k) >= 0) return; if (vazio(kp[k]) && !vazio(x[k])) kp[k] = x[k] });
+  if (!kp.arquivo && x.arquivo && kp.status === 'arquivada') kp.arquivo = x.arquivo;
+  /* execuções, visitas e planejamentos que apontavam para a cópia passam a apontar para a marcação única */
+  (S.__sp15o && S.__sp15o.execucoes || []).forEach(e => { if (e.ocorrenciaId === x.id) e.ocorrenciaId = kp.id });
+}
 function sp14Dedup(o) {
-  if (!o || !o.ocorrencias) return 0;
-  const map = Object.assign({}, DUPK, DUPM); const porExt = {}; o.ocorrencias.forEach(x => { if (x.ext) porExt[x.ext] = x });
+  if (!o || !o.ocorrencias) return 0; S.__sp15o = o;
+  const map = Object.assign({}, DUPK, DUPM); const porExt = {};
+  /* cópias do MESMO código (a semeadura rodou mais de uma vez / mesclagem entre aparelhos): fica a que tem mais informação */
+  const pontos = x => ((o.execucoes || []).some(e => e.ocorrenciaId === x.id) ? 1000 : 0) + (x.fotos || []).length * 10 + (x.docs || []).length * 10 + (x.planId ? 5 : 0) + (x.semana ? 3 : 0) + (x.status && x.status !== 'relato' ? 2 : 0) + (x.insu ? 1 : 0) + (x.servsFiscal && x.servsFiscal.length ? 4 : 0);
+  o.ocorrencias.forEach(x => { if (!x.ext) return; const c = porExt[x.ext]; if (!c || pontos(x) > pontos(c)) porExt[x.ext] = x });
   const remap = {}; let n = 0; const sai = [];
-  o.ocorrencias.forEach(x => { const k = x.ext && map[x.ext]; if (!k) return; const kp = porExt[k]; if (!kp || kp === x) return;
-    if ((o.execucoes || []).some(e => e.ocorrenciaId === x.id)) return;
-    const ids = new Set((kp.fotos || []).map(f => f.id)); (x.fotos || []).forEach(f => { if (!ids.has(f.id)) (kp.fotos = kp.fotos || []).push(f) });
-    const fk = new Set(kp.fotosKml || []); (x.fotosKml || []).forEach(t => { if (!fk.has(t)) (kp.fotosKml = kp.fotosKml || []).push(t) });
-    if ((x.docs || []).length) kp.docs = (kp.docs || []).concat(x.docs);
-    if (String(x.ext).startsWith('MAPA-') && x.desc && kp.desc && kp.desc.indexOf(x.ext) < 0) kp.desc += ' | Relato repetido (' + x.ext + (x.criadoEm ? ', ' + String(x.criadoEm).slice(0, 10) : '') + '): ' + String(x.desc).slice(0, 220);
-    if (!kp.semana && x.semana) kp.semana = x.semana; if (!kp.planId && x.planId) kp.planId = x.planId;
+  o.ocorrencias.forEach(x => { const mesmo = !!(x.ext && !map[x.ext] && porExt[x.ext] && porExt[x.ext] !== x); const k = x.ext && (map[x.ext] || (mesmo ? x.ext : null)); if (!k) return; const kp = porExt[k]; if (!kp || kp === x) return;
+    sp15Une(kp, x, mesmo);
     remap[x.id] = kp.id; sai.push(x); n++;
-    o.extIgnorar = o.extIgnorar || []; if (o.extIgnorar.indexOf(x.ext) < 0) o.extIgnorar.push(x.ext); o.extAlias = o.extAlias || {}; o.extAlias[x.ext] = kp.ext;
-    try { log(kp, 'Marcação repetida ' + x.ext + ' reunida nesta (duplicada eliminada em 10/11/2026)') } catch (e) { } });
+    if (!mesmo) { o.extIgnorar = o.extIgnorar || []; if (o.extIgnorar.indexOf(x.ext) < 0) o.extIgnorar.push(x.ext); o.extAlias = o.extAlias || {}; o.extAlias[x.ext] = kp.ext }
+    try { log(kp, mesmo ? 'Cópia repetida da mesma marcação reunida nesta (fotos e informações unidas, 10/11/2026)' : 'Marcação repetida ' + x.ext + ' reunida nesta (fotos e informações unidas, 10/11/2026)') } catch (e) { } });
   if (!n) return 0;
   o.ocorrencias = o.ocorrencias.filter(x => sai.indexOf(x) < 0);
   (o.planejamentos || []).forEach(p => { const vis = new Set(); p.itens = (p.itens || []).map(it => remap[it.ocId] ? Object.assign({}, it, { ocId: remap[it.ocId] }) : it).filter(it => { if (vis.has(it.ocId)) return false; vis.add(it.ocId); return true }) });
@@ -3958,6 +3977,19 @@ paleta = function (obras, onde) { if (onde !== 'todas') return _pal14.apply(this
 CHG.sp14U = el => { const v = PV(); modelosTP().forEach(r => { v[r.p.id] = el.checked }); pvSalva(); render() };
 ACTS.sp14Uso = () => { const v = PV(); obrasVisiveis().forEach(o => (o.planejamentos || []).forEach(p => { v[p.id] = !!p.modelo })); pvSalva(); render() };
 ACTS.sp14UR = () => { const L = modelosTP(); if (L.length) relPlanos(L) };
+
+/* ---------- SP-15 (10/11/2026): legenda do mapa com liga/desliga de cada cor, das linhas (trajetos) e dos raios ---------- */
+const LG = () => { if (!S.sp15L) { S.sp15L = { pri: {}, plan: {} }; try { const j = JSON.parse(localStorage.getItem('tc_sp15_leg') || 'null'); if (j) S.sp15L = Object.assign({ pri: {}, plan: {} }, j) } catch (e) { } } return S.sp15L };
+const LGs = () => { try { localStorage.setItem('tc_sp15_leg', JSON.stringify(LG())) } catch (e) { } };
+const LGp = p => { const g = LG().plan[p.id] || {}; return { pt: g.pt !== false, tr: g.tr !== false, ra: g.ra !== false } };
+window.__sp15Pri = x => { const L0 = LG().pri; const feito = x.status === 'executada' || x.status === 'medida'; return L0[feito ? 'feito' : priEf(x)] !== false };
+CHG.sp14LP = el => { const L0 = LG(); const g = L0.plan[el.dataset.id] = Object.assign({ pt: true, tr: true, ra: true }, L0.plan[el.dataset.id]); g[el.dataset.k] = el.checked; LGs(); render() };
+CHG.sp15Pri = el => { LG().pri[el.dataset.k] = el.checked; LGs(); render() };
+const _tMapaZ = tMapa;
+tMapa = function (o) { let h = _tMapaZ.apply(this, arguments); const R0 = RT(); const pri = LG().pri;
+  h = h.replace(/<span>(<i [^>]*><\/i>)(Alta|Média|Baixa|Executada\/medida)<\/span>/g, (m, i, t) => { const k = { 'Alta': 'alta', 'Média': 'media', 'Baixa': 'baixa', 'Executada/medida': 'feito' }[t]; return `<label class="chk" style="margin:0"><input type="checkbox" data-chg="sp15Pri" data-k="${k}" ${pri[k] === false ? '' : 'checked'}> ${i}${t}</label>` });
+  const lin = `<label class="chk" style="margin:0"><input type="checkbox" data-chg="sp12Rc" data-k="traj" ${R0.traj && R0.modo !== 'nao' ? 'checked' : ''}> <i style="display:inline-block;width:24px;height:0;border-radius:0;border-top:3px solid #c2255c;vertical-align:middle"></i> Linhas (trajetos entre as ocorrências)</label><label class="chk" style="margin:0"><input type="checkbox" data-chg="sp12Rc" data-k="raio" ${R0.raio && R0.modo !== 'nao' ? 'checked' : ''}> <i style="display:inline-block;width:16px;height:16px;border:2px dashed #c2255c;border-radius:50%;vertical-align:middle"></i> Raios de atendimento</label>`;
+  const q = h.indexOf('class="legend"'); const e = q < 0 ? -1 : h.indexOf('</div>', q); return e < 0 ? h : h.slice(0, e) + lin + h.slice(e) };
 })();
 </script>
 
