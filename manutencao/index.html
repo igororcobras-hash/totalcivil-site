@@ -3499,13 +3499,13 @@ function desenhaPlanos(map, lista) { if (!map || typeof L === 'undefined') retur
         .bindPopup(`<div style="max-width:250px"><b style="color:${cor}">■ ${esc(p.nome)}</b><br>${esc(o.nome)}<br><b>Dia ${k + 1}: ${fdB(d)}</b> (semana ${isoWeek(d).split('-W')[1]})<br>#${r.x.num} ${esc(ocLocal(r.x))}<br><span style="font-size:11px">${esc((r.x.desc || '').slice(0, 160))}</span>${gc ? '<br>Custo estimado: <b>' + fR(custoOc(o, r.x)) + '</b>' : ''}</div>`)) }) });
   return g }
 /* a paleta (lista de planejamentos com cor e caixinha) */
-function paleta(obras, onde) { const v = PV(); const aberta = S.sp12Pal === onde;
+function paleta(obras, onde) { const v = PV(); const aberta = !(S.sp12PalF || {})[onde];
   const linhas = obras.map(o => { const pls = o.planejamentos || []; if (!pls.length) return obras.length > 1 ? `<div class="small muted" style="margin:4px 0">${esc(o.nome)}: nenhum planejamento ainda.</div>` : '<p class="muted small">Nenhum planejamento salvo ainda.</p>';
     return (obras.length > 1 ? `<div style="font-weight:700;margin:8px 0 2px">${esc(o.nome)}</div>` : '') + pls.map(p => { const c = corPl(o, p), r = p.resumo || {};
       return `<div class="row gap" style="align-items:center;flex-wrap:wrap;margin:3px 0"><label class="chk" style="margin:0;flex:1;min-width:240px"><input type="checkbox" data-chg="sp12PV" data-id="${p.id}" ${v[p.id] ? 'checked' : ''}> <input type="color" value="${c}" data-chg="sp12PC" data-o="${o.id}" data-id="${p.id}" title="Trocar a cor" style="width:26px;height:20px;padding:0;border:0;vertical-align:middle;background:none"> ${esc(p.nome.slice(0, 80))} <span class="muted small">(${p.itens.length} ocorr. · ${r.dias || 0} dia(s)${r.ini ? ' · ' + fdB(r.ini) + '–' + fdB(r.fim) : ''}${p.emUso ? ' · <b>em uso</b>' : ''})</span></label>
-        ${seloAt(o, p)}<button class="btn sm" data-act="sp12At" data-o="${o.id}" data-id="${p.id}">✅ Atendimento</button><button class="btn sm" data-act="sp12RelPl" data-o="${o.id}" data-id="${p.id}">📄 Relatório completo</button></div>` }).join('') }).join('');
+        <button class="btn sm" data-act="sp12PVso" data-k="${onde}" data-id="${p.id}" title="Mostrar no mapa só este planejamento">👁 Só este</button>${seloAt(o, p)}<button class="btn sm" data-act="sp12At" data-o="${o.id}" data-id="${p.id}">✅ Atendimento</button><button class="btn sm" data-act="sp12RelPl" data-o="${o.id}" data-id="${p.id}">📄 Relatório completo</button></div>` }).join('') }).join('');
   const nVis = obras.reduce((s, o) => s + (o.planejamentos || []).filter(p => v[p.id]).length, 0);
-  return `<div class="card" style="margin:10px 0;padding:10px 14px;border-left:4px solid #b8450f"><div class="row gap" style="align-items:center;flex-wrap:wrap"><button class="btn pri" data-act="sp12Pal" data-k="${onde}">🎨 Planejamentos no mapa ${aberta ? '▲' : '▼'}</button><span class="small muted">${nVis} planejamento(s) aparecendo no mapa</span><span class="sp"></span>
+  return `<div class="card" style="margin:10px 0;padding:10px 14px;border-left:4px solid #b8450f"><div class="row gap" style="align-items:center;flex-wrap:wrap"><button class="btn pri" data-act="sp12Pal" data-k="${onde}">🎨 Escolher planejamentos no mapa ${aberta ? '▲' : '▼'}</button><span class="small muted">${nVis} de ${obras.reduce((s, o) => s + (o.planejamentos || []).length, 0)} planejamento(s) aparecendo no mapa — marque as caixinhas para escolher quais ver</span><span class="sp"></span>
     <button class="btn sm" data-act="sp12PVtodos" data-k="${onde}" data-v="1">Mostrar todos</button><button class="btn sm" data-act="sp12PVtodos" data-k="${onde}" data-v="0">Esconder todos</button>${nVis ? `<button class="btn sm pri" data-act="sp12RelVis" data-k="${onde}">📄 Relatório completo dos que estão no mapa</button>` : ''}${nVis ? `<button class="btn sm" data-act="sp12AtGraf" data-k="${onde}">📊 Gráfico de atendimentos</button>` : ''}</div>
     ${aberta ? `<div style="margin-top:8px">${linhas}</div>` : ''}</div>` }
 const visDe = obras => obras.flatMap(o => (o.planejamentos || []).filter(p => PV()[p.id]).map(p => ({ o, p })));
@@ -3534,7 +3534,8 @@ const ___render = _render;
 _render = function () { try { plSync() } catch (e) { } ___render.apply(this, arguments); if (S.obraId && S.tab === 'plan' && O()) setTimeout(initPlanMap, 60) };
 CHG.sp12PV = el => { PV()[el.dataset.id] = el.checked; pvSalva(); render() };
 CHG.sp12PC = el => { const o = S.obras[el.dataset.o]; const p = o && (o.planejamentos || []).find(x => x.id === el.dataset.id); if (!p) return; p.cor = el.value; saveObra(o); render() };
-ACTS.sp12Pal = d => { S.sp12Pal = S.sp12Pal === d.k ? null : d.k; render() };
+ACTS.sp12Pal = d => { S.sp12PalF = S.sp12PalF || {}; S.sp12PalF[d.k] = !S.sp12PalF[d.k]; render() };
+ACTS.sp12PVso = d => { const v = PV(); (d.k === 'todas' ? obrasVisiveis() : [O()]).forEach(o => (o.planejamentos || []).forEach(p => { v[p.id] = p.id === d.id })); pvSalva(); render() };
 ACTS.sp12PVtodos = d => { const v = PV(); (d.k === 'todas' ? obrasVisiveis() : [O()]).forEach(o => (o.planejamentos || []).forEach(p => { v[p.id] = d.v === '1' })); pvSalva(); render() };
 ACTS.sp12RelPl = d => { const o = S.obras[d.o]; const p = o && (o.planejamentos || []).find(x => x.id === d.id); if (p) relPlanos([{ o, p }]) };
 ACTS.sp12RelVis = d => { const l = visDe(d.k === 'todas' ? obrasVisiveis().filter(o => !(S.sp12Obs && S.sp12Obs[o.id] === false)) : [O()]); if (l.length) relPlanos(l) };
@@ -3580,7 +3581,7 @@ function relPlanos(lista) { const gc = verCusto(); const hoje = new Date().toLoc
 const tipoNome = p => p.modelo ? 'modelo' : p.tipo === 'tonelada' ? 'por tonelada' : p.tipo === 'manual' ? 'programação já definida' : 'instruído';
 
 /* ---------- SP-12g (09/11/2026): prazo em meses, rotas diária/semanal/mensal com raio de atendimento e fotos nos balões do mapa ---------- */
-const RT = () => (S.sp12R = S.sp12R || { modo: 'dia', sel: '', raio: true, fotos: true });
+const RT = () => { S.sp12R = S.sp12R || { modo: 'dia', sel: '', raio: true, fotos: true }; if (S.sp12R.traj === undefined) S.sp12R.traj = true; return S.sp12R };
 const chaveG = (modo, d) => modo === 'sem' ? isoWeek(d) : modo === 'mes' ? d.slice(0, 7) : d;
 const rotG = (modo, k) => modo === 'sem' ? 'Semana ' + k.split('-W')[1] + '/' + k.split('-W')[0] + ' (' + fdB(weekRange(k)[0]) + ' a ' + fdB(weekRange(k)[1]) + ')' : modo === 'mes' ? MESES[+k.slice(5, 7) - 1] + ' de ' + k.slice(0, 4) : fdB(k) + ' (' + ['dom', 'seg', 'ter', 'qua', 'qui', 'sex', 'sáb'][pd(k).getUTCDay()] + ')';
 function prazo(p) { const r = p.resumo || {}; if (!r.ini) return null; const dc = Math.round((pd(r.fim) - pd(r.ini)) / 864e5) + 1; return { du: r.dias || 0, dc, meses: dc / 30.44, ini: r.ini, fim: r.fim } }
@@ -3603,7 +3604,7 @@ desenhaPlanos = function (map, lista) { if (!map || typeof L === 'undefined') re
   map.on('popupopen', e => { try { hydrate(e.popup.getElement()) } catch (er) { } });
   lista.forEach(({ o, p }) => { const cor = corPl(o, p); const gs = gruposRota(o, p, R0.modo === 'nao' ? 'dia' : R0.modo);
     gs.forEach((gr, gi) => { if (R0.sel && R0.modo !== 'nao' && gr.k !== R0.sel) return; const com = gr.ord.filter(r => r.x.lat != null); const lab = R0.modo === 'nao' ? '' : rotG(R0.modo, gr.k);
-      if (R0.modo !== 'nao' && com.length > 1) L.polyline(com.map(r => [r.x.lat, r.x.lng]), { color: cor, weight: 3, opacity: .8, pane: fundo }).addTo(g).bindTooltip(`${lab} · rota ≈ ${fN(gr.km, 1)} km · ${gr.l.length} ocorr.`, { sticky: true });
+      if (R0.modo !== 'nao' && R0.traj && com.length > 1) L.polyline(com.map(r => [r.x.lat, r.x.lng]), { color: cor, weight: 3, opacity: .8, pane: fundo }).addTo(g).bindTooltip(`${lab} · rota ≈ ${fN(gr.km, 1)} km · ${gr.l.length} ocorr.`, { sticky: true });
       if (R0.modo !== 'nao' && R0.raio && gr.cen && com.length > 1) L.circle([gr.cen.lat, gr.cen.lng], { radius: Math.max(gr.raio, 60), color: cor, weight: 1.5, dashArray: '6 5', fillOpacity: .06, pane: fundo, interactive: false }).addTo(g)
         .bindTooltip(`${lab} · raio de atendimento ${fN(gr.raio / 1000, 2)} km · ${gr.l.length} ocorr.${verCusto() ? ' · ' + fR(gr.custo) : ''}`, { sticky: true });
       com.forEach((r, i) => { const m = L.circleMarker([r.x.lat, r.x.lng], { radius: 8, fillColor: cor, color: '#fff', weight: 2, fillOpacity: .95 }).addTo(g);
@@ -3624,13 +3625,17 @@ paleta = function (obras, onde) { let h = _paleta0(obras, onde); const R0 = RT()
   const ctl = `<div class="toolbar" style="flex-wrap:wrap;margin-top:8px"><label>Rota e raio por<select data-chg="sp12R" data-k="modo"><option value="dia" ${R0.modo === 'dia' ? 'selected' : ''}>Dia (rota diária)</option><option value="sem" ${R0.modo === 'sem' ? 'selected' : ''}>Semana (rota semanal)</option><option value="mes" ${R0.modo === 'mes' ? 'selected' : ''}>Mês (rota mensal)</option><option value="nao" ${R0.modo === 'nao' ? 'selected' : ''}>Só os pontos</option></select></label>
     ${R0.modo !== 'nao' ? `<label>Mostrar<select data-chg="sp12R" data-k="sel"><option value="">Todos os períodos</option>${sel.map(k => `<option value="${k}" ${R0.sel === k ? 'selected' : ''}>${esc(rotG(R0.modo, k))}</option>`).join('')}</select></label>
     <button class="btn sm" data-act="sp12Rpasso" data-v="-1" ${sel.length ? '' : 'disabled'}>◀</button><button class="btn sm" data-act="sp12Rpasso" data-v="1" ${sel.length ? '' : 'disabled'}>▶</button>
-    <label class="chk" style="align-self:end"><input type="checkbox" data-chg="sp12Rc" data-k="raio" ${R0.raio ? 'checked' : ''}> Raios de atendimento</label>` : ''}
+` : ''}
+    <label class="chk" style="align-self:end"><input type="checkbox" data-chg="sp12Rc" data-k="traj" ${R0.traj && R0.modo !== 'nao' ? 'checked' : ''}> Trajetos (rotas)</label>
+    <label class="chk" style="align-self:end"><input type="checkbox" data-chg="sp12Rc" data-k="raio" ${R0.raio && R0.modo !== 'nao' ? 'checked' : ''}> Raios de atendimento</label>
+    <button class="btn sm" data-act="sp12SoPontos">📍 Só os pontos</button>
     <label class="chk" style="align-self:end"><input type="checkbox" data-chg="sp12Rc" data-k="fotos" ${R0.fotos ? 'checked' : ''}> Fotos nos balões</label></div>
     ${resumoSel.length ? `<div class="small" style="margin-top:4px">${resumoSel.map(g => `<b>${esc(rotG(R0.modo, g.k))}</b>: ${g.l.length} ocorrência(s) · rota ≈ ${fN(g.km, 1)} km · raio ${fN(g.raio / 1000, 2)} km${verCusto() ? ' · ' + fR(g.custo) : ''}`).join('<br>')}</div>` : ''}
     <div class="small muted" style="margin-top:4px">${lista.map(({ o, p }) => `<span style="color:${corPl(o, p)}">■</span> ${esc(p.nome.slice(0, 50))}: ${prazoTxt(p)}`).join('<br>') || 'Marque um planejamento para ver o prazo e as rotas.'}</div>`;
   return h.replace(/<\/div>\s*$/, ctl + '</div>') };
 CHG.sp12R = el => { const R0 = RT(); R0[el.dataset.k] = el.value; if (el.dataset.k === 'modo') R0.sel = ''; render() };
-CHG.sp12Rc = el => { RT()[el.dataset.k] = el.checked; render() };
+CHG.sp12Rc = el => { const R0 = RT(); R0[el.dataset.k] = el.checked; if (el.checked && R0.modo === 'nao' && (el.dataset.k === 'traj' || el.dataset.k === 'raio')) R0.modo = 'dia'; render() };
+ACTS.sp12SoPontos = () => { const R0 = RT(); R0.traj = false; R0.raio = false; render() };
 ACTS.sp12Rpasso = d => { const R0 = RT(); const obras = S.obraId ? [O()] : obrasTP(); const ks = new Set(); visDe(obras).forEach(({ o, p }) => ocsDoPlano(o, p).forEach(r => ks.add(chaveG(R0.modo, r.it.dia)))); const l = [...ks].sort(); if (!l.length) return;
   let i = l.indexOf(R0.sel); i = i < 0 ? (+d.v > 0 ? 0 : l.length - 1) : Math.min(l.length - 1, Math.max(0, i + (+d.v))); R0.sel = l[i]; render() };
 ACTS.sp12OcAbrir = d => { if (S.obraId !== d.o) { ACTS.abrir({ id: d.o }) } try { S.mapObj && S.mapObj.closePopup() } catch (e) { } setTimeout(() => ACTS.ocEdit({ id: d.id }), 60) };
