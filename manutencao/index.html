@@ -4281,5 +4281,51 @@ processarFoto = async function (file, camera) {
 })();
 </script>
 
+<script>
+/* ---------- SP-16 (10/11/2026): lupa de pesquisa em todos os mapas (como no Google Earth): rua, bairro, nome do imóvel, nº ou texto das ocorrências; vai até o ponto, dá zoom e abre a janela; se não achar, procura no OpenStreetMap ---------- */
+(function () {
+  if (typeof L === 'undefined' || !L.Map || !L.Control) return;
+  const nz = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+  const esc2 = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  function fonte() {
+    const todas = Object.values(S.obras || {}).filter(o => !S.trava || (S.acessos && S.acessos[o.id]));
+    const escopo = S.obraId && S.obras && S.obras[S.obraId] ? [S.obras[S.obraId]] : todas; const r = [];
+    escopo.forEach(o => {
+      let l = []; try { l = ativas(o) } catch (e) { l = (o.ocorrencias || []).filter(x => x.status !== 'arquivada') }
+      l.filter(x => x.lat != null && x.lng != null).forEach(x => { let loc = ''; try { loc = ocLocal(x) } catch (e) { loc = x.rua || '' }
+        r.push({ t: '#' + x.num + ' ' + loc, sub: (o.nome || '').replace(/^.*?—\s*/, '').slice(0, 40), k: nz([x.rua, x.bairro, x.ref, x.desc, x.ext, '#' + x.num, 'n ' + x.num, x.lugar, x.nome].join(' ')), rua: nz(x.rua), lat: x.lat, lng: x.lng }) });
+      (o.externas || []).filter(x => x.lat != null).forEach(x => r.push({ t: (x.name || 'Esgoto Rio+') + (x.lugar ? ' — ' + x.lugar : ''), sub: 'Esgoto Rio+ (fora do contrato)', k: nz([x.name, x.lugar, x.tema].join(' ')), rua: nz(x.name), lat: x.lat, lng: x.lng }))
+    }); return r }
+  function achar(q) { const tk = nz(q).split(/\s+/).filter(Boolean); if (!tk.length) return []; const f = fonte(); const out = [];
+    f.forEach(it => { if (tk.every(t => it.k.indexOf(t) >= 0)) out.push({ it, sc: (it.rua.indexOf(tk[0]) === 0 ? 0 : it.rua.indexOf(tk[0]) > 0 ? 1 : 2) }) });
+    out.sort((a, b) => a.sc - b.sc || a.it.t.localeCompare(b.it.t, 'pt-BR')); return out.map(o => o.it) }
+  function ir(map, lat, lng, rot) {
+    map.setView([lat, lng], Math.max(map.getZoom(), 18), { animate: true });
+    let achou = null; map.eachLayer(l => { if (achou || !l.getLatLng || !l.getPopup || !l.getPopup()) return; const p = l.getLatLng(); if (Math.abs(p.lat - lat) < 1e-6 && Math.abs(p.lng - lng) < 1e-6) achou = l });
+    if (achou) setTimeout(() => { try { achou.openPopup() } catch (e) { } }, 350);
+    const c = L.circleMarker([lat, lng], { radius: 20, color: '#d4380d', weight: 3, fill: false, interactive: false }).addTo(map); if (rot) c.bindTooltip(rot, { permanent: true, direction: 'top', offset: [0, -14] });
+    setTimeout(() => { try { map.removeLayer(c) } catch (e) { } }, 6000) }
+  const Ctl = L.Control.extend({ options: { position: 'topleft' }, onAdd: function (map) {
+    const d = L.DomUtil.create('div', 'sp16-busca'); d.innerHTML = '<button type="button" class="sp16-lupa" title="Pesquisar rua, bairro ou nome" aria-label="Pesquisar">🔍</button><div class="sp16-box" style="display:none"><input type="search" placeholder="Rua, bairro, nome ou nº…" autocomplete="off" spellcheck="false"><div class="sp16-res"></div></div>';
+    L.DomEvent.disableClickPropagation(d); L.DomEvent.disableScrollPropagation(d);
+    const bt = d.querySelector('.sp16-lupa'), bx = d.querySelector('.sp16-box'), inp = d.querySelector('input'), res = d.querySelector('.sp16-res'); let lista = [];
+    const mostra = () => { const q = inp.value.trim(); if (!q) { res.innerHTML = '<div class="sp16-dica">Digite parte do nome da rua, do bairro, do imóvel ou o nº da ocorrência.</div>'; lista = []; return }
+      lista = achar(q); const top = lista.slice(0, 15);
+      res.innerHTML = (top.length ? top.map((it, i) => `<a href="#" data-i="${i}"><b>${esc2(it.t)}</b><small>${esc2(it.sub)}</small></a>`).join('') + (lista.length > 15 ? `<div class="sp16-dica">+ ${lista.length - 15} resultados: escreva mais para filtrar.</div>` : '') : '<div class="sp16-dica">Nada encontrado nas ocorrências.</div>') + `<a href="#" data-osm="1" class="sp16-osm">🌐 Procurar “${esc2(q)}” no mapa (OpenStreetMap)</a>` };
+    bt.onclick = e => { e.preventDefault(); const aberto = bx.style.display !== 'none'; bx.style.display = aberto ? 'none' : 'block'; if (!aberto) { inp.focus(); mostra() } };
+    inp.oninput = mostra; inp.onkeydown = e => { if (e.key === 'Escape') { bx.style.display = 'none' } else if (e.key === 'Enter') { e.preventDefault(); if (lista[0]) { ir(map, lista[0].lat, lista[0].lng, lista[0].t); if (window.innerWidth < 700) bx.style.display = 'none' } else { const o = res.querySelector('[data-osm]'); if (o) o.click() } } };
+    res.onclick = async e => { const a = e.target.closest('a'); if (!a) return; e.preventDefault();
+      if (a.dataset.i != null) { const it = lista.slice(0, 15)[+a.dataset.i]; if (it) { ir(map, it.lat, it.lng, it.t); if (window.innerWidth < 700) bx.style.display = 'none' } return }
+      if (a.dataset.osm) { const q = inp.value.trim(); res.innerHTML = '<div class="sp16-dica">Procurando…</div>';
+        try { const u = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=br&viewbox=-42.10,-22.40,-41.80,-22.60&q=' + encodeURIComponent(q + ', Rio das Ostras, RJ'); const j = await (await fetch(u, { headers: { 'Accept-Language': 'pt-BR' } })).json();
+          res.innerHTML = j.length ? j.map((x, i) => `<a href="#" data-o="${i}"><b>${esc2(String(x.display_name).split(',').slice(0, 3).join(','))}</b><small>OpenStreetMap</small></a>`).join('') : '<div class="sp16-dica">O OpenStreetMap também não achou.</div>'; res._osm = j }
+        catch (er) { res.innerHTML = '<div class="sp16-dica">Sem internet ou busca bloqueada.</div>' } return }
+      if (a.dataset.o != null) { const x = (res._osm || [])[+a.dataset.o]; if (x) { ir(map, +x.lat, +x.lon, String(x.display_name).split(',')[0]); if (window.innerWidth < 700) bx.style.display = 'none' } } };
+    return d } });
+  L.Map.addInitHook(function () { try { this.addControl(new Ctl()) } catch (e) { } });
+  const st = document.createElement('style'); st.textContent = '.sp16-busca{background:#fff;color:#222;border-radius:6px;box-shadow:0 1px 5px rgba(0,0,0,.45);margin-top:8px}.sp16-busca .sp16-lupa{width:34px;height:34px;border:0;background:#fff;font-size:17px;cursor:pointer;border-radius:6px}.sp16-box{padding:6px;width:min(290px,70vw)}.sp16-box input{width:100%;box-sizing:border-box;padding:7px 8px;border:1px solid #bbb;border-radius:6px;font-size:14px;background:#fff;color:#222}.sp16-res{max-height:min(46vh,320px);overflow:auto;margin-top:4px}.sp16-res a{display:block;padding:6px 6px;border-radius:5px;text-decoration:none;color:#222;font-size:12.5px;line-height:1.25}.sp16-res a:hover{background:#eef3fb}.sp16-res a small{display:block;color:#777;font-size:11px}.sp16-dica{padding:6px;font-size:12px;color:#666}.sp16-osm{color:#1d5aa8!important;font-weight:600}'; document.head.appendChild(st);
+})();
+</script>
+
 </body>
 </html>
