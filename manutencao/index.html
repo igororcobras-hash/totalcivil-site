@@ -3337,7 +3337,7 @@ const fcObra = { p: 'p', np: 'np', prop: 'prop' };
 const fcFoto = (x, w) => `<a href="${FCURL + x.a}" target="_blank" rel="noopener" title="${esc((x.leg || x.rua || x.a) + ' — ' + (x.d || '').replace('T', ' ').slice(0, 16))}"><img src="${FCURL + x.a}" style="width:${w || 150}px;height:${Math.round((w || 150) * 1.1)}px;object-fit:cover;margin:4px 4px 0 0;border-radius:6px" loading="lazy" onerror="this.parentNode.style.display='none'"></a>`;
 let fcDaOc = (o, oc) => { if (!oc) return []; const lg = o.fcLig || {}; const cam = camada(o); return FC.filter(x => lg[x.a] ? lg[x.a] === oc.id : (cam && oc.ext && x.e === oc.ext && x.o === cam)) };
 let fcOk = (o, x) => { const v = (o.fcLig || {})[x.a]; return v ? v !== '-' : !!x.o };
-const fcPasta = o => { const cam = camada(o); return FC.filter(x => !x.o || x.o === cam) };
+const fcPasta = o => FC.filter(x => fcDaObra(o, x)); /* SP-19: só as fotos DESTA obra */
 /* fotos de campo dentro da ocorrência */
 const _ocCard2 = ocCard;
 ocCard = function (o, oc) { let h = _ocCard2.apply(this, arguments); const l = fcDaOc(o, oc); if (!l.length) return h;
@@ -3350,7 +3350,7 @@ painelPastas = function (o) { let h = _pp(o); if (!h) return h; const of = off()
   const ks = Object.keys(dias).sort(); const fd2 = d => d.split('-').reverse().join('/');
   const lig = l.filter(x => fcOk(o, x)).length;
   const g = of['FC'] ? '' : ks.filter(k => !of['FC|' + k]).map(k => `<details style="margin:6px 0 0 22px"><summary style="cursor:pointer">📂 ${fd2(k)} <span class="muted small">(${dias[k].length} foto(s))</span></summary><div>${dias[k].map(x => `<div style="display:inline-block;vertical-align:top;width:156px;margin-right:4px">${fcFoto(x, 150)}<div class="small" style="line-height:1.25">${esc((x.rua ? x.rua + (x.b ? ' — ' + x.b : '') : '') || x.leg || '').slice(0, 90)}${fcOk(o, x) ? '<br><span class="muted">✔ ligada a um ponto</span>' : '<br><span style="color:#c0392b;font-weight:700">⚠ NÃO LOCALIZADA</span>'}<br><button class="btn sm" data-act="sp12FcLigar" data-a="${x.a}">📌 ${fcOk(o, x) ? 'Trocar' : 'Ligar a um ponto'}</button></div></div>`).join('')}</div></details>`).join('');
-  const cb = `<label class="chk" style="margin:6px 0 2px 0"><input type="checkbox" data-chg="sp12Pasta" data-k="FC" ${of['FC'] ? '' : 'checked'}> 📁 Fotos de campo — WhatsApp (Igor Rabelo, 03 a 09/11/2026) <span class="muted small">(${l.length}; ${lig} ligada(s) a ocorrências pelo carimbo ou legenda)</span></label>`;
+  const cb = `<label class="chk" style="margin:6px 0 2px 0"><input type="checkbox" data-chg="sp12Pasta" data-k="FC" ${of['FC'] ? '' : 'checked'}> 📁 Fotos de campo — WhatsApp (Igor Rabelo, 03 a 09/11/2026) <span class="muted small">(${l.length} foto(s) desta obra)</span></label>`;
   return h.replace(/<\/div><\/details>$/, cb + g + '</div></details>') };
 /* contadores já certos na tela de obras: importa as marcações de todas as obras ao abrir o programa */
 const _tH = telaHome;
@@ -3759,29 +3759,29 @@ ACTS.sp12AtGraf = d => { const l = visDe(d.k === 'todas' ? obrasVisiveis().filte
   M = { t: 'sp12gr' }; abrirModal(`<div class="mh"><h3>📊 Gráfico de atendimentos — ${l.length} planejamento(s) no mapa</h3><button class="x" data-act="mClose">×</button></div><div class="mb">${graficoAt(l)}<div class="row gap" style="justify-content:flex-end;margin-top:10px"><button class="btn" data-act="mClose">Fechar</button></div></div>`) };
 
 /* ---------- SP-12h3 (10/11/2026): ligar à mão uma foto de campo a uma ocorrência (as fotos sem carimbo/legenda não têm como ser ligadas sozinhas) ---------- */
-ACTS.sp12FcLigar = d => { const o = O(); if (!o) return; const x = FC.find(f => f.a === d.a); if (!x) return; M = { t: 'sp12fc', a: d.a };
+ACTS.sp12FcLigar = d => { const o = d.o ? S.obras[d.o] : O(); if (!o) return; const x = FC.find(f => f.a === d.a); if (!x) return; M = { t: 'sp12fc', a: d.a };
   const ini = (x.rua || '').toLowerCase(); const atual = ((o.fcLig || {})[x.a] !== '-' && (o.fcLig || {})[x.a]) || (x.o && x.e ? (o.ocorrencias.find(q => q.ext === x.e) || {}).id : '');
-  const lin = o.ocorrencias.filter(q => !q.arquivo).sort((a, b) => a.num - b.num).map(q => `<div data-fcrow="${esc((ocLocal(q) + ' ' + (q.bairro || '') + ' ' + (q.desc || '')).toLowerCase())}" style="display:flex;gap:6px;align-items:center;border-bottom:1px solid #8883;padding:3px 0"><button class="btn sm ${q.id === atual ? 'pri' : ''}" data-act="sp12FcLig2" data-a="${x.a}" data-id="${q.id}">${q.id === atual ? '✔ ligada' : 'Ligar'}</button><span class="small"><b>#${q.num}</b> ${esc(ocLocal(q).slice(0, 80))}${q.bairro ? ' — ' + esc(q.bairro) : ''}</span></div>`).join('');
+  const lin = o.ocorrencias.filter(q => !q.arquivo).sort((a, b) => a.num - b.num).map(q => `<div data-fcrow="${esc((ocLocal(q) + ' ' + (q.bairro || '') + ' ' + (q.desc || '')).toLowerCase())}" style="display:flex;gap:6px;align-items:center;border-bottom:1px solid #8883;padding:3px 0"><button class="btn sm ${q.id === atual ? 'pri' : ''}" data-act="sp12FcLig2" data-a="${x.a}" data-id="${q.id}" data-o="${o.id}">${q.id === atual ? '✔ ligada' : 'Ligar'}</button><span class="small"><b>#${q.num}</b> ${esc(ocLocal(q).slice(0, 80))}${q.bairro ? ' — ' + esc(q.bairro) : ''}</span></div>`).join('');
   abrirModal(`<div class="mh"><h3>📌 Ligar foto a um ponto</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
    <div class="row gap" style="align-items:flex-start"><a href="${FCURL + x.a}" target="_blank" rel="noopener"><img src="${FCURL + x.a}" style="width:180px;border-radius:6px" alt=""></a><div class="small muted">${esc(x.leg || '')}<br>${x.d ? fdB(x.d.slice(0, 10)) + ' ' + x.d.slice(11, 16) : ''}<br>${esc(x.rua || '')}</div></div>
    <label>Procurar a ocorrência (rua, bairro, nº)<input id="fc-busca" data-chg="sp12FcBusca" value="${esc(x.rua || '')}" placeholder="digite parte do nome"></label>
    <div id="fc-lista" style="max-height:48vh;overflow:auto">${lin}</div>
-   <div class="row gap" style="justify-content:space-between;margin-top:10px"><button class="btn" data-act="sp12FcLig2" data-a="${x.a}" data-id="">Desligar da ocorrência</button><button class="btn" data-act="mClose">Fechar</button></div></div>`);
+   <div class="row gap" style="justify-content:space-between;margin-top:10px"><button class="btn" data-act="sp12FcLig2" data-a="${x.a}" data-id="" data-o="${o.id}">Desligar da ocorrência</button><button class="btn" data-act="mClose">Fechar</button></div></div>`);
   CHG.sp12FcBusca($('#fc-busca')) };
 CHG.sp12FcBusca = el => { const q = (el.value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim(); document.querySelectorAll('#fc-lista [data-fcrow]').forEach(r => { const t = r.dataset.fcrow.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); r.style.display = !q || q.split(/\s+/).every(w => t.includes(w)) ? 'flex' : 'none' }) };
-ACTS.sp12FcLig2 = d => { const o = O(); if (!o) return; o.fcLig = o.fcLig || {}; o.fcLig[d.a] = d.id || '-';
+ACTS.sp12FcLig2 = d => { const o = d.o ? S.obras[d.o] : O(); if (!o) return; o.fcLig = o.fcLig || {}; o.fcLig[d.a] = d.id || '-';
   saveObra(o); fecharModal(false); toast(d.id ? 'Foto ligada ao ponto.' : 'Foto desligada.'); render() };
 
 /* lista das fotos de campo que não puderam ser localizadas (sem rua nem coordenada legível, ou sem ponto) */
 function fotosSemLocal(o) { return fcPasta(o).filter(x => !fcOk(o, x) && x.lat == null) }
-ACTS.sp12FcSem = () => { const o = O(); if (!o) return; const l = fotosSemLocal(o).sort((a, b) => a.a.localeCompare(b.a)); const pc = fcPasta(o).filter(x => x.lat != null && !fcOk(o, x)).length;
+ACTS.sp12FcSem = () => { ACTS.sp12Todas(); return; const o = O(); if (!o) return; const l = fotosSemLocal(o).sort((a, b) => a.a.localeCompare(b.a)); const pc = fcPasta(o).filter(x => x.lat != null && !fcOk(o, x)).length;
   const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Fotos sem localização</title><style>body{font:12px Arial,sans-serif;margin:20px;color:#111}h1{font-size:18px}.g{display:flex;flex-wrap:wrap;gap:8px}.c{width:170px;border:1px solid #bbb;padding:4px;font-size:10px;word-break:break-all}.c img{width:100%;height:150px;object-fit:cover}</style></head><body>
    <h1>Fotos de campo sem localização — ${esc(o.nome)}</h1><p>${l.length} foto(s) sem rua nem coordenada legível no carimbo e sem ocorrência ligada. ${pc ? pc + ' foto(s) têm coordenadas e aparecem como ponto próprio no mapa. ' : ''}Para cada uma, use “📌 Ligar a um ponto” em Pastas desta obra › Fotos de campo.</p>
    <div class="g">${l.map(x => `<div class="c"><img src="${FCURL + x.a}" alt=""><b>${esc(x.a)}</b><br>${x.d ? fdB(x.d.slice(0, 10)) + ' ' + x.d.slice(11, 16) : 'sem data lida'}</div>`).join('')}</div></body></html>`;
   abrirPreview('Fotos sem localização', html, false) };
 const _pp2 = painelPastas;
-painelPastas = function (o) { let h = _pp2(o); if (!h || !camada(o)) return h; const n = fotosSemLocal(o).length; if (!n) return h;
-  return h.replace(/<\/div><\/details>$/, `<div class="small" style="margin:6px 0 0 22px">⚠ ${n} foto(s) de campo sem rua nem coordenada legível <button class="btn sm" data-act="sp12FcSem">📋 Ver quais são</button></div></div></details>`) };
+painelPastas = function (o) { let h = _pp2(o); if (!h || !camada(o)) return h; const n = fcSemLocal().length; if (!n) return h;
+  return h.replace(/<\/div><\/details>$/, `<div class="small" style="margin:6px 0 0 22px">⚠ ${n} foto(s) de campo ainda sem localização: ficam em <b>🗺 Todas as obras</b> › Fotos de campo sem localização <button class="btn sm" data-act="sp12Todas">Abrir Todas as obras</button></div></div></details>`) };
 
 /* sem o contorno de foco do navegador (quadro preto) ao tocar em linhas e pontos do mapa */
 try { const st = document.createElement('style'); st.textContent = '.leaflet-container .leaflet-interactive:focus,.leaflet-container path:focus{outline:none}'; document.head.appendChild(st) } catch (e) { }
@@ -3920,8 +3920,8 @@ fcDaOc = function (o, oc) { const r = _fcd14.apply(this, arguments); try { const
 
 /* ---------- SP-17 (10/11/2026): toda foto de campo com coordenada fica LIGADA à ocorrência mais próxima (de qualquer obra) e aparece no balão dela; nada de ponto de foto solto ---------- */
 let __fcA = null, __fcAk = '';
-function fcAuto() { const obras = Object.values(S.obras || {}).filter(o => camada(o));
-  const k = obras.map(o => o.id + ':' + (o.ocorrencias || []).length + ':' + Object.keys(o.fcLig || {}).length).join('|'); if (__fcA && k === __fcAk) return __fcA;
+function fcAuto() { fcLocAplica(); const obras = Object.values(S.obras || {}).filter(o => camada(o));
+  const k = obras.map(o => o.id + ':' + (o.ocorrencias || []).length + ':' + Object.keys(o.fcLig || {}).length + ':' + Object.values(o.fcLoc || {}).map(v => v.em).join(',')).join('|'); if (__fcA && k === __fcAk) return __fcA;
   const m = {}; FC.forEach(x => { if (x.lat == null) return;
     if (obras.some(o => { const v = (o.fcLig || {})[x.a]; return v === '-' || (v && v !== '-') })) return; /* o usuário já ligou ou desligou à mão */
     if (x.o && x.e && obras.some(o => camada(o) === x.o && (o.ocorrencias || []).some(q => q.ext === x.e || (o.extAlias || {})[x.e] === q.ext))) return; /* já ligada pela leitura do carimbo */
@@ -4044,6 +4044,60 @@ const _tMapaZ = tMapa;
 tMapa = function (o) { let h = _tMapaZ.apply(this, arguments); const R0 = RT();
   const lin = `<label class="chk" style="margin:0"><input type="checkbox" data-chg="sp12Rc" data-k="traj" ${R0.traj && R0.modo !== 'nao' ? 'checked' : ''}> <i style="display:inline-block;width:24px;height:0;border-radius:0;border-top:3px solid #c2255c;vertical-align:middle"></i> Linhas (trajetos entre as ocorrências)</label><label class="chk" style="margin:0"><input type="checkbox" data-chg="sp12Rc" data-k="raio" ${R0.raio && R0.modo !== 'nao' ? 'checked' : ''}> <i style="display:inline-block;width:16px;height:16px;border:2px dashed #c2255c;border-radius:50%;vertical-align:middle"></i> Raios de atendimento</label>`;
   const q = h.indexOf('class="legend"'); const e = q < 0 ? -1 : h.indexOf('</div>', q); return e < 0 ? h : h.slice(0, e) + lin + h.slice(e) };
+/* ---------- SP-19 (10/11/2026): pastas e fotos de campo SEPARADAS POR OBRA; em “🗺 Todas as obras” aparecem todas as pastas e todas as fotos, e cada foto sem localização ganha “📍 Locar foto” (clicar no mapa ou buscar o endereço) ---------- */
+const SP19_ISO = () => new Date().toISOString();
+const todasObras = () => Object.values(S.obras || {});
+/* aplica as localizações feitas à mão (o.fcLoc, guardado na obra que fica com a foto e enviado à nuvem com ela) */
+function fcLocAplica() { const L0 = {}; todasObras().forEach(o => Object.entries(o.fcLoc || {}).forEach(([a, v]) => { L0[a] = v }));
+  FC.forEach(x => { const v = L0[x.a]; if (v) { if (x.__orig === undefined) x.__orig = { lat: x.lat, lng: x.lng }; x.lat = v.lat; x.lng = v.lng; x.locUser = true; if (v.rua && !x.rua) x.rua = v.rua } else if (x.locUser) { x.lat = x.__orig.lat; x.lng = x.__orig.lng; x.locUser = false } }) }
+/* a foto é desta obra? (ligada à mão a uma ocorrência dela, pelo carimbo na mesma camada, ou pela ocorrência mais próxima) */
+function fcDaObra(o, x) { fcAuto(); const v = (o.fcLig || {})[x.a]; if (v) return v !== '-';
+  if (todasObras().some(q => q !== o && (q.fcLig || {})[x.a])) return false;
+  if (x.o) return x.o === camada(o); const a = fcAuto()[x.a]; return !!(a && a.o === o.id) }
+/* fotos sem localização nenhuma (em qualquer obra) */
+function fcSemLocal() { fcAuto(); return FC.filter(x => { const ligs = todasObras().map(o => (o.fcLig || {})[x.a]).filter(Boolean); if (ligs.some(v => v !== '-')) return false; if (ligs.length) return true; return x.lat == null && !x.o }).sort((a, b) => a.a.localeCompare(b.a)) }
+const fcInfo = x => esc((x.rua ? x.rua + (x.b ? ' — ' + x.b : '') : '') || x.leg || '').slice(0, 90);
+const fcData = x => x.d ? fdB(x.d.slice(0, 10)) + ' ' + x.d.slice(11, 16) : 'sem data lida';
+const fcThumb = (x, w) => `<img src="${FCURL + x.a}" style="width:${w}px;height:${Math.round(w * 1.1)}px;object-fit:cover;margin:4px 4px 0 0;border-radius:6px;cursor:zoom-in" loading="lazy" onclick="__sp12Ver('${FCURL + x.a}')" onerror="this.style.display='none'" alt="">`;
+function fcDiasHtml(o, l) { const dias = {}; l.forEach(x => { const d = (x.d || '').slice(0, 10); (dias[d] = dias[d] || []).push(x) });
+  return Object.keys(dias).sort().map(k => `<details style="margin:6px 0 0 22px"><summary style="cursor:pointer">📂 ${k ? fdB(k) : 'sem data'} <span class="muted small">(${dias[k].length} foto(s))</span></summary><div>${dias[k].map(x => `<div style="display:inline-block;vertical-align:top;width:156px;margin-right:4px">${fcThumb(x, 150)}<div class="small" style="line-height:1.25">${fcInfo(x)}<br><span class="muted">✔ ligada a um ponto</span><br><button class="btn sm" data-act="sp12FcLigar" data-a="${x.a}" data-o="${o.id}">📌 Trocar</button> <button class="btn sm" data-act="sp19Loc" data-a="${x.a}">📍 Corrigir local</button></div></div>`).join('')}</div></details>`).join('') }
+function cardFotosTodas() { const ob = obrasVisiveis().filter(o => !(S.sp12Obs && S.sp12Obs[o.id] === false)); const sem = fcSemLocal();
+  const porObra = ob.map(o => { const cam = camada(o), all = ativas(o), na = all.filter(x => pastaDe(x) === 'ATUAL').length, subs = {}; all.forEach(x => { const k = pastaDe(x); if (k !== 'ATUAL') subs[k] = (subs[k] || 0) + 1 });
+    const ks = Object.keys(subs).sort((a, b) => a.localeCompare(b, 'pt-BR')), nk = ks.reduce((s, k) => s + subs[k], 0), fl = FC.filter(x => fcDaObra(o, x));
+    return `<details style="border-top:1px solid var(--line);padding:6px 0"><summary style="cursor:pointer"><b>📂 ${esc(o.nome)}</b> <span class="muted small">— ${na} ocorrência(s) atuais${cam ? ' · ' + nk + ' marcação(ões) do Google Earth' : ''} · ${fl.length} foto(s) de campo</span></summary>
+     <div style="margin:6px 0 0 16px"><div class="small">📁 Ocorrências atuais <span class="muted">(${na})</span></div>${cam ? `<div class="small" style="margin-top:4px">📁 Marcações do Google Earth — ${tit[cam]} <span class="muted">(${nk})</span></div><div class="small muted" style="columns:2;column-gap:20px;margin-left:16px">${ks.map(k => '📂 ' + esc(k.slice(4)) + ' (' + subs[k] + ')').join('<br>')}</div>` : ''}
+     ${fl.length ? `<div class="small" style="margin-top:6px">📁 Fotos de campo desta obra <span class="muted">(${fl.length})</span></div>${fcDiasHtml(o, fl)}` : '<div class="small muted" style="margin-top:6px">Nenhuma foto de campo ligada a esta obra.</div>'}</div></details>` }).join('');
+  const semH = `<details open style="border-top:1px solid var(--line);padding:6px 0"><summary style="cursor:pointer"><b>⚠ Fotos de campo sem localização</b> <span class="muted small">(${sem.length})</span></summary>
+    <p class="small muted" style="margin:6px 0">Toque na foto para ver grande. Em cada uma, “📍 Locar foto”: marque o local no mapa ou busque o endereço; a foto passa a ficar na obra da ocorrência mais próxima.</p>
+    <div>${sem.map(x => `<div style="display:inline-block;vertical-align:top;width:156px;margin-right:4px">${fcThumb(x, 150)}<div class="small" style="line-height:1.25"><span class="muted">${fcData(x)}</span><br><button class="btn sm pri" data-act="sp19Loc" data-a="${x.a}">📍 Locar foto</button></div></div>`).join('') || '<p class="small muted">Todas as fotos estão localizadas. ✔</p>'}</div></details>`;
+  return `<div class="card" style="margin:12px 0"><h3 style="margin:0 0 6px">📁 Pastas e fotos — todas as obras</h3><p class="muted small" style="margin:0 0 6px">Dentro de cada obra aparecem só as pastas e fotos dela. Aqui estão todas, mais as fotos que ainda não têm localização.</p>${porObra}${semH}</div>` }
+const _telaTodasFC = telaTodas;
+telaTodas = function () { const h = _telaTodasFC.apply(this, arguments); const i = h.indexOf('<div id="sp12all"'); const c = cardFotosTodas(); return i < 0 ? h + c : h.slice(0, i) + c + h.slice(i) };
+
+/* janela “Locar foto”: busca por endereço ou clique no mapa */
+ACTS.sp19Loc = d => { const x = FC.find(f => f.a === d.a); if (!x) return; M = { t: 'sp19fc', a: x.a, pos: x.lat != null ? { lat: x.lat, lng: x.lng } : null, rua: '' };
+  abrirModal(`<div class="mh"><h3>📍 Locar foto no mapa</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+   <div class="row gap" style="align-items:flex-start;flex-wrap:wrap"><img src="${FCURL + x.a}" style="max-width:100%;max-height:40vh;border-radius:8px;cursor:zoom-in" onclick="__sp12Ver('${FCURL + x.a}')" alt=""><div class="small muted">${esc(x.leg || '')}<br>${fcData(x)}<br>${esc(x.rua || '')}${x.locUser ? '<br><b>Localizada à mão</b>' : ''}</div></div>
+   <label>Buscar pelo endereço<div class="row gap"><input id="fl-q" value="${esc(x.rua ? x.rua + (x.b ? ', ' + x.b : '') : '')}" placeholder="Rua, bairro" style="flex:1"><button class="btn" data-act="sp19Busca">🔎 Buscar</button></div></label><div id="fl-res"></div>
+   <p class="small muted" style="margin:6px 0 0">Ou toque no mapa no local onde a foto foi tirada. Arraste o pino para ajustar.</p><div id="fl-map" class="pickmap"></div><p id="fl-st" class="small" style="margin:4px 0 0;color:#2563a8"></p></div>
+   <div class="mf">${x.locUser ? `<button class="btn dan" data-act="sp19Limpa" data-a="${x.a}">Remover localização</button><span class="sp"></span>` : ''}<button class="btn" data-act="mClose">Cancelar</button><button class="btn pri" data-act="sp19Salva">Salvar localização</button></div>`);
+  const el = $('#fl-map'); if (!el) return; if (typeof L === 'undefined') { el.innerHTML = '<div class="nomap">Mapa indisponível (sem internet).</div>'; return }
+  const c = S.settings.mapa, map = L.map(el).setView(M.pos ? [M.pos.lat, M.pos.lng] : [c.lat, c.lng], M.pos ? 17 : c.zoom); L.tileLayer(OSM, { maxZoom: 19, attribution: '© OpenStreetMap' }).addTo(map); M.map = map;
+  M.pin = null; const pin = (la, ln, voa) => { M.pos = { lat: la, lng: ln }; if (M.pin) M.pin.setLatLng([la, ln]); else { M.pin = L.marker([la, ln], { draggable: true }).addTo(map); M.pin.on('dragend', e => { const p = e.target.getLatLng(); pin(p.lat, p.lng) }) }
+    if (voa) map.setView([la, ln], 18); const s = $('#fl-st'); if (s) s.textContent = 'Local marcado: ' + la.toFixed(5) + ', ' + ln.toFixed(5) }; M.setPin = pin;
+  if (M.pos) pin(M.pos.lat, M.pos.lng); map.on('click', e => { M.rua = ''; pin(e.latlng.lat, e.latlng.lng) }); setTimeout(() => { if (M && M.map === map) map.invalidateSize({ animate: false }) }, 90) };
+ACTS.sp19Busca = () => { const q = ($('#fl-q').value || '').trim(); if (!q) { toast('Digite a rua ou o bairro.'); return } const o = O(); const cid = (o && o.cidade) || 'Rio das Ostras';
+  $('#fl-res').innerHTML = '<p class="small muted">Buscando…</p>';
+  geocodificar(/rio das ostras/i.test(q) ? q : q + ', ' + cid).then(r => { if (!M || M.t !== 'sp19fc') return; if (!r.length) { $('#fl-res').innerHTML = '<p class="small muted">Nenhum resultado. Toque no mapa para marcar o ponto.</p>'; return }
+    M.geo = r; $('#fl-res').innerHTML = '<div class="geo">' + r.map((x, i) => `<button data-act="sp19Esc" data-i="${i}">${esc(x.display_name)}</button>`).join('') + '</div>' }).catch(() => { $('#fl-res').innerHTML = '<p class="small muted">Busca indisponível (sem internet?). Toque no mapa para marcar o ponto.</p>' }) };
+ACTS.sp19Esc = d => { const x = M.geo && M.geo[+d.i]; if (!x || !M.setPin) return; M.rua = String(x.display_name || '').split(',')[0]; M.setPin(parseFloat(x.lat), parseFloat(x.lon), true); $('#fl-res').innerHTML = '' };
+ACTS.sp19Salva = () => { if (!M || M.t !== 'sp19fc') return; if (!M.pos) { toast('Marque o local no mapa ou escolha um resultado da busca.'); return } const x = FC.find(f => f.a === M.a); if (!x) return;
+  let best = null; todasObras().forEach(o => { let l = []; try { l = ativas(o) } catch (e) { l = o.ocorrencias || [] } l.forEach(q => { if (q.lat == null || q.lng == null) return; const dd = distM(M.pos, q); if (!best || dd < best.d) best = { o, q, d: dd } }) });
+  const host = best ? best.o : (O() || obrasVisiveis()[0]); if (!host) { toast('Nenhuma obra disponível para guardar a localização.'); return }
+  todasObras().forEach(o => { let ch = false; if (o !== host && o.fcLoc && o.fcLoc[M.a]) { delete o.fcLoc[M.a]; ch = true } if ((o.fcLig || {})[M.a] === '-') { delete o.fcLig[M.a]; ch = true } if (ch) saveObra(o) });
+  host.fcLoc = host.fcLoc || {}; host.fcLoc[M.a] = { lat: +M.pos.lat.toFixed(6), lng: +M.pos.lng.toFixed(6), rua: M.rua || '', em: SP19_ISO(), quem: quem() }; saveObra(host);
+  const msg = best ? 'Foto localizada e ligada à ocorrência nº ' + best.q.num + ' da obra “' + host.nome + '” (a ' + Math.round(best.d) + ' m).' : 'Foto localizada.'; fecharModal(false); render(); toast(msg, 5000) };
+ACTS.sp19Limpa = d => { if (!confirm('Remover a localização desta foto?')) return; todasObras().forEach(o => { if (o.fcLoc && o.fcLoc[d.a]) { delete o.fcLoc[d.a]; saveObra(o) } }); fecharModal(false); render(); toast('Localização removida.') };
 })();
 </script>
 
