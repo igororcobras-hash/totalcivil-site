@@ -3987,20 +3987,21 @@ const b64bytes = d => { const s = atob(String(d).split(',')[1] || ''); const u =
 async function exportaKmz(obras, rotulo) {
   obras = obras.filter(Boolean); if (!obras.length) return; const arqs = [], feitos = new Map(); let nF = 0, nO = 0; const gc = verCusto();
   const st = { alta: PRI.alta.c, media: PRI.media.c, baixa: PRI.baixa.c, feito: '#2e7d4f' };
-  let estilos = Object.entries(st).map(([k, c]) => `<Style id="p_${k}"><IconStyle><color>${corKml(c)}</color><scale>1.1</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle><LabelStyle><scale>0.7</scale></LabelStyle><BalloonStyle><text>$[description]</text></BalloonStyle></Style>`).join('');
+  let estilos = Object.entries(st).map(([k, c]) => `<Style id="p_${k}"><IconStyle><scale>1.2</scale><Icon><href>https://earth.google.com/earth/document/icon?color=${String(c).replace('#', '').toLowerCase()}&amp;id=2000&amp;scale=4</href></Icon><hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/></IconStyle><LabelStyle><scale>0.8</scale></LabelStyle></Style>`).join('');
   toast('Montando o KMZ… (lendo as fotos)');
   const pasta = []; for (const o of obras) { let l = []; try { l = ativas(o) } catch (e) { l = o.ocorrencias || [] } l = l.filter(x => x.lat != null && x.lng != null);
     const porB = {}; l.forEach(x => { (porB[x.bairro || 'Sem bairro'] = porB[x.bairro || 'Sem bairro'] || []).push(x) });
     const fb = []; for (const b of Object.keys(porB).sort((a, c) => a.localeCompare(c, 'pt-BR'))) { const pms = [];
-      for (const x of porB[b].sort((a, c) => a.num - c.num)) { nO++; const imgs = [];
-        for (const f of (x.fotos || [])) { let nome = feitos.get('d' + f.id); if (!nome) { try { const d = await getFoto(f.id); if (d) { nome = 'files/' + String(f.id).replace(/[^\w-]/g, '') + '.jpg'; arqs.push({ nome, dados: b64bytes(d) }); feitos.set('d' + f.id, nome); nF++ } } catch (e) { } } if (nome) imgs.push(`<img src="${nome}" width="420"><br>`) }
-        for (const q of fcDaOc(o, x)) { let nome = feitos.get('c' + q.a); if (!nome) { try { const d = await bytesDe(FCURL + q.a); nome = 'files/campo_' + q.a.replace(/[^\w.-]/g, '_'); arqs.push({ nome, dados: d }); feitos.set('c' + q.a, nome); nF++ } catch (e) { } } if (nome) imgs.push(`<img src="${nome}" width="420"><br>`) }
-        (x.fotosKml || []).forEach(t => imgs.push(`<img src="${fotoUrl(t)}" width="420"><br>`));
+      for (const x of porB[b].sort((a, c) => a.num - c.num)) { nO++; const imgs = [], urls = [];
+        for (const f of (x.fotos || [])) { let nome = feitos.get('d' + f.id); if (!nome) { try { const d = await getFoto(f.id); if (d) { nome = 'files/' + String(f.id).replace(/[^\w-]/g, '') + '.jpg'; arqs.push({ nome, dados: b64bytes(d) }); feitos.set('d' + f.id, nome); nF++ } } catch (e) { } } if (nome) { urls.push(nome); imgs.push(`<p><img src="${nome}" width="400"></p>`) } }
+        for (const q of fcDaOc(o, x)) { let nome = feitos.get('c' + q.a); if (!nome) { try { const d = await bytesDe(FCURL + q.a); nome = 'files/campo_' + q.a.replace(/[^\w.-]/g, '_'); arqs.push({ nome, dados: d }); feitos.set('c' + q.a, nome); nF++ } catch (e) { } } if (nome) { urls.push(nome); imgs.push(`<p><img src="${nome}" width="400"></p>`) } }
+        (x.fotosKml || []).forEach(t => { const u = fotoUrl(t).replace('fife=s500', 'fife=s1200'); urls.push(u); imgs.push(`<p><img src="${u}" width="400"></p>`) });
         const feito = x.status === 'executada' || x.status === 'medida'; let pr = 'media'; try { pr = priEf(x) } catch (e) { }
         let ins = ''; try { const i = insumosOc(o, x); if (i) ins = `<p><b>Materiais:</b> ${linIns(i.mat)}<br><b>Equipamentos:</b> ${linIns(i.eq, 'eq')}<br><b>Mão de obra:</b> ${linIns(i.mo)}</p>` } catch (e) { }
         let cus = ''; try { const cv = custoOc(o, x); if (gc && cv > 0) cus = `<p><b>Custo ${custoReal(o, x) > 0 ? 'real' : 'estimado'}:</b> ${fR(cv)}</p>` } catch (e) { }
         const desc = `<div style="width:440px;font-family:Arial"><h3>#${x.num} ${xe(ocLocal(x))}</h3><p>${xe(o.nome)}<br>Prioridade: ${xe((PRI[pr] || {}).l || pr)} · Situação: ${xe((ST[x.status] || {}).l || x.status)}</p><p>${xe(x.desc || '')}</p>${cus}${ins}${imgs.join('')}</div>`;
-        pms.push(`<Placemark><name>#${x.num} ${xe(x.rua || ocLocal(x))}</name><styleUrl>#p_${feito ? 'feito' : pr}</styleUrl><description><![CDATA[${desc}]]></description><Point><coordinates>${x.lng},${x.lat},0</coordinates></Point></Placemark>`) }
+        const car = urls.length ? '<gx:Carousel>' + urls.map((u, k) => `<gx:Image kml:id="img_${x.num}_${k}"><gx:imageUrl>${xe(u)}</gx:imageUrl></gx:Image>`).join('') + '</gx:Carousel>' : '';
+        pms.push(`<Placemark id="oc_${x.num}"><name>#${x.num} ${xe(x.rua || ocLocal(x))}</name><description><![CDATA[${desc}]]></description><LookAt><longitude>${x.lng}</longitude><latitude>${x.lat}</latitude><altitude>0</altitude><heading>0</heading><tilt>0</tilt><range>250</range></LookAt><styleUrl>#p_${feito ? 'feito' : pr}</styleUrl>${car}<Point><coordinates>${x.lng},${x.lat},0</coordinates></Point></Placemark>`) }
       fb.push(`<Folder><name>${xe(b)} (${porB[b].length})</name>${pms.join('')}</Folder>`) }
     pasta.push(`<Folder><name>${xe(o.nome)} (${l.length})</name>${fb.join('')}</Folder>`) }
   /* rotas e raios dos planejamentos visíveis */
@@ -4011,7 +4012,7 @@ async function exportaKmz(obras, rotulo) {
       return `<Placemark><name>${xe(rot)} · ${com.length} ocorr. · ${fN(g.km, 1)} km</name><styleUrl>#${id}</styleUrl><LineString><tessellate>1</tessellate><coordinates>${com.map(r => r.x.lng + ',' + r.x.lat + ',0').join(' ')}</coordinates></LineString></Placemark>${circ}` }).join('');
     pl.push(`<Folder><name>${xe(p.nome)}</name>${ls}</Folder>`) }) } catch (e) { console.warn('kmz rotas', e) }
   const hoje = new Date().toISOString().slice(0, 10);
-  const kml = `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Total Civil — ${xe(rotulo)} — ${hoje}</name>${estilos}${pasta.join('')}${pl.length ? `<Folder><name>Planejamentos (rotas e raios)</name>${pl.join('')}</Folder>` : ''}</Document></kml>`;
+  const kml = `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2" xmlns:kml="http://www.opengis.net/kml/2.2"><Document><name>Total Civil — ${xe(rotulo)} — ${hoje}</name>${estilos}${pasta.join('')}${pl.length ? `<Folder><name>Planejamentos (rotas e raios)</name>${pl.join('')}</Folder>` : ''}</Document></kml>`;
   arqs.unshift({ nome: 'doc.kml', dados: new TextEncoder().encode(kml) });
   const blob = zip19(arqs); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = ('TotalCivil_' + rotulo).replace(/[^\w-]+/g, '_').slice(0, 60) + '_' + hoje + '.kmz'; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove() }, 4000);
   toast(`KMZ gerado: ${nO} ocorrência(s), ${nF} foto(s) dentro do arquivo. Abra no Google Earth.`); window.__sp19ult = { nO, nF, tam: blob.size, kml: kml.length } }
