@@ -2586,6 +2586,50 @@ ACTS.ocExportar = async function () { if (!M || M.t !== 'oc' || M.novo || !can('
   rem.concat(docRem).forEach(id => { DB.del('fotos', id); fotoCache.delete(id); });
   const oc = await exportarRelato(o, x, dest, mot); render();
   toast('Relato nº ' + x.num + ' exportado para “' + dest.nome + '” como relato nº ' + oc.num + '.', 6000); };
+
+/* ---------- PATCH SP-32 (10/11/2026): mover ocorrência e foto de uma obra para outra ----------
+   (1) botão “🔀 Mover” em TODO cartão de ocorrência: escolhe a obra e a ocorrência vai para ela (como exportação: o original fica
+       arquivado, marcado “exportado para”); (2) em “Abrir / editar”, cada foto tem “↗ mover”: vai para outra ocorrência (da mesma obra
+       ou de outra) ou para uma ocorrência nova da obra escolhida, e sai da ocorrência de origem. */
+const sp32Obras = () => Object.values(S.obras).filter(x => x && !x.demo === !(O() && O().demo) && (!S.trava || (S.acessos && S.acessos[x.id]))).sort((a, b) => String(a.nome).localeCompare(String(b.nome), 'pt-BR'));
+const _ocCard32 = ocCard;
+ocCard = function (o, oc) { const h = _ocCard32.apply(this, arguments); if (!oc || oc.arquivo || !can('ocorr') || sp32Obras().length < 2) return h;
+  return h.replace('<button class="btn sm" data-act="ocEdit" data-id="' + oc.id + '">', '<button class="btn sm" data-act="sp32Mover" data-id="' + oc.id + '" title="Trocar de obra / tipo de obra">🔀 Mover</button><button class="btn sm" data-act="ocEdit" data-id="' + oc.id + '">') };
+ACTS.sp32Mover = function (d) { if (!can('ocorr')) return; const o = O(), x = o.ocorrencias.find(y => y.id === d.id); if (!x) return;
+  if (o.execucoes.some(e => e.ocorrenciaId === x.id)) { toast('Esta ocorrência já tem execução lançada (RDO/medição) e não pode mudar de obra. Mova só as fotos, em “Abrir / editar”.', 6000); return }
+  const ops = sp32Obras().filter(y => y.id !== o.id).map(y => `<option value="${y.id}">${esc(y.nome)}${y.contrato ? ' · contrato ' + esc(y.contrato) : ''}</option>`).join('');
+  M = { t: 'sp32mv', id: x.id };
+  abrirModal(`<div class="mh"><h3>🔀 Mover a ocorrência nº ${x.num} para outra obra</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+   <p class="small">${esc(ocLocal(x))} — <span class="muted">${esc((x.desc || '').slice(0, 160))}</span></p>
+   <p class="small">Vai para a obra escolhida (fotos, documentos, local, relato, materiais e equipe vão juntos). Aqui ela sai da lista e fica em “Ocorrências Arquivadas”, marcada “exportado para” a outra obra; fotos de campo e do Google Earth ligadas a ela também passam para a nova obra.</p>
+   <div class="g2"><label>Obra de destino<select id="mv-o">${ops}</select></label><label>Motivo / observação<input id="mv-m" placeholder="ex.: rua de paralelepípedo"></label></div></div>
+   <div class="mf"><button class="btn" data-act="mClose">Cancelar</button><button class="btn pri" data-act="sp32MoverOk">🔀 Mover</button></div>`) };
+ACTS.sp32MoverOk = async function () { if (!M || M.t !== 'sp32mv') return; const o = O(), x = o.ocorrencias.find(y => y.id === M.id), dest = S.obras[$('#mv-o').value]; if (!x || !dest) { toast('Escolha a obra de destino.'); return }
+  const mot = ($('#mv-m').value || '').trim(); fecharModal(false); const oc = await exportarRelato(o, x, dest, mot); render();
+  toast('Ocorrência nº ' + x.num + ' movida para “' + dest.nome + '” (nº ' + oc.num + ').', 6000) };
+/* foto: “↗ mover” em Abrir / editar */
+const _fa32 = fotosArea;
+fotosArea = function (fotos, kind) { let h = _fa32.apply(this, arguments); if (kind !== 'oc' || !M || M.t !== 'oc' || M.novo || !can('ocorr')) return h;
+  return h.replace(/<button class="btn mini dan" data-act="fotoDel" data-i="(\d+)">/g, '<button class="btn mini" data-act="sp32FotoMv" data-i="$1" title="Levar esta foto para outra ocorrência / obra">↗ mover</button> <button class="btn mini dan" data-act="fotoDel" data-i="$1">') };
+ACTS.sp32FotoMv = function (d) { const fig = document.querySelectorAll('#fotosArea figure.th')[+d.i]; if (!fig) return; const ja = fig.querySelector('.sp32f'); if (ja) { ja.remove(); return }
+  const o = O(), obs = sp32Obras(); M.mvI = +d.i; const div = document.createElement('div'); div.className = 'sp32f'; div.style.cssText = 'margin-top:6px;padding:6px;border:1px solid #c9a227;border-radius:6px;background:rgba(201,162,39,.08)';
+  div.innerHTML = `<label class="small">Obra<select id="sp32-ob" data-chg="sp32FotoObra">${obs.map(y => `<option value="${y.id}" ${y.id === o.id ? 'selected' : ''}>${esc(y.nome)}</option>`).join('')}</select></label>
+   <label class="small">Ocorrência<select id="sp32-oc"></select></label><div class="row gap" style="margin-top:4px"><button type="button" class="btn mini pri" data-act="sp32FotoOk">Mover foto</button><button type="button" class="btn mini" data-act="sp32FotoNo">Cancelar</button></div>`;
+  fig.appendChild(div); CHG.sp32FotoObra($('#sp32-ob')) };
+CHG.sp32FotoObra = function (el) { const ob = S.obras[el.value], sel = $('#sp32-oc'); if (!ob || !sel) return; const o = O(); const l = ativas(ob).filter(y => !(ob.id === o.id && M && M.d && y.id === M.d.id));
+  sel.innerHTML = '<option value="+">➕ Nova ocorrência nesta obra</option>' + l.slice(0, 400).map(y => `<option value="${y.id}">#${y.num} ${esc(ocLocal(y)).slice(0, 70)}</option>`).join('') };
+ACTS.sp32FotoNo = function () { document.querySelectorAll('.sp32f').forEach(e => e.remove()) };
+ACTS.sp32FotoOk = async function () { if (!M || M.t !== 'oc' || M.mvI == null) return; const o = O(), x = o.ocorrencias.find(y => y.id === M.d.id), f = M.d.fotos[M.mvI], dest = S.obras[($('#sp32-ob') || {}).value], alvo = ($('#sp32-oc') || {}).value; if (!x || !f || !dest || !alvo) return;
+  const cp = await dupArq([f], dest.id, 'f'); if (!cp.length) { toast('Não achei esta foto no aparelho nem na nuvem; não foi movida.', 5000); return }
+  let dc = alvo === '+' ? null : dest.ocorrencias.find(y => y.id === alvo);
+  if (!dc) { dc = { id: 'c' + uid(), num: ++dest.seq, rua: x.rua || '', bairro: x.bairro || '', ref: x.ref || '', lat: f.lat != null ? f.lat : (x.lat != null ? x.lat : null), lng: f.lat != null ? f.lng : (x.lng != null ? x.lng : null), origem: f.lat != null ? (f.origem || x.origem || null) : (x.origem || null),
+      desc: '', sug: '', constat: '', tipo: x.tipo || '', med: { c: 0, l: 0 }, priF: 'media', fotos: [], docs: [], criadoEm: new Date().toISOString(), criadoPor: quem(), ext: '', hist: [], status: 'relato', veioDe: { obraId: o.id, obra: o.nome, num: x.num, orgao: 'Foto movida' } };
+    dest.ocorrencias.push(dc); recalcStatus(dest, dc) }
+  dc.fotos = (dc.fotos || []).concat(cp); log(dc, 'Recebeu 1 foto da ocorrência nº ' + x.num + ' da obra “' + o.nome + '”'); log(x, 'Foto movida para a ocorrência nº ' + dc.num + ' da obra “' + dest.nome + '”');
+  M.d.fotos.splice(M.mvI, 1); M.mvI = null; M.orig = (M.orig || []).filter(id => id !== f.id); M.novas = (M.novas || []).filter(id => id !== f.id);
+  x.fotos = (x.fotos || []).filter(y => y.id !== f.id); DB.del('fotos', f.id); fotoCache.delete(f.id);
+  await saveObra(o); if (dest !== o) await saveObra(dest); try { if (typeof nuvSobeFotos === 'function' && nuvPode(dest)) nuvSobeFotos(dest) } catch (e) { }
+  refreshFotos(); toast('Foto movida para a ocorrência nº ' + dc.num + ' de “' + dest.nome + '”.', 5000) };
 })();
 /* =====================================================================
    PATCH SP-06 (04/11/2026)
@@ -4169,7 +4213,10 @@ const SP19_ISO = () => new Date().toISOString();
 const todasObras = () => Object.values(S.obras || {});
 /* aplica as localizações feitas à mão (o.fcLoc, guardado na obra que fica com a foto e enviado à nuvem com ela) */
 function fcLocAplica() { const L0 = {}; todasObras().forEach(o => Object.entries(o.fcLoc || {}).forEach(([a, v]) => { L0[a] = v }));
-  FC.forEach(x => { const v = L0[x.a]; if (v) { if (x.__orig === undefined) x.__orig = { lat: x.lat, lng: x.lng }; x.lat = v.lat; x.lng = v.lng; x.locUser = true; if (v.sup) { if (x.__sup0 === undefined) x.__sup0 = x.sup || null; x.sup = v.sup } if (v.rua && !x.rua) x.rua = v.rua } else if (x.locUser) { x.lat = x.__orig.lat; x.lng = x.__orig.lng; x.locUser = false } }) }
+  FC.forEach(x => { const v = L0[x.a]; if (v) { if (x.__orig === undefined) x.__orig = { lat: x.lat, lng: x.lng }; x.lat = v.lat; x.lng = v.lng; x.locUser = true; if (v.rua && !x.rua) x.rua = v.rua
+    /* SP-32: o que o usuário escolheu manda sobre o carimbo: tipo de via/obra (x.o), ligação à marcação (x.e) e o aviso vermelho (x.conf) */
+    if (v.sup || v.obra) { if (x.__c0 === undefined) x.__c0 = { o: x.o, e: x.e, sup: x.sup, conf: x.conf }; x.sup = v.sup || x.sup; x.o = v.obra ? '' : v.sup; x.e = ''; x.conf = '' } else if (x.__c0 === undefined) { x.__c0 = { o: x.o, e: x.e, sup: x.sup, conf: x.conf }; x.conf = '' }
+  } else if (x.locUser || x.__c0 !== undefined) { if (x.__orig) { x.lat = x.__orig.lat; x.lng = x.__orig.lng } x.locUser = false; if (x.__c0 !== undefined) { x.o = x.__c0.o; x.e = x.__c0.e; x.sup = x.__c0.sup; x.conf = x.__c0.conf; delete x.__c0 } } }) }
 /* a foto é desta obra? (ligada à mão a uma ocorrência dela, pelo carimbo na mesma camada, ou pela ocorrência mais próxima) */
 function fcDaObra(o, x) { fcAuto(); const ex = fcExpMap()[x.a]; if (ex) return ex.o === o.id; /* SP-30: foi junto com a ocorrência exportada */
   const v = (o.fcLig || {})[x.a]; if (v) return v !== '-';
