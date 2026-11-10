@@ -3334,7 +3334,8 @@ const FC = [{"a":"IMG-20261103-WA0175.jpg","d":"2026-11-03T15:07:00","leg":"","r
 const FCURL = '/manutencao/fotos-campo/';
 const fcObra = { p: 'p', np: 'np', prop: 'prop' };
 const fcFoto = (x, w) => `<a href="${FCURL + x.a}" target="_blank" rel="noopener" title="${esc((x.leg || x.rua || x.a) + ' — ' + (x.d || '').replace('T', ' ').slice(0, 16))}"><img src="${FCURL + x.a}" style="width:${w || 150}px;height:${Math.round((w || 150) * 1.1)}px;object-fit:cover;margin:4px 4px 0 0;border-radius:6px" loading="lazy" onerror="this.parentNode.style.display='none'"></a>`;
-const fcDaOc = (o, oc) => { const cam = camada(o); if (!cam || !oc || !oc.ext) return []; return FC.filter(x => x.e === oc.ext && x.o === cam) };
+const fcDaOc = (o, oc) => { if (!oc) return []; const lg = o.fcLig || {}; const cam = camada(o); return FC.filter(x => lg[x.a] ? lg[x.a] === oc.id : (cam && oc.ext && x.e === oc.ext && x.o === cam)) };
+const fcOk = (o, x) => { const v = (o.fcLig || {})[x.a]; return v ? v !== '-' : !!x.o };
 const fcPasta = o => { const cam = camada(o); return FC.filter(x => !x.o || x.o === cam) };
 /* fotos de campo dentro da ocorrência */
 const _ocCard2 = ocCard;
@@ -3346,8 +3347,8 @@ const _pp = painelPastas;
 painelPastas = function (o) { let h = _pp(o); if (!h) return h; const of = off(); const l = fcPasta(o); if (!l.length) return h;
   const dias = {}; l.forEach(x => { const d = (x.d || '').slice(0, 10); (dias[d] = dias[d] || []).push(x) });
   const ks = Object.keys(dias).sort(); const fd2 = d => d.split('-').reverse().join('/');
-  const lig = l.filter(x => x.o).length;
-  const g = of['FC'] ? '' : ks.filter(k => !of['FC|' + k]).map(k => `<details style="margin:6px 0 0 22px"><summary style="cursor:pointer">📂 ${fd2(k)} <span class="muted small">(${dias[k].length} foto(s))</span></summary><div>${dias[k].map(x => `<div style="display:inline-block;vertical-align:top;width:156px;margin-right:4px">${fcFoto(x, 150)}<div class="small" style="line-height:1.25">${esc((x.rua ? x.rua + (x.b ? ' — ' + x.b : '') : '') || x.leg || '').slice(0, 90)}${x.o ? '<br><span class="muted">✔ ligada à ocorrência</span>' : ''}</div></div>`).join('')}</div></details>`).join('');
+  const lig = l.filter(x => fcOk(o, x)).length;
+  const g = of['FC'] ? '' : ks.filter(k => !of['FC|' + k]).map(k => `<details style="margin:6px 0 0 22px"><summary style="cursor:pointer">📂 ${fd2(k)} <span class="muted small">(${dias[k].length} foto(s))</span></summary><div>${dias[k].map(x => `<div style="display:inline-block;vertical-align:top;width:156px;margin-right:4px">${fcFoto(x, 150)}<div class="small" style="line-height:1.25">${esc((x.rua ? x.rua + (x.b ? ' — ' + x.b : '') : '') || x.leg || '').slice(0, 90)}${fcOk(o, x) ? '<br><span class="muted">✔ ligada a um ponto</span>' : '<br><span class="muted">sem ponto</span>'}<br><button class="btn sm" data-act="sp12FcLigar" data-a="${x.a}">📌 ${fcOk(o, x) ? 'Trocar' : 'Ligar a um ponto'}</button></div></div>`).join('')}</div></details>`).join('');
   const cb = `<label class="chk" style="margin:6px 0 2px 0"><input type="checkbox" data-chg="sp12Pasta" data-k="FC" ${of['FC'] ? '' : 'checked'}> 📁 Fotos de campo — WhatsApp (Igor Rabelo, 03 a 09/11/2026) <span class="muted small">(${l.length}; ${lig} ligada(s) a ocorrências pelo carimbo ou legenda)</span></label>`;
   return h.replace(/<\/div><\/details>$/, cb + g + '</div></details>') };
 /* contadores já certos na tela de obras: importa as marcações de todas as obras ao abrir o programa */
@@ -3742,6 +3743,20 @@ ACTS.sp12AtRepl = () => { if (!(canPI() || can('plan'))) { toast('Só o Gestor /
   toast('Criado: ' + itens.length + ' ocorrência(s) em ' + dias.length + ' dia(s), de ' + fdB(dias[0]) + ' a ' + fdB(dias[dias.length - 1]) + '.'); render() };
 ACTS.sp12AtGraf = d => { const l = visDe(d.k === 'todas' ? obrasVisiveis().filter(o => !(S.sp12Obs && S.sp12Obs[o.id] === false)) : [O()]); if (!l.length) { toast('Marque ao menos um planejamento na paleta 🎨.'); return }
   M = { t: 'sp12gr' }; abrirModal(`<div class="mh"><h3>📊 Gráfico de atendimentos — ${l.length} planejamento(s) no mapa</h3><button class="x" data-act="mClose">×</button></div><div class="mb">${graficoAt(l)}<div class="row gap" style="justify-content:flex-end;margin-top:10px"><button class="btn" data-act="mClose">Fechar</button></div></div>`) };
+
+/* ---------- SP-12h3 (10/11/2026): ligar à mão uma foto de campo a uma ocorrência (as fotos sem carimbo/legenda não têm como ser ligadas sozinhas) ---------- */
+ACTS.sp12FcLigar = d => { const o = O(); if (!o) return; const x = FC.find(f => f.a === d.a); if (!x) return; M = { t: 'sp12fc', a: d.a };
+  const ini = (x.rua || '').toLowerCase(); const atual = ((o.fcLig || {})[x.a] !== '-' && (o.fcLig || {})[x.a]) || (x.o && x.e ? (o.ocorrencias.find(q => q.ext === x.e) || {}).id : '');
+  const lin = o.ocorrencias.filter(q => !q.arquivo).sort((a, b) => a.num - b.num).map(q => `<div data-fcrow="${esc((ocLocal(q) + ' ' + (q.bairro || '') + ' ' + (q.desc || '')).toLowerCase())}" style="display:flex;gap:6px;align-items:center;border-bottom:1px solid #8883;padding:3px 0"><button class="btn sm ${q.id === atual ? 'pri' : ''}" data-act="sp12FcLig2" data-a="${x.a}" data-id="${q.id}">${q.id === atual ? '✔ ligada' : 'Ligar'}</button><span class="small"><b>#${q.num}</b> ${esc(ocLocal(q).slice(0, 80))}${q.bairro ? ' — ' + esc(q.bairro) : ''}</span></div>`).join('');
+  abrirModal(`<div class="mh"><h3>📌 Ligar foto a um ponto</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+   <div class="row gap" style="align-items:flex-start"><a href="${FCURL + x.a}" target="_blank" rel="noopener"><img src="${FCURL + x.a}" style="width:180px;border-radius:6px" alt=""></a><div class="small muted">${esc(x.leg || '')}<br>${x.d ? fdB(x.d.slice(0, 10)) + ' ' + x.d.slice(11, 16) : ''}<br>${esc(x.rua || '')}</div></div>
+   <label>Procurar a ocorrência (rua, bairro, nº)<input id="fc-busca" data-chg="sp12FcBusca" value="${esc(x.rua || '')}" placeholder="digite parte do nome"></label>
+   <div id="fc-lista" style="max-height:48vh;overflow:auto">${lin}</div>
+   <div class="row gap" style="justify-content:space-between;margin-top:10px"><button class="btn" data-act="sp12FcLig2" data-a="${x.a}" data-id="">Desligar da ocorrência</button><button class="btn" data-act="mClose">Fechar</button></div></div>`);
+  CHG.sp12FcBusca($('#fc-busca')) };
+CHG.sp12FcBusca = el => { const q = (el.value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim(); document.querySelectorAll('#fc-lista [data-fcrow]').forEach(r => { const t = r.dataset.fcrow.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); r.style.display = !q || q.split(/\s+/).every(w => t.includes(w)) ? 'flex' : 'none' }) };
+ACTS.sp12FcLig2 = d => { const o = O(); if (!o) return; o.fcLig = o.fcLig || {}; o.fcLig[d.a] = d.id || '-';
+  saveObra(o); fecharModal(false); toast(d.id ? 'Foto ligada ao ponto.' : 'Foto desligada.'); render() };
 })();
 </script>
 
