@@ -3105,8 +3105,17 @@ const camada = o => { if (!o || o.demo) return null;
 const tit = { np: 'Ruas não pavimentadas e rotas de van', p: 'Ruas pavimentadas', prop: 'Próprios municipais' };
 const R = fR;
 const fotoUrl = t => `https://earth.usercontent.google.com/hostedimage/e/*/${t}?authuser=0&fife=s500`;
+/* SP-22: foto do Google Earth já copiada para o programa (x.fotos com kmlTok) não aparece mais como link */
+function kmlPend(x) { const ja = new Set((x.fotos || []).map(f => f.kmlTok).filter(Boolean)); return (x.fotosKml || []).filter(t => !ja.has(t)) }
 const fotoFalha = el => { try { const u = el.getAttribute('src'); const a = document.createElement('a'); a.href = u; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.textContent = '📷 Abrir foto'; a.style.cssText = 'display:inline-block;margin:4px 4px 0 0;padding:7px 12px;border-radius:8px;background:#2563a8;color:#fff;font-weight:700;font-size:13px;text-decoration:none'; el.replaceWith(a) } catch (e) { el.style.display = 'none' } };
-const foto = (t, w) => `<img src="${fotoUrl(t)}" referrerpolicy="no-referrer" onclick="window.__sp12Ver&&__sp12Ver(this.src)" style="cursor:zoom-in;width:${w || 200}px;min-height:40px;margin:4px 4px 0 0;border-radius:6px" loading="lazy" onerror="(window.__sp12FF||function(e){e.style.display='none'})(this)">`;
+let foto = (t, w) => `<img src="${fotoUrl(t)}" referrerpolicy="no-referrer" onclick="window.__sp12Ver&&__sp12Ver(this.src)" style="cursor:zoom-in;width:${w || 200}px;min-height:40px;margin:4px 4px 0 0;border-radius:6px" loading="lazy" onerror="(window.__sp12FF||function(e){e.style.display='none'})(this)">`;
+
+/* SP-22: foto do Google Earth que já foi copiada para o programa aparece direto no balão (como no Google Earth), de qualquer obra */
+let __geT = null, __geTk = 0;
+function geTok(t) { const now = Date.now(); if (!__geT || now - __geTk > 1500) { __geT = new Map(); Object.values(S.obras || {}).forEach(o => (o.ocorrencias || []).forEach(x => (x.fotos || []).forEach(f => { if (f.kmlTok && !__geT.has(f.kmlTok)) __geT.set(f.kmlTok, f.id) }))); __geTk = now } return __geT.get(t) }
+const _foto22 = foto;
+foto = (t, w) => { const id = geTok(t); return id ? `<img data-foto="${id}" data-act="zoom" style="cursor:zoom-in;width:${w || 200}px;height:${Math.round((w || 200) * .75)}px;object-fit:cover;margin:4px 4px 0 0;border-radius:6px" alt="">` : _foto22(t, w) };
+try { if (typeof L !== 'undefined' && L.Map && !L.Map.__sp22) { L.Map.__sp22 = 1; L.Map.addInitHook(function () { this.on('popupopen', e => { try { hydrate(e.popup.getElement()) } catch (er) { } }) }) } } catch (e) { }
 window.__sp12FF = fotoFalha;
 const norm = s => String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 
@@ -3326,7 +3335,7 @@ CHG.sp12Pasta = el => { off()[el.dataset.k] = !el.checked; render() };
 
 /* ---------- fotos do KML nas ocorrências ---------- */
 const _ocCard = ocCard;
-ocCard = function (o, oc) { let h = _ocCard.apply(this, arguments); const t = oc && oc.fotosKml; if (!t || !t.length) return h;
+ocCard = function (o, oc) { let h = _ocCard.apply(this, arguments); const t = oc && kmlPend(oc); if (!t || !t.length) return h;
   const bloco = `<div style="margin:6px 0">${t.map(x => foto(x, 150)).join('')}<div class="muted small">Fotos do Google Earth (KML)</div></div>`;
   const i = h.lastIndexOf('</article>'); return i < 0 ? h + bloco : h.slice(0, i) + bloco + h.slice(i) };
 
@@ -3560,7 +3569,7 @@ function relPlanos(lista) { const gc = verCusto(); const hoje = new Date().toLoc
     let acum = 0; const ordM = k => k.split('/').reverse().join('-'); const meses = Object.keys(porM).sort((a, b) => ordM(a).localeCompare(ordM(b)));
     const tbl = (tit, m, ord, lab) => `<h3>${tit}</h3><table><thead><tr><th>${lab}</th><th class="r">Ocorrências</th><th class="r">Dias</th>${gc ? '<th class="r">Custo estimado (R$)</th><th class="r">%</th>' : ''}</tr></thead><tbody>${Object.entries(m).sort(ord).map(([k, a]) => `<tr><td>${esc(k)}</td><td class="r">${a.n}</td><td class="r">${a.d.size}</td>${gc ? `<td class="r">${fN(a.c)}</td><td class="r">${tot ? fN(a.c / tot * 100, 1) : '—'}</td>` : ''}</tr>`).join('')}</tbody></table>`;
     const pts = rs.filter(r => r.x.lat != null).map(r => ({ lat: r.x.lat, lng: r.x.lng, cor: PLC[dias.indexOf(r.it.dia) % PLC.length], lab: '' }));
-    const fotosN = r => (r.x.fotos || []).length + (r.x.fotosKml || []).length + fcDaOc(o, r.x).length;
+    const fotosN = r => (r.x.fotos || []).length + kmlPend(r.x).length + fcDaOc(o, r.x).length;
     const semC = rs.filter(r => r.x.lat == null);
     return `<section class="pl"><h1 style="border-left:8px solid ${cor};padding-left:8px">${esc(p.nome)}</h1>
      <p class="n">Obra: <b>${esc(o.nome)}</b>${o.contrato ? ' · Contrato nº ' + esc(o.contrato) : ''}${o.contratada ? ' · ' + esc(o.contratada) : ''} · ${p.emUso ? '<b>em uso</b>' : 'não está em uso (simulação)'} · criado em ${p.criadoEm ? new Date(p.criadoEm).toLocaleDateString('pt-BR') : '—'}${p.por ? ' por ' + esc(p.por) : ''}</p>
@@ -3595,7 +3604,7 @@ function gruposRota(o, p, modo) { const rs = ocsDoPlano(o, p).sort((a, b) => a.i
     return { k, l, ord: rot.ord.map(q => q.r), km: rot.km, cen, raio, custo: l.reduce((s, r) => s + custoOc(o, r.x), 0) } }) }
 /* balão com fotos (como no Google Earth) */
 function balao(o, p, r, cor, extra) { const x = r.x, gc = verCusto(); const ft = RT().fotos;
-  const fl = ft ? [(x.fotos || []).map(f => `<img data-foto="${f.id}" data-act="zoom" style="width:110px;height:82px;object-fit:cover;margin:3px 3px 0 0;border-radius:5px" alt="">`).join(''), (x.fotosKml || []).map(t => foto(t, 110)).join(''), fcDaOc(o, x).map(q => fcFoto(q, 110)).join('')].join('') : '';
+  const fl = ft ? [(x.fotos || []).map(f => `<img data-foto="${f.id}" data-act="zoom" style="width:110px;height:82px;object-fit:cover;margin:3px 3px 0 0;border-radius:5px" alt="">`).join(''), kmlPend(x).map(t => foto(t, 110)).join(''), fcDaOc(o, x).map(q => fcFoto(q, 110)).join('')].join('') : '';
   return `<div style="max-width:350px"><b style="color:${cor}">■ ${esc(p.nome.slice(0, 70))}</b><br><span style="font-size:11px">${esc(o.nome)}</span><br>${extra || ''}<b>#${x.num} ${esc(ocLocal(x))}</b><br><span style="font-size:11px">${esc((x.desc || '').slice(0, 200))}</span>${gc ? '<br>Custo estimado: <b>' + fR(custoOc(o, x)) + '</b>' : ''}${fl ? '<div style="margin-top:4px">' + fl + '</div>' : ''}
    <div style="margin-top:6px"><button class="btn sm" data-act="sp12OcAbrir" data-o="${o.id}" data-id="${x.id}">📷 Abrir / anexar fotos</button></div></div>` }
 /* novo desenho: rotas por dia/semana/mês, raio de atendimento, fotos */
@@ -3933,7 +3942,7 @@ const _fcOk17 = fcOk;
 fcOk = function (o, x) { if (_fcOk17(o, x)) return true; const a = fcAuto()[x.a]; return !!(a && a.o === o.id) };
 const _fcd17 = fcDaOc;
 fcDaOc = function (o, oc) { const r = _fcd17.apply(this, arguments); if (!oc) return r; const A = fcAuto(); const mais = FC.filter(x => { const a = A[x.a]; return a && a.o === o.id && a.id === oc.id && r.indexOf(x) < 0 }); return mais.length ? r.concat(mais) : r };
-window.__sp17Fotos = (o, x) => { const fs = (x.fotos || []).map(f => `<img data-foto="${f.id}" data-act="zoom" style="width:110px;height:82px;object-fit:cover;margin:3px 3px 0 0;border-radius:5px" alt="">`).join('') + (x.fotosKml || []).map(t => foto(t, 110)).join('') + fcDaOc(o, x).map(q => fcFoto(q, 110)).join('');
+window.__sp17Fotos = (o, x) => { const fs = (x.fotos || []).map(f => `<img data-foto="${f.id}" data-act="zoom" style="width:110px;height:82px;object-fit:cover;margin:3px 3px 0 0;border-radius:5px" alt="">`).join('') + kmlPend(x).map(t => foto(t, 110)).join('') + fcDaOc(o, x).map(q => fcFoto(q, 110)).join('');
   return fs ? '<div style="margin-top:6px;max-height:260px;overflow:auto">' + fs + '</div>' : '' };
 
 /* ---- estimativa editável (quantidades) e execução real ---- */
@@ -3941,8 +3950,12 @@ const copiaIns = i => ({ mat: i.mat.map(a => a.slice()), eq: i.eq.map(a => a.sli
 const insEst = insumosOc;
 function insumosReais(o, x) { const L = (o.execucoes || []).filter(e => e.ocorrenciaId === x.id && e.insu); if (!L.length) return null; const T = { mat: {}, eq: {}, mo: {} }; L.forEach(e => ['mat', 'eq', 'mo'].forEach(k => (e.insu[k] || []).forEach(([n, v, u]) => { const a = T[k][n] = T[k][n] || { v: 0, u }; a.v += +v || 0 })));
   const R_ = { origem: 'real' }; ['mat', 'eq', 'mo'].forEach(k => R_[k] = Object.keys(T[k]).map(n => [n, T[k][n].v, T[k][n].u])); return R_ }
-insumosOc = function (o, x) { try { const r = insumosReais(o, x); if (r) return r; if (x.insu) return Object.assign({ origem: 'editada' }, copiaIns(x.insu)); const e = insEst(o, x); return e ? Object.assign({ origem: 'estimada' }, e) : null } catch (er) { return null } };
-const rotOrig = { real: '✅ Real (lançado na execução)', editada: '✏ Estimativa editada', estimada: 'Estimativa pelas premissas do relatório de 09/11/2026' };
+insumosOc = function (o, x) { try { const r = insumosReais(o, x); if (r) return r; if (x.insu) return Object.assign({ origem: 'editada' }, copiaIns(x.insu)); const e = insEst(o, x); if (e) return Object.assign({ origem: 'estimada' }, e); return insPadrao(o, x) } catch (er) { return null } };
+const rotOrig = { real: '✅ Real (lançado na execução)', editada: '✏ Estimativa editada', estimada: 'Estimativa pelas premissas do relatório de 09/11/2026', padrao: 'Estimativa padrão de tapa-buraco (3 m²), premissas do relatório de 09/11/2026 — confira em campo', adefinir: 'Serviço a definir pelo fiscal: use ✏ Editar quantidades para lançar o previsto' };
+/* SP-20: toda ocorrência tem materiais/equipamentos/mão de obra previstos: buraco (relato do Mapa, à mão ou foto) = tapa-buraco padrão; o resto fica “a definir” com edição */
+function insPadrao(o, x) { const t = String((x.desc || '') + ' ' + (x.servSug || '') + ' ' + (x.sug || '')).toLowerCase(); let cam = null; try { cam = camada(o) } catch (e) { }
+  if (cam !== 'np' && cam !== 'prop' && /buraco|tapa|panela|cratera|afundamento|pavimento/.test(t)) return { origem: 'padrao', mat: [['CBUQ', .36, 't'], ['Emulsão RR-1C (pintura de ligação)', 1.2, 'L']], eq: [['Serra de corte e placa vibratória', 1 / 15, 'diária'], ['Caminhão basculante com CBUQ', 1 / 15, 'diária']], mo: [['Encarregado', 1 / 15, 'homem-dia'], ['Servente', 4 / 15, 'homem-dia']] };
+  return { origem: 'adefinir', mat: [], eq: [], mo: [] } }
 const htmlInsOc14 = (i, o, x) => !i ? '' : `<b>Materiais:</b> ${linIns(i.mat)}<br><b>Equipamentos:</b> ${linIns(i.eq, 'eq')}<br><b>Mão de obra:</b> ${linIns(i.mo)}<br><span style="color:#777">${rotOrig[i.origem] || ''}</span>${o && x && (canPI() || can('plan') || can('fiscal')) && i.origem !== 'real' ? `<br><button class="btn sm" style="margin-top:4px" data-act="sp14Edit" data-o="${o.id}" data-id="${x.id}">✏ Editar quantidades</button>` : ''}`;
 /* balão e cartão passam a usar a versão com botão de edição e a origem (estimada / editada / real) */
 balao = function (o, p, r) { let h = _balao14.apply(this, arguments); const i = insumosOc(o, r.x); if (!i) return h; const mk = '<div style="margin-top:6px"><button class="btn sm" data-act="sp12OcAbrir"'; const k = h.lastIndexOf(mk); const b = `<details open style="font-size:11px;margin-top:5px"><summary><b>🧱 Materiais, equipamentos e mão de obra</b></summary><div style="margin-top:3px">${htmlInsOc14(i, o, r.x)}</div></details>`; if (k >= 0) h = h.slice(0, k) + b + h.slice(k); else h += b; return custoRealRot(o, r.x, h) };
@@ -3995,7 +4008,7 @@ async function exportaKmz(obras, rotulo) {
       for (const x of porB[b].sort((a, c) => a.num - c.num)) { nO++; const imgs = [], urls = [];
         for (const f of (x.fotos || [])) { let nome = feitos.get('d' + f.id); if (!nome) { try { const d = await getFoto(f.id); if (d) { nome = 'files/' + String(f.id).replace(/[^\w-]/g, '') + '.jpg'; arqs.push({ nome, dados: b64bytes(d) }); feitos.set('d' + f.id, nome); nF++ } } catch (e) { } } if (nome) { urls.push(nome); imgs.push(`<p><img src="${nome}" width="400"></p>`) } }
         for (const q of fcDaOc(o, x)) { let nome = feitos.get('c' + q.a); if (!nome) { try { const d = await bytesDe(FCURL + q.a); nome = 'files/campo_' + q.a.replace(/[^\w.-]/g, '_'); arqs.push({ nome, dados: d }); feitos.set('c' + q.a, nome); nF++ } catch (e) { } } if (nome) { urls.push(nome); imgs.push(`<p><img src="${nome}" width="400"></p>`) } }
-        (x.fotosKml || []).forEach(t => { const u = fotoUrl(t).replace('fife=s500', 'fife=s1200'); urls.push(u); imgs.push(`<p><img src="${u}" width="400"></p>`) });
+        kmlPend(x).forEach(t => { const u = fotoUrl(t).replace('fife=s500', 'fife=s1200'); urls.push(u); imgs.push(`<p><img src="${u}" width="400"></p>`) });
         const feito = x.status === 'executada' || x.status === 'medida'; let pr = 'media'; try { pr = priEf(x) } catch (e) { }
         let ins = ''; try { const i = insumosOc(o, x); if (i) ins = `<p><b>Materiais:</b> ${linIns(i.mat)}<br><b>Equipamentos:</b> ${linIns(i.eq, 'eq')}<br><b>Mão de obra:</b> ${linIns(i.mo)}</p>` } catch (e) { }
         let cus = ''; try { const cv = custoOc(o, x); if (gc && cv > 0) cus = `<p><b>Custo ${custoReal(o, x) > 0 ? 'real' : 'estimado'}:</b> ${fR(cv)}</p>` } catch (e) { }
@@ -4021,6 +4034,42 @@ const _tMapa19 = tMapa;
 tMapa = function (o) { const h = _tMapa19.apply(this, arguments); return h.replace('<button class="btn" data-act="mapFit">⌖ Enquadrar todas</button>', '<button class="btn" data-act="mapFit">⌖ Enquadrar todas</button><button class="btn" data-act="sp19Kmz" data-k="obra" title="Baixa um arquivo .kmz para abrir no Google Earth, com as fotos">🌍 Exportar KMZ (Google Earth)</button>') };
 const _telaTodas19 = telaTodas;
 telaTodas = function () { const h = _telaTodas19.apply(this, arguments); const i = h.indexOf('<div id="sp12all"'); if (i < 0) return h; return h.slice(0, i) + '<div class="row gap" style="margin:6px 0"><button class="btn" data-act="sp19Kmz" data-k="todas">🌍 Exportar KMZ de todas as obras (Google Earth)</button></div>' + h.slice(i) };
+/* ---------- SP-21 (10/11/2026): 📥 Trazer fotos para as marcações: do programa Imagens GoogleEarth (guardadas neste aparelho) ou escolhendo várias fotos; cada foto com local (GPS, propriedades ou tarja) vai para a ocorrência mais próxima e passa a aparecer no balão ---------- */
+const IMP21 = { lim: 150, max: 400 };
+async function geDados() { return new Promise(res => { let q; try { q = indexedDB.open('TC_ImagensGoogleEarth') } catch (e) { res(null); return } q.onerror = () => res(null);
+  q.onsuccess = () => { const db = q.result; if (![...db.objectStoreNames].includes('kv')) { res(null); return } const t = db.transaction(['kv', 'fotos']); const g = t.objectStore('kv').get('estado'); const out = { fotos: [], blobs: new Map() };
+    t.oncomplete = () => { const e = g.result || {}; out.fotos = (e.fotos || []).filter(f => f.lat != null && (f.lon != null || f.lng != null)); if (!out.fotos.length) { res(out); return } const t2 = db.transaction('fotos'); const st = t2.objectStore('fotos'); out.fotos.forEach(f => { const r = st.get(f.id); r.onsuccess = () => { if (r.result) out.blobs.set(f.id, r.result) } }); t2.oncomplete = () => res(out); t2.onerror = () => res(out) } } }) }
+async function blobParaFoto(blob, obraId) { const url = URL.createObjectURL(blob); try { const img = await carregarImg(url); const k = Math.min(1, FOTO_MAX / Math.max(img.naturalWidth, img.naturalHeight)); const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); const data = c.toDataURL('image/jpeg', FOTO_Q); const id = 'f' + uid(); await DB.put('fotos', id, { id, obraId, data }); fotoCache.set(id, data); return id } finally { URL.revokeObjectURL(url) } }
+function maisPerto(lat, lng) { let best = null; Object.values(S.obras || {}).forEach(o => { let l = []; try { l = ativas(o) } catch (e) { l = o.ocorrencias || [] } l.forEach(x => { if (x.lat == null || x.lng == null) return; const d = distM({ lat, lng }, x); if (!best || d < best.d) best = { o, x, d } }) }); return best }
+async function importa21(lista, rot) { /* lista: [{chave, nome, lat, lng, data, blob | foto(já salva)}] */
+  let feitos = {}; try { feitos = (await DB.get('kv', 'sp21imp')) || {} } catch (e) { }
+  const R = { lig: 0, aprox: 0, longe: 0, semLocal: 0, ja: 0 }; const mexidas = new Set(); const el = $('#sp21-prog');
+  for (let i = 0; i < lista.length; i++) { const f = lista[i]; if (el) el.textContent = `${rot}: ${i + 1} de ${lista.length}…`;
+    if (feitos[f.chave]) { R.ja++; continue } if (f.lat == null || f.lng == null) { R.semLocal++; continue }
+    const b = maisPerto(f.lat, f.lng); if (!b || b.d > IMP21.max) { R.longe++; continue }
+    let id = f.foto && f.foto.id; try { if (!id) id = await blobParaFoto(f.blob, b.o.id) } catch (e) { R.semLocal++; continue }
+    const ft = Object.assign({ legenda: f.nome || '', fase: 'antes' }, f.foto || {}, { id, lat: f.lat, lng: f.lng, origem: f.foto ? (f.foto.origem || 'importada') : 'imagens-googleearth', tiradaEm: (f.foto && f.foto.tiradaEm) || f.data || null });
+    b.x.fotos = b.x.fotos || []; if (!b.x.fotos.some(q => q.id === id)) b.x.fotos.push(ft);
+    try { log(b.x, `Foto ${f.nome || ''} trazida (${rot}), a ${Math.round(b.d)} m${b.d > IMP21.lim ? ' — local aproximado, confira' : ''}`) } catch (e) { }
+    feitos[f.chave] = b.x.id; mexidas.add(b.o); if (b.d > IMP21.lim) R.aprox++; else R.lig++ }
+  try { await DB.put('kv', 'sp21imp', feitos) } catch (e) { }
+  for (const o of mexidas) { try { await saveObra(o) } catch (e) { } try { nuvSobeFotos(o) } catch (e) { } }
+  return R }
+const txt21 = R => `<b>${R.lig + R.aprox}</b> foto(s) ligadas às ocorrências${R.aprox ? ` (${R.aprox} com local aproximado, entre ${IMP21.lim} e ${IMP21.max} m — confira)` : ''}. ${R.ja ? R.ja + ' já tinham sido trazidas. ' : ''}${R.semLocal ? R.semLocal + ' sem local legível (ligue à mão em “Abrir / anexar fotos”). ' : ''}${R.longe ? R.longe + ' longe de qualquer ocorrência (mais de ' + IMP21.max + ' m).' : ''}`;
+ACTS.sp21Imp = () => { abrirModal(`<div class="mh"><h3>📥 Trazer fotos para as marcações</h3><button class="x" data-act="mClose">×</button></div><div class="mb"><p class="small">Cada foto com local (GPS, propriedades do arquivo ou tarja escrita na foto) vai para a ocorrência mais próxima, de qualquer obra, e passa a aparecer no balão do mapa e no KMZ. Foto já trazida não repete.</p>
+  <div class="row gap" style="flex-wrap:wrap"><button class="btn pri" data-act="sp21Ge">🌍 Do programa Imagens GoogleEarth (fotos deste aparelho)</button><label class="btn">🖼 Escolher fotos…<input type="file" accept="image/*" multiple id="sp21-arq" style="display:none"></label></div>
+  <div id="sp21-prog" class="small" style="margin-top:10px"></div><div id="sp21-res" style="margin-top:6px"></div></div><div class="mf"><span class="sp"></span><button class="btn" data-act="mClose">Fechar</button></div>`);
+  setTimeout(() => { const i = $('#sp21-arq'); if (i) i.onchange = async () => { const fs = [...i.files]; if (!fs.length) return; const l = []; const el = $('#sp21-prog');
+    for (let k = 0; k < fs.length; k++) { const f = fs[k]; if (el) el.textContent = `Lendo local das fotos: ${k + 1} de ${fs.length} (a tarja pode levar alguns segundos)…`; let r = null; try { r = await processarFoto(f, false) } catch (e) { } l.push({ chave: 'arq:' + f.name + ':' + f.size, nome: f.name, lat: r && r.lat, lng: r && r.lng, foto: r }) }
+    const R = await importa21(l, 'fotos escolhidas'); $('#sp21-prog').textContent = 'Pronto.'; $('#sp21-res').innerHTML = txt21(R); render() } }, 60) };
+ACTS.sp21Ge = async () => { const el = $('#sp21-prog'); if (el) el.textContent = 'Lendo as fotos do Imagens GoogleEarth neste aparelho…'; const d = await geDados();
+  if (!d || !d.fotos.length) { $('#sp21-res').innerHTML = 'Este aparelho não tem fotos com local no programa Imagens GoogleEarth. Abra o programa neste aparelho e carregue as fotos lá, ou use “Escolher fotos…”.'; if (el) el.textContent = ''; return }
+  const l = d.fotos.filter(f => d.blobs.get(f.id)).map(f => ({ chave: 'ge:' + f.id, nome: f.nome, lat: f.lat, lng: f.lon != null ? f.lon : f.lng, data: f.data, blob: d.blobs.get(f.id) }));
+  const R = await importa21(l, 'Imagens GoogleEarth'); if (el) el.textContent = 'Pronto.'; $('#sp21-res').innerHTML = txt21(R); render() };
+const _tMapa21 = tMapa;
+tMapa = function (o) { const h = _tMapa21.apply(this, arguments); return h.replace('<button class="btn" data-act="sp19Kmz" data-k="obra"', '<button class="btn" data-act="sp21Imp" title="Traz fotos do programa Imagens GoogleEarth ou do computador e liga cada uma à ocorrência mais próxima">📥 Trazer fotos</button><button class="btn" data-act="sp19Kmz" data-k="obra"') };
+const _telaTodas21 = telaTodas;
+telaTodas = function () { const h = _telaTodas21.apply(this, arguments); return h.replace('<button class="btn" data-act="sp19Kmz" data-k="todas">', '<button class="btn" data-act="sp21Imp">📥 Trazer fotos para as marcações</button><button class="btn" data-act="sp19Kmz" data-k="todas">') };
 
 ACTS.sp14Salva = () => { const b = document.querySelector('#modal [data-s14o]'); if (!b) return; const o = S.obras[b.dataset.s14o] || O(); const x = o.ocorrencias.find(y => y.id === b.dataset.s14id); if (!x) return; x.insu = Object.assign(lerLin(), { em: new Date().toISOString() }); saveObra(o); fecharModal(false); toast('Quantidades salvas.'); render() };
 ACTS.sp14Volta = () => { const b = document.querySelector('#modal [data-s14o]'); if (!b) return; const o = S.obras[b.dataset.s14o] || O(); const x = o.ocorrencias.find(y => y.id === b.dataset.s14id); if (!x) return; delete x.insu; saveObra(o); fecharModal(false); toast('Voltou à estimativa.'); render() };
