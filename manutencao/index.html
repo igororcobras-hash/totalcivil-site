@@ -126,6 +126,7 @@ body[data-amb=android] input,body[data-amb=android] select,body[data-amb=ios] in
 @media(max-width:820px){.g2,.g3,.g4,.cols{grid-template-columns:1fr}.list{grid-template-columns:1fr}.wrap{padding:16px 12px 60px}.top{padding:8px 12px}h1{font-size:24px}.mapbox{height:60vh}.modal{padding:0}.modal .box{border-radius:0;min-height:100vh}.mh,.mf{border-radius:0}}
 </style>
 <script src="/assistente-abas.js" data-tabs="nav.tabs .tab" data-auxilio="gerar" data-recolhido="1"></script>
+<script src="/estado-pagina.js" data-abas="nao"></script>
 <script>
 /* Guia passo a passo de cada aba (usado pelo botão "Auxílio de preenchimento" do assistente-abas.js) */
 window.TC_GUIAS = {
@@ -4886,6 +4887,48 @@ ocCard = function (o, oc) { const h = _card18.apply(this, arguments); if (!oc ||
   const _todas = ACTS.sp12Todas; if (_todas) ACTS.sp12Todas = function () { const r = _todas.apply(this, arguments); novas(true); return r };
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') novas(false) });
   setInterval(() => novas(false), 180000);
+})();
+</script>
+<script>
+/* =====================================================================
+   PATCH SP-32 (10/11/2026): ao ATUALIZAR a página (F5, Ctrl+Shift+R depois de uma publicação) o programa volta
+   para o MESMO lugar: a obra aberta, a aba, “🗺 Todas as obras”, os filtros simples e a rolagem — e não para a
+   lista de obras. A posição do mapa é guardada/restaurada pelo /estado-pagina.js (todos os programas).
+   Guardado por aba do navegador (sessionStorage `tc_nav_manut`), 12 h. Não mexe nos dados.
+   ===================================================================== */
+(function () {
+  var K = 'tc_nav_manut', pronto = false, t0 = Date.now();
+  function ler() { try { return JSON.parse(sessionStorage.getItem(K) || 'null'); } catch (e) { return null; } }
+  function salva() {
+    if (!pronto) return;
+    try {
+      var f = {}; Object.keys(S.f || {}).forEach(function (k) { var v = S.f[k]; if (v === null || ['string', 'number', 'boolean'].indexOf(typeof v) >= 0) f[k] = v; });
+      sessionStorage.setItem(K, JSON.stringify({ obraId: S.obraId || null, tab: S.tab || 'painel', todas: !!S.sp12Todas, y: window.pageYOffset || 0, f: f, pOff: (S.f && S.f.pOff) || {}, t: Date.now() }));
+    } catch (e) { }
+  }
+  setInterval(salva, 700); window.addEventListener('pagehide', salva); window.addEventListener('beforeunload', salva);
+  function rola(y) { [150, 600, 1400, 2800].forEach(function (ms) { setTimeout(function () { try { if (y > 0 && Math.abs((window.pageYOffset || 0) - y) > 4) window.scrollTo(0, y); } catch (e) { } }, ms); }); }
+  function tenta() {
+    var r = ler();
+    if (!r || Date.now() - r.t > 12 * 3600e3) { pronto = true; return true; }
+    var app = document.getElementById('app');
+    if (!S.settings || !app || !app.children.length || document.documentElement.classList.contains('tc-veu')) return false;
+    if (!window.TC_USUARIO && Date.now() - t0 < 4000) return false;          /* espera o acesso do login */
+    try {
+      if (!S.obraId) {
+        if (r.todas) { if (r.pOff) S.f.pOff = r.pOff; ACTS.sp12Todas(); }
+        else if (r.obraId && S.obras[r.obraId] && (!S.trava || (S.acessos && S.acessos[r.obraId]))) { ACTS.abrir({ id: r.obraId }); }
+      }
+      if (S.obraId && S.obraId === r.obraId) {
+        if (r.f) Object.keys(r.f).forEach(function (k) { if (k !== 'pOff') S.f[k] = r.f[k]; });
+        if (r.pOff) S.f.pOff = r.pOff;
+        if (r.tab && S.tab !== r.tab) S.tab = r.tab;
+        render();
+      }
+    } catch (e) { console.warn('SP-32', e); }
+    pronto = true; rola(r.y || 0); return true;
+  }
+  var n = 0, iv = setInterval(function () { if (tenta() || ++n > 100) { clearInterval(iv); pronto = true; } }, 300);
 })();
 </script>
 </body>
