@@ -550,7 +550,7 @@ function tMapa(o){const f=S.f;const n=ativas(o).filter(x=>x.lat!=null).length;
  <div class="legend"><span><i style="background:${PRI.alta.c}"></i>Alta</span><span><i style="background:${PRI.media.c}"></i>Média</span><span><i style="background:${PRI.baixa.c}"></i>Baixa</span><span><i style="background:#2e7d4f;border:2px solid #fff;box-shadow:0 0 0 1px #2e7d4f"></i>Executada/medida</span>${(o.externas||[]).length?`<label class="chk" style="margin:0"><input type="checkbox" data-chg="mapExt" ${f.mapExt===false?'':'checked'}> <i style="background:#7a8396"></i>Esgoto Rio+ — fora do contrato (${o.externas.length})</label>`:''}</div><div id="mapa" class="mapbox"></div>`}
 function initMapa(){const el=$('#mapa');if(!el)return;if(typeof L==='undefined'){el.innerHTML='<div class="nomap">Mapa indisponível (sem internet).</div>';return}
  const o=O();const c=S.settings.mapa;const map=L.map(el).setView([c.lat,c.lng],c.zoom);L.tileLayer(OSM,{maxZoom:19,attribution:'© OpenStreetMap'}).addTo(map);S.mapObj=map;
- const pts=[];ativas(o).filter(x=>x.lat!=null&&(!S.f.mapSt||x.status===S.f.mapSt)).forEach(x=>{const feito=x.status==='executada'||x.status==='medida';
+ const pts=[];ativas(o).filter(x=>x.lat!=null&&(!S.f.mapSt||x.status===S.f.mapSt)&&(!window.__mapOcOk||window.__mapOcOk(o,x))).forEach(x=>{const feito=x.status==='executada'||x.status==='medida';
   const m=L.circleMarker([x.lat,x.lng],{radius:10,fillColor:feito?'#2e7d4f':PRI[priEf(x)].c,color:'#fff',weight:3,fillOpacity:.95}).addTo(map);pts.push([x.lat,x.lng]);try{if(window.__sp14Foto&&window.__sp14Foto(o,x))L.circleMarker([x.lat,x.lng],{radius:3.5,fillColor:'#fff',color:'#111',weight:1.5,fillOpacity:1,interactive:false}).addTo(map)}catch(e){}
   m.bindPopup(`<b>#${x.num} ${esc(ocLocal(x))}</b><br>${PRI[priEf(x)].l} · ${ST[x.status].l}<br>${esc((x.desc||'').slice(0,100))}${x.fotos[0]?'<br><img data-foto="'+x.fotos[0].id+'" style="width:180px;margin-top:6px;border-radius:6px">':''}<br><a href="#" data-act="ocEdit" data-id="${x.id}">Abrir ocorrência</a>`)});
  if(S.f.mapExt!==false)(o.externas||[]).forEach(x=>{L.circleMarker([x.lat,x.lng],{radius:6,fillColor:'#7a8396',color:'#fff',weight:2,fillOpacity:.85}).addTo(map).bindPopup('<b>'+esc(x.name)+'</b><br>'+esc(x.tema)+' — fora do contrato de pavimento<br>'+esc(x.lugar||'')+(x.rel?'<br>'+x.rel+' relato(s)'+(x.ult?', último '+x.ult:''):'')+(/aprox/i.test(x.prec||'')?'<br><i>Local aproximado (só o bairro)</i>':''))});
@@ -3613,7 +3613,7 @@ desenhaPlanos = function (map, lista) { if (!map || typeof L === 'undefined') re
         m.bindPopup(balao(o, p, r, cor, `<b>${fdB(r.it.dia)}</b>${lab ? ' · ' + esc(lab) : ''}${R0.modo !== 'nao' ? ' · parada ' + (i + 1) + ' de ' + com.length : ''}<br>`), { maxWidth: 370 }) }) }) });
   /* fotos de campo com coordenada lida no carimbo, mas sem ocorrência por perto: aparecem como ponto próprio */
   const vistos = new Set(); [...new Set(lista.map(z => z.o).concat(O() ? [O()] : []))].forEach(o => { if (vistos.has(o.id) || !camada(o)) return; vistos.add(o.id);
-    FC.filter(x => x.lat != null && !fcOk(o, x) && (!x.o || x.o === camada(o))).forEach(x => { if (vistos.has('f' + x.a)) return; vistos.add('f' + x.a);
+    FC.filter(x => x.lat != null && !fcOk(o, x) && (!x.o || x.o === camada(o)) && MV().fc !== false).forEach(x => { if (vistos.has('f' + x.a)) return; vistos.add('f' + x.a);
       L.circleMarker([x.lat, x.lng], { radius: 7, fillColor: '#444', color: '#fff', weight: 2, fillOpacity: .95 }).addTo(g).bindTooltip('📷 foto de campo ' + fdB((x.d || '').slice(0, 10)), { direction: 'top' })
         .bindPopup(`<div style="max-width:260px"><b>📷 Foto de campo</b><br><span style="font-size:11px">${esc([x.rua, x.b].filter(Boolean).join(' — '))} ${x.d ? fdB(x.d.slice(0, 10)) + ' ' + x.d.slice(11, 16) : ''}<br>Localização: ${esc(x.como || 'coordenada lida na foto')}.</span><br>${fcFoto(x, 220)}<br><button class="btn sm" data-act="sp12FcLigar" data-a="${x.a}">📌 Ligar a uma ocorrência</button></div>`) }) });
   return g };
@@ -3934,6 +3934,27 @@ const _custoOc14 = custoOc;
 custoOc = function (o, x) { const r = custoReal(o, x); return r > 0 ? r : _custoOc14.apply(this, arguments) };
 window.__sp14Real = (o, x) => custoReal(o, x) > 0;
 function custoRealRot(o, x, h) { try { return custoReal(o, x) > 0 ? h.replace('Custo estimado:', 'Custo real (executado):') : h } catch (e) { return h } }
+
+/* ---------- SP-12i (10/11/2026): cada item do mapa com caixinha (Alta/Média/Baixa/Executada, Esgoto Rio+, KML, fotos de campo, planejamentos, trajetos e raios) e mapa que acompanha o período escolhido ---------- */
+const MV = () => { if (!S.sp12MV) { S.sp12MV = { alta: true, media: true, baixa: true, feita: true, fc: true, fora: false }; try { Object.assign(S.sp12MV, JSON.parse(localStorage.getItem('tc_sp12_mv') || '{}')) } catch (e) { } } return S.sp12MV };
+const mvSalva = () => { try { localStorage.setItem('tc_sp12_mv', JSON.stringify(MV())) } catch (e) { } };
+let __mapSet = null;
+/* quando um período (dia/semana/mês) está escolhido em “Mostrar”, só as ocorrências desse período ficam no mapa (a não ser que marque “fora do período”) */
+function periodoSet(o) { if (__mapSet && __mapSet.o === o.id) return __mapSet.s; const R = RT(); let st = null;
+  if (R.modo !== 'nao' && R.sel && !MV().fora) { const l = visDe([o]); if (l.length) { st = new Set(); l.forEach(({ o: oo, p }) => ocsDoPlano(oo, p).forEach(r => { if (chaveG(R.modo, r.it.dia) === R.sel) st.add(r.x.id) })) } }
+  __mapSet = { o: o.id, s: st }; return st }
+window.__mapOcOk = (o, x) => { const v = MV(); const feito = x.status === 'executada' || x.status === 'medida'; if (feito ? v.feita === false : v[priEf(x)] === false) return false; const st = periodoSet(o); return !st || st.has(x.id) };
+const _initMapaMV = initMapa;
+initMapa = function () { __mapSet = null; return _initMapaMV.apply(this, arguments) };
+const _tMapaMV = tMapa;
+tMapa = function (o) { let h = _tMapaMV.apply(this, arguments); const v = MV(), R = RT();
+  const ext = (h.match(/<label class="chk" style="margin:0"><input type="checkbox" data-chg="mapExt"[\s\S]*?<\/label>/) || [''])[0];
+  const it = (k, cor, txt, ex) => `<label class="chk" style="margin:0"><input type="checkbox" data-chg="mapV" data-k="${k}" ${v[k] === false ? '' : 'checked'}> <i style="background:${cor}${ex || ''}"></i>${txt}</label>`;
+  const comPer = R.modo !== 'nao' && R.sel && visDe([o]).length;
+  const leg = `<div class="legend">${it('alta', PRI.alta.c, 'Alta')}${it('media', PRI.media.c, 'Média')}${it('baixa', PRI.baixa.c, 'Baixa')}${it('feita', '#2e7d4f', 'Executada/medida', ';border:2px solid #fff;box-shadow:0 0 0 1px #2e7d4f')}${ext}${it('fc', '#444', 'Fotos de campo sem ocorrência')}${comPer ? `<label class="chk" style="margin:0"><input type="checkbox" data-chg="mapV" data-k="fora" ${v.fora ? 'checked' : ''}> Ocorrências de fora do período escolhido</label>` : ''}<button class="btn sm" data-act="mapVTodos" data-v="1">☑ Marcar todos</button><button class="btn sm" data-act="mapVTodos" data-v="0">☐ Desmarcar todos</button></div>`;
+  return h.replace(/<div class="legend">[\s\S]*?<\/div>/, leg) };
+CHG.mapV = el => { MV()[el.dataset.k] = el.checked; mvSalva(); render() };
+ACTS.mapVTodos = d => { const on = d.v === '1', v = MV(); ['alta', 'media', 'baixa', 'feita', 'fc'].forEach(k => { v[k] = on }); S.f.mapExt = on; S.f.sp12Map = on; mvSalva(); render() };
 
 /* ---------- SP-14b: janela do ponto sempre visível (rola por dentro e cabe no mapa) ---------- */
 (function () { let t = 0; const ini = () => { if (typeof L === 'undefined' || !L.Map || !L.Map.addInitHook) { if (++t < 200) setTimeout(ini, 300); return }
