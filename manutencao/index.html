@@ -3373,9 +3373,11 @@ function sp12Dur(o, oc, mp) { const m = mp[oc.ext]; const cam = camada(o);
   if (cam === 'np') return Math.max(0.25, ar / 2500);
   return m.k === 'P' ? 1 / 15 : Math.max(0.25, ar / 1500) }
 function sp12Custo(o, oc, mp) { const m = mp[oc.ext]; if (!m) return 0; return camada(o) === 'prop' ? (m.sit === 'demanda' ? m.bdi || 0 : 0) : (m.cb || 0) }
-function sp12Mapa(o) { const cam = camada(o), mp = {}; if (cam === 'prop') PROP.imoveis.forEach((m, i) => { mp['KML-prop-' + i] = m }); else itensRua(cam).forEach((m, i) => { mp['KML-' + cam + '-' + (m.tp === 'van' ? 'van-' : '') + i] = m }); return mp }
+/* SP-31: toda obra real com ocorrências tem planejamento modelo (não só as do KML), para entrar em “🗺 Todas as obras” e na união */
+function sp30Mod(o) { return !!o && !o.demo && !!(camada(o) || (o.ocorrencias || []).length) }
+function sp12Mapa(o) { const cam = camada(o) || tipoVia(o), mp = {}; if (cam === 'prop') PROP.imoveis.forEach((m, i) => { mp['KML-prop-' + i] = m }); else itensRua(cam).forEach((m, i) => { mp['KML-' + cam + '-' + (m.tp === 'van' ? 'van-' : '') + i] = m }); return mp }
 function sp12Modelo(o, forca, filtro) {
-  const cam = camada(o); if (!cam) return null; o.planejamentos = o.planejamentos || [];
+  const cam = camada(o) || (sp30Mod(o) ? (tipoVia(o) || 'outra') : null); if (!cam) return null; o.planejamentos = o.planejamentos || [];
   const velho = o.planejamentos.find(p => p.modelo); if (velho && !forca) return null; if (velho && velho.emUso) return 'uso';
   const mp = sp12Mapa(o);
   const ab = ativas(o).filter(x => x.status !== 'medida' && x.status !== 'executada' && !o.execucoes.some(e => e.ocorrenciaId === x.id))
@@ -3394,7 +3396,7 @@ function sp12Modelo(o, forca, filtro) {
     resumo: { n: itens.length, dias: dl.length, m3: 0, t: 0, cargas: 0, custo: Math.round(custo * 100) / 100, ini: dl[0] || '', fim: dl[dl.length - 1] || '', resto: 0 } };
   if (velho) o.planejamentos = o.planejamentos.filter(q => q !== velho); o.planejamentos.push(p); return p }
 const _sem2 = semearSp12;
-semearSp12 = function (o) { const n = _sem2(o); try { if (camada(o) && !(o.planejamentos || []).some(p => p.modelo)) { if (sp12Modelo(o)) saveObra(o) } } catch (e) { console.warn('modelo', e) } return n };
+semearSp12 = function (o) { const n = _sem2(o); try { if (sp30Mod(o) && !(o.planejamentos || []).some(p => p.modelo)) { if (sp12Modelo(o)) saveObra(o) } } catch (e) { console.warn('modelo', e) } return n };
 ACTS.sp12Modelo = function () { const o = O(); if (!(typeof canPI === 'function' ? canPI() : can('medicao'))) { toast('Só o Gestor / Secretário refaz o planejamento modelo.'); return }
   if (!confirm('Refazer o planejamento modelo com as ocorrências abertas de hoje? O modelo anterior é substituído (os outros planejamentos não mudam).')) return;
   const r = sp12Modelo(o, true); if (r === 'uso') { toast('O planejamento modelo está em uso. Duplique-o ou deixe de usá-lo antes de refazer.', 6000); return }
@@ -3477,7 +3479,7 @@ ACTS.sp12Ir = d => { const o = S.obras[d.id]; if (!o) return; ACTS.abrir({ id: d
   if (d.a && ACTS[d.a]) setTimeout(() => { try { ACTS[d.a]({}) } catch (e) { console.warn(e) } }, 120) };
 ACTS.sp12TodasPdf = () => { const P = TP(), pr = perDe(P); const L = obrasTP().flatMap(o => linhasPer(o, P.pFonte, pr.ini, pr.fim, filtroTP));
   pdfPer('Programação geral — ' + (P.obra ? S.obras[P.obra].nome : 'todas as obras'), pr.lab + (P.pFonte === 'modelo' ? ' · planejamento modelo' : ' · programação em uso'), L, true) };
-ACTS.sp12ModeloTodas = () => { const al = obrasTP().filter(o => camada(o)); if (!al.length) { toast('Nenhuma obra com marcações no escopo.'); return }
+ACTS.sp12ModeloTodas = () => { const al = obrasTP().filter(o => sp30Mod(o)); if (!al.length) { toast('Nenhuma obra com marcações no escopo.'); return }
   if (!confirm('Refazer o 📐 planejamento modelo de ' + al.length + ' obra(s), só com as pastas marcadas? Os outros planejamentos não mudam.')) return;
   let n = 0, u = 0; al.forEach(o => { const r = sp12Modelo(o, true, x => filtroTP(o, x)); if (r === 'uso') u++; else if (r) { n++; saveObra(o) } });
   render(); toast(n + ' planejamento(s) modelo refeito(s)' + (u ? '; ' + u + ' em uso não foram mudados' : '') + '.', 6000) };
@@ -4212,7 +4214,7 @@ function pastaPlan(o, cb, on) { const pls = o.planejamentos || []; if (!pls.leng
      ${on('PL|' + q.id) && (q.itens || []).length ? `<details data-lzp="${o.id}§${q.id}" ontoggle="__sp26Lz(this)" style="margin:0 0 4px 24px"><summary class="small" style="cursor:pointer">📄 Ver as ocorrências por dia, com fotos (${(q.itens || []).length})</summary><div class="lz"></div></details>` : ''}</div>` }).join('');
   return `${cb('PL', '📅 Planejamentos', pls.length, 0)} <button class="btn sm" data-act="sp26Atual" data-o="${o.id}" data-id="*" ${podePl() ? '' : 'disabled'}>↻ Atualizar todos desta obra</button>${on('PL') ? lin : ''}` }
 const _sem26 = semearSp12;
-semearSp12 = function (o) { const n = _sem26.apply(this, arguments); try { if (camada(o)) { let ch = false; (o.planejamentos || []).forEach(q => { const e = plEstado(o, q); if (q.modelo) { if (!q.emUso && (e.sobra || e.falta)) { sp12Modelo(o, true); ch = true } } else if (e.sobra) { plSincroniza(o, q); ch = true } }); if (ch) saveObra(o) } } catch (e) { console.warn('plAuto', e) } return n };
+semearSp12 = function (o) { const n = _sem26.apply(this, arguments); try { if (sp30Mod(o)) { let ch = false; (o.planejamentos || []).forEach(q => { const e = plEstado(o, q); if (q.modelo) { if (!q.emUso && (e.sobra || e.falta)) { sp12Modelo(o, true); ch = true } } else if (e.sobra) { plSincroniza(o, q); ch = true } }); if (ch) saveObra(o) } } catch (e) { console.warn('plAuto', e) } return n };
 function arvore(o, todas) { const cam = camada(o), of = off(), K = k => o.id + '§' + k, on = k => !of[K(k)];
   const cb = (k, t, n, ind) => `<label class="chk" style="margin:2px 0 2px ${ind}px"><input type="checkbox" data-chg="sp12Pasta" data-o="${o.id}" data-k="${esc(k)}" ${on(k) ? 'checked' : ''}> ${t} <span class="muted small">(${n})</span></label>`;
   const na = ativas(o).filter(x => pastaDe(x) === 'ATUAL').length, ks = pastasKml(o), nk = ks.reduce((s0, q) => s0 + q[1], 0), dias = fcDias(o), nf = Object.values(dias).reduce((s0, q) => s0 + q.length, 0);
@@ -4866,5 +4868,25 @@ ocCard = function (o, oc) { const h = _card18.apply(this, arguments); if (!oc ||
 })();
 </script>
 
+<script>
+/* PATCH SP-31 (10/11/2026): “🗺 Todas as obras” sempre com TODAS as obras, inclusive as criadas depois (neste ou em outro aparelho),
+   já com as ocorrências. Antes a obra criada em outro aparelho só chegava quando a página era aberta de novo (nuvIniciar);
+   o nuvPuxar de 1 em 1 minuto só atualizava obras que o aparelho já tinha. Agora, a cada 3 minutos, ao abrir “Todas as obras”
+   e ao voltar para a aba do navegador, a lista da nuvem é conferida e as obras novas são baixadas (nuvAdota). Obra apagada neste
+   aparelho não volta. As obras já conhecidas continuam sendo atualizadas pelo nuvPuxar. */
+(function () {
+  const apagadas = new Set(); let ult = 0, rodando = false;
+  const _apagar = nuvApagar; nuvApagar = function (o) { try { apagadas.add(typeof o === 'string' ? o : o && o.id) } catch (e) { } return _apagar.apply(this, arguments) };
+  async function novas(forca) { const ad = NUV.ad; if (!ad || !ad.list || !NUV.pronto || rodando) return 0; if (!forca && Date.now() - ult < 170000) return 0; rodando = true; ult = Date.now(); let n = 0;
+    try { const l = await ad.list(); const nomes = []; for (const x of l) { if (!x || !x.obraId || S.obras[x.obraId] || apagadas.has(x.obraId)) continue; try { JSON.parse(x.texto) } catch (e) { continue } const o = await nuvAdota(null, x, null); n++; nomes.push(o && o.nome || 'obra') }
+      if (n) { toast(n === 1 ? 'Nova obra recebida da nuvem: “' + nomes[0] + '”.' : n + ' obras novas recebidas da nuvem: ' + nomes.join(', ') + '.', 6000); render() } }
+    catch (e) { console.warn('Nuvem (obras novas):', e) } finally { rodando = false } return n }
+  window.__sp31Novas = novas;
+  const _puxar = nuvPuxar; nuvPuxar = async function () { const r = await _puxar.apply(this, arguments); await novas(false); return r };
+  const _todas = ACTS.sp12Todas; if (_todas) ACTS.sp12Todas = function () { const r = _todas.apply(this, arguments); novas(true); return r };
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') novas(false) });
+  setInterval(() => novas(false), 180000);
+})();
+</script>
 </body>
 </html>
