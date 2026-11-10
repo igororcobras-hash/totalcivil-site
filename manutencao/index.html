@@ -4245,6 +4245,86 @@ ACTS.sp19Salva = () => { if (!M || M.t !== 'sp19fc') return; if (!M.pos) { toast
   host.fcLoc = host.fcLoc || {}; host.fcLoc[M.a] = { lat: +M.pos.lat.toFixed(6), lng: +M.pos.lng.toFixed(6), rua: M.rua || '', sup: supEsc || undefined, em: SP19_ISO(), quem: quem() }; saveObra(host);
   const msg = best ? 'Foto localizada e ligada à ocorrência nº ' + best.q.num + ' da obra “' + host.nome + '” (a ' + Math.round(best.d) + ' m).' : 'Foto localizada.'; fecharModal(false); render(); toast(msg, 5000) };
 ACTS.sp19Limpa = d => { if (!confirm('Remover a localização desta foto?')) return; todasObras().forEach(o => { if (o.fcLoc && o.fcLoc[d.a]) { delete o.fcLoc[d.a]; saveObra(o) } }); fecharModal(false); render(); toast('Localização removida.') };
+/* PATCH SP-28 (10/11/2026): “🔎 Buscar” da janela “Locar foto” não achava nada com o endereço do carimbo (“Rua Des. Elis
+   Hermidyo Figueira, 2013, Jardim Campomar”) e, quando achava, só dava zoom depois de tocar no resultado. Agora:
+   1) procura primeiro nas ruas que o programa já conhece (ocorrências de todas as obras, marcações do Google Earth e fotos
+      de campo com coordenada), sem acento, sem tipo de via (Rua/Av./Alameda), com abreviações abertas (Des. = Desembargador)
+      e tolerando erro de grafia (Hermidyo × Hermydio); o bairro desempata;
+   2) se não achar, tenta o OpenStreetMap em várias formas (endereço inteiro → sem número/bairro → abreviações abertas →
+      só os nomes principais), limitado a Rio das Ostras;
+   3) vai SOZINHO até o 1º resultado (zoom 18 e pino), e lista os outros para trocar;
+   4) se só o bairro for achado, mostra o bairro (zoom 16) para o usuário tocar no ponto. */
+const SP28_ABR = { des: 'desembargador', dr: 'doutor', dra: 'doutora', pref: 'prefeito', prof: 'professor', profa: 'professora', eng: 'engenheiro', gov: 'governador', pres: 'presidente', sen: 'senador', dep: 'deputado', ver: 'vereador', cel: 'coronel', cap: 'capitao', gal: 'general', mal: 'marechal', ten: 'tenente', sgt: 'sargento', cmte: 'comandante', sta: 'santa', sto: 'santo', s: 'sao', n: 'nossa', sra: 'senhora', pe: 'padre', fr: 'frei', d: 'dom', jd: 'jardim', pq: 'parque', vl: 'vila', cond: 'condominio' };
+const SP28_TIPO = /^(rua|r|avenida|av|alameda|al|travessa|tv|trav|estrada|est|rodovia|rod|praca|pc|pca|largo|lg|beco|servidao|serv|ladeira|via|viela|caminho|acesso|rj|br)$/;
+const SP28_PAR = /^(de|da|do|das|dos|e|a|o)$/;
+const sp28nz = s => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+function sp28tk(s) { return sp28nz(s).replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean).map(t => SP28_ABR[t] || t) }
+/* “Rua Des. Elis Hermidyo Figueira, 2013, Jardim Campomar” → { rua: [desembargador, elis, hermidyo, figueira], num: '2013', bairro: 'jardim campomar' } */
+function sp28parte(q) { const p = String(q || '').split(/[,;–—-]+/).map(s => s.trim()).filter(Boolean); let rua = '', num = '', bairro = '';
+  p.forEach(s => { const t = sp28nz(s); if (/^\s*(n[ºo°.]?\s*)?\d+[a-z]?\s*$/.test(t)) { if (!num) num = t.replace(/\D/g, ''); return } if (/rio das ostras|^rj$|^brasil$|rio de janeiro/.test(t)) return; if (!rua) { const m = s.match(/^(.*?)[\s,]+(\d{1,5})\s*$/); if (m) { rua = m[1]; num = num || m[2] } else rua = s } else if (!bairro) bairro = s });
+  const tk = sp28tk(rua).filter(t => !/^\d+$/.test(t)); const sig = tk.filter(t => !SP28_TIPO.test(t) && !SP28_PAR.test(t));
+  return { rua, num, bairro, tk, sig, bz: sp28nz(bairro).trim() } }
+function sp28lev(a, b) { if (a === b) return 0; const m = a.length, n = b.length; if (Math.abs(m - n) > 2) return 9; let v = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) { const w = [i]; for (let j = 1; j <= n; j++) w[j] = Math.min(v[j] + 1, w[j - 1] + 1, v[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); v = w } return v[n] }
+const sp28igual = (a, b) => a === b || (a.length >= 5 && b.length >= 5 && sp28lev(a, b) <= 2) || (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a)));
+/* ruas conhecidas pelo programa, com coordenada */
+function sp28fonte() { const r = []; const add = (nome, b, lat, lng, de) => { if (!nome || lat == null || lng == null || !isFinite(+lat) || !isFinite(+lng)) return; r.push({ nome: String(nome), b: b || '', lat: +lat, lng: +lng, de }) };
+  todasObras().forEach(o => { let l = []; try { l = ativas(o) } catch (e) { l = o.ocorrencias || [] } l.forEach(x => add(x.rua || x.lugar || x.nome, x.bairro, x.lat, x.lng, 'ocorrência nº ' + x.num + ' — ' + (o.nome || '').replace(/^.*?—\s*/, '').slice(0, 30))) });
+  try { (CAM.p || []).forEach(x => add(x.n, x.b, x.c && x.c[0], x.c && x.c[1], 'marcação do Google Earth')) } catch (e) { }
+  try { (CAM.np || []).concat(CAM.van || []).forEach(x => { const c = x.c || []; const m = Array.isArray(c[0]) ? c[Math.floor(c.length / 2)] : c; add(x.n, x.b, m && m[0], m && m[1], 'marcação do Google Earth') }) } catch (e) { }
+  try { FC.forEach(x => { if (x.lat != null && !x.descartar) add(x.rua, x.b, x.lat, x.lng, 'foto de campo') }) } catch (e) { }
+  return r }
+function sp28local(P) { if (!P.sig.length) return []; const out = [], vistos = {};
+  sp28fonte().forEach(it => { const t = sp28tk(it.nome.split(/[,–—]/)[0]).filter(x => !/^\d+$/.test(x) && !SP28_TIPO.test(x) && !SP28_PAR.test(x)); if (!t.length) return;
+    const ac = P.sig.filter(a => t.some(b => sp28igual(a, b))).length; const fora = t.filter(b => !P.sig.some(a => sp28igual(a, b))).length;
+    /* precisa bater os nomes principais: todos, ou todos menos 1 quando a rua tem 3 ou mais nomes */
+    if (!ac || ac < Math.min(P.sig.length, t.length) - (P.sig.length >= 3 ? 1 : 0) || ac < Math.min(2, P.sig.length)) return;
+    const bOk = P.bz && sp28nz(it.b).trim() && (sp28nz(it.b).includes(P.bz) || P.bz.includes(sp28nz(it.b).trim()));
+    const nOk = P.num && new RegExp('\\b' + P.num + '\\b').test(it.nome); const sc = ac * 10 - fora * 3 + (bOk ? 8 : 0) + (nOk ? 5 : 0); const k = sp28nz(it.nome.split(/[,–—]/)[0]).trim() + '|' + sp28nz(it.b);
+    if (vistos[k] && vistos[k].sc >= sc) return; vistos[k] = { ...it, sc, bOk } });
+  Object.values(vistos).forEach(v => out.push(v)); out.sort((a, b) => b.sc - a.sc); return out.slice(0, 8) }
+/* várias formas do endereço para o OpenStreetMap (que não entende abreviação nem tolera erro de grafia) */
+function sp28formas(q, P) { const cap = s => s.replace(/\b[a-z]/g, c => c.toUpperCase()); const f = [];
+  const tipo = (P.tk.find(t => SP28_TIPO.test(t)) || ''); const nomeAb = cap(P.tk.filter(t => !SP28_TIPO.test(t)).join(' '));
+  const tipoAb = { r: 'Rua', rua: 'Rua', av: 'Avenida', avenida: 'Avenida', al: 'Alameda', alameda: 'Alameda', tv: 'Travessa', trav: 'Travessa', travessa: 'Travessa', est: 'Estrada', estrada: 'Estrada', rod: 'Rodovia', rodovia: 'Rodovia' }[tipo] || '';
+  f.push(q);
+  if (P.rua) f.push(P.rua + (P.num ? ', ' + P.num : ''));
+  if (nomeAb) { if (tipoAb) f.push(tipoAb + ' ' + nomeAb); f.push(nomeAb) }
+  const nom = P.sig.filter(t => !/^(desembargador|doutor|doutora|prefeito|professor|professora|engenheiro|governador|presidente|senador|deputado|vereador|coronel|capitao|general|marechal|tenente|sargento|comandante|padre|frei|dom)$/.test(t));
+  if (nom.length >= 2) { f.push(cap(nom.join(' '))); if (nom.length >= 3) f.push(cap(nom[0] + ' ' + nom[nom.length - 1])) }
+  const vis = {}; return f.map(s => s.trim()).filter(s => s && !vis[s.toLowerCase()] && (vis[s.toLowerCase()] = 1)) }
+async function sp28osm(q, bounded) { const u = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=br&viewbox=-42.10,-22.40,-41.80,-22.62' + (bounded ? '&bounded=1' : '') + '&q=' + encodeURIComponent(q);
+  const r = await fetch(u, { headers: { 'Accept-Language': 'pt-BR' } }); if (!r.ok) throw new Error('osm'); return r.json() }
+let sp28seq = 0;
+const sp28dorme = ms => new Promise(ok => setTimeout(ok, ms));
+ACTS.sp19Busca = async () => { const q = ($('#fl-q').value || '').trim(); if (!q) { toast('Digite a rua ou o bairro.'); return } const res = $('#fl-res'); if (!res) return;
+  const meu = (M && M.t === 'sp19fc') ? M : null; if (!meu) return; const seq = ++sp28seq; const vivo = () => M === meu && seq === sp28seq && $('#fl-res');
+  const P = sp28parte(q); res.innerHTML = '<p class="small muted">Buscando…</p>';
+  const mostra = (lista, txt) => { meu.geo = lista; res.innerHTML = `<p class="small" style="margin:4px 0;color:#2563a8">${txt}</p>` + (lista.length > 1 ? '<div class="geo">' + lista.map((x, i) => `<button data-act="sp19Esc" data-i="${i}">${i === 0 ? '✔ ' : ''}${esc(x.display_name)}</button>`).join('') + '</div>' : '') };
+  const vai = (x, z) => { meu.rua = String(x.rua || x.display_name || '').split(',')[0]; if (z === 16) { meu.map.setView([+x.lat, +x.lon], 16) } else meu.setPin(+x.lat, +x.lon, true) };
+  /* 1) ruas que o programa já conhece */
+  const loc = sp28local(P).map(v => ({ lat: v.lat, lon: v.lng, rua: v.nome, display_name: v.nome + (v.b ? ', ' + v.b : '') + ' — ' + v.de }));
+  const cvOsm = j => (j || []).map(x => ({ lat: +x.lat, lon: +x.lon, rua: String(x.display_name).split(',')[0], display_name: String(x.display_name).split(',').slice(0, 4).join(',') + ' — OpenStreetMap' }));
+  const txt = l => '📍 Mapa levado até “' + esc(l[0].display_name) + '”. Confira e arraste o pino até o ponto exato da foto' + (l.length > 1 ? ', ou escolha outro resultado:' : '.');
+  if (loc.length) { vai(loc[0]); mostra(loc, txt(loc));
+    /* complementa com o OpenStreetMap (1 consulta, endereço inteiro): entra na lista, sem tirar o mapa do lugar */
+    try { const o2 = cvOsm(await sp28osm(q, true)); if (o2.length && vivo()) mostra(loc.concat(o2).slice(0, 10), txt(loc)) } catch (e) { } return }
+  /* 2) OpenStreetMap, várias formas */
+  let osm = [], semNet = false; const fs = sp28formas(q, P);
+  for (let i = 0; i < fs.length && !osm.length; i++) { if (!vivo()) return; try { if (i) await sp28dorme(1050); osm = await sp28osm(fs[i], true) } catch (e) { semNet = true; break } }
+  if (!vivo()) return; osm = cvOsm(osm);
+  if (osm.length) { vai(osm[0]); mostra(osm, txt(osm)); return }
+  /* 3) só o bairro */
+  if (P.bairro && !semNet) { let b = []; const bl = sp28fonte().filter(v => sp28nz(v.b).trim() && (sp28nz(v.b).includes(P.bz) || P.bz.includes(sp28nz(v.b).trim())));
+    if (bl.length) b = [{ lat: bl.reduce((s, v) => s + v.lat, 0) / bl.length, lon: bl.reduce((s, v) => s + v.lng, 0) / bl.length, display_name: P.bairro }];
+    else { try { await sp28dorme(1050); b = (await sp28osm(P.bairro + ', Rio das Ostras', true)).map(x => ({ lat: +x.lat, lon: +x.lon, display_name: P.bairro })) } catch (e) { } }
+    if (!vivo()) return;
+    if (b.length) { vai(b[0], 16); meu.geo = []; res.innerHTML = `<p class="small" style="margin:4px 0;color:#b45309">Rua não encontrada no mapa. Mostrando o bairro <b>${esc(P.bairro)}</b>: toque no local da foto para marcar o ponto.</p>`; return } }
+  res.innerHTML = semNet ? '<p class="small muted">Busca indisponível (sem internet?). Toque no mapa para marcar o ponto.</p>' : '<p class="small muted">Nenhum resultado. Toque no mapa para marcar o ponto.</p>' };
+ACTS.sp19Esc = d => { const x = M && M.geo && M.geo[+d.i]; if (!x || !M.setPin) return; M.rua = String(x.rua || x.display_name || '').split(',')[0]; M.setPin(+x.lat, +x.lon, true);
+  $$('#fl-res .geo button').forEach((b, i) => { b.textContent = (i === +d.i ? '✔ ' : '') + b.textContent.replace(/^✔ /, '') }) };
+/* Enter no campo de endereço = Buscar */
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target && e.target.id === 'fl-q') { e.preventDefault(); ACTS.sp19Busca() } });
 })();
 </script>
 
