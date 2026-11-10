@@ -2792,7 +2792,7 @@ function sp8Resumo(o, p) { const P = Object.assign(piDef(), p.params || {}); con
     tot.m3 += v.m3 || 0; tot.t += v.t || 0; tot.custo = r2(tot.custo + (v.custo || 0)); dias.set(i.dia, (dias.get(i.dia) || 0) + (v.t || 0)); });
   dias.forEach(t => { tot.cargas += P.carga > 0 ? Math.ceil(t / P.carga - 1e-9) : 0; }); const ds = [...dias.keys()].sort();
   p.resumo = Object.assign(tot, {dias: ds.length, ini: ds[0] || '', fim: ds[ds.length - 1] || '', resto: (p.resumo && p.resumo.resto) || 0}); }
-function sp8Reconhece(o) { if (!o) return false; const l = progSolta(o); if (!l.length) return false;
+function sp8Reconhece(o) { if (!o) return false; if (!o.sp8Auto) return false; /* SP-14: planejamento só entra quando o usuário inclui */ const l = progSolta(o); if (!l.length) return false;
   let p = PLS(o).find(x => x.auto && x.emUso);
   if (!p) { p = {id: 'pl' + uid(), nome: 'Programação já definida (reconhecida automaticamente)', tipo: 'manual', modo: 'atual', base: '', auto: true, criadoEm: new Date().toISOString(), por: '', emUso: true, itens: [], resumo: {}}; PLS(o).push(p); }
   l.forEach(oc => { const dia = oc.diaPlan || weekRange(oc.semana)[0]; p.itens = p.itens.filter(i => i.ocId !== oc.id);
@@ -3479,7 +3479,7 @@ renderTop = function () { _rTop.apply(this, arguments); const a = document.query
 
 /* ---------- SP-12f (09/11/2026): 🎨 paleta de planejamentos no mapa + relatório completo do planejamento ---------- */
 const PLC = ['#e6194b', '#3cb44b', '#4363d8', '#f58231', '#911eb4', '#0aa5a5', '#c71585', '#7a9a01', '#b8860b', '#1e3a8a', '#8b4513', '#008b8b'];
-const corPl = (o, p) => { const i = (o.planejamentos || []).indexOf(p); return p.cor || PLC[(i < 0 ? 0 : i) % PLC.length] };
+const corPl = (o, p) => { if (p.modelo && S.sp12Todas && !S.obraId) return '#c2255c'; const i = (o.planejamentos || []).indexOf(p); return p.cor || PLC[(i < 0 ? 0 : i) % PLC.length] };
 const PV = () => { if (!S.sp12PV) { S.sp12PV = {}; try { Object.assign(S.sp12PV, JSON.parse(localStorage.getItem('tc_sp12_pv') || '{}')) } catch (e) { } } return S.sp12PV };
 const pvSalva = () => { try { localStorage.setItem('tc_sp12_pv', JSON.stringify(PV())) } catch (e) { } };
 /* planejamento novo (gerado agora) já entra visível no mapa */
@@ -3943,6 +3943,21 @@ function custoRealRot(o, x, h) { try { return custoReal(o, x) > 0 ? h.replace('C
     const c = map.getContainer(); const r = c.getBoundingClientRect(); if (r.top < 0 || r.bottom > innerHeight) c.scrollIntoView({ block: 'center', behavior: 'smooth' }) } catch (er) { } }) });
   try { const st = document.createElement('style'); st.textContent = '.leaflet-popup-content{max-height:none}.leaflet-popup-content img{max-width:100%;height:auto}'; document.head.appendChild(st) } catch (e) { } };
   ini() })();
+
+/* ---------- SP-14d: em “Todas as obras” o modelo é um só (a união dos modelos de cada obra) ---------- */
+const modelosTP = () => obrasTP().map(o => ({ o, p: (o.planejamentos || []).find(q => q.modelo) })).filter(r => r.p);
+const _pal14 = paleta;
+paleta = function (obras, onde) { if (onde !== 'todas') return _pal14.apply(this, arguments);
+  const cp = obras.map(o => Object.assign({}, o, { planejamentos: (o.planejamentos || []).filter(p => !p.modelo) }));
+  let h = _pal14.call(this, cp, onde); const M_ = modelosTP().filter(r => obras.some(o => o.id === r.o.id)); if (!M_.length) return h; const v = PV();
+  const n = M_.reduce((s, r) => s + (r.p.itens || []).length, 0); let a = '9999-99-99', b = '0000-00-00'; M_.forEach(r => (r.p.itens || []).forEach(i => { if (i.dia < a) a = i.dia; if (i.dia > b) b = i.dia }));
+  const todos = M_.every(r => v[r.p.id]);
+  const lin = `<div class="row gap" style="align-items:center;flex-wrap:wrap;margin:6px 0;padding:6px 8px;border:1px solid var(--line);border-radius:10px"><label class="chk" style="margin:0;flex:1;min-width:240px"><input type="checkbox" data-chg="sp14U" ${todos ? 'checked' : ''}> <span style="display:inline-block;width:14px;height:14px;border-radius:3px;background:#c2255c;vertical-align:middle"></span> <b>📐 Planejamento modelo — todas as obras (união)</b> <span class="muted small">(${M_.length} obras · ${n} ocorr.${a <= b ? ' · ' + fdB(a) + '–' + fdB(b) : ''})</span></label><button class="btn sm" data-act="sp14Uso">👁 Só este</button><button class="btn sm" data-act="sp14UR">📄 Relatório da união</button></div>`;
+  const anc = ['<div style="font-weight:700;margin:8px 0 2px">', '<div class="small muted" style="margin:4px 0">']; let k = -1; for (const x of anc) { const i = h.indexOf(x); if (i >= 0 && (k < 0 || i < k)) k = i }
+  return k < 0 ? h + lin : h.slice(0, k) + lin + h.slice(k) };
+CHG.sp14U = el => { const v = PV(); modelosTP().forEach(r => { v[r.p.id] = el.checked }); pvSalva(); render() };
+ACTS.sp14Uso = () => { const v = PV(); obrasVisiveis().forEach(o => (o.planejamentos || []).forEach(p => { v[p.id] = !!p.modelo })); pvSalva(); render() };
+ACTS.sp14UR = () => { const L = modelosTP(); if (L.length) relPlanos(L) };
 })();
 </script>
 
