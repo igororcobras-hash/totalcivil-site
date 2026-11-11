@@ -1561,8 +1561,8 @@ function renderTopoTable(){
     <td class="ti c4"><input type="number" step="0.01" value="${r.tEixo}" onchange="topoVal(${i},'tEixo',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c5"><input type="number" step="0.01" value="${r.tDir}" onchange="topoVal(${i},'tDir',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c6"><input type="number" step="0.01" value="${r.greide}" onchange="topoVal(${i},'greide',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="to c7" id="tge-${i}">—</td>
-    <td class="to c8" id="tgd-${i}">—</td>
+    <td class="ti c7" id="tge-${i}"><input type="number" step="0.001" value="${r.gEsq==null?'':r.gEsq}" placeholder="auto" title="Vazio = calculado pelo caimento transversal; digite a cota do projeto para fixar" onchange="topoVal(${i},'gEsq',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="ti c8" id="tgd-${i}"><input type="number" step="0.001" value="${r.gDir==null?'':r.gDir}" placeholder="auto" title="Vazio = calculado pelo caimento transversal; digite a cota do projeto para fixar" onchange="topoVal(${i},'gDir',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="to c9" id="tdl-${i}">—</td>
     <td class="ti c10"><input type="number" step="0.5" value="${r.larg}" onchange="topoVal(${i},'larg',this.value)" style="width:50px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="to c11" id="tsit-${i}">—</td>
@@ -1573,13 +1573,26 @@ function renderTopoTable(){
   </tr>`).join('');
   aplicarColunasTopo();
 }
-function topoVal(i,k,val){topoRows[i][k]=parseFloat(val)||0;calcTopo();}
+function topoVal(i,k,val){
+  if(k==='gEsq'||k==='gDir'){ /* cota de greide lateral: vazio = automático (pelo caimento) */
+    const n=parseFloat(String(val).replace(',','.'));
+    if(String(val).trim()===''||isNaN(n)) delete topoRows[i][k]; else topoRows[i][k]=n;
+    calcTopo(); return;
+  }
+  topoRows[i][k]=parseFloat(val)||0;calcTopo();
+}
 /* Linhas da topografia com a geometria da seção de cada estaca (mesma da aba Seções transversais) */
 function topoLinhas(){
   const P=secaoParams(), num=x=>(x===''||x==null||isNaN(x))?null:+x;
   return topoRows.map((row,i)=>{
     const L={i,est:+row.est||0,te:num(row.tEsq),tc:num(row.tEixo),td:num(row.tDir),gr:num(row.greide),larg:+row.larg||0,na:null,ac:0,aa:0,ar:0,sit:'—',form:null,gE:null,gD:null};
-    if(L.gr!==null){ L.form=L.gr-P.eTot; L.gE=+(L.gr-(L.larg/2)*P.cEsq).toFixed(3); L.gD=+(L.gr-(L.larg/2)*P.cDir).toFixed(3); }
+    L.cE=P.cEsq; L.cD=P.cDir; L.gEusr=false; L.gDusr=false;
+    if(L.gr!==null){
+      L.form=L.gr-P.eTot;
+      const hb=L.larg/2, ge=num(row.gEsq), gd=num(row.gDir);
+      if(ge!==null&&hb>0){ L.cE=(L.gr-ge)/hb; L.gE=+ge.toFixed(3); L.gEusr=true; } else L.gE=+(L.gr-hb*P.cEsq).toFixed(3);
+      if(gd!==null&&hb>0){ L.cD=(L.gr-gd)/hb; L.gD=+gd.toFixed(3); L.gDusr=true; } else L.gD=+(L.gr-hb*P.cDir).toFixed(3);
+    }
     if(L.gr!==null&&L.tc!==null&&L.larg>0){
       const G=secaoGeom(L,P), A=secaoAreas(L,G,P);
       L.ac=A.ac; L.aa=A.aa; L.ar=A.ar;
@@ -1595,7 +1608,10 @@ function calcTopo(){
     const T=(id,t)=>{const e=document.getElementById(id); if(e) e.textContent=t;};
     T('tsit-'+L.i,L.sit); T('tac-'+L.i,L.sit==='—'?'—':fmt(L.ac,2)); T('taa-'+L.i,L.sit==='—'?'—':fmt(L.aa,2));
     T('tco-'+L.i,'—'); T('tat-'+L.i,'—');
-    T('tge-'+L.i,L.gE==null?'—':fmt(L.gE,3)); T('tgd-'+L.i,L.gD==null?'—':fmt(L.gD,3));
+    [['tge-','gEsq',L.gE,L.gEusr],['tgd-','gDir',L.gD,L.gDusr]].forEach(([p,k,val,usr])=>{
+      const td=document.getElementById(p+L.i), inp=td&&td.querySelector('input'); if(!inp) return;
+      inp.placeholder=val==null?'auto':fmt(val,3); inp.style.opacity=usr?'1':'.6';
+    });
     const nx=linhas[L.i+1], d=nx?nx.est-L.est:0;
     T('tdl-'+L.i,(nx&&d>0&&L.gr!=null&&nx.gr!=null)?fmt((nx.gr-L.gr)/d*100,2):'—');
   });
@@ -1634,7 +1650,7 @@ function calcTopo(){
    i_min (%) a cada trecho; onde o terreno já cai mais que isso, o greide segue o terreno.
    Bordas: greide do eixo − (largura/2) × caimento transversal de cada lado.
 ══════════════════════════════════════════════════════ */
-let _greideCfg={imin:0.5,sentido:'desc',cota:''}, _greideAnterior=null;
+let _greideCfg={imin:0.5,sentido:'desc',cota:''}, _greideAnterior=null, _greideLatAnt=null;
 function abrirGerarGreide(){
   if(topoRows.length<2){ toast('Inclua pelo menos 2 estacas com as cotas do terreno.',true); return; }
   const g=_greideCfg, md=document.getElementById('modal');
@@ -1661,7 +1677,8 @@ function gerarGreide(){
   const n=topoRows.length, T=topoRows.map(r=>+r.tEixo);
   if(T.some(x=>isNaN(x))){ toast('Há estaca sem cota do terreno no eixo.',true); return; }
   for(let i=1;i<n;i++){ if(!(topoRows[i].est>topoRows[i-1].est)){ toast('As estacas precisam estar em ordem crescente (estaca '+(i+1)+' ≤ anterior).',true); return; } }
-  _greideAnterior=topoRows.map(r=>r.greide);
+  _greideAnterior=topoRows.map(r=>r.greide); _greideLatAnt=topoRows.map(r=>[r.gEsq,r.gDir]);
+  topoRows.forEach(r=>{delete r.gEsq;delete r.gDir;}); /* greide novo: bordas voltam a ser calculadas pelo caimento */
   const G=new Array(n), f2=x=>Math.floor(x*100+1e-9)/100;
   const ini=sentido==='desc'?0:n-1;
   G[ini]=cota!=null?cota:T[ini];
@@ -1681,7 +1698,7 @@ function gerarGreide(){
 }
 function desfazerGreide(){
   if(!_greideAnterior||_greideAnterior.length!==topoRows.length){ toast('Nada para desfazer.',true); return; }
-  topoRows.forEach((r,i)=>r.greide=_greideAnterior[i]);
+  topoRows.forEach((r,i)=>{r.greide=_greideAnterior[i]; const l=(_greideLatAnt||[])[i]||[]; if(l[0]!=null) r.gEsq=l[0]; else delete r.gEsq; if(l[1]!=null) r.gDir=l[1]; else delete r.gDir;});
   _greideAnterior=null;
   document.getElementById('btn-desfazer-greide').style.display='none';
   document.getElementById('greide-resumo').textContent='';
@@ -2122,7 +2139,7 @@ function secaoGeom(L, P) {
     return { tB: tB, yS: yS, yF: yF, k: k, h: h, corte: corte, y0: y0, tal: tal, s: s, d: d, semInt: semInt,
       yInt: yInt, tInt: tB + k * d, re: re };
   };
-  return { b: b, form: form, tE: tE, tC: tC, tD: tD, E: lado(tE, P.cEsq), D: lado(tD, P.cDir),
+  return { b: b, form: form, tE: tE, tC: tC, tD: tD, E: lado(tE, L.cE != null ? L.cE : P.cEsq), D: lado(tD, L.cD != null ? L.cD : P.cDir),
     hC: tC - form };
 }
 
@@ -2173,7 +2190,8 @@ function secaoSVG(L, G, P, papel) {
   const f3 = (x) => fmt(x, 3),f2 = (x) => fmt(x, 2);
   const sg = (x) => (x > 0 ? '+' : '') + fmt(x, 2);
   const halo = `paint-order="stroke" stroke="${C.bg}" stroke-width="3" stroke-linejoin="round"`;
-  const ysE = L.gr - b * P.cEsq,ysD = L.gr - b * P.cDir;
+  const cE = L.cE != null ? L.cE : P.cEsq,cD = L.cD != null ? L.cD : P.cDir;
+  const ysE = L.gr - b * cE,ysD = L.gr - b * cD;
   // rótulos com anti-sobreposição: cada texto procura a posição livre mais próxima
   const rots = [];
   const rot = (prio, txt, x, y, size, anchor, fill, bold, dir) => rots.push({ prio, txt, x, y, size, anchor, fill, bold, dir });
@@ -2234,8 +2252,8 @@ function secaoSVG(L, G, P, papel) {
   });
   // bermas
   if (P.berma > 0 && P.berma < b) {
-    s += `<polyline points="${pts([[-b, ysE], [-b + P.berma, L.gr - (b - P.berma) * P.cEsq]])}" fill="none" stroke="#8c8c8c" stroke-width="4"/>` +
-    `<polyline points="${pts([[b - P.berma, L.gr - (b - P.berma) * P.cDir], [b, ysD]])}" fill="none" stroke="#8c8c8c" stroke-width="4"/>`;
+    s += `<polyline points="${pts([[-b, ysE], [-b + P.berma, L.gr - (b - P.berma) * cE]])}" fill="none" stroke="#8c8c8c" stroke-width="4"/>` +
+    `<polyline points="${pts([[b - P.berma, L.gr - (b - P.berma) * cD], [b, ysD]])}" fill="none" stroke="#8c8c8c" stroke-width="4"/>`;
   }
   // meio-fio e sarjeta
   if (P.mf) {
@@ -2256,7 +2274,7 @@ function secaoSVG(L, G, P, papel) {
     });
   }
   // formação
-  s += `<line x1="${X(-b)}" y1="${Y(G.form - b * P.cEsq)}" x2="${X(b)}" y2="${Y(G.form - b * P.cDir)}" stroke="${C.acc}" stroke-width="1" stroke-dasharray="4 3"/>`;
+  s += `<line x1="${X(-b)}" y1="${Y(G.form - b * cE)}" x2="${X(b)}" y2="${Y(G.form - b * cD)}" stroke="${C.acc}" stroke-width="1" stroke-dasharray="4 3"/>`;
   // taludes
   [[G.E, -1], [G.D, 1]].forEach(([Ld, sn]) => {
     const x1 = sn * b,x2 = sn * (b + Ld.d);
@@ -2294,7 +2312,7 @@ function secaoSVG(L, G, P, papel) {
   const camTxt = P.camadas.map((c) => c[0].split(' (')[0] + ' ' + fmt(c[1] * 100, 1)).join(' · ');
   if (naFora) s += `<text x="${W / 2}" y="${yb + extraCotas + 58 + (nota ? 14 : 0)}" font-size="10" text-anchor="middle" fill="#2f7fd1">N.A. na cota ${f3(L.na)} (abaixo do quadro)</text>`;
   if (nota) s += `<text x="${W / 2}" y="${yb + extraCotas + 58}" font-size="10" font-weight="700" text-anchor="middle" fill="#3f7a2e">${nota}</text>`;
-  s += `<text x="${W / 2}" y="${yb + extraCotas + 30}" font-size="10" text-anchor="middle" fill="${C.fg3}">${geo}caimento ${fmt(P.cEsq * 100, 1)}% / ${fmt(P.cDir * 100, 1)}%${mfTxt}</text>` +
+  s += `<text x="${W / 2}" y="${yb + extraCotas + 30}" font-size="10" text-anchor="middle" fill="${C.fg3}">${geo}caimento ${fmt(cE * 100, 1)}% / ${fmt(cD * 100, 1)}%${mfTxt}</text>` +
   `<text x="${W / 2}" y="${yb + extraCotas + 44}" font-size="10" text-anchor="middle" fill="${C.fg3}">${camTxt} cm (total ${fmt(P.eTot * 100, 1)} cm)${P.ev !== 1 ? ' · escala vertical ×' + P.ev : ''}</text>`;
   // legenda
   const ly0 = H - legH + 6;
