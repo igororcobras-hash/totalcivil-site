@@ -1555,7 +1555,7 @@ function remEstaca(){if(topoRows.length>0){topoRows.pop();renderTopoTable();calc
 function renderTopoTable(){
   const tbody=document.getElementById('topo-tbody');
   tbody.innerHTML=topoRows.map((r,i)=>`<tr>
-    <td class="c1">${i+1}${r.ponto?` <span title="Ponto inserido com +Ponto" style="font-size:9px;font-weight:700;color:var(--accent2,#2563eb)">P</span> <button type="button" title="Excluir este ponto" onclick="remPonto(${i})" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:13px;padding:0 2px">×</button>`:''}</td>
+    <td class="c1">${i+1}${r.ponto?` <span title="${esc(r.obs||'Ponto inserido com +Ponto')}" style="font-size:9px;font-weight:700;color:var(--accent2,#2563eb)">P</span> <button type="button" title="Excluir este ponto" onclick="remPonto(${i})" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:13px;padding:0 2px">×</button>`:''}</td>
     <td class="ti c2"><input type="number" step="0.5" value="${r.est}" onchange="topoVal(${i},'est',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c3"><input type="number" step="0.01" value="${r.tEsq}" onchange="topoVal(${i},'tEsq',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c4"><input type="number" step="0.01" value="${r.tEixo}" onchange="topoVal(${i},'tEixo',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
@@ -1885,7 +1885,7 @@ function impLer(){
   const g=id=>document.getElementById(id), col=k=>parseInt(g('im_c_'+k).value,10);
   const r1=parseInt(g('im_r1').value,10)||1, r2=parseInt(g('im_r2').value,10)||r1, comp=parseFloat(g('im_comp').value)||20, uni=g('im_uni').value;
   const C={}; IMP_CAMPOS.forEach(c=>C[c[0]]=col(c[0]));
-  const aviso=[], rows=[]; let ign=0;
+  const aviso=[], rows=[], vazios=[]; let ign=0;
   if(C.est<0) aviso.push('Escolha a coluna da estaca / distância.');
   if(C.tEixo<0&&!(C.tEsq>=0&&C.tDir>=0)) aviso.push('Escolha a coluna do terreno no eixo (ou as duas bordas).');
   const larg0=parseFloat(document.getElementById('larg-pad').value)||6;
@@ -1895,6 +1895,10 @@ function impLer(){
       const n=k=>C[k]>=0?impNum(row[C[k]]):NaN;
       let ex=n('tEixo'), ee=n('tEsq'), ed=n('tDir');
       if(isNaN(ex)&&!isNaN(ee)&&!isNaN(ed)) ex=(ee+ed)/2;
+      if(!isNaN(est)&&isNaN(ex)&&['tEsq','tEixo','tDir','greide'].every(k=>isNaN(n(k)))){
+        const o=row.find(x=>typeof x==='string'&&x.trim()!==''&&isNaN(impNum(x))&&!/^\s*\d+\s*\+/.test(x));
+        vazios.push({est:+est.toFixed(3),obs:o?String(o).trim().slice(0,80):'',linha:r}); continue;
+      }
       if(isNaN(est)||isNaN(ex)){ if(row.some(impTxt)) ign++; continue; }
       const gr=n('greide'), lg=n('larg'), rd=x=>+x.toFixed(3);
       rows.push({est:rd(est),tEsq:rd(isNaN(ee)?ex:ee),tEixo:rd(ex),tDir:rd(isNaN(ed)?ex:ed),greide:rd(isNaN(gr)?ex:gr),larg:rd(isNaN(lg)||lg<=0?larg0:lg),linha:r,
@@ -1902,6 +1906,16 @@ function impLer(){
     }
     rows.sort((a,b)=>a.est-b.est);
     const unicas=[]; let dup=0; rows.forEach(r=>{ if(unicas.length&&Math.abs(unicas[unicas.length-1].est-r.est)<1e-6) dup++; else unicas.push(r); });
+    let interp=0;
+    vazios.forEach(v=>{
+      if(unicas.some(u=>Math.abs(u.est-v.est)<1e-6)) return;
+      const a=unicas.filter(u=>u.est<v.est).pop(), b=unicas.find(u=>u.est>v.est);
+      const base=a||b; if(!base) return;
+      const t=(a&&b)?(v.est-a.est)/(b.est-a.est):0, f=k=>+(((a||b)[k])+(((b||a)[k])-((a||b)[k]))*t).toFixed(3);
+      unicas.push({est:v.est,tEsq:f('tEsq'),tEixo:f('tEixo'),tDir:f('tDir'),greide:f('greide'),larg:f('larg'),linha:v.linha,ponto:true,obs:v.obs,interp:true}); interp++;
+    });
+    unicas.sort((x,y)=>x.est-y.est);
+    if(interp) aviso.push(interp+' ponto(s) sem cotas na planilha (ex.: cruzamento de rua) entraram na posição certa com cotas interpoladas entre as estacas vizinhas — ajuste se tiver o levantamento.');
     if(ign) aviso.push(ign+' linha(s) com texto/valor inválido foram ignoradas.');
     if(dup) aviso.push(dup+' linha(s) repetida(s) na mesma estaca foram ignoradas (vale a primeira).');
     if(C.greide<0) aviso.push('Sem coluna de greide: o greide ficou igual ao terreno do eixo. Use “Gerar greide…” depois.');
@@ -1918,12 +1932,12 @@ function impPrevia(){
   const mostra=L.rows.slice(0,12);
   box.innerHTML='<div style="font-size:12px;margin-bottom:4px"><b>'+L.rows.length+' estaca(s)/ponto(s)</b> serão importados ('+L.rows.filter(r=>r.ponto).length+' fora do múltiplo de '+fmt(parseFloat(document.getElementById('im_comp').value)||20,0)+' m, marcados como ponto). Prévia:</div>'+w+
     '<div class="tw" style="max-height:230px;overflow:auto"><table><thead><tr><th>Linha Excel</th><th>Estaca (m)</th><th>Terreno esq.</th><th>Terreno eixo</th><th>Terreno dir.</th><th>Greide eixo</th><th>Largura</th></tr></thead><tbody>'+
-    mostra.map(r=>'<tr><td>'+r.linha+'</td><td>'+fmt(r.est,2)+(r.ponto?' <b style="color:var(--accent2,#2563eb)">P</b>':'')+'</td><td>'+fmt(r.tEsq,3)+'</td><td>'+fmt(r.tEixo,3)+'</td><td>'+fmt(r.tDir,3)+'</td><td>'+fmt(r.greide,3)+'</td><td>'+fmt(r.larg,2)+'</td></tr>').join('')+
+    mostra.map(r=>'<tr><td>'+r.linha+'</td><td>'+fmt(r.est,2)+(r.ponto?' <b style="color:var(--accent2,#2563eb)">P</b>':'')+(r.obs?' <span style="font-size:10px;color:var(--fg3)">'+esc(r.obs)+'</span>':'')+'</td><td>'+fmt(r.tEsq,3)+'</td><td>'+fmt(r.tEixo,3)+'</td><td>'+fmt(r.tDir,3)+'</td><td>'+fmt(r.greide,3)+'</td><td>'+fmt(r.larg,2)+'</td></tr>').join('')+
     (L.rows.length>mostra.length?'<tr><td colspan="7" style="color:var(--fg3)">… e mais '+(L.rows.length-mostra.length)+' linha(s)</td></tr>':'')+'</tbody></table></div>';
 }
 function impAplicar(){
   const L=_imp&&_imp.ler; if(!L||!L.rows.length) return;
-  const novas=L.rows.map(r=>({est:r.est,tEsq:r.tEsq,tEixo:r.tEixo,tDir:r.tDir,greide:r.greide,larg:r.larg,...(r.ponto?{ponto:true}:{})}));
+  const novas=L.rows.map(r=>({est:r.est,tEsq:r.tEsq,tEixo:r.tEixo,tDir:r.tDir,greide:r.greide,larg:r.larg,...(r.ponto?{ponto:true}:{}),...(r.obs?{obs:r.obs}:{})}));
   const modo=document.getElementById('im_modo').value;
   if(modo==='add'){
     const todas=topoRows.concat(novas).sort((a,b)=>a.est-b.est), fim=[];
