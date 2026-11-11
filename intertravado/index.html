@@ -1708,6 +1708,21 @@ function colunasTopoGrupo(g){
   aplicarColunasTopo();
 }
 function toggleColunasTopo(){ montarColunasTopo(); document.getElementById('topo-cols').classList.toggle('open'); aplicarColunasTopo(); }
+/* Shift+Enter (ou Enter) na tabela da topografia: vai para a mesma coluna da linha de baixo */
+function topoTeclado(){
+  const tb=document.getElementById('topo-tbody'); if(!tb||tb.dataset.kb) return; tb.dataset.kb='1';
+  tb.addEventListener('keydown',function(e){
+    if(e.key!=='Enter'||e.isComposing) return;
+    const inp=e.target; if(!inp||inp.tagName!=='INPUT') return;
+    const td=inp.closest('td'), tr=td&&td.parentElement; if(!tr) return;
+    e.preventDefault();
+    const dir=e.ctrlKey?-1:1;
+    const alvo=dir>0?tr.nextElementSibling:tr.previousElementSibling;
+    const prox=alvo&&alvo.cells[td.cellIndex]&&alvo.cells[td.cellIndex].querySelector('input');
+    inp.dispatchEvent(new Event('change',{bubbles:true}));
+    if(prox){ prox.focus(); try{prox.select();}catch(x){} }
+  });
+}
 let _topo=null;
 function volumesCamadas(totArea){
   const r=resultado; if(!r) return [];
@@ -2655,6 +2670,8 @@ document.querySelectorAll('.tab').forEach(t=>{
   try{const th=localStorage.getItem('pint_theme');if(th)document.documentElement.setAttribute('data-theme',th);const fe=parseFloat(localStorage.getItem('pint_fonte'));if(FONTE_PASSOS.indexOf(fe)>=0)fonteEscala=fe;aplicarFonte();}catch(e){}
   topoRows=[{est:0,tEsq:100,tEixo:100,tDir:100,greide:100,larg:6},{est:20,tEsq:100,tEixo:100,tDir:100,greide:100,larg:6}];
   renderTopoTable();
+  calcTopo();
+  topoTeclado();
   iniciarAjuda();
   atualizarFig61();
 })();
