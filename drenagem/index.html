@@ -11718,4 +11718,201 @@ function excluirRuaCompleta(id) {
 }
 function topoExcluirRua(id) { if (excluirRuaCompleta(id)) topoTela(); }
 </script>
+<script>
+/* =====================================================================
+   PATCH DR-18 (11/11/2026) — gerador rápido na malha 6 × 4
+   Durante UM cálculo (calc) as estacas, o greide e o meio-fio não mudam:
+   estacasRua, greideCota, topoDelta, cotaMF, cotaMuro e geoCache passam a
+   ser lembrados só enquanto o calc roda (zerados ao terminar). Antes o
+   gerador refazia o filtro/ordenação das 1.000+ estacas milhares de vezes
+   por cálculo (~2 min por opção; as 3 opções travavam o navegador).
+   window.__semMemo18 = true desliga (para comparar).
+   ===================================================================== */
+let MEMO18 = null;
+/* lado da caixa em relação ao PV, ao longo da rua da caixa (−1 antes, +1 depois, 0 na mesma estaca) */
+function lado18(G, b, pv) { const g = G[b.rua], q = posPV(G, pv); if (!g || !q) return 0; const d = num(b.dist) - g.loc(q).s; return Math.abs(d) < 0.05 ? 0 : Math.sign(d); }
+/* sentido da água na sarjeta da caixa (mesma regra do addBLMontante) */
+function sentido18(b) { const S = (typeof sarjSentidoLado === 'function' ? sarjSentidoLado(b.rua, num(b.dist), b.lado) : greideDecl(b.rua, num(b.dist))); return S == null || S >= 0 ? 1 : -1; }
+/* o PV já recebe outra caixa da MESMA sarjeta (rua + lado) com a água vindo do MESMO sentido? */
+function ocupado18(G, pv, b) { const sb = sentido18(b); return P.bls.some(x => x !== b && x.pv === pv.id && x.rua === b.rua && x.lado === b.lado && sentido18(x) === sb); }
+/* liga a caixa a um PV que ainda não recebe caixa desta sarjeta (ramal a favor do fluxo, ≤ ramal máximo);
+   sem PV livre: cria um PV no trecho da rede da rua, a 45° a jusante da caixa (cotas interpoladas, como em fixRamalContra) */
+/* comprimento da caixa ao longo da sarjeta (grelha ou abertura na guia) */
+function comp18(b) { return Math.max(num(b.gL) || 0, num(b.L) || 0, 0.9); }
+function liga18(b, k) {
+  const G = geoRuas(), g = G[b.rua], rua = ruaById(b.rua); if (!g || !rua) return null;
+  const Lmax = num(P.crit.ramalLmax) || 15, faixa = (+rua.larg || 7) / 2 + (+rua.passeio || 2), pv0 = b.pv;
+  let best = null;
+  P.pvs.forEach(pv => { if (pv.id === pv0) return; const q = posPV(G, pv); if (!q || Math.abs(g.loc(q).off) > faixa) return;
+    b.pv = pv.id; const a = angRamal(G, b), L = ramalLGeo(G, b), oc = ocupado18(G, pv, b); b.pv = pv0;
+    if (isNum(a) && a <= 90.5 && isNum(L) && L <= Lmax && !oc) { const sc = L + Math.abs(a - 45) * 0.05; if (!best || sc < best.sc) best = {pv, sc, a, L}; } });
+  if (best) { b.pv = best.pv.id; b.ang = +best.a.toFixed(1); b.rL = +best.L.toFixed(2); return b.id + ': o ' + pv0 + ' já recebe outra caixa desta sarjeta — ligada ao ' + best.pv.id + ' (ramal a ' + fmt(best.a, 0) + '°, ' + fmt(best.L, 1) + ' m).'; }
+  // 2 caixas uma ao lado da outra: a caixa vai encostada na mantida, a montante na sarjeta, com o próprio ramal ao mesmo PV
+  if (k && k.pv === pv0) { const d0b = num(b.dist), prox0 = b.prox, fl = sentido18(b), sLado = num(k.dist) - fl * (comp18(k) + 0.15);   // fica do lado de onde a água dela vem
+    if (sLado >= g.sMin + 1 && sLado <= g.sMax - 1) { b.dist = +sLado.toFixed(2); const G2 = geoRuas(), a = angRamal(G2, b), L = ramalLGeo(G2, b);
+      if (!blNaEsquina(G2, b) && isNum(a) && a <= 90.5 && isNum(L) && L <= Lmax) {
+        // encadeamento (água que passa direto): ... → b → k → ..., sem ciclo
+        P.bls.forEach(x => { if (x !== b && x.prox === k.id) x.prox = b.id; });
+        if (k.prox === b.id) k.prox = prox0 && prox0 !== k.id ? prox0 : '';
+        b.prox = k.id; b.ang = +a.toFixed(1); b.rL = +L.toFixed(2);
+        return b.id + ': o ' + pv0 + ' já recebe a caixa ' + k.id + ' desta sarjeta — ' + b.id + ' colocada ao lado dela (est. ' + estLabel(d0b) + ' → ' + estLabel(b.dist) + '), ramal próprio a ' + fmt(a, 0) + '° (' + fmt(L, 1) + ' m) ao mesmo PV.'; }
+      b.dist = d0b; b.prox = prox0; } }
+  const off = blOff(b, rua) * (b.lado === 'D' ? -1 : 1), d0 = num(b.dist), ESP = 15;   // PV novo a ≥ 15 m dos vizinhos (PVs ao longo da rua costumam ficar a 30–50 m)
+  for (const t of P.trechos) {
+    const pm = pvById(t.m), pj = pvById(t.j), qm = pm && posPV(G, pm), qj = pj && posPV(G, pj); if (!qm || !qj) continue;
+    const lm = g.loc(qm), lj = g.loc(qj); if (Math.abs(lm.off) > 0.5 || Math.abs(lj.off) > 0.5) continue;
+    const dirT = Math.sign(lj.s - lm.s); if (!dirT) continue;
+    const sNew = d0 + dirT * Math.abs(lm.off - off); if (!((sNew - lm.s) * dirT >= ESP && (lj.s - sNew) * dirT >= ESP)) continue;
+    const cm = num(t.cm), cj = num(t.cj), fr = (sNew - lm.s) / (lj.s - lm.s), ci = isNum(cm) && isNum(cj) ? +(cm + (cj - cm) * fr).toFixed(3) : '';
+    const nid = idCapt(P);
+    P.pvs.push(Object.assign(JSON.parse(JSON.stringify(pm)), {id: nid, rua: b.rua, dist: +sNew.toFixed(2), defl: 'reta', tampa: '', na: '', pvL: '', pvHi: '', obs: 'PV para receber a caixa ' + b.id + ' a 45° (uma caixa por sarjeta em cada PV)'}));
+    let k = 1, tid; do { tid = t.id + '.' + k++; } while (P.trechos.some(x => x.id === tid));
+    const dz = +((P.crit.dz || {}).reta) || 0, Lt = num(t.L) > 0, t2 = Object.assign(JSON.parse(JSON.stringify(t)), {id: tid, m: nid, cm: ci === '' ? '' : +(ci - dz).toFixed(3), L: Lt ? +Math.abs(lj.s - sNew).toFixed(2) : ''});
+    t.j = nid; t.cj = ci; if (Lt) t.L = +Math.abs(sNew - lm.s).toFixed(2);
+    P.trechos.splice(P.trechos.indexOf(t) + 1, 0, t2);
+    b.pv = nid; const a = angRamal(geoRuas(), b); if (isNum(a)) b.ang = +a.toFixed(1);
+    return b.id + ': o ' + pv0 + ' já recebe outra caixa desta sarjeta — criado o ' + nid + ' no trecho ' + t.id + ' (est. ' + estLabel(sNew) + '), ramal a 45°.';
+  }
+  // sem rede na rua neste ponto: rede auxiliar — PV novo a 45° da caixa, ligado por tubo ao PV a jusante na sarjeta
+  const pd = pvById(pv0), qd = pd && posPV(G, pd);
+  if (qd) { const ld = g.loc(qd), fl = sentido18(b), sNew = d0 + fl * Math.abs(ld.off - off), Lt = (ld.s - sNew) * fl;
+    if (Math.abs(ld.off) <= 0.5 && Lt >= ESP && Lt <= 60 && !P.pvs.some(x => { const qx = posPV(G, x); return qx && x.id !== pv0 && Math.abs(g.loc(qx).off) <= 0.5 && Math.abs(g.loc(qx).s - sNew) < ESP; }) && sNew >= g.sMin + 2 && sNew <= g.sMax - 2) {
+      const nid = idCapt(P), dmin = num(P.crit.dmin) || 400, tpl = P.trechos.find(x => x.m === pv0 || x.j === pv0) || {};
+      P.pvs.push(Object.assign(JSON.parse(JSON.stringify(pd)), {id: nid, rua: b.rua, dist: +(num(pd.dist) + (sNew - ld.s)).toFixed(2), defl: 'ini', tampa: '', na: '', pvL: '', pvHi: '', obs: 'PV de rede auxiliar para a caixa ' + b.id + ' a 45° (uma caixa por sarjeta em cada PV)'}));
+      const tid = nextId(P.trechos, 'T', 1);
+      P.trechos.push({id: tid, m: nid, j: pv0, L: +Lt.toFixed(2), D: dmin, cm: '', cj: '', mat: tpl.mat || 'CA-2 (concreto armado)', aL: '', cL: '', tcL: '', sec: 'circ', secao: 'c' + dmin});
+      const nIn = P.trechos.filter(x => x.j === pv0).length; if (nIn >= 3) pd.defl = 'X'; else if (nIn === 2 && pd.defl !== 'X') pd.defl = 'T'; else if (pd.defl === 'ini') pd.defl = 'reta';
+      b.pv = nid; const a = angRamal(geoRuas(), b); if (isNum(a)) b.ang = +a.toFixed(1);
+      if (isNum(a) && a <= 90.5) return b.id + ': o ' + pv0 + ' já recebe outra caixa desta sarjeta e não há rede na rua neste ponto — rede auxiliar: ' + nid + ' (est. ' + estLabel(sNew) + ') ligado ao ' + pv0 + ' pelo ' + tid + ' (Ø' + dmin + ', ' + fmt(Lt, 1) + ' m), ramal a 45°.';
+      P.pvs = P.pvs.filter(x => x.id !== nid); P.trechos = P.trechos.filter(x => x.id !== tid); b.pv = pv0;
+    } }
+  return null;
+}
+/* depois de criar/mover PVs: refaz as cotas até estabilizar (o degrau de cada PV depende da perda calculada na passada anterior) */
+function cotas18(max) { calc(); let e = R.checks.filter(c => c.st === 'err').length;
+  for (let k = 0; k < (max || 10) && e > 0; k++) { autoCotas(true); calc(); e = R.checks.filter(c => c.st === 'err').length; } return e; }
+/* cada PV recebe no máximo UMA caixa de cada sarjeta (rua + lado) com a água vindo do mesmo sentido — ou DUAS lado a lado,
+   cada uma com seu ramal (orientação do dono, 11/11/2026); fica a de ramal mais curto */
+function dedup18() {
+  const mot = []; let G = geoRuas(); const grp = {};
+  P.bls.forEach(b => { const pv = pvById(b.pv); if (!pv) return; const k = b.pv + '|' + b.rua + '|' + b.lado + '|' + sentido18(b); (grp[k] = grp[k] || []).push(b); });
+  Object.values(grp).forEach(L => { if (L.length < 2) return;
+    L.sort((x, y) => (ramalLGeo(G, x) || 1e9) - (ramalLGeo(G, y) || 1e9));
+    const k = L[0], par = L.find(x => x !== k && Math.abs(num(x.dist) - num(k.dist)) <= comp18(k) + 0.6);   // já está ao lado: pode ficar
+    L.slice(1).forEach(b => { if (b === par) return; const temPar = L.some(x => x !== k && x !== b && x.pv === k.pv && Math.abs(num(x.dist) - num(k.dist)) <= comp18(k) + 0.6);
+      const m = liga18(b, temPar ? null : k); if (m) { mot.push(m); G = geoRuas(); } }); });
+  if (mot.length) { sincGeo(true); cotas18(); }
+  return mot;
+}
+/* PV de cabeceira (não recebe tubo) no fim da rua: as caixas da ponta não têm sarjeta a montante para ir a 45°;
+   o PV desce pela rua a distância lateral do ramal (45°), se continuar a ≥ 5 m do PV seguinte */
+function cabeceira18() {
+  const mot = []; calc(); const e0 = R.checks.filter(c => c.st === 'err').length;
+  const cand = new Map(); P.bls.forEach(b => { const a = num(b.ang); if (a > 60 && a <= 90.5 && pvById(b.pv)) (cand.get(b.pv) || cand.set(b.pv, []).get(b.pv)).push(b.id); });
+  cand.forEach((ids, id) => {
+    const snap = JSON.stringify(P);
+    const pv = pvById(id), r = R.pv[id], bs = ids.map(x => P.bls.find(b => b.id === x)).filter(Boolean);
+    if (!pv || !r || !bs.length || r.ins.length || r.outs.length !== 1 || bs.some(b => b.rua !== pv.rua)) return;
+    const G = geoRuas(), g = G[pv.rua], rua = ruaById(pv.rua); if (!g || !rua) return;
+    const t = P.trechos.find(x => x.id === r.outs[0].id), pj = t && pvById(t.j), qj = pj && posPV(G, pj), q = posPV(G, pv); if (!qj || !q) return;
+    const s0 = g.loc(q).s, dn = Math.max(...bs.map(b => Math.abs(g.loc(q).off - blOff(b, rua) * (b.lado === 'D' ? -1 : 1))));
+    const sb = num(bs[0].dist), d0 = num(pv.dist), L0 = t.L; let feito = false;
+    for (const sg of [1, -1]) {
+      const sp = sb + sg * dn; if (Math.abs(sp - s0) < 0.5) continue;
+      pv.dist = +(d0 + (sp - s0)).toFixed(2);
+      const G2 = geoRuas(), q2 = posPV(G2, pv), dj = q2 && Math.hypot(qj.x - q2.x, qj.y - q2.y);
+      if (num(L0) > 0 && q2) t.L = +dj.toFixed(2);
+      if (q2 && dj >= 5 && bs.every(b => { const a = angRamal(G2, b); return isNum(a) && a >= 30 && a <= 55; })) {
+        bs.forEach(b => { const a = angRamal(G2, b), L = ramalLGeo(G2, b); b.ang = +a.toFixed(1); if (isNum(L)) b.rL = +L.toFixed(2); });
+        feito = true; break; }
+      pv.dist = d0; t.L = L0;
+    }
+    if (!feito) return;
+    // cotas: o PV mudou de lugar — refaz as cotas pelo critério do projeto; se aparecer erro, volta este PV
+    calc(); if (R.checks.filter(c => c.st === 'err').length > e0) cotas18();
+    if (R.checks.filter(c => c.st === 'err').length > e0) { P = migrate(JSON.parse(snap)); calc(); return; }
+    mot.push(id + ': est. ' + estLabel(d0) + ' → ' + estLabel(num(pvById(id).dist)));
+  });
+  return mot;
+}
+(function () {
+  const memo = (nome, chave) => { const f = window[nome]; if (typeof f !== 'function') return;
+    window[nome] = function () { const M = MEMO18; if (!M || M.P !== P) return f.apply(this, arguments);
+      const c = M[nome] || (M[nome] = new Map()), k = chave.apply(null, arguments); if (c.has(k)) return c.get(k);
+      const v = f.apply(this, arguments); c.set(k, v); return v; }; };
+  memo('estacasRua', r => r);
+  memo('greideCota', (r, d) => r + '|' + d);
+  memo('topoDelta', (r, d, l) => r + '|' + d + '|' + l);
+  memo('cotaMF', (r, d, l) => r + '|' + d + '|' + l);
+  memo('cotaMuro', (r, d, l) => r + '|' + d + '|' + l);
+  memo('geoCache', () => '');
+  /* ramal contra o fluxo: a solução "ligar a outro PV" não pode ir para um PV que já recebe caixa desta sarjeta */
+  const frc18 = fixRamalContra;
+  fixRamalContra = function (id) { const t = frc18.apply(this, arguments); if (!t) return t;
+    try { const b = P.bls.find(x => x.id === id), pv = b && pvById(b.pv); if (pv && ocupado18(geoRuas(), pv, b)) { const m = liga18(b); if (m) return t + ' ' + m; } } catch (e) { console.error('DR-18', e); }
+    return t; };
+  /* autoCorrigir: antes de tudo, separa caixas da mesma sarjeta ligadas ao mesmo PV */
+  const acDup18 = autoCorrigir;
+  autoCorrigir = function () { try { const m = dedup18(); if (m.length) { window.__dup18 = m; calc(); } } catch (e) { console.error('DR-18 caixas', e); } return acDup18.apply(this, arguments); };
+  /* 🛠 Redimensionar do 3D: caixa nova a montante NÃO vai para o mesmo PV da caixa de baixo */
+  if (typeof T3sarjCorrige === 'function') { const sc18 = T3sarjCorrige;
+    T3sarjCorrige = function () { const mot = sc18.apply(this, arguments) || []; let m = []; try { m = dedup18(); } catch (e) { console.error('DR-18 caixas', e); } if (m.length) calc(); return mot.concat(m); }; }
+  /* ∠45° Todas as caixas: PV de cabeceira no fim da rua desce o necessário para o ramal ficar a 45°; nunca termina com caixa contra o fluxo */
+  const pl18 = plTodas45;
+  plTodas45 = function () {
+    const _t = toast; let m0 = ''; toast = x => { m0 = x; }; let mot = [];
+    try { pl18.apply(this, arguments); } finally { toast = _t; }
+    if (/^Nenhuma caixa/.test(m0)) { mot = cabeceira18(); if (!mot.length) return toast(m0); }
+    else mot = cabeceira18();
+    const contra = []; P.bls.forEach(b => { if (num(b.ang) > 90.5) { const t = fixRamalContra(b.id); if (t) contra.push(t); } });
+    let dup = []; try { dup = dedup18(); } catch (e) { console.error('DR-18', e); }
+    sincGeo(true); save(); calc(); if (TAB === 'planta') drawPlanta(); else renderTab();
+    const e = R.checks.filter(c => c.st === 'err').length, w = R.checks.filter(c => c.st === 'warn').length;
+    toast(m0.replace(/ Cálculos refeitos:.*$/, '') + (mot.length ? ' ' + mot.length + ' PV(s) de cabeceira no fim da rua descidos para as caixas da ponta ficarem a 45°.' : '') + (contra.length ? ' ' + contra.length + ' caixa(s) contra o fluxo corrigida(s).' : '') + (dup.length ? ' ' + dup.length + ' caixa(s) da mesma sarjeta separada(s) para outro PV.' : '') + ' Cálculos refeitos: ' + e + ' erro(s), ' + w + ' alerta(s). Ctrl+Z desfaz.');
+  };
+  /* autoCorrigir: refaz o calc 5 a 7 vezes POR CAIXA (298 caixas = ~2 mil cálculos), quase sempre
+     sem nada ter mudado. Enquanto ele roda, o calc só é refeito se o projeto (P) mudou desde o último. */
+  const ac18 = autoCorrigir;
+  autoCorrigir = function () {
+    if (window.__semMemo18 || window.__ac18) return ac18.apply(this, arguments);
+    const calc0 = calc; let ck = null; window.__ac18 = true;
+    calc = function () { if (ck !== null && R && JSON.stringify(P) === ck) return R; const r = calc0.apply(this, arguments); ck = JSON.stringify(P); return r; };
+    try { return ac18.apply(this, arguments); } finally { calc = calc0; window.__ac18 = false; calc(); }
+  };
+  /* 3 opções uma de cada vez (o navegador respira entre elas e mostra o andamento) */
+  gerCalcular = function () {
+    if (!GER.disp) return _gerCalcular64.apply(this, arguments);
+    if (GER.propGr !== false && P.ruas.some(r => estacasRua(r.id).some(e => isNum(num(e.tn)))) && !P.ruas.some(r => temTerra(r.id))) terraPropor(true);
+    const ops = [], t0 = Date.now(); let i = 0;
+    const msg = () => { const el = $('ger-res'); if (el) el.innerHTML = '<div class="msg info">⏳ <span>Projetando a opção ' + (i + 1) + ' de ' + GER_OP.length + ' — <b>' + esc(GER_OP[i].nome) + '</b>' + (i ? ' (' + i + ' pronta' + (i > 1 ? 's' : '') + ', ' + Math.round((Date.now() - t0) / 1000) + ' s)' : '') + '…</span></div>'; };
+    const passo = () => { msg(); setTimeout(() => {
+      try { ops[i] = gerProjeto(GER_OP[i]); } catch (e) { console.error(e); ops[i] = null; }
+      i++; if (i < GER_OP.length) passo(); else { GER.ops = ops; gerTela(); } }, 40); };
+    passo();
+  };
+  /* EMOP — caixa de ralo pré-moldada ou de concreto: corpo 06.015.0030 + grelha e caixilho de concreto armado 06.015.0070
+     (decisão do dono, 11/11/2026; antes: "a EMOP não tem caixa pré-moldada; usado o equivalente em blocos") */
+  const D070 = 'GRELHA E CAIXILHO DE CONCRETO ARMADO,SENDO AS DIMENSOES EXTERNAS DE 0,30X0,90M(GRELHA) E 1,00X0,40M(CAIXILHO),PARA CAIXA DE RALO,UTILIZANDO ARGAMASSA DE CIMENTO E AREIA,NO TRACO 1:4.FORNECIMENTO E COLOCACAO';
+  if (typeof EMOP_TAB === 'object' && !EMOP_TAB['06.015.0070']) EMOP_TAB['06.015.0070'] = ['UN', D070, '0'];
+  if (typeof EMOP_ADM === 'object' && EMOP_ADM.t && !EMOP_ADM.t['06.015.0070']) EMOP_ADM.t['06.015.0070'] = ['UN', D070, '0', null, 'A', null];   // preço entra ao rodar scripts/emop/gerar_emop_adm.py com o DIPR do mês
+  const AV18 = /:? ?a EMOP não tem caixa pré-moldada; usado o equivalente em blocos/g, NV18 = ': na EMOP, corpo da caixa 06.015.0030 + grelha e caixilho de concreto armado 06.015.0070';
+  const il18 = itensLic;
+  itensLic = function (sol, bank) {
+    const L = il18.apply(this, arguments); if (!Array.isArray(L)) return L;
+    const out = [];
+    L.forEach(it => { out.push(it);
+      if (!(it.g === GRUPOS_LIC[6] && /^Caixa de ralo/.test(it.nome) && /pré-mold|concreto moldado/i.test(it.nome))) return;
+      const tr = v => typeof v === 'string' ? v.replace(AV18, NV18) : Array.isArray(v) ? v.map(tr) : v;
+      it.memo = tr(it.memo);
+      out.push({g: it.g, nome: 'Grelha e caixilho de concreto armado — grelha 0,30 × 0,90 m e caixilho 1,00 × 0,40 m (caixa de ralo)', un: 'un', q: it.q, cod: {emop: '06.015.0070', sinapi: false, sco: false}, qb: {}, memo: it.memo});
+    });
+    return out;
+  };
+  const calc18 = calc; let prof = 0;
+  calc = function () {
+    if (prof++ === 0 && !window.__semMemo18) MEMO18 = {P};
+    try { return calc18.apply(this, arguments); } finally { if (--prof === 0) MEMO18 = null; }
+  };
+})();
+</script>
 </body></html>
