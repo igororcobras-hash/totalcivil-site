@@ -462,13 +462,20 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
   <input type="text" id="resp-inp" placeholder="Responsável técnico" style="background:var(--inp);border:1px solid var(--inp-border);border-radius:4px;padding:3px 7px;font-size:12px;color:var(--fg);width:160px">
   <div class="tb-sep"></div>
   <button class="tb-btn tb-btn-save" onclick="salvarProjeto()">💾 Salvar</button>
-  <button class="tb-btn" onclick="abrirProjetoClick()">📂 Abrir</button>
-  <input type="file" id="imp" accept=".json" style="display:none" onchange="importarArquivo(event)">
+  <button class="tb-btn" onclick="abrirProjetoClick()" title="Abre um projeto salvo (.json) ou exportado como projeto completo (.json ou .html)">📂 Abrir</button>
+  <input type="file" id="imp" accept=".json,.html,.htm" style="display:none" onchange="importarArquivo(event)">
   <div class="tb-sep"></div>
   <span class="tb-label">Exportar memória:</span>
   <button class="tb-btn tb-btn-excel" onclick="exportarExcel()">Excel</button>
   <button class="tb-btn tb-btn-word" onclick="exportarWord()">Word</button>
   <button class="tb-btn tb-btn-pdf" onclick="exportarPDF()">PDF</button>
+  <div class="tb-sep"></div>
+  <span class="tb-label">Projeto completo:</span>
+  <button class="tb-btn" onclick="exportarProjetoCompleto('json')" title="Baixa o projeto inteiro (todos os dados) em um arquivo .json para abrir em outro computador com 📂 Abrir">JSON</button>
+  <button class="tb-btn" onclick="exportarProjetoCompleto('html')" title="Baixa uma página .html com a memória de cálculo e todos os dados do projeto dentro. Abre em qualquer computador e também pode ser aberta no programa com 📂 Abrir">HTML</button>
+  <div class="tb-sep"></div>
+  <button class="tb-btn" onclick="abrirNuvemProjetos()" title="Salvar na nuvem, abrir seus projetos e os que outros compartilharam com você">☁ Nuvem</button>
+  <button class="tb-btn" onclick="compartilharProjeto()" title="Dar acesso ao projeto (visualizar ou editar) a outros usuários do programa">👥 Compartilhar</button>
 </div>
 
 <!-- TABS -->
@@ -749,6 +756,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
     </div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
       <button class="btn-add" onclick="addEstaca()">+ Estaca</button>
+      <button class="btn-add" onclick="abrirPonto()" title="Insere um ponto topográfico ou cruzamento a uma distância quebrada à frente de uma estaca (ex.: estaca 2 = 20 m + 10,67 m = 30,67 m)">+ Ponto</button>
       <button class="btn-rem" onclick="remEstaca()">− Remover</button>
       <button class="tb-btn tb-btn-save" onclick="calcTopo()">Recalcular</button>
       <button class="btn-add" onclick="abrirMeioFio()">Meio-fio…</button>
@@ -1538,14 +1546,14 @@ function atualizarCorte(){
 function addEstaca(){
   const n=topoRows.length,prev=n>0?topoRows[n-1]:null;
   const lp=v('larg-pad')||6;
-  topoRows.push({est:prev?prev.est+20:0,tEsq:prev?prev.tEsq:100,tEixo:prev?prev.tEixo:100,tDir:prev?prev.tDir:100,greide:prev?prev.greide:100,larg:lp});
+  topoRows.push({est:prev?(Math.abs(prev.est/20-Math.round(prev.est/20))<1e-6?prev.est+20:Math.ceil(prev.est/20)*20):0,tEsq:prev?prev.tEsq:100,tEixo:prev?prev.tEixo:100,tDir:prev?prev.tDir:100,greide:prev?prev.greide:100,larg:lp});
   renderTopoTable();calcTopo();
 }
 function remEstaca(){if(topoRows.length>0){topoRows.pop();renderTopoTable();calcTopo();}}
 function renderTopoTable(){
   const tbody=document.getElementById('topo-tbody');
   tbody.innerHTML=topoRows.map((r,i)=>`<tr>
-    <td class="c1">${i+1}</td>
+    <td class="c1">${i+1}${r.ponto?` <span title="Ponto inserido com +Ponto" style="font-size:9px;font-weight:700;color:var(--accent2,#2563eb)">P</span> <button type="button" title="Excluir este ponto" onclick="remPonto(${i})" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:13px;padding:0 2px">×</button>`:''}</td>
     <td class="ti c2"><input type="number" step="0.5" value="${r.est}" onchange="topoVal(${i},'est',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c3"><input type="number" step="0.01" value="${r.tEsq}" onchange="topoVal(${i},'tEsq',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c4"><input type="number" step="0.01" value="${r.tEixo}" onchange="topoVal(${i},'tEixo',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
@@ -1722,6 +1730,46 @@ function topoTeclado(){
     inp.dispatchEvent(new Event('change',{bubbles:true}));
     if(prox){ prox.focus(); try{prox.select();}catch(x){} }
   });
+}
+/* ══════════════════════════════════════════════════════
+   + PONTO · ponto topográfico / cruzamento a uma distância quebrada à frente de uma estaca
+   Ex.: estaca 2 (20 m) + 10,67 m = ponto em 30,67 m. Cotas e largura são interpoladas
+   entre a estaca escolhida e a seguinte (ou copiadas, se for a última) e podem ser editadas.
+══════════════════════════════════════════════════════ */
+function abrirPonto(){
+  if(!topoRows.length){ toast('Inclua primeiro uma estaca.',true); return; }
+  const md=document.getElementById('modal'); md.style.width='420px';
+  const opts=topoRows.map((r,i)=>'<option value="'+i+'">Linha '+(i+1)+(r.ponto?' (ponto)':' · estaca')+' — '+fmt(r.est,2)+' m</option>').join('');
+  md.innerHTML='<button class="m-close" onclick="fecharPonto()" aria-label="Fechar">×</button><h2>Inserir ponto</h2>'+
+    '<p style="font-size:12px;color:var(--fg2)">Escolha a estaca de referência e digite o comprimento à frente dela. O ponto entra na planilha na posição <b>estaca + comprimento</b>.</p>'+
+    '<div class="mf-f"><label for="pt_est">Estaca de referência</label><select id="pt_est" onchange="pontoPrevia()">'+opts+'</select></div>'+
+    '<div class="mf-f"><label for="pt_dist">Comprimento à frente da estaca (m)</label><input type="text" inputmode="decimal" id="pt_dist" placeholder="ex.: 10,67" oninput="pontoPrevia()"></div>'+
+    '<div id="pt_prev" style="font-size:12px;margin-top:8px;color:var(--fg2)"></div>'+
+    '<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button type="button" class="tb-btn" onclick="fecharPonto()">Cancelar</button><button type="button" class="tb-btn tb-btn-save" onclick="inserirPonto()">Inserir ponto</button></div>';
+  document.getElementById('modal-bg').classList.add('open');
+  pontoPrevia();
+  setTimeout(()=>{const e=document.getElementById('pt_dist'); if(e) e.focus();},50);
+}
+function fecharPonto(){ document.getElementById('modal-bg').classList.remove('open'); }
+function pontoPrevia(){
+  const i=+document.getElementById('pt_est').value, d=parseFloat(String(document.getElementById('pt_dist').value).replace(',','.'));
+  const el=document.getElementById('pt_prev'); if(!el||!topoRows[i]) return;
+  el.innerHTML=isNaN(d)||d<=0?'':'Posição do ponto: '+fmt(topoRows[i].est,2)+' m + '+fmt(d,2)+' m = <b>'+fmt(topoRows[i].est+d,2)+' m</b>';
+}
+function inserirPonto(){
+  const i=+document.getElementById('pt_est').value, d=parseFloat(String(document.getElementById('pt_dist').value).replace(',','.'));
+  const a=topoRows[i]; if(!a) return;
+  if(isNaN(d)||d<=0){ toast('Digite o comprimento à frente da estaca (maior que zero).',true); return; }
+  const est=+(a.est+d).toFixed(3), b=topoRows[i+1];
+  if(b&&est>=b.est-1e-9){ toast('O ponto cairia em '+fmt(est,2)+' m, na posição da linha '+(i+2)+' ('+fmt(b.est,2)+' m) ou depois dela. Escolha a estaca anterior ao ponto ou diminua o comprimento.',true); return; }
+  const t=b?d/(b.est-a.est):0, itp=k=>+((+a[k]||0)+((b?(+b[k]||0):(+a[k]||0))-(+a[k]||0))*t).toFixed(3);
+  topoRows.splice(i+1,0,{est,tEsq:itp('tEsq'),tEixo:itp('tEixo'),tDir:itp('tDir'),greide:itp('greide'),larg:itp('larg'),ponto:true});
+  fecharPonto(); renderTopoTable(); calcTopo();
+  toast('Ponto inserido em '+fmt(est,2)+' m (linha '+(i+2)+'). As cotas foram interpoladas: ajuste se tiver o levantamento do ponto.');
+}
+function remPonto(i){
+  if(!topoRows[i]||!topoRows[i].ponto) return;
+  topoRows.splice(i,1); renderTopoTable(); calcTopo();
 }
 let _topo=null;
 function volumesCamadas(totArea){
@@ -2624,8 +2672,51 @@ function abrirProjetoClick(){document.getElementById('imp').click();}
 function importarArquivo(ev){
   const file=ev.target.files[0];if(!file)return;
   const reader=new FileReader();
-  reader.onload=e=>{try{aplicarProjeto(JSON.parse(e.target.result));}catch(err){toast('Erro ao abrir: '+err.message,true);}};
+  reader.onload=e=>{try{
+    let txt=String(e.target.result||'');
+    const m=/<script[^>]*id="pint-projeto-dados"[^>]*>([\s\S]*?)<\/script>/.exec(txt);
+    if(m) txt=m[1];
+    else if(/^\s*</.test(txt)) throw new Error('este arquivo .html não é um projeto completo exportado pelo Pavimento Intertravado.');
+    aplicarProjeto(JSON.parse(txt));
+    if(typeof projNuvem!=='undefined') projNuvem=null;
+  }catch(err){toast('Erro ao abrir: '+err.message,true);}};
   reader.readAsText(file);ev.target.value='';
+}
+
+/* ══════════════════════════════════════════════════════
+   EXPORTAR PROJETO COMPLETO (JSON ou HTML) · para abrir em outro computador
+   JSON: todos os dados do projeto.
+   HTML: página com a memória de cálculo + os mesmos dados embutidos; abre em qualquer
+   navegador e também pode ser aberta no programa com 📂 Abrir (os dados são lidos de dentro dela).
+══════════════════════════════════════════════════════ */
+function exportarProjetoCompleto(formato){
+  const proj=Object.assign({},projetoParaJSON(),{_meta:{formato:'pint-projeto-completo',versao:1,programa:'Pavimento Intertravado · Total Civil',exportadoEm:new Date().toISOString()}});
+  const logr=(document.getElementById('logradouro-inp').value||'intertravado').replace(/[^a-zA-Z0-9_\-]/g,'_').substring(0,30);
+  const base='intertravado_PROJETO-COMPLETO_'+logr+'_'+carimbo();
+  const json=JSON.stringify(proj,null,2);
+  if(formato==='json'){
+    triggerDownload(new Blob([json],{type:'application/json'}),base+'.json');
+    toast('Projeto completo exportado (.json). Em outro computador: 📂 Abrir e escolha o arquivo.'); return;
+  }
+  let memo='';
+  if(resultado){ try{ atualizarMemoria(); }catch(e){} memo=document.getElementById('memo-content').innerHTML; }
+  const hoje=new Date().toLocaleString('pt-BR');
+  const dados=json.replace(/</g,'\\u003c');
+  const css='*{box-sizing:border-box}:root{--fg:#1e293b;--fg2:#475569;--fg3:#64748b;--bg:#fff;--bg2:#f8fafc;--out:#eef4ff;--inp:#fff;--inp-border:#cbd5e1;--border:#cbd5e1;--accent:#1d4ed8;--accent2:#2563eb;--ok-fg:#166534;--warn-fg:#b45309}'+
+    'body{font-family:system-ui,Segoe UI,Arial,sans-serif;color:#1e293b;background:#f1f5f9;margin:0;padding:18px}.pg{max-width:1100px;margin:auto;background:#fff;border:1px solid #cbd5e1;border-radius:10px;padding:22px 26px}'+
+    'h1{font-size:20px;margin:0 0 2px;color:#1a3a5c}.sub{font-size:12px;color:#64748b;margin-bottom:14px}.aviso{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;font-size:12.5px;margin-bottom:16px;line-height:1.5}'+
+    '.aviso button{background:#2563eb;color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;margin-top:6px}'+
+    '.ms{margin-top:16px}.ms h3{font-size:14px;color:#1a3a5c;border-bottom:1px solid #cbd5e1;padding-bottom:3px;margin:0 0 8px}.mexp{font-size:12.5px;color:#334155;margin:4px 0}'+
+    '.mkv{display:flex;gap:10px;font-size:12.5px;padding:2px 0}.mk{min-width:230px;color:#475569}.mv{font-weight:600}.mfml{font-family:Consolas,monospace;font-size:12px;background:#f8fafc;border-left:3px solid #2563eb;padding:4px 8px;margin:4px 0}'+
+    '.tw{overflow-x:auto;margin:6px 0}table{border-collapse:collapse;font-size:11.5px;width:100%}th{background:#1a3a5c;color:#fff;padding:5px 7px;text-align:left}td{border-bottom:1px solid #e2e8f0;padding:4px 7px}.fig-box{overflow-x:auto}.fig-box svg{max-width:100%;height:auto}@media print{body{background:#fff;padding:0}.pg{border:none}.aviso{display:none}}';
+  const html='<!DOCTYPE html>\n<html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Projeto completo — '+esc(document.getElementById('logradouro-inp').value||'Pavimento Intertravado')+'</title><style>'+css+'</style></head><body><div class="pg">'+
+    '<h1>Pavimento Intertravado — projeto completo</h1><div class="sub">Obra: <b>'+esc(document.getElementById('logradouro-inp').value||'(não informada)')+'</b> · Responsável: '+esc(document.getElementById('resp-inp').value||'(não informado)')+' · exportado em '+esc(hoje)+' · IP-06/2004 (PMSP)</div>'+
+    '<div class="aviso"><b>Para continuar este projeto em outro computador:</b> abra o programa em <b>totalcivil.com.br/intertravado</b>, clique em <b>📂 Abrir</b> e escolha este arquivo .html (os dados do projeto estão dentro dele). Ou baixe só os dados:<br><button type="button" onclick="baixarDados()">⬇ Baixar dados do projeto (.json)</button></div>'+
+    (memo||'<p class="mexp">O dimensionamento ainda não tinha sido calculado quando este arquivo foi exportado; os dados digitados estão dentro do arquivo e voltam ao programa com 📂 Abrir.</p>')+
+    '</div><script type="application/json" id="pint-projeto-dados">'+dados+'<\/script>'+
+    '<script>function baixarDados(){var t=document.getElementById("pint-projeto-dados").textContent;var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([t],{type:"application/json"}));a.download="'+base+'.json";document.body.appendChild(a);a.click();a.remove();}<\/script></body></html>';
+  triggerDownload(new Blob([html],{type:'text/html;charset=utf-8'}),base+'.html');
+  toast('Projeto completo exportado (.html). Em outro computador: 📂 Abrir e escolha o arquivo.');
 }
 
 /* ══════════════════════════════════════════════════════
@@ -2753,6 +2844,7 @@ Nuvem.aoMudarSessao = function(u){
   if(btnSair) btnSair.hidden = false;
   if(btnUsr)  btnUsr.hidden = !u.admin;
   if(window.mostrarSelecaoAmbiente) window.mostrarSelecaoAmbiente();
+  if(Nuvem.garantirDiretorio) Nuvem.garantirDiretorio();
   if(u.admin && window.atualizarSeloPendentes) window.atualizarSeloPendentes();
   setLoginBusy(false);
 };
@@ -2955,6 +3047,219 @@ Nuvem.atualizarUsuario = async function(uid, campos){
   if('empresa'  in campos) corpo.empresa  = String(campos.empresa||'').slice(0,120);
   if('validade' in campos) corpo.validade = campos.validade ? new Date(campos.validade+'T23:59:59') : null;
   await fs.updateDoc(fs.doc(d,'usuarios',uid), corpo);
+};
+
+/* ============================================================
+   PROJETOS NA NUVEM + COMPARTILHAMENTO (PI-02)
+   - "Salvar" (arquivo .json no computador) continua igual.
+   - ☁ Nuvem: salva o projeto na conta, lista "Meus projetos" e "Compartilhados comigo".
+   - 👥 Compartilhar: o dono escolhe pessoas na lista de usuários do programa e dá
+     acesso "Visualizar" (só abre) ou "Editar" (abre e grava por cima).
+   Precisa das regras novas do Firestore (arquivo firestore-COM-compartilhamento-intertravado.rules).
+   ============================================================ */
+const COL_PROJ = 'projetosIntertravado', COL_DIR = 'diretorioIntertravado';
+
+Nuvem.garantirDiretorio = async function(){
+  const {d, fs} = Nuvem._fb, u = Nuvem.usuario;
+  if(!u || !u.uid) return;
+  try{
+    await fs.setDoc(fs.doc(d, COL_DIR, u.uid), {uid:u.uid, nome:u.nome||'', empresa:u.empresa||'', usuario:u.usuario||'', atualizadoEm:fs.serverTimestamp()});
+  }catch(e){ console.warn('Diretório de usuários não atualizado:', (e && (e.code || e.message)) || e); }
+};
+
+Nuvem.listarDiretorio = async function(){
+  const {d, fs} = Nuvem._fb, u = Nuvem.usuario, mapa = {};
+  try{
+    const s = await fs.getDocs(fs.query(fs.collection(d, COL_DIR), fs.limit(500)));
+    s.docs.forEach(x => { const v = x.data(); mapa[x.id] = {uid:x.id, nome:v.nome||'', empresa:v.empresa||'', usuario:v.usuario||''}; });
+  }catch(e){ if(!u.admin) throw e; }
+  if(u.admin){
+    try{ (await Nuvem.listarUsuarios()).forEach(x => {
+      if(x.uid && (x.intertravadoAtivo || x.admin) && !mapa[x.uid]) mapa[x.uid] = {uid:x.uid, nome:x.nome||'', empresa:x.empresa||'', usuario:x.usuario||x.email||''};
+    }); }catch(e){}
+  }
+  delete mapa[u.uid];
+  return Object.values(mapa).sort((a,b)=> String(a.nome||a.usuario).localeCompare(String(b.nome||b.usuario)));
+};
+
+Nuvem.salvarProjetoNuvem = async function(id, nome, dados){
+  const {d, fs} = Nuvem._fb, u = Nuvem.usuario;
+  if(!u || !u.uid) throw new Error('Entre na sua conta para usar a nuvem.');
+  const txt = JSON.stringify(dados);
+  if(txt.length > 900000) throw new Error('Projeto grande demais para a nuvem (limite de cerca de 900 KB).');
+  nome = String(nome || 'Sem nome').slice(0,120);
+  const quem = u.nome || u.usuario || '';
+  if(id){
+    await fs.updateDoc(fs.doc(d, COL_PROJ, id), {nome, dados:txt, atualizadoEm:fs.serverTimestamp(), editadoPor:quem});
+    return id;
+  }
+  const ref = await fs.addDoc(fs.collection(d, COL_PROJ), {uid:u.uid, donoNome:quem, nome, dados:txt,
+    criadoEm:fs.serverTimestamp(), atualizadoEm:fs.serverTimestamp(), editadoPor:quem, compartilhado:{}, membros:[], editores:[]});
+  return ref.id;
+};
+
+Nuvem.listarProjetosNuvem = async function(){
+  const {d, fs} = Nuvem._fb, u = Nuvem.usuario, mapa = {};
+  const [q1, q2] = await Promise.all([
+    fs.getDocs(fs.query(fs.collection(d, COL_PROJ), fs.where('uid','==',u.uid))),
+    fs.getDocs(fs.query(fs.collection(d, COL_PROJ), fs.where('membros','array-contains',u.uid)))
+  ]);
+  [q1, q2].forEach(q => q.docs.forEach(x => {
+    const v = x.data(), comp = v.compartilhado || {};
+    mapa[x.id] = {id:x.id, nome:v.nome||'Sem nome', donoNome:v.donoNome||'', dono:v.uid===u.uid,
+      papel: v.uid===u.uid ? 'dono' : ((comp[u.uid] && comp[u.uid].papel) || 'ver'),
+      atualizadoEm:paraData(v.atualizadoEm), editadoPor:v.editadoPor||'', compartilhado:comp};
+  }));
+  return Object.values(mapa).sort((a,b)=> (b.atualizadoEm||0) - (a.atualizadoEm||0));
+};
+
+Nuvem.lerProjetoNuvem = async function(id){
+  const {d, fs} = Nuvem._fb, u = Nuvem.usuario;
+  const s = await fs.getDoc(fs.doc(d, COL_PROJ, id));
+  if(!s.exists()) throw new Error('Projeto não encontrado (pode ter sido excluído).');
+  const v = s.data(), comp = v.compartilhado || {};
+  return {id, nome:v.nome||'', dados:JSON.parse(v.dados), dono:v.uid===u.uid, donoNome:v.donoNome||'',
+    papel: v.uid===u.uid ? 'dono' : ((comp[u.uid] && comp[u.uid].papel) || 'ver'), compartilhado:comp};
+};
+
+Nuvem.compartilharProjeto = async function(id, mapa){
+  const {d, fs} = Nuvem._fb, comp = {}, membros = [], editores = [];
+  Object.keys(mapa).forEach(k => {
+    const p = mapa[k] && mapa[k].papel;
+    if(p !== 'ver' && p !== 'editar') return;
+    comp[k] = {papel:p, nome:String(mapa[k].nome||'').slice(0,120)};
+    membros.push(k); if(p === 'editar') editores.push(k);
+  });
+  await fs.updateDoc(fs.doc(d, COL_PROJ, id), {compartilhado:comp, membros, editores});
+};
+
+Nuvem.excluirProjetoNuvem = async function(id){
+  const {d, fs} = Nuvem._fb;
+  await fs.deleteDoc(fs.doc(d, COL_PROJ, id));
+};
+
+/* ---- interface ---- */
+let projNuvem = null;   // projeto da nuvem aberto agora: {id, nome, papel}
+function msgErroNuvem(e){
+  const c = (e && e.code) || '';
+  if(/permission-denied/.test(c)) return 'Sem permissão no servidor. As regras novas do Firestore ainda não foram publicadas (arquivo firestore-COM-compartilhamento-intertravado.rules) ou o seu acesso ao Intertravado não está ativo.';
+  if(/unavailable|network/.test(c)) return 'Sem conexão com o servidor. Verifique a internet.';
+  return (e && e.message) || String(e);
+}
+function fmtDataHora(d){ return d ? d.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '—'; }
+function nuvemOk(){
+  if(!Nuvem.disponivel || !Nuvem.usuario || !Nuvem.usuario.uid){ toast('Entre na sua conta em totalcivil.com.br para usar a nuvem.', true); return false; }
+  return true;
+}
+function abrirModalNuvem(largura){
+  const md = document.getElementById('modal'); md.style.width = (largura||560) + 'px'; md.style.maxWidth = '94vw';
+  document.getElementById('modal-bg').classList.add('open'); return md;
+}
+window.fecharModalNuvem = function(){ document.getElementById('modal-bg').classList.remove('open'); };
+function etiquetaPapel(p){ return p==='dono' ? 'Dono' : p==='editar' ? 'Pode editar' : 'Só visualizar'; }
+
+window.salvarNaNuvem = async function(comoNovo){
+  if(!nuvemOk()) return null;
+  const nome = (document.getElementById('logradouro-inp').value || '').trim();
+  if(!nome){ toast('Preencha o campo "Obra" (logradouro) para dar nome ao projeto na nuvem.', true); return null; }
+  let id = projNuvem && !comoNovo ? projNuvem.id : null;
+  if(projNuvem && !comoNovo && projNuvem.papel === 'ver'){ toast('Você só pode visualizar este projeto. Use "Salvar cópia na minha nuvem".', true); return null; }
+  try{
+    id = await Nuvem.salvarProjetoNuvem(id, nome, projetoParaJSON());
+    projNuvem = {id, nome, papel: (projNuvem && !comoNovo) ? projNuvem.papel : 'dono'};
+    toast('Projeto salvo na nuvem.');
+    return id;
+  }catch(e){ toast(msgErroNuvem(e), true); return null; }
+};
+
+window.abrirNuvemProjetos = async function(){
+  if(!nuvemOk()) return;
+  const md = abrirModalNuvem(620);
+  md.innerHTML = '<button class="m-close" onclick="fecharModalNuvem()" aria-label="Fechar">×</button><h2>Projetos na nuvem</h2><p style="font-size:12px;color:var(--fg2)">Carregando…</p>';
+  let lista;
+  try{ lista = await Nuvem.listarProjetosNuvem(); }
+  catch(e){ md.innerHTML = '<button class="m-close" onclick="fecharModalNuvem()" aria-label="Fechar">×</button><h2>Projetos na nuvem</h2><p style="color:var(--warn-fg);font-size:13px">'+esc(msgErroNuvem(e))+'</p>'; return; }
+  const meus = lista.filter(x=>x.dono), comigo = lista.filter(x=>!x.dono);
+  const bt = (txt, fn, id, cls) => '<button type="button" class="tb-btn '+(cls||'')+'" onclick="'+fn+'(\''+id+'\')">'+txt+'</button>';
+  const linha = x => '<tr><td><b>'+esc(x.nome)+'</b><br><span style="font-size:10.5px;color:var(--fg3)">'+(x.dono ? 'atualizado' : 'de '+esc(x.donoNome||'—')+' · atualizado')+' '+fmtDataHora(x.atualizadoEm)+(x.editadoPor?' por '+esc(x.editadoPor):'')+'</span></td>'+
+    '<td style="white-space:nowrap;font-size:11px">'+etiquetaPapel(x.papel)+(x.dono && Object.keys(x.compartilhado).length ? '<br><span style="color:var(--fg3)">com '+Object.keys(x.compartilhado).length+' pessoa(s)</span>' : '')+'</td>'+
+    '<td style="white-space:nowrap;text-align:right">'+bt('Abrir','abrirDaNuvem',x.id,'tb-btn-save')+' '+(x.dono ? bt('👥','compartilharProjeto',x.id)+' '+bt('🗑','excluirDaNuvem',x.id) : '')+'</td></tr>';
+  const tab = (arr, vazio) => arr.length ? '<div style="overflow-x:auto"><table class="lista-nuvem" style="width:100%;font-size:12px"><tbody>'+arr.map(linha).join('')+'</tbody></table></div>' : '<p style="font-size:12px;color:var(--fg3)">'+vazio+'</p>';
+  md.innerHTML = '<button class="m-close" onclick="fecharModalNuvem()" aria-label="Fechar">×</button><h2>Projetos na nuvem</h2>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 10px">'+(projNuvem && projNuvem.papel==='ver' ? '' : '<button type="button" class="tb-btn tb-btn-save" onclick="salvarNaNuvemEFechar(false)">☁ '+(projNuvem ? 'Atualizar “'+esc(projNuvem.nome)+'” na nuvem' : 'Salvar o projeto atual na nuvem')+'</button>')+
+    (projNuvem ? '<button type="button" class="tb-btn" onclick="salvarNaNuvemEFechar(true)">Salvar cópia na minha nuvem</button>' : '')+'</div>'+
+    '<div class="sec-title" style="margin-top:6px">Meus projetos</div>'+tab(meus,'Você ainda não salvou nenhum projeto na nuvem.')+
+    '<div class="sec-title" style="margin-top:12px">Compartilhados comigo</div>'+tab(comigo,'Ninguém compartilhou projetos com você ainda.')+
+    '<p style="font-size:11px;color:var(--fg3);margin-top:10px">“Salvar” (💾) continua baixando o arquivo .json no seu computador. Com acesso “Pode editar”, quem salva por último sobrescreve o anterior.</p>';
+};
+window.salvarNaNuvemEFechar = async function(copia){ const id = await salvarNaNuvem(copia); if(id) abrirNuvemProjetos(); };
+
+window.abrirDaNuvem = async function(id){
+  if(!nuvemOk()) return;
+  try{
+    const r = await Nuvem.lerProjetoNuvem(id);
+    aplicarProjeto(r.dados);
+    if(r.nome) document.getElementById('logradouro-inp').value = r.nome, atualizarLogradouro();
+    projNuvem = {id, nome:r.nome, papel:r.papel};
+    fecharModalNuvem();
+    toast(r.papel==='ver' ? 'Projeto aberto somente para visualização: alterações não podem ser gravadas na nuvem.' : 'Projeto aberto da nuvem.');
+  }catch(e){ toast(msgErroNuvem(e), true); }
+};
+
+window.excluirDaNuvem = async function(id){
+  if(!confirm('Excluir este projeto da nuvem? Quem tem acesso compartilhado também perde. Isso não pode ser desfeito.')) return;
+  try{ await Nuvem.excluirProjetoNuvem(id); if(projNuvem && projNuvem.id === id) projNuvem = null; toast('Projeto excluído da nuvem.'); abrirNuvemProjetos(); }
+  catch(e){ toast(msgErroNuvem(e), true); }
+};
+
+/* botão 👥 Compartilhar da barra (sem id) ou da lista (com id) */
+window.compartilharProjeto = async function(id){
+  if(!nuvemOk()) return;
+  if(!id){
+    if(!projNuvem){
+      if(!confirm('Para compartilhar, o projeto precisa estar salvo na nuvem. Salvar agora?')) return;
+      id = await salvarNaNuvem(true); if(!id) return;
+    }else if(projNuvem.papel !== 'dono'){ toast('Só o dono do projeto pode compartilhar.', true); return; }
+    else{ id = await salvarNaNuvem(false); if(!id) return; }  // garante a versão mais recente antes de compartilhar
+  }
+  const md = abrirModalNuvem(640);
+  md.innerHTML = '<button class="m-close" onclick="fecharModalNuvem()" aria-label="Fechar">×</button><h2>Compartilhar projeto</h2><p style="font-size:12px;color:var(--fg2)">Carregando usuários…</p>';
+  let proj, dir;
+  try{ [proj, dir] = await Promise.all([Nuvem.lerProjetoNuvem(id), Nuvem.listarDiretorio()]); }
+  catch(e){ md.innerHTML = '<button class="m-close" onclick="fecharModalNuvem()" aria-label="Fechar">×</button><h2>Compartilhar projeto</h2><p style="color:var(--warn-fg);font-size:13px">'+esc(msgErroNuvem(e))+'</p>'; return; }
+  const atual = proj.compartilhado || {};
+  dir.forEach(x => { if(atual[x.uid]) atual[x.uid].jaTem = true; });
+  Object.keys(atual).forEach(k => { if(!dir.some(x => x.uid === k)) dir.push({uid:k, nome:atual[k].nome||'(usuário)', empresa:'', usuario:''}); });
+  window._shareCtx = {id, dir, atual};
+  const sel = x => { const p = (atual[x.uid] && atual[x.uid].papel) || ''; return '<select data-uid="'+esc(x.uid)+'" style="padding:3px 5px;font-size:12px;border:1px solid var(--inp-border);background:var(--inp);color:var(--fg);border-radius:4px">'+
+    '<option value=""'+(p===''?' selected':'')+'>Sem acesso</option><option value="ver"'+(p==='ver'?' selected':'')+'>Visualizar</option><option value="editar"'+(p==='editar'?' selected':'')+'>Editar</option></select>'; };
+  md.innerHTML = '<button class="m-close" onclick="fecharModalNuvem()" aria-label="Fechar">×</button><h2>Compartilhar “'+esc(proj.nome)+'”</h2>'+
+    '<p style="font-size:12px;color:var(--fg2)">Usuários do Pavimento Intertravado. <b>Visualizar</b>: a pessoa abre o projeto, mas não grava na nuvem. <b>Editar</b>: abre e grava por cima (vale a última gravação).</p>'+
+    '<input type="text" id="sh-busca" placeholder="Buscar por nome, empresa ou usuário…" oninput="filtrarCompartilhar()" style="width:100%;margin:6px 0;padding:6px 8px;border:1px solid var(--inp-border);background:var(--inp);color:var(--fg);border-radius:5px;font-size:13px">'+
+    '<div style="max-height:46vh;overflow:auto;border:1px solid var(--inp-border);border-radius:6px"><table class="lista-nuvem" style="width:100%;font-size:12px"><tbody id="sh-corpo">'+
+    (dir.length ? dir.map(x => '<tr data-busca="'+esc((x.nome+' '+x.empresa+' '+x.usuario).toLowerCase())+'"><td><b>'+esc(x.nome||x.usuario||'(sem nome)')+'</b><br><span style="font-size:10.5px;color:var(--fg3)">'+esc(x.empresa)+(x.usuario?' · '+esc(x.usuario):'')+'</span></td><td style="text-align:right">'+sel(x)+'</td></tr>').join('')
+      : '<tr><td style="padding:10px;color:var(--fg3)">Nenhum outro usuário apareceu ainda. Cada pessoa entra na lista depois de abrir o Pavimento Intertravado uma vez.</td></tr>')+
+    '</tbody></table></div>'+
+    '<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button type="button" class="tb-btn" onclick="fecharModalNuvem()">Cancelar</button><button type="button" class="tb-btn tb-btn-save" onclick="gravarCompartilhamento()">Gravar compartilhamento</button></div>';
+};
+window.filtrarCompartilhar = function(){
+  const q = (document.getElementById('sh-busca').value || '').toLowerCase().trim();
+  document.querySelectorAll('#sh-corpo tr[data-busca]').forEach(tr => { tr.style.display = (!q || tr.dataset.busca.indexOf(q) >= 0) ? '' : 'none'; });
+};
+window.gravarCompartilhamento = async function(){
+  const c = window._shareCtx; if(!c) return;
+  const mapa = {};
+  document.querySelectorAll('#sh-corpo select[data-uid]').forEach(s => {
+    if(!s.value) return;
+    const x = c.dir.find(y => y.uid === s.dataset.uid);
+    mapa[s.dataset.uid] = {papel:s.value, nome:(x && (x.nome||x.usuario)) || ''};
+  });
+  try{
+    await Nuvem.compartilharProjeto(c.id, mapa);
+    const n = Object.keys(mapa).length;
+    fecharModalNuvem();
+    toast(n ? 'Compartilhado com '+n+' pessoa(s).' : 'Compartilhamento removido: só você tem acesso.');
+  }catch(e){ toast(msgErroNuvem(e), true); }
 };
 
 /* ============================================================
