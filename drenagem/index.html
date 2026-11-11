@@ -3918,6 +3918,12 @@ function baixarBlob(nome, b) {
       if (isNum(r.tp) && isNum(r.fundo))
         e += dTx('TEXTOS', p.x + rad + 0.3, p.y - 1.2, 2 * FZ, 'CT ' + r.tp.toFixed(3) + ' CF ' + r.fundo.toFixed(3));
     });
+    // deságues (DR-18): boca com alas, seta e rótulo
+    try { (typeof desagues18 === 'function' ? desagues18(G) : []).forEach(d => {
+      if (!d.nao) { e += dPl('DESAGUE', d.testa.map(q => [q.x, q.y]), false); d.alas.forEach(a => { e += dPl('DESAGUE', a.map(q => [q.x, q.y]), false); }); }
+      e += dLn('DESAGUE', d.seta[0].x, d.seta[0].y, d.seta[1].x, d.seta[1].y) + dArw('DESAGUE', d.seta[0].x, d.seta[0].y, d.seta[1].x, d.seta[1].y);
+      e += dTx('DESAGUE', d.rot.x, d.rot.y, 3 * FZ, 'DESAGUE ' + d.id); }); } catch (x) { console.error(x); }
+    if (!layers.some(l => l[0] === 'DESAGUE')) layers.push(['DESAGUE', 30]);
     dSave(dNome() + '_planta.dxf', dBuild(layers, e));
     toast('Planta baixa exportada em DXF');
   };
@@ -11791,6 +11797,77 @@ function liga18(b, k) {
 /* depois de criar/mover PVs: refaz as cotas até estabilizar (o degrau de cada PV depende da perda calculada na passada anterior) */
 function cotas18(max) { calc(); let e = R.checks.filter(c => c.st === 'err').length;
   for (let k = 0; k < (max || 10) && e > 0; k++) { autoCotas(true); calc(); e = R.checks.filter(c => c.st === 'err').length; } return e; }
+/* ---------- deságue (boca de lançamento) desenhado na planta e no DXF ----------
+   O dono não via os deságues nas pontas das redes geradas: cada PV final (sem saída) ganha a boca com alas,
+   no prolongamento do último trecho, uma seta para o receptor e o rótulo DESÁGUE. */
+function desagues18(G) {
+  if (!R || !R.outlets) return [];
+  return R.outlets.map((id, i) => { const pv = pvById(id), r = R.pv[id], p = pv && posPV(G, pv); if (!p || !r) return null;
+    const t = r.ins.slice().sort((a, b) => aIntTr(b) - aIntTr(a))[0], q = t && posPV(G, pvById(t.m)); let ux = 1, uy = 0;
+    if (q) { const L = Math.hypot(p.x - q.x, p.y - q.y); if (L > 0.01) { ux = (p.x - q.x) / L; uy = (p.y - q.y) / L; } }
+    const a = (R.ala || {})[id] || {}, rt = t && R.tr[t.id], We = isNum(a.We) ? a.We : (t ? deTr(t) : 1), La = isNum(a.La) ? a.La : 2, Wend = isNum(a.Wend) ? a.Wend : We + 2, Bt = isNum(a.Bt) ? a.Bt : We + 0.7;
+    const r0 = Math.max(0.5, (num(pv.dpv) || 1000) / 2000 * 1.3) + 1.0, nx = -uy, ny = ux, P0 = {x: p.x + ux * r0, y: p.y + uy * r0}, proj = La * Math.cos((num((a.par || {}).ang) || 30) * Math.PI / 180);
+    const at = (s, o) => ({x: P0.x + ux * s + nx * o, y: P0.y + uy * s + ny * o});
+    return {id, n: i + 1, pv, t, ux, uy, p, testa: [at(0, Bt / 2), at(0, -Bt / 2)], alas: [[at(0, We / 2), at(proj, Wend / 2)], [at(0, -We / 2), at(proj, -Wend / 2)]],
+      seta: [at(proj + 0.5, 0), at(proj + 6, 0)], rot: at(proj + 7.5, 0), Q: rt ? rt.Q : null, V: a.V, na: num(pv.na), nao: !!a.nao};
+  }).filter(Boolean);
+}
+/* ---------- PV no tamanho padrão da base (EMOP / SINAPI / SCO) ----------
+   Orientação do dono (11/11/2026): manter as medidas da tabela da base escolhida. Quando um PV precisaria de câmara maior
+   (cruzamento com muitos tubos + ramais), coloca-se um PV AO LADO, também no tamanho padrão, que recebe parte dos ramais. */
+function pvLmax18() { const cat = PV_CAT[pvBancoCat()] || PV_CAT.sinapi; return Math.max(...cat.map(x => x.L)); }
+function pvDmax18() { const cat = PV_CAT[pvBancoCat()] || PV_CAT.sinapi; const d = cat.map(x => x.Dmax).filter(isNum); return d.length ? Math.max(...d) : Infinity; }
+function Lneed18(id) { const pv = pvById(id), r = R && R.pv[id]; if (!pv || !r) return 0; try { const m = emopMedidas(pv, r, emopC()); return m ? (m.mod || !m.geo ? m.Lneed : Math.max(m.Lneed, pvLmax18() + 0.01)) : 0; } catch (e) { return 0; } }
+/* PV novo dividindo o trecho t a d metros do PV id (para jusante se t sai dele, para montante se t chega nele) */
+function pvNoTrecho18(t, id, d) {
+  const G = geoRuas(), pv = pvById(id), outro = pvById(t.m === id ? t.j : t.m), a = posPV(G, pv), b = outro && posPV(G, outro); if (!a || !b) return null;
+  const L = Math.hypot(b.x - a.x, b.y - a.y); if (L < d + 5) return null;
+  const rua = [pv.rua, outro.rua].find(rid => { const g = G[rid]; return g && Math.abs(g.loc(a).off) < 0.5 && Math.abs(g.loc(b).off) < 0.5; }); if (!rua) return null;
+  const g = G[rua], sa = g.loc(a).s, sb = g.loc(b).s, sN = sa + Math.sign(sb - sa) * d;
+  const nid = idCapt(P), fr = d / L;
+  P.pvs.push(Object.assign(JSON.parse(JSON.stringify(pv)), {id: nid, rua, dist: +sN.toFixed(2), defl: 'reta', tampa: '', na: '', pvL: '', pvHi: '', emL: '', emH: '',
+    obs: 'PV ao lado do ' + id + ' (tamanho padrão da base): recebe ramais que não cabem no ' + id}));
+  let k = 1, tid; do { tid = t.id + '.' + k++; } while (P.trechos.some(x => x.id === tid));
+  const cm = num(t.cm), cj = num(t.cj), Lt = num(t.L) > 0, t2 = JSON.parse(JSON.stringify(t)); t2.id = tid;
+  if (t.m === id) { const ci = isNum(cm) && isNum(cj) ? +(cm + (cj - cm) * fr).toFixed(3) : ''; t.j = nid; t.cj = ci; t2.m = nid; t2.cm = ci; if (Lt) { t.L = +d.toFixed(2); t2.L = +(L - d).toFixed(2); } }
+  else { const ci = isNum(cm) && isNum(cj) ? +(cj + (cm - cj) * fr).toFixed(3) : ''; t.j = nid; t.cj = ci; t2.m = nid; t2.cm = ci; t2.j = id; if (Lt) { t.L = +(L - d).toFixed(2); t2.L = +d.toFixed(2); } }
+  delete t2.iFix; P.trechos.splice(P.trechos.indexOf(t) + 1, 0, t2);
+  return nid;
+}
+function pvPadrao18() {
+  const Lmax = pvLmax18(), Lr = num(P.crit.ramalLmax) || 15, mot = [], antes = JSON.stringify(P);
+  calc(); const e0 = R.checks.filter(c => c.st === 'err').length;
+  const grandes = P.pvs.filter(pv => Lneed18(pv.id) > Lmax + 1e-6).map(pv => pv.id);
+  grandes.forEach(id => {
+    const snap = JSON.stringify(P), r = R.pv[id]; if (!r || Lneed18(id) <= Lmax + 1e-6) return;
+    const L0 = Lneed18(id), pv = pvById(id), ext = Lmax + 2 * ((emopC().pvEmopParede) || 0.2), d = Math.ceil((ext + 1.0) * 2) / 2;   // centro a centro: PV + 1 m entre as paredes
+    const cands = r.outs.concat(r.ins).map(x => x.id);
+    const novos = [], movT = [];
+    for (const tid of cands) {
+      if (Lneed18(id) <= Lmax + 1e-6) break;
+      const t = P.trechos.find(x => x.id === tid); if (!t) continue;
+      const s1 = JSON.stringify(P), nid = pvNoTrecho18(t, id, d); if (!nid) continue;
+      calc(); const G = geoRuas();
+      // ramais do PV, do mais perto do PV novo ao mais longe: passam para o PV novo enquanto o principal não couber e o novo couber
+      const rams = P.bls.filter(b => b.pv === id).map(b => { b.pv = nid; const a = angRamal(G, b), L = ramalLGeo(G, b); b.pv = id; return {b, a, L}; })
+        .filter(x => isNum(x.a) && x.a <= 90.5 && isNum(x.L) && x.L <= Lr).sort((x, y) => x.L - y.L);
+      const mv = [];
+      for (const x of rams) { if (Lneed18(id) <= Lmax + 1e-6) break; x.b.pv = nid; if (Lneed18(nid) > Lmax + 1e-6) { x.b.pv = id; continue; } mv.push(x.b); }
+      if (!mv.length) { P = JSON.parse(s1); calc(); continue; }
+      mv.forEach(b => { const a = angRamal(G, b), L = ramalLGeo(G, b); b.ang = +a.toFixed(1); b.rL = +L.toFixed(2); });
+      novos.push(nid); movT.push(...mv.map(b => b.id));
+    }
+    if (novos.length && Lneed18(id) <= Lmax + 1e-6) { mot.push(id + ': câmara precisaria de ' + fmt(L0, 2) + ' m (maior que a da tabela ' + BANCO_NOME[pvBancoCat()] + ', ' + fmt(Lmax, 2) + ' m) — ' + (novos.length > 1 ? 'criados os ' : 'criado o ') + novos.join(' e ') + ' ao lado (' + fmt(d, 1) + ' m), com os ramais ' + movT.join(', ') + '.'); return; }
+    P = JSON.parse(snap); calc();
+  });
+  if (!mot.length) return mot;
+  sincGeo(true); let e1 = cotas18(12);
+  window.__pv18it = [];
+  for (let k = 0; k < 15 && e1 > e0; k++) { autoCotas(true); calc(); e1 = R.checks.filter(c => c.st === 'err').length; window.__pv18it.push(e1); }
+  if (e1 > e0) { try { T3diamPrimeiro(); } catch (e) {} e1 = cotas18(12); }
+  if (e1 > e0) { window.__pv18 = R.checks.filter(c => c.st === 'err').slice(0, 8).map(c => c.par + ' ' + c.el + ' ' + c.val); P = migrate(JSON.parse(antes)); calc(); return []; }
+  return mot;
+}
 /* cada PV recebe no máximo UMA caixa de cada sarjeta (rua + lado) com a água vindo do mesmo sentido — ou DUAS lado a lado,
    cada uma com seu ramal (orientação do dono, 11/11/2026); fica a de ramal mais curto */
 function dedup18() {
@@ -11846,6 +11923,50 @@ function cabeceira18() {
   memo('cotaMF', (r, d, l) => r + '|' + d + '|' + l);
   memo('cotaMuro', (r, d, l) => r + '|' + d + '|' + l);
   memo('geoCache', () => '');
+  /* câmara pela TABELA da base: parede com UM tubo só precisa que o modelo aceite o Ø (EMOP 2,00 × 2,00 recebe Ø1,50, como no item
+     06.015.0016); a soma de tubos + folgas só vale para parede com mais de uma ligação. Assim o PV fica no tamanho padrão. */
+  const em18 = emopMedidas;
+  emopMedidas = function (pv, r, E) {
+    const m = em18.apply(this, arguments);
+    try { if (!m || !m.geo || !m.par || !(num(pv.pvL) > 0 ? false : true)) return m;
+      const cat = PV_CAT[pvBancoCat()] || []; if (!cat.some(x => isNum(x.Dmax))) return m;
+      let Ln = 0, Lp = 'jus'; Object.keys(m.par).forEach(k => { const a = m.par[k], v = a.length === 1 && !/^ramal /.test(a[0].id) ? 0 : (m.nec[k] || 0); if (v > Ln) { Ln = v; Lp = k; } });
+      if (Ln >= m.Lneed - 1e-6) return m;
+      const Lt = Ln - 0.02, modH = pvModelo(pvBancoCat(), Lt, m.Dt, m.HiNeed), mod = modH || pvModelo(pvBancoCat(), Lt, m.Dt);   // 2 cm de tolerância na soma das folgas if (!mod || (m.mod && m.mod.L <= mod.L)) return m;
+      // sem modelo da altura necessária (câmara mais alta que a do item de blocos): mantém a altura calculada — na EMOP há o PV de concreto armado até 6,0 m
+      const Ee = E || emopC(), L = mod.L, ext = L + 2 * Ee.pvEmopParede;
+      Object.assign(m, {mod, Lneed: Ln, Lpar: Lp, Lauto: L, L, tab18: true});
+      if (modH && mod.H && !m.Hdig) { const raso = isNum(m.disp) && m.disp < mod.H - 1e-6; m.Hauto = mod.H; m.Hi = raso ? Math.max(0, Math.floor(m.disp * 100 + 1e-6) / 100) : mod.H; m.hMot = raso ? 'raso' : 'modelo'; m.hc = isNum(m.disp) ? m.disp - m.Hi : null; }
+      // folga por parede: parede de um tubo só = a do modelo da tabela (não acusa); demais = folga mínima + sobra repartida
+      const gap = {}; Object.keys(m.par).forEach(k => { const a = m.par[k]; if (!a.length) return; gap[k] = a.length === 1 && !/^ramal /.test(a[0].id) ? Math.max(Ee.pvEmopFolga, (L - (a[0].w || a[0].De)) / 2) : Ee.pvEmopFolga + Math.max(0, L - (m.nec[k] || 0)) / (a.length + 1); }); m.gap = gap;
+      m.q = Object.assign({}, m.q, {alv: 4 * (L + Ee.pvEmopParede) * m.Hi, lajeF: ext * ext * Ee.pvEmopLajeF, lajeT: Math.max(0, ext * ext - Math.PI * 0.30 * 0.30) * Ee.pvEmopLajeT, cham: isNum(m.hc) ? Math.max(0, m.hc) : 0});
+    } catch (e) { console.error('DR-18 câmara', e); }
+    return m;
+  };
+  /* gerador e 🛠: PVs no tamanho padrão da base (PV ao lado quando não cabe) */
+  if (typeof gerEng16 === 'function') { const ge18 = gerEng16; gerEng16 = function () { const r = ge18.apply(this, arguments); try { window.__pvPad18 = pvPadrao18(); } catch (e) { console.error('DR-18 PV padrão', e); } return r; }; }
+  /* planta: deságues */
+  const svp18 = svgPlanta;
+  svgPlanta = function (K, W, H, st, lay) {
+    let svg = svp18.apply(this, arguments);
+    try { const G = geoRuas(), S = q => ({x: q.x * st.s + st.tx, y: -q.y * st.s + st.ty}), L = desagues18(G); if (!L.length) return svg;
+      let g = '';
+      L.forEach(d => { const pts = a => a.map(q => { const z = S(q); return z.x.toFixed(1) + ',' + z.y.toFixed(1); }).join(' ');
+        const w = Math.max(2.5, 0.25 * st.s);
+        if (!d.nao) { g += `<polyline points="${pts(d.testa)}" fill="none" stroke="${K.orange}" stroke-width="${w.toFixed(1)}"/>`; d.alas.forEach(a => { g += `<polyline points="${pts(a)}" fill="none" stroke="${K.orange}" stroke-width="${(w * 0.8).toFixed(1)}"/>`; }); }
+        const A = S(d.seta[0]), B = S(d.seta[1]), an = Math.atan2(B.y - A.y, B.x - A.x), hl = 11;
+        g += ln(A.x, A.y, B.x, B.y, K.orange, 3) + `<path d="M ${B.x.toFixed(1)} ${B.y.toFixed(1)} L ${(B.x - hl * Math.cos(an) + 6 * Math.sin(an)).toFixed(1)} ${(B.y - hl * Math.sin(an) - 6 * Math.cos(an)).toFixed(1)} L ${(B.x - hl * Math.cos(an) - 6 * Math.sin(an)).toFixed(1)} ${(B.y - hl * Math.sin(an) + 6 * Math.cos(an)).toFixed(1)} Z" fill="${K.orange}"/>`;
+        const T = S(d.rot), dx = Math.cos(an) >= -0.2 ? 6 : -6, anc = Math.cos(an) >= -0.2 ? 'start' : 'end';
+        g += `<g data-k="pv:${esc(d.id)}" style="cursor:pointer">` + tx(T.x + dx, T.y + 4, 'DESÁGUE ' + (L.length > 1 ? 'D' + d.n + ' ' : '') + '— ' + d.id, {fs: 13, w: 700, c: K.orange, a: anc, halo: K.bg});
+        if (lay.rot) g += tx(T.x + dx, T.y + 19, (isNum(d.Q) ? 'Q ' + fL(d.Q) + ' L/s' : '') + (isNum(d.V) ? ' · V ' + fmt(d.V, 2) + ' m/s' : '') + (isNum(d.na) ? ' · NA ' + fmt(d.na, 2) : '') + (d.nao ? ' · sem boca' : ' · boca com alas'), {fs: 11, c: K.ink, a: anc, halo: K.bg});
+        g += '</g>'; });
+      // item na legenda (logo acima do quadro da legenda)
+      const lx = W - 210, ly = H - 20 - 6 * 18;
+      g += rc(lx - 10, ly - 44, 210, 24, K.bg, K.grid) + ln(lx, ly - 32, lx + 22, ly - 32, K.orange, 3) + tx(lx + 30, ly - 28, 'Deságue / boca de lançamento', {fs: 11.5, c: K.ink});
+      svg = svg.replace(/<\/svg>$/, g + '</svg>');
+    } catch (e) { console.error('DR-18 deságue', e); }
+    return svg;
+  };
   /* ramal contra o fluxo: a solução "ligar a outro PV" não pode ir para um PV que já recebe caixa desta sarjeta */
   const frc18 = fixRamalContra;
   fixRamalContra = function (id) { const t = frc18.apply(this, arguments); if (!t) return t;
