@@ -757,6 +757,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
       <button class="btn-add" onclick="addEstaca()">+ Estaca</button>
       <button class="btn-add" onclick="abrirPonto()" title="Insere um ponto topográfico ou cruzamento a uma distância quebrada à frente de uma estaca (ex.: estaca 2 = 20 m + 10,67 m = 30,67 m)">+ Ponto</button>
+      <button class="btn-add" id="btn-rua" onclick="abrirRua()" title="Acrescenta outra rua (travessa, rua paralela…) com topografia própria; informe se ela cruza uma rua já lançada e em que estaca">+ Rua</button>
       <button class="btn-rem" onclick="remEstaca()">− Remover</button>
       <button class="tb-btn tb-btn-save" onclick="calcTopo()">Recalcular</button>
       <button class="btn-add" onclick="abrirMeioFio()">Meio-fio…</button>
@@ -767,6 +768,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
       <button class="tb-btn" id="btn-colunas" onclick="toggleColunasTopo()" title="Ocultar ou reexibir colunas da tabela de topografia">👁 Colunas</button>
       <span class="mf-resumo" style="font-size:11px;color:var(--fg2)"></span>
     </div>
+    <div id="ruas-bar" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px"></div>
     <div id="topo-cols" class="topo-cols"></div>
     <div id="greide-resumo" style="font-size:11px;color:var(--fg2);margin-bottom:8px"></div>
     <div id="topo-totals" class="topo-totals"></div>
@@ -776,7 +778,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
           <th class="c1">#</th><th class="c2">Estaca (m)</th>
           <th class="c3">Terreno esq. (m)</th><th class="c4">Terreno eixo (m)</th><th class="c5">Terreno dir. (m)</th>
           <th class="c6">Greide eixo (m)</th><th class="c7">Greide esq. (m)</th><th class="c8">Greide dir. (m)</th><th class="c9">Declive long. até a próxima (%)</th><th class="c10">Largura (m)</th>
-          <th class="c11">Situação</th><th class="c12">Corte (m²)</th><th class="c13">Aterro (m²)</th><th class="c14">Vol. corte até a próxima (m³)</th><th class="c15">Vol. aterro até a próxima (m³)</th>
+          <th class="c11">Situação</th><th class="c12">Corte (m²)</th><th class="c13">Aterro (m²)</th><th class="c14">Vol. corte até a próxima (m³)</th><th class="c15">Vol. aterro até a próxima (m³)</th><th class="c16">Cruzamento (rua · estaca)</th>
         </tr></thead>
         <tbody id="topo-tbody"></tbody>
       </table>
@@ -885,6 +887,7 @@ const GAMA={blocos:22,areia:17,baseGran:21,baseCim:23,sub:21,ref:20}; // kN/m³ 
    ESTADO GLOBAL
 ══════════════════════════════════════════════════════ */
 let logradouro='', responsavel='', resultado=null, topoRows=[];
+let ruas=[{id:'r1',nome:'',rows:null}], ruaAtiva=0; /* várias ruas: topoRows sempre aponta para as linhas da rua ativa */
 
 /* ══════════════════════════════════════════════════════
    UTILITÁRIOS
@@ -1553,6 +1556,7 @@ function addEstaca(){
 }
 function remEstaca(){if(topoRows.length>0){topoRows.pop();renderTopoTable();calcTopo();}}
 function renderTopoTable(){
+  ruasSinc();
   const tbody=document.getElementById('topo-tbody');
   tbody.innerHTML=topoRows.map((r,i)=>`<tr>
     <td class="c1">${i+1}${r.ponto?` <span title="${esc(r.obs||'Ponto inserido com +Ponto')}" style="font-size:9px;font-weight:700;color:var(--accent2,#2563eb)">P</span> <button type="button" title="Excluir este ponto" onclick="remPonto(${i})" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:13px;padding:0 2px">×</button>`:''}</td>
@@ -1570,8 +1574,9 @@ function renderTopoTable(){
     <td class="to c13" id="taa-${i}">—</td>
     <td class="to c14" id="tco-${i}">—</td>
     <td class="to c15" id="tat-${i}">—</td>
+    <td class="to c16" id="tcz-${i}" style="white-space:nowrap">—</td>
   </tr>`).join('');
-  aplicarColunasTopo();
+  aplicarColunasTopo(); renderRuasBar();
 }
 function topoVal(i,k,val){
   if(k==='gEsq'||k==='gDir'){ /* cota de greide lateral: vazio = automático (pelo caimento) */
@@ -1582,9 +1587,9 @@ function topoVal(i,k,val){
   topoRows[i][k]=parseFloat(val)||0;calcTopo();
 }
 /* Linhas da topografia com a geometria da seção de cada estaca (mesma da aba Seções transversais) */
-function topoLinhas(){
+function topoLinhas(rows){
   const P=secaoParams(), num=x=>(x===''||x==null||isNaN(x))?null:+x;
-  return topoRows.map((row,i)=>{
+  return (rows||topoRows).map((row,i)=>{
     const L={i,est:+row.est||0,te:num(row.tEsq),tc:num(row.tEixo),td:num(row.tDir),gr:num(row.greide),larg:+row.larg||0,na:null,ac:0,aa:0,ar:0,sit:'—',form:null,gE:null,gD:null};
     L.cE=P.cEsq; L.cD=P.cDir; L.gEusr=false; L.gDusr=false;
     if(L.gr!==null){
@@ -1612,6 +1617,7 @@ function calcTopo(){
       const td=document.getElementById(p+L.i), inp=td&&td.querySelector('input'); if(!inp) return;
       inp.placeholder=val==null?'auto':fmt(val,3); inp.style.opacity=usr?'1':'.6';
     });
+    { const cz=document.getElementById('tcz-'+L.i); if(cz) cz.innerHTML=cruzHtml(L); }
     const nx=linhas[L.i+1], d=nx?nx.est-L.est:0;
     T('tdl-'+L.i,(nx&&d>0&&L.gr!=null&&nx.gr!=null)?fmt((nx.gr-L.gr)/d*100,2):'—');
   });
@@ -1628,14 +1634,18 @@ function calcTopo(){
     document.getElementById('tco-'+i).textContent=fmt(cT,2);
     document.getElementById('tat-'+i).textContent=fmt(aT,2);
   }
-  _topo={linhas,totC,totA,totR,totArea,extensao:linhas.length?linhas[linhas.length-1].est-linhas[0].est:0};
+  const extAtiva=linhas.length?linhas[linhas.length-1].est-linhas[0].est:0;
+  const porRua=[{nome:nomeRua(ruaAtiva),ext:extAtiva,area:totArea,c:totC,a:totA,r:totR}];
+  if(ruas.length>1) ruas.forEach((ru,ri)=>{ if(ri===ruaAtiva) return; const t=totaisRows(ru.rows||[]); porRua.push({nome:nomeRua(ri),ext:t.ext,area:t.area,c:t.c,a:t.a,r:t.r}); totC+=t.c; totA+=t.a; totR+=t.r; totArea+=t.area; });
+  _topo={linhas,totC,totA,totR,totArea,extensao:porRua.reduce((x,p)=>x+p.ext,0),porRua};
   mfAtualizarResumo();
   const bf=Math.max(0,totC-totA);
   document.getElementById('topo-totals').innerHTML=[
     {v:fmt(totC,2),l:'Corte (m³)'},{v:fmt(totA,2),l:'Aterro (m³)'},
     ...(totR>0?[{v:fmt(totR,2),l:'Reaterro lateral (m³)'}]:[]),
     {v:fmt(totArea,2),l:'Área pavimentada (m²)'},{v:fmt(bf,2),l:'Bota-fora saldo (m³)'},
-  ].map(c=>`<div class="ttcard"><div class="tv">${c.v}</div><div class="tl">${c.l}</div></div>`).join('');
+  ].map(c=>`<div class="ttcard"><div class="tv">${c.v}</div><div class="tl">${c.l}${ruas.length>1?' · todas as ruas':''}</div></div>`).join('')+
+    (ruas.length>1?'<div style="flex-basis:100%;font-size:11px;color:var(--fg2)">'+porRua.map(p=>'<b>'+esc(p.nome)+'</b>: '+fmt(p.ext,2)+' m · '+fmt(p.area,2)+' m²').join(' &nbsp;|&nbsp; ')+'</div>':'');
   if(r&&totArea>0){
     document.getElementById('sec-volumes').hidden=false;
     document.getElementById('vols-tbody').innerHTML=volumesCamadas(totArea).map(c=>
@@ -1708,14 +1718,14 @@ function desfazerGreide(){
 /* ══════════════════════════════════════════════════════
    COLUNAS DA TOPOGRAFIA · ocultar e reexibir
 ══════════════════════════════════════════════════════ */
-const TOPO_COLS=[[2,'Estaca'],[3,'Terreno esq.'],[4,'Terreno eixo'],[5,'Terreno dir.'],[6,'Greide eixo'],[7,'Greide esq.'],[8,'Greide dir.'],[9,'Declive long.'],[10,'Largura'],[11,'Situação'],[12,'Corte (m²)'],[13,'Aterro (m²)'],[14,'Vol. corte'],[15,'Vol. aterro']];
+const TOPO_COLS=[[2,'Estaca'],[3,'Terreno esq.'],[4,'Terreno eixo'],[5,'Terreno dir.'],[6,'Greide eixo'],[7,'Greide esq.'],[8,'Greide dir.'],[9,'Declive long.'],[10,'Largura'],[11,'Situação'],[12,'Corte (m²)'],[13,'Aterro (m²)'],[14,'Vol. corte'],[15,'Vol. aterro'],[16,'Cruzamento']];
 let topoOcultas=[];
 try{ const t=JSON.parse(localStorage.getItem('pint_topo_ocultas')||'[]'); if(Array.isArray(t)) topoOcultas=t.filter(x=>TOPO_COLS.some(c=>c[0]===x)); }catch(e){}
 /* Ordem das colunas: arrastar o título para outro lugar, como no Excel (a coluna # fica sempre primeiro). */
 let topoOrdem=[];
 try{ const t=JSON.parse(localStorage.getItem('pint_topo_ordem')||'[]'); if(Array.isArray(t)) topoOrdem=t; }catch(e){}
 function topoOrdemAtual(){
-  const base=[2,3,4,5,6,7,8,9,10,11,12,13,14,15];
+  const base=[2,3,4,5,6,7,8,9,10,11,12,13,14,15,16];
   const o=topoOrdem.filter(c=>base.indexOf(c)>=0).filter((c,i,a)=>a.indexOf(c)===i);
   base.forEach(c=>{ if(o.indexOf(c)<0) o.push(c); });
   return o;
@@ -1742,7 +1752,7 @@ function ordemOriginalTopo(){
   aplicarOrdemTopo(); atualizarOrdemBtn();
 }
 function atualizarOrdemBtn(){
-  const b=document.getElementById('btn-ordem-topo'); if(b) b.style.display=topoOrdemAtual().join()==='2,3,4,5,6,7,8,9,10,11,12,13,14,15'?'none':'';
+  const b=document.getElementById('btn-ordem-topo'); if(b) b.style.display=topoOrdemAtual().join()==='2,3,4,5,6,7,8,9,10,11,12,13,14,15,16'?'none':'';
 }
 function topoArrastar(){
   const tr=document.querySelector('#tbl-topo thead tr'); if(!tr||tr.dataset.dnd) return; tr.dataset.dnd='1';
@@ -1806,6 +1816,164 @@ function topoTeclado(){
     if(prox){ prox.focus(); try{prox.select();}catch(x){} }
   });
 }
+
+/* ══════════════════════════════════════════════════════
+   RUAS · várias ruas no mesmo projeto (travessas, ruas paralelas…)
+   Cada rua tem a sua tabela de topografia; topoRows aponta para a rua ativa.
+   Cruzamento: a linha da estaca em que duas ruas se cruzam guarda cruz={rua:id da outra, est:estaca na outra}.
+   Ruas paralelas (rua.paralela = id da outra) não têm cruzamento. As cotas do greide dos dois lados são comparadas.
+══════════════════════════════════════════════════════ */
+function ruasSinc(){ if(ruas[ruaAtiva]) ruas[ruaAtiva].rows=topoRows; }
+function nomeRua(i){ const r=ruas[i]; return r?(r.nome||('Rua '+(i+1))):''; }
+function ruaIdx(id){ return ruas.findIndex(r=>r.id===id); }
+function estacaTxt(m){ const n=Math.floor(m/20+1e-9); return n+' + '+fmt(m-20*n,2); }
+function parseEstaca(t){
+  t=String(t==null?'':t).trim().replace(/\s/g,'').replace(/m$/i,''); if(t==='') return NaN;
+  if(t.indexOf('+')>0){ const p=t.split('+'); const a=parseFloat(p[0].replace(',','.')), b=parseFloat(p[1].replace(',','.')); return (isNaN(a)||isNaN(b))?NaN:+(a*20+b).toFixed(3); }
+  const x=parseFloat(t.replace(',','.')); return isNaN(x)?NaN:x;
+}
+/* valor interpolado de uma coluna de uma lista de linhas, numa estaca */
+function itpRows(rows,est,k){
+  if(!rows||!rows.length) return null;
+  const a=rows.filter(r=>r[k]!==''&&r[k]!=null&&!isNaN(r[k])); if(!a.length) return null;
+  if(est<=a[0].est) return +a[0][k]; if(est>=a[a.length-1].est) return +a[a.length-1][k];
+  for(let i=0;i<a.length-1;i++) if(est>=a[i].est-1e-9&&est<=a[i+1].est+1e-9){ const d=a[i+1].est-a[i].est; return d<=0?+a[i][k]:+a[i][k]+(+a[i+1][k]-+a[i][k])*(est-a[i].est)/d; }
+  return null;
+}
+/* garante uma linha na estaca (insere ponto interpolado se não existir); devolve o índice e se ficou fora do trecho */
+function garantirLinha(rows,est){
+  let j=rows.findIndex(r=>Math.abs(r.est-est)<0.005); if(j>=0) return {j,fora:false};
+  const fora=!rows.length||est<rows[0].est||est>rows[rows.length-1].est;
+  const nr={est:+est.toFixed(3),ponto:true}; ['tEsq','tEixo','tDir','greide','larg'].forEach(k=>{ const v=itpRows(rows,est,k); nr[k]=v==null?(k==='larg'?6:100):+v.toFixed(3); });
+  j=rows.findIndex(r=>r.est>est); if(j<0) j=rows.length; rows.splice(j,0,nr); return {j,fora};
+}
+function desmarcarCruz(ia,j){
+  const A=ruas[ia]&&ruas[ia].rows&&ruas[ia].rows[j]; if(!A||!A.cruz) return;
+  const ib=ruaIdx(A.cruz.rua);
+  if(ib>=0) (ruas[ib].rows||[]).forEach(r=>{ if(r.cruz&&r.cruz.rua===ruas[ia].id&&Math.abs(r.cruz.est-A.est)<0.01) delete r.cruz; });
+  delete A.cruz;
+}
+function marcarCruz(ia,estA,ib,estB){
+  ruasSinc();
+  const RA=ruas[ia].rows, RB=ruas[ib].rows;
+  const ga=garantirLinha(RA,estA), gb=garantirLinha(RB,estB);
+  desmarcarCruz(ia,ga.j); desmarcarCruz(ib,gb.j);
+  RA[ga.j].cruz={rua:ruas[ib].id,est:+estB.toFixed(3)}; RB[gb.j].cruz={rua:ruas[ia].id,est:+estA.toFixed(3)};
+  return {foraA:ga.fora,foraB:gb.fora};
+}
+function cruzTexto(row){
+  if(!row||!row.cruz) return ''; const ib=ruaIdx(row.cruz.rua); if(ib<0) return '';
+  return nomeRua(ib)+' · est. '+estacaTxt(row.cruz.est)+' ('+fmt(row.cruz.est,2)+' m)';
+}
+function cruzHtml(L){
+  const row=topoRows[L.i]; if(!row) return '—';
+  const bt=(t,ti,fn)=>'<button type="button" onclick="'+fn+'" title="'+ti+'" style="border:1px solid var(--border,#ccc);background:transparent;border-radius:4px;cursor:pointer;font-size:11px;padding:0 5px;color:var(--fg2)">'+t+'</button>';
+  if(row.cruz){
+    const ib=ruaIdx(row.cruz.rua); if(ib<0) return '—';
+    const gO=itpRows(ruas[ib].rows,row.cruz.est,'greide'); let chk='';
+    if(gO!=null&&L.gr!=null){ const df=L.gr-gO; chk=Math.abs(df)>0.02?' <span style="color:#b91c1c;font-weight:700" title="O greide do eixo aqui ('+fmt(L.gr,3)+' m) difere do greide da outra rua neste ponto ('+fmt(gO,3)+' m). Acerte as cotas para as duas ruas se encontrarem.">⚠ '+(df>0?'+':'')+fmt(df*100,1)+' cm</span>':' <span style="color:#15803d" title="Greide confere com a outra rua ('+fmt(gO,3)+' m)">✓</span>'; }
+    return '<b>↔ '+esc(nomeRua(ib))+'</b> · est. '+estacaTxt(row.cruz.est)+chk+' '+bt('✎','Editar ou remover o cruzamento','abrirCruz('+L.i+')');
+  }
+  return ruas.length>1?bt('＋ cruza','Marcar que outra rua cruza aqui','abrirCruz('+L.i+')'):'—';
+}
+function totaisRows(rows){
+  const L=topoLinhas(rows); let c=0,a=0,r=0,area=0;
+  for(let i=0;i<L.length-1;i++){ const x=L[i],y=L[i+1],d=y.est-x.est; if(d<=0) continue; c+=(x.ac+y.ac)/2*d; a+=(x.aa+y.aa)/2*d; r+=(x.ar+y.ar)/2*d; area+=((x.larg+y.larg)/2)*d; }
+  return {c,a,r,area,ext:L.length>1?L[L.length-1].est-L[0].est:0};
+}
+function renderRuasBar(){
+  const el=document.getElementById('ruas-bar'); if(!el) return;
+  if(ruas.length<2){ el.innerHTML=''; el.style.display='none'; return; }
+  el.style.display='flex';
+  el.innerHTML='<span style="font-size:12px;font-weight:700;color:var(--fg2)" title="Gerar greide, + Ponto, + Estaca e Importar Excel agem só na rua selecionada">Ruas (a rua selecionada recebe as alterações e a importação):</span>'+ruas.map((r,i)=>{
+    const on=i===ruaAtiva, par=r.paralela&&ruaIdx(r.paralela)>=0?' · paralela à '+nomeRua(ruaIdx(r.paralela)):'';
+    return '<span style="display:inline-flex;align-items:center;gap:4px;border:1px solid '+(on?'var(--accent2,#2563eb)':'var(--border,#ccc)')+';background:'+(on?'var(--accent2,#2563eb)':'transparent')+';color:'+(on?'#fff':'var(--fg)')+';border-radius:14px;padding:2px 8px;font-size:12px">'+
+      '<a href="#" onclick="trocarRua('+i+');return false" style="color:inherit;text-decoration:none;font-weight:'+(on?700:500)+'" title="'+esc(nomeRua(i)+par)+'">'+esc(nomeRua(i))+(par?' <small>∥</small>':'')+'</a>'+
+      '<a href="#" onclick="renomearRua('+i+');return false" title="Renomear" style="color:inherit;text-decoration:none;opacity:.8">✎</a>'+
+      '<a href="#" onclick="removerRua('+i+');return false" title="Remover esta rua" style="color:inherit;text-decoration:none;opacity:.8">✕</a></span>';
+  }).join('');
+}
+function trocarRua(i){
+  if(!ruas[i]) return; ruasSinc(); ruaAtiva=i; topoRows=ruas[i].rows||(ruas[i].rows=[]);
+  _greideAnterior=null; _greideLatAnt=null;
+  const bd=document.getElementById('btn-desfazer-greide'); if(bd) bd.style.display='none';
+  const gr=document.getElementById('greide-resumo'); if(gr) gr.textContent='';
+  renderTopoTable(); calcTopo();
+}
+function renomearRua(i){
+  const n=prompt('Nome da rua:',nomeRua(i)); if(n==null) return;
+  ruas[i].nome=n.trim(); renderRuasBar(); calcTopo();
+}
+function removerRua(i){
+  if(ruas.length<2) return;
+  if(!confirm('Remover a rua “'+nomeRua(i)+'” e toda a sua topografia?')) return;
+  ruasSinc(); const id=ruas[i].id;
+  ruas.splice(i,1);
+  ruas.forEach(r=>{ if(r.paralela===id) delete r.paralela; (r.rows||[]).forEach(x=>{ if(x.cruz&&x.cruz.rua===id) delete x.cruz; }); });
+  ruaAtiva=Math.min(ruaAtiva>i?ruaAtiva-1:ruaAtiva,ruas.length-1); if(ruaAtiva<0) ruaAtiva=0;
+  topoRows=ruas[ruaAtiva].rows||[]; renderTopoTable(); calcTopo();
+}
+function abrirRua(){
+  ruasSinc();
+  const md=document.getElementById('modal'); md.style.width='460px';
+  const op=ruas.map((r,i)=>'<option value="'+i+'">'+esc(nomeRua(i))+'</option>').join('');
+  md.innerHTML='<button class="m-close" onclick="fecharPonto()" aria-label="Fechar">×</button><h2>Nova rua</h2>'+
+    '<p style="font-size:12px;color:var(--fg2)">A nova rua tem a sua própria tabela de topografia (digite ou use 📥 Importar Excel). Informe como ela se relaciona com uma rua já lançada.</p>'+
+    '<div class="mf-f"><label for="nr_nome">Nome da rua</label><input type="text" id="nr_nome" value="Rua '+(ruas.length+1)+'"></div>'+
+    '<div class="mf-f"><label for="nr_rel">Relação com a outra rua</label><select id="nr_rel" onchange="ruaRelMuda()"><option value="cruza">Cruza uma rua já lançada</option><option value="paralela">Paralela — não cruza</option></select></div>'+
+    '<div class="mf-f"><label for="nr_outra">Rua existente</label><select id="nr_outra">'+op+'</select></div>'+
+    '<div id="nr_cz"><div class="mf-f"><label for="nr_eo">Estaca onde o EIXO da nova rua cruza o EIXO da rua existente (medida na rua existente)</label><input type="text" id="nr_eo" placeholder="ex.: 2+10,67  ou  50,67"></div>'+
+    '<div class="mf-f"><label for="nr_en">Estaca do eixo da nova rua nesse cruzamento (medida na nova rua; 0 se ela começa ali)</label><input type="text" id="nr_en" value="0" placeholder="ex.: 0"></div>'+
+    '<p style="font-size:11px;color:var(--fg2)">Aceita metros (50,67) ou estaca+metros (2+10,67 = 2×20 + 10,67). Se não houver linha nessa estaca, o programa cria um ponto interpolado nas duas ruas. O greide das duas ruas será comparado no cruzamento.</p></div>'+
+    '<label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:10px"><input type="checkbox" id="nr_imp" checked> Importar a planilha Excel desta rua logo depois de criar</label>'+
+    '<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button type="button" class="tb-btn" onclick="fecharPonto()">Cancelar</button><button type="button" class="tb-btn tb-btn-save" onclick="criarRua()">Criar rua</button></div>';
+  document.getElementById('modal-bg').classList.add('open'); ruaRelMuda();
+  setTimeout(()=>{const e=document.getElementById('nr_nome'); if(e){e.focus();e.select();}},50);
+}
+function ruaRelMuda(){ const p=document.getElementById('nr_rel').value==='paralela'; const e=document.getElementById('nr_cz'); if(e) e.style.display=p?'none':''; }
+function criarRua(){
+  const nome=document.getElementById('nr_nome').value.trim(), rel=document.getElementById('nr_rel').value, io=+document.getElementById('nr_outra').value;
+  if(!nome){ toast('Digite o nome da rua.',true); return; }
+  let eo=NaN,en=0;
+  if(rel==='cruza'){
+    eo=parseEstaca(document.getElementById('nr_eo').value); en=parseEstaca(document.getElementById('nr_en').value);
+    if(isNaN(eo)||isNaN(en)||eo<0||en<0){ toast('Informe as estacas do cruzamento (ex.: 2+10,67 ou 50,67).',true); return; }
+  }
+  const abrirImp=!!(document.getElementById('nr_imp')&&document.getElementById('nr_imp').checked);
+  const id='r'+(Math.max(0,...ruas.map(r=>+String(r.id).slice(1)||0))+1);
+  const v=k=>{ const x=rel==='cruza'?itpRows(ruas[io].rows,eo,k):null; return x==null?(k==='larg'?6:100):+x.toFixed(3); };
+  const base={tEsq:v('tEsq'),tEixo:v('tEixo'),tDir:v('tDir'),greide:v('greide'),larg:v('larg')};
+  const nova={id,nome,rows:[Object.assign({est:rel==='cruza'?en:0},base),Object.assign({est:(rel==='cruza'?en:0)+20},base)]};
+  if(rel==='paralela') nova.paralela=ruas[io].id;
+  ruasSinc(); ruas.push(nova); const ni=ruas.length-1; fecharPonto(); trocarRua(ni);
+  if(rel==='cruza'){
+    const m=marcarCruz(ni,en,io,eo); renderTopoTable(); calcTopo();
+    toast('Rua criada. Cruzamento marcado em '+estacaTxt(en)+' desta rua = '+estacaTxt(eo)+' de '+nomeRua(io)+(m.foraB?' (fora do trecho lançado da outra rua: confira as cotas)':'')+'. Digite ou importe as cotas.');
+  }else toast('Rua criada (paralela à '+nomeRua(io)+'). Digite ou importe as cotas.');
+  if(abrirImp) setTimeout(importarExcelClick,250);
+}
+function abrirCruz(i){
+  const row=topoRows[i]; if(!row) return;
+  if(ruas.length<2){ toast('Crie antes outra rua com o botão “+ Rua”.',true); return; }
+  const md=document.getElementById('modal'); md.style.width='440px';
+  const outras=ruas.map((r,k)=>k===ruaAtiva?'':'<option value="'+k+'"'+(row.cruz&&ruaIdx(row.cruz.rua)===k?' selected':'')+'>'+esc(nomeRua(k))+'</option>').join('');
+  md.innerHTML='<button class="m-close" onclick="fecharPonto()" aria-label="Fechar">×</button><h2>Cruzamento</h2>'+
+    '<p style="font-size:12px;color:var(--fg2)">Linha '+(i+1)+' · estaca '+estacaTxt(row.est)+' ('+fmt(row.est,2)+' m) de <b>'+esc(nomeRua(ruaAtiva))+'</b>.</p>'+
+    '<div class="mf-f"><label for="cz_rua">Rua que cruza aqui</label><select id="cz_rua"><option value="-1">Nenhuma (não cruza / paralela)</option>'+outras+'</select></div>'+
+    '<div class="mf-f"><label for="cz_est">Estaca onde o eixo desta rua cruza o eixo da outra (medida na outra rua)</label><input type="text" id="cz_est" value="'+(row.cruz?String(+row.cruz.est.toFixed(3)).replace('.',','):'')+'" placeholder="ex.: 2+10,67  ou  50,67"></div>'+
+    '<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button type="button" class="tb-btn" onclick="fecharPonto()">Cancelar</button><button type="button" class="tb-btn tb-btn-save" onclick="aplicarCruz('+i+')">Aplicar</button></div>';
+  document.getElementById('modal-bg').classList.add('open');
+}
+function aplicarCruz(i){
+  const k=+document.getElementById('cz_rua').value, row=topoRows[i]; if(!row) return;
+  if(k<0){ desmarcarCruz(ruaAtiva,i); fecharPonto(); renderTopoTable(); calcTopo(); toast('Cruzamento removido desta linha.'); return; }
+  const eo=parseEstaca(document.getElementById('cz_est').value);
+  if(isNaN(eo)||eo<0){ toast('Informe a estaca do cruzamento na outra rua (ex.: 2+10,67 ou 50,67).',true); return; }
+  const est=row.est, m=marcarCruz(ruaAtiva,est,k,eo);
+  fecharPonto(); renderTopoTable(); calcTopo();
+  toast('Cruzamento marcado com '+nomeRua(k)+' (estaca '+estacaTxt(eo)+' dela).'+(m.foraB?' Fora do trecho lançado da outra rua: confira as cotas.':''));
+}
+
 /* ══════════════════════════════════════════════════════
    + PONTO · ponto topográfico / cruzamento a uma distância quebrada à frente de uma estaca
    Ex.: estaca 2 (20 m) + 10,67 m = ponto em 30,67 m. Cotas e largura são interpoladas
@@ -1911,7 +2079,7 @@ function impSugerir(rot){
 }
 function impAbrirModal(){
   const md=document.getElementById('modal'); md.style.width='820px'; md.style.maxWidth='96vw';
-  md.innerHTML='<button class="m-close" onclick="impFechar()" aria-label="Fechar">×</button><h2>Importar topografia do Excel</h2>'+
+  md.innerHTML='<button class="m-close" onclick="impFechar()" aria-label="Fechar">×</button><h2>Importar topografia do Excel'+(ruas.length>1?' — para: <span style="color:var(--accent2,#2563eb)">'+esc(nomeRua(ruaAtiva))+'</span>':'')+'</h2>'+
     '<p style="font-size:12px;color:var(--fg2)">Arquivo: <b>'+esc(_imp.nome)+'</b>. Confira a linha dos títulos, as linhas de dados e a coluna de cada informação. A prévia mostra como as estacas vão entrar.</p>'+
     '<div class="mf-g" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr">'+
       '<div class="mf-f"><label>Planilha</label><select id="im_aba" onchange="impTrocarAba(this.value)">'+_imp.wb.SheetNames.map(n=>'<option>'+esc(n)+'</option>').join('')+'</select></div>'+
@@ -2012,6 +2180,7 @@ function impAplicar(){
   const L=_imp&&_imp.ler; if(!L||!L.rows.length) return;
   const novas=L.rows.map(r=>({est:r.est,tEsq:r.tEsq,tEixo:r.tEixo,tDir:r.tDir,greide:r.greide,larg:r.larg,...(r.ponto?{ponto:true}:{}),...(r.obs?{obs:r.obs}:{})}));
   const modo=document.getElementById('im_modo').value;
+  const marcas=topoRows.filter(r=>r.cruz).map(r=>({est:r.est,cruz:r.cruz})); /* cruzamentos já marcados desta rua */
   if(modo==='add'){
     const todas=topoRows.concat(novas).sort((a,b)=>a.est-b.est), fim=[];
     todas.forEach(r=>{ if(!fim.length||Math.abs(fim[fim.length-1].est-r.est)>1e-6) fim.push(r); });
@@ -2019,9 +2188,10 @@ function impAplicar(){
   }else topoRows=novas;
   _greideAnterior=null; const bd=document.getElementById('btn-desfazer-greide'); if(bd) bd.style.display='none';
   const gr=document.getElementById('greide-resumo'); if(gr) gr.textContent='';
+  if(modo!=='add') marcas.forEach(m=>{ const ib=ruaIdx(m.cruz.rua); if(ib>=0&&ib!==ruaAtiva) marcarCruz(ruaAtiva,m.est,ib,m.cruz.est); }); /* a substituição não perde o cruzamento */
   const n=novas.length; impFechar();
   renderTopoTable(); calcTopo();
-  toast(n+' linha(s) importada(s) do Excel para a Topografia.');
+  toast(n+' linha(s) importada(s) do Excel para '+(ruas.length>1?'a rua “'+nomeRua(ruaAtiva)+'” (as outras ruas não foram alteradas)':'a Topografia')+'.');
 }
 let _topo=null;
 function volumesCamadas(totArea){
@@ -2797,8 +2967,8 @@ function itensPadroesSecao(M){
   M.push({kv:['Berma (cada lado):',P.berma>0?fmt(P.berma,2)+' m':'sem berma']});
   M.push({kv:['Meio-fio:',P.mf?mfTextoCurto(P.mf)+' · nos dois lados':'sem meio-fio']});
 }
-function linhasTopoVolumes(){
-  const L=topoLinhas(), out=[]; let tc=0,ta=0,tr=0,tA=0;
+function linhasTopoVolumes(rows){
+  const L=topoLinhas(rows), out=[]; let tc=0,ta=0,tr=0,tA=0;
   L.forEach((a,i)=>{ const b=L[i+1], d=b?b.est-a.est:0;
     const vc=b&&d>0?(a.ac+b.ac)/2*d:null, va=b&&d>0?(a.aa+b.aa)/2*d:null;
     if(b&&d>0){tc+=vc;ta+=va;tr+=(a.ar+b.ar)/2*d;tA+=(a.larg+b.larg)/2*d;}
@@ -2823,12 +2993,21 @@ function itensSecoes(){
   return M;
 }
 function itensTopo(){
-  const M=itensIdent(), T=linhasTopoVolumes(), c=(x,d)=>x==null?'—':fmt(x,d);
+  const M=itensIdent(), c=(x,d)=>x==null?'—':fmt(x,d);
   M.push({h:'Topografia · padrões'}); itensPadroesSecao(M);
   M.push({kv:['Espessura do pavimento:',fmt(resultado.total,1)+' cm (formação = greide − espessura)']});
   M.push({h:'Estacas, áreas e volumes'});
-  M.push({tab:{cab:['Estaca (m)','Terreno esq.','Terreno eixo','Terreno dir.','Greide eixo','Greide esq.','Greide dir.','Largura (m)','Situação','Corte (m²)','Aterro (m²)','Vol. corte (m³)','Vol. aterro (m³)'],
-    lin:T.lin.map(o=>[c(o.L.est,2),c(o.L.te,3),c(o.L.tc,3),c(o.L.td,3),c(o.L.gr,3),c(o.L.gE,3),c(o.L.gD,3),c(o.L.larg,2),o.L.sit,c(o.L.ac,2),c(o.L.aa,2),c(o.vc,2),c(o.va,2)])}});
+  ruasSinc(); let tc=0,ta=0,tr=0,tA=0;
+  ruas.forEach((ru,ri)=>{
+    const T=linhasTopoVolumes(ru.rows||[]);
+    if(ruas.length>1) M.push({h:'Rua: '+nomeRua(ri)+(ru.paralela&&ruaIdx(ru.paralela)>=0?' (paralela à '+nomeRua(ruaIdx(ru.paralela))+')':'')});
+    M.push({tab:{cab:['Estaca (m)','Terreno esq.','Terreno eixo','Terreno dir.','Greide eixo','Greide esq.','Greide dir.','Largura (m)','Situação','Corte (m²)','Aterro (m²)','Vol. corte (m³)','Vol. aterro (m³)','Cruzamento'],
+      lin:T.lin.map(o=>[c(o.L.est,2),c(o.L.te,3),c(o.L.tc,3),c(o.L.td,3),c(o.L.gr,3),c(o.L.gE,3),c(o.L.gD,3),c(o.L.larg,2),o.L.sit,c(o.L.ac,2),c(o.L.aa,2),c(o.vc,2),c(o.va,2),cruzTexto((ru.rows||[])[o.L.i])||'—'])}});
+    if(ruas.length>1){ M.push({kv:['Corte / aterro / área desta rua:',fmt(T.tc,2)+' m³ / '+fmt(T.ta,2)+' m³ / '+fmt(T.tA,2)+' m²']}); }
+    tc+=T.tc; ta+=T.ta; tr+=T.tr; tA+=T.tA;
+  });
+  if(ruas.length>1) M.push({h:'Total do projeto (todas as ruas)'});
+  const T={tc,ta,tr,tA};
   M.push({kv:['Corte total:',fmt(T.tc,2)+' m³']}); M.push({kv:['Aterro total:',fmt(T.ta,2)+' m³']});
   if(T.tr>0) M.push({kv:['Reaterro lateral:',fmt(T.tr,2)+' m³']});
   M.push({kv:['Área pavimentada:',fmt(T.tA,2)+' m²']}); M.push({kv:['Bota-fora (saldo):',fmt(Math.max(0,T.tc-T.ta),2)+' m³']});
@@ -2859,10 +3038,17 @@ function exportarTabExcel(tab){
     const P=secaoParams(); rows.push([''],['Berma (m):',P.berma],['Meio-fio:',P.mf?mfTextoCurto(P.mf):'sem meio-fio']);
   }else if(tab==='topo'){
     sheet='Topografia';fname='intertravado_topografia_'+carimbo()+'.xlsx';
-    const T=linhasTopoVolumes(), n=(x,d)=>x==null?'':+x.toFixed(d);
-    rows=[['TOPOGRAFIA — CORTE E ATERRO'],['Estaca','Terreno esq.','Terreno eixo','Terreno dir.','Greide eixo','Greide esq.','Greide dir.','Largura','Situação','Corte (m²)','Aterro (m²)','Vol. corte (m³)','Vol. aterro (m³)'],
-      ...T.lin.map(o=>[o.L.est,o.L.te,o.L.tc,o.L.td,o.L.gr,n(o.L.gE,3),n(o.L.gD,3),o.L.larg,o.L.sit,n(o.L.ac,2),n(o.L.aa,2),n(o.vc,2),n(o.va,2)]),[''],
-      ['Corte total (m³):',n(T.tc,2)],['Aterro total (m³):',n(T.ta,2)],['Reaterro (m³):',n(T.tr,2)],['Área pavimentada (m²):',n(T.tA,2)]];
+    const n=(x,d)=>x==null?'':+x.toFixed(d); ruasSinc();
+    const cab=['Estaca','Terreno esq.','Terreno eixo','Terreno dir.','Greide eixo','Greide esq.','Greide dir.','Largura','Situação','Corte (m²)','Aterro (m²)','Vol. corte (m³)','Vol. aterro (m³)','Cruzamento'];
+    rows=[['TOPOGRAFIA — CORTE E ATERRO']]; let tc=0,ta=0,tr=0,tA=0;
+    ruas.forEach((ru,ri)=>{
+      const T=linhasTopoVolumes(ru.rows||[]);
+      if(ruas.length>1) rows.push([''],['RUA: '+nomeRua(ri)+(ru.paralela&&ruaIdx(ru.paralela)>=0?' (paralela à '+nomeRua(ruaIdx(ru.paralela))+')':'')]);
+      rows.push(cab,...T.lin.map(o=>[o.L.est,o.L.te,o.L.tc,o.L.td,o.L.gr,n(o.L.gE,3),n(o.L.gD,3),o.L.larg,o.L.sit,n(o.L.ac,2),n(o.L.aa,2),n(o.vc,2),n(o.va,2),cruzTexto((ru.rows||[])[o.L.i])]));
+      if(ruas.length>1) rows.push(['Total desta rua — corte (m³):',n(T.tc,2),'aterro (m³):',n(T.ta,2),'área (m²):',n(T.tA,2)]);
+      tc+=T.tc; ta+=T.ta; tr+=T.tr; tA+=T.tA;
+    });
+    rows.push([''],[ruas.length>1?'TOTAL DO PROJETO (todas as ruas)':''],['Corte total (m³):',n(tc,2)],['Aterro total (m³):',n(ta,2)],['Reaterro (m³):',n(tr,2)],['Área pavimentada (m²):',n(tA,2)]);
   }else{
     return exportarExcel();
   }
@@ -2897,7 +3083,7 @@ function projetoParaJSON(){
     numN:{sel:document.getElementById('n-sel').value,custom:document.getElementById('n-custom').value},
     subleito:{cbr:document.getElementById('cbr-sub').value,exp:document.getElementById('exp-sub').value,lencol:document.getElementById('lencol').value},
     base:{mat:document.getElementById('base-mat').value,bloco:document.getElementById('bloco-cm').value,areia:document.getElementById('areia-cm').value,fpk:document.getElementById('fpk').value,subCCR:document.getElementById('sub-ccr').value,reforco:document.getElementById('reforco').value,hConf:document.getElementById('h-conf').value,cbrRef:document.getElementById('cbr-ref').value,sobrecarga:document.getElementById('sobrecarga').value,arred:document.getElementById('arred').value},
-    topo:{caiEsq:document.getElementById('cai-esq').value,caiDir:document.getElementById('cai-dir').value,largPad:document.getElementById('larg-pad').value,rows:topoRows},
+    topo:{caiEsq:document.getElementById('cai-esq').value,caiDir:document.getElementById('cai-dir').value,largPad:document.getElementById('larg-pad').value,rows:(ruasSinc(),ruas[0].rows||topoRows),ruas:ruas.map(r=>({id:r.id,nome:r.nome||'',paralela:r.paralela||null,rows:r.rows||[]})),ruaAtiva:ruaAtiva},
     secoes:{talCorte:document.getElementById('c_talcorte').value,talAterro:document.getElementById('c_talaterro').value,berma:document.getElementById('c_berma').value,ev:document.getElementById('c_ev').value},
     meiofio:_mf,
   };
@@ -2911,7 +3097,10 @@ function aplicarProjeto(p){
   if(p.secoes){set('c_talcorte',p.secoes.talCorte);set('c_talaterro',p.secoes.talAterro);set('c_berma',p.secoes.berma);set('c_ev',p.secoes.ev);}
   /* projeto antigo gravado como “sem meio-fio” sem escolha explícita do usuário = padrão antigo → volta ao conjugado */
   { const mfp=p.meiofio||null; _mf=Object.assign({},MF_PADRAO,(mfp&&(mfp.escolhido||mfp.tipo!=='nenhum'))?mfp:{}); }
-  if(p.topo){set('cai-esq',p.topo.caiEsq);set('cai-dir',p.topo.caiDir);set('larg-pad',p.topo.largPad);if(p.topo.rows){topoRows=[...p.topo.rows];renderTopoTable();}}
+  if(p.topo){set('cai-esq',p.topo.caiEsq);set('cai-dir',p.topo.caiDir);set('larg-pad',p.topo.largPad);if(Array.isArray(p.topo.ruas)&&p.topo.ruas.length){
+      ruas=p.topo.ruas.map((r,i)=>({id:r.id||('r'+(i+1)),nome:r.nome||'',...(r.paralela?{paralela:r.paralela}:{}),rows:Array.isArray(r.rows)?[...r.rows]:[]}));
+      ruaAtiva=Math.min(Math.max(+p.topo.ruaAtiva||0,0),ruas.length-1); topoRows=ruas[ruaAtiva].rows; renderTopoTable();
+    }else if(p.topo.rows){ ruas=[{id:'r1',nome:'',rows:null}]; ruaAtiva=0; topoRows=[...p.topo.rows];renderTopoTable();}}
   document.getElementById('n-custom-field').hidden=(document.getElementById('n-sel').value!=='custom');
   atualizarLogradouro();calcular();
   toast('Projeto aberto com sucesso.');
@@ -3014,6 +3203,7 @@ document.querySelectorAll('.tab').forEach(t=>{
 ══════════════════════════════════════════════════════ */
 (function init(){
   try{const th=localStorage.getItem('pint_theme');if(th)document.documentElement.setAttribute('data-theme',th);const fe=parseFloat(localStorage.getItem('pint_fonte'));if(FONTE_PASSOS.indexOf(fe)>=0)fonteEscala=fe;aplicarFonte();}catch(e){}
+  ruas=[{id:'r1',nome:'',rows:null}]; ruaAtiva=0;
   topoRows=[{est:0,tEsq:100,tEixo:100,tDir:100,greide:100,larg:6},{est:20,tEsq:100,tEixo:100,tDir:100,greide:100,larg:6}];
   renderTopoTable();
   calcTopo();
