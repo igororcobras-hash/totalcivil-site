@@ -1271,7 +1271,7 @@ function calc() {
     if (!pm || !pj) add('PVs do trecho', (t.m || '—') + ' → ' + (t.j || '—'), 'PVs cadastrados', 'err', 'Selecione PV de montante e de jusante.');
     if (!isNum(S)) add('Cotas do tubo', '—', 'informe cotas de montante e jusante', 'err', 'Use "Lançar cotas automaticamente" ou digite as cotas.');
     else {
-      add('Declividade', fmt(S * 100, 3) + ' %', '≥ ' + fmt(c.imin, 2) + ' %', S * 100 >= c.imin ? 'ok' : (S > 0 ? 'warn' : 'err'), S > 0 ? 'Abaixo da mínima adotada.' : 'Tubo em aclive ou nivelado.');
+      add('Declividade', fmt(S * 100, 3) + ' %', '≥ ' + fmt(c.imin, 2) + ' %', S * 100 >= c.imin - 1e-7 ? 'ok' : (S > 0 ? 'warn' : 'err'), S > 0 ? 'Abaixo da mínima adotada.' : 'Tubo em aclive ou nivelado.');
       if (gal) add('Seção da galeria', galNome(gal) + ' · parede ' + fmt(gal.e * 100, 0) + ' cm', 'altura ≥ 1,00 m (acesso para limpeza)', gal.H >= 1 - 1e-6 ? 'ok' : 'warn', 'Aduela baixa dificulta a limpeza; prefira altura de 1,00 m ou mais.');
       else add('Diâmetro', D + ' mm', '≥ ' + c.dmin + ' mm', D >= c.dmin ? 'ok' : 'err');
       if (Q > 0 && h.V != null) {
@@ -11374,6 +11374,328 @@ T3alertas = function () {
     if (n) { T3alertaQuadro(); if (typeof T3labelsUpd === 'function') T3labelsUpd(); }
   } catch (e) { console.error('DR-15 alerta ventilação', e); }
   return out;
+};
+</script>
+<script>
+/* =====================================================================
+   PATCH DR-16 (11/11/2026) — Gerador "3 opções pela topografia" projeta
+   SEM ERROS, como um projetista de drenagem:
+   1. Cotas (autoCotas): arredondamento ao milímetro que nunca deixa a
+      declividade abaixo da mínima (a verificação dava "0,500 % < 0,50 %").
+      Modo "rede rasa" (P.crit.cotasRaso): onde o tubo está mais fundo que o
+      recobrimento mínimo, usa a MENOR declividade admissível (i mín.,
+      tensão trativa e V mín.) em vez de acompanhar o greide — a rede
+      volta a subir em direção ao recobrimento mínimo, perde menos
+      profundidade e a saída fica mais alta. t.recDes = recobrimento
+      reduzido (com proteção: PA-2 ou laje) para não afogar o deságue.
+      P.crit.pvProfMin = profundidade mínima dos PVs (opcional).
+   2. Saída no deságue abaixo do NA do receptor: o gerador primeiro LEVANTA
+      a rede (rede rasa + recobrimento reduzido com proteção nos trechos que
+      controlam a cota da saída, nunca abaixo do mínimo com laje). Se a
+      topografia não permitir saída livre, a saída afogada é verificada
+      pela linha piezométrica a partir do NA (remanso; HEC-22 / DAEE-CETESB):
+      se a água não sobe acima da tampa de nenhum PV (folga ≥ folga mínima)
+      nem acima da grelha das caixas ligadas, é ALERTA (com válvula de
+      retenção); senão continua ERRO.
+   3. Cada opção: compara "acompanhar o greide" × "rede rasa", aplica a
+      correção completa (Ø primeiro, sarjeta com caixas a montante, aba 7)
+      e fica com a de menor pontuação (erros, alertas, custo).
+   4. Janela do gerador: em cada opção, "Erros, alertas e sugestões" com o
+      motivo, a sugestão de engenharia e botões de correção (aprofundar PV
+      raso para caber a câmara EMOP, galeria mais baixa em PV fundo).
+   ===================================================================== */
+const floor3 = x => Math.floor(x * 1000 + 1e-7) / 1000;
+autoCotas = function (silencioso) {
+  const c = P.crit, ot = ordemTrechos().ordem, done = {}, raso = !!(c.cotasRaso || window.__cotasRaso);
+  const pmin = num(c.pvProfMin) > 0 ? +c.pvProfMin : 0;
+  ot.forEach(t => {
+    const pm = pvById(t.m), pj = pvById(t.j), tm = tampaPV(pm), tj = tampaPV(pj), L = trechoL(t) || 0;
+    if (!isNum(tm) || !isNum(tj) || !(L > 0)) return;
+    const D = (num(t.D) || 0) / 1000, recT = num(t.recDes) > 0 ? Math.min(+c.recob, +t.recDes) : +c.recob, hmin = recT + D + espTr(t);
+    const pPV = id => { if (num(t.recDes) > 0) return 0; let v = pmin;
+      if (c.pvProfAuto) { const E = emopC(); v = Math.max(v, E.pvEmopLajeT + Math.max(E.pvEmopHmin, Math.ceil((D + (+E.pvEmopFolgaTopo || 0.2)) * 10 - 1e-6) / 10) + pvChamMin() + 0.005); }   /* câmara mínima EMOP (ou o tubo + folga) + laje + pescoço; sem a queda, para não realimentar */
+      return v; };
+    const hM = Math.max(hmin, pPV(t.m)), hJ = Math.max(hmin, pvById(t.j) && R && R.outlets && R.outlets.includes(t.j) ? 0 : pPV(t.j));
+    let cm = tm - hM;
+    ot.filter(u => u.j === t.m && done[u.id]).forEach(u => {
+      const cjI = num(u.cj), dI = (num(u.D) || 0) / 1000;
+      const rp = R && R.pv && R.pv[t.m], xO = R && R.tr[t.id], xI = R && R.tr[u.id];
+      const dzH = rp && isNum(rp.hf) ? rp.hf + (xO && xO.h && isNum(xO.h.y) ? xO.h.y : 0) - (xI && xI.h && isNum(xI.h.y) ? xI.h.y : 0) : 0;
+      cm = Math.min(cm, cjI - Math.max(+c.dz[pm.defl] || 0, dzH > 0 ? dzH + 0.003 : 0), cjI + dI - D);
+    });
+    const r = R && R.tr[t.id];
+    let iLow = c.imin / 100, iHigh = Infinity;
+    if (num(t.iFix) > 0) iLow = Math.max(iLow, num(t.iFix) / 100);
+    if (r && r.Q > 0) {
+      if (r.h && r.h.R > 0) iLow = Math.max(iLow, c.tauMin / (c.gama * r.h.R));
+      if (raso) { const sv = slopeForV(r.Q, num(t.D), c.vmin * 1.01, t); if (isNum(sv) && sv > 0 && sv < 8) iLow = Math.max(iLow, sv / 100); }
+      const sx = slopeForVmax(r.Q, num(t.D), c.vmax * 0.99); if (sx) iHigh = sx / 100;
+    }
+    if (iHigh < iLow) iHigh = iLow;
+    const iT = (tm - tj) / L;
+    const i = raso ? iLow : Math.min(Math.max(iT, iLow), iHigh);
+    cm = floor3(cm);
+    let cj = Math.min(cm - i * L, tj - hJ);
+    if ((cm - cj) / L > iHigh + 1e-9) cm = floor3(cj + iHigh * L);
+    cj = floor3(cj);
+    if (cm - cj < iLow * L - 1e-9) cj = floor3(cm - iLow * L - 0.0005);
+    t.cm = +cm.toFixed(3); t.cj = +cj.toFixed(3); done[t.id] = true;
+  });
+  if (!silencioso) toast('Cotas lançadas de montante para jusante');
+};
+
+/* ---------- saída afogada verificada pela linha piezométrica ---------- */
+function montantesDe(res, id) {
+  const out = new Set(), fila = [id];
+  while (fila.length) { const v = fila.pop(); res.ordem.filter(t => t.j === v).forEach(t => { if (!out.has(t.m)) { out.add(t.m); fila.push(t.m); } }); }
+  return [...out];
+}
+/* linha piezométrica com a velocidade REAL no remanso: com o NA alto o tubo enche e a velocidade é Q/A da lâmina
+   real (A plena quando em carga), não a do escoamento uniforme; a perda no PV (K·V²/2g) usa essa velocidade.
+   Sem remanso (lâmina = normal) o resultado é o mesmo de antes. */
+function aMolh16(t, r, y) {
+  const g = galOf(t); if (g) return g.N * g.B * Math.max(0, Math.min(y, g.H));
+  const D = r.D / 1000, yy = Math.max(0, Math.min(y, D)); if (yy >= D - 1e-9) return Math.PI * D * D / 4;
+  const th = 2 * Math.acos(1 - 2 * yy / D); return D * D / 8 * (th - Math.sin(th));
+}
+function piez16(res) {
+  const c = P.crit, G = 9.81;
+  P.pvs.forEach(pv => { const r = res.pv[pv.id]; if (r) r.H = undefined; });
+  const visit = (pvId, Hpv, guard) => {
+    if (guard > 400) return;
+    res.ordem.filter(t => t.j === pvId).forEach(t => {
+      const r = res.tr[t.id]; if (!r || !isNum(r.cm) || !isNum(r.cj) || !r.h) return;
+      const D = r.D / 1000, yn = r.h.carga ? D : (r.h.y || 0);
+      const Hj = Math.max(Hpv, r.cj + yn), carga = Hj > r.cj + D + 1e-6 || r.h.carga;
+      const hfA = isNum(r.h.Sf) ? r.h.Sf * r.L : 0;
+      const Hm = carga ? Math.max(Hj + hfA, r.cm + yn) : Math.max(r.cm + yn, Hj);
+      const pvm = res.pv[t.m], ym = Hm - r.cm, A = aMolh16(t, r, ym), V = A > 1e-6 && r.Q > 0 ? Math.min(r.h.V || Infinity, r.Q / A) : (r.h.V || 0);
+      const hpv = pvm ? (pvm.K || 0) * V * V / (2 * G) : 0, Hpm = Hm + hpv;
+      r.piez = {Hj, Hm, hfA, hpv, Hpm, carga, regime: carga ? 'em carga' : (Hj > r.cj + yn + 1e-3 ? 'livre com remanso' : 'livre'), Vr: V};
+      if (pvm) pvm.H = Math.max(isNum(pvm.H) ? pvm.H : -1e9, Hpm);
+      visit(t.m, Hpm, guard + 1);
+    });
+  };
+  res.outlets.forEach(id => { const r = res.pv[id]; if (!r) return; let H0 = -1e9;
+    r.ins.forEach(t => { const x = res.tr[t.id]; if (x && isNum(x.cj)) H0 = Math.max(H0, x.cj + (x.h.carga ? x.D / 1000 : (x.h.y || 0))); });
+    const na = num((pvById(id) || {}).na); if (isNum(na)) H0 = Math.max(H0, na); r.H = H0; visit(id, H0, 0); });
+  const fol = +c.folgaPV || 0.3;
+  res.checks = res.checks.filter(x => x.par !== 'Linha piezométrica × tampa');
+  P.pvs.forEach(pv => {
+    const r = res.pv[pv.id]; if (!r) return;
+    r.msgs = (r.msgs || []).filter(m => !/^Nível d'água no PV/.test(m.t));
+    if (!isNum(r.H) || !isNum(r.tp) || r.H < -1e8) { r.folga = undefined; return; }
+    r.folga = r.tp - r.H;
+    const s = r.folga < 0 ? 'err' : r.folga < fol ? 'warn' : 'ok';
+    res.checks.push({tab: 'perfil', el: pv.id, par: 'Linha piezométrica × tampa', val: 'folga ' + fmt(r.folga, 2) + ' m', lim: '≥ ' + fmt(fol, 2) + ' m', st: s, nota: s === 'err' ? 'EXTRAVASAMENTO: o nível d\'água ultrapassa a tampa do PV.' : 'Folga pequena entre o nível d\'água e a tampa.'});
+    r.msgs.push({s, t: 'Nível d\'água no PV ' + fmt(r.H, 3) + ' m — folga até a tampa ' + fmt(r.folga, 2) + ' m'});
+    r.st = r.msgs.reduce((a, m) => worst(a, m.s), 'ok');
+  });
+}
+const _calc16 = calc;
+calc = function () {
+  const res = _calc16.apply(this, arguments);
+  try { piez16(res); } catch (e) { console.error('DR-16 piezométrica', e); }
+  try {
+    const c = P.crit, fol = +c.folgaPV || 0.3;
+    res.checks.forEach(x => {
+      if (x.st !== 'err' || !/^Saída no deságue/.test(x.par)) return;
+      const ids = montantesDe(res, x.el).concat([x.el]);
+      let pior = null, bl = null;
+      ids.forEach(id => { const r = res.pv[id]; if (r && isNum(r.folga) && (!pior || r.folga < pior.f)) pior = {id, f: r.folga}; });
+      P.bls.filter(b => ids.includes(b.pv)).forEach(b => { const r = res.pv[b.pv], z = greideCota(b.rua, num(b.dist)); if (r && isNum(r.H) && isNum(z) && (!bl || z - 0.15 - r.H < bl.f)) bl = {id: b.id, f: z - 0.15 - r.H}; });
+      const na = num((pvById(x.el) || {}).na), m = /\(([^)]+)\)/.exec(x.par), t = m && res.tr[m[1]];
+      const af = t && isNum(na) ? na - t.cj : null;
+      if (pior && pior.f >= fol - 1e-6 && (!bl || bl.f >= 0)) {
+        x.st = 'warn'; x.par = 'Saída afogada no deságue' + (m ? ' (' + m[1] + ')' : '');
+        x.val = 'fundo ' + fmt(t ? t.cj : 0, 3) + ' m, ' + fmt(af, 2) + ' m abaixo do NA';
+        x.lim = 'piezométrica a partir do NA ' + fmt(na, 3) + ' m: folga mín. ' + fmt(pior.f, 2) + ' m (' + pior.id + ') ≥ ' + fmt(fol, 2) + ' m';
+        x.nota = 'A topografia não permite saída livre acima do NA do receptor. Verificado o remanso: a linha piezométrica, calculada de jusante para montante a partir do NA, fica abaixo das tampas de todos os PVs (folga ≥ ' + fmt(fol, 2) + ' m) e das grelhas das caixas ligadas. Preveja válvula de retenção (flap) na boca de lançamento se o receptor for maré ou rio em cheia, e limpeza periódica (o trecho afogado acumula sedimento).';
+        const r = res.pv[x.el]; if (r) { r.msgs.forEach(g => { if (g.s === 'err' && /^Saída/.test(g.t)) g.s = 'warn'; }); r.st = r.msgs.reduce((s, g) => worst(s, g.s), 'ok'); }
+      } else if (pior || bl) x.nota += ' Remanso a partir do NA: ' + (pior && pior.f < fol ? 'folga de só ' + fmt(pior.f, 2) + ' m no ' + pior.id : 'a água sai pela caixa ' + bl.id) + '.';
+    });
+  } catch (e) { console.error('DR-16 deságue', e); }
+  return res;
+};
+
+/* ---------- engenharia do gerador ---------- */
+function gerPont16() { calc(); const p = pontuacao(); let prof = 0; P.pvs.forEach(pv => { prof = Math.max(prof, (R.pv[pv.id] || {}).prof || 0); }); return Object.assign(p, {prof}); }
+function gerCorrigeTudo16() {
+  autoCotas(true); calc(); autoDimensionar(); autoCorrigir();
+  try { T3diamPrimeiro(); T3sarjCorrige(); autoCorrigir(); const m2 = T3diamPrimeiro(); if (m2.length) autoCorrigir(); } catch (e) { console.error('DR-16 correção', e); }
+  calc();
+}
+/* levanta os trechos que controlam a cota da saída: recobrimento reduzido (com proteção) até o mínimo com laje */
+function gerLevanta16() {
+  const c = P.crit, recLim = +(protCrit().laje + 0.05).toFixed(2); let algum = false;
+  for (let it = 0; it < 8; it++) {
+    calc(); let mexeu = false;
+    const req = (tid, cjReq, g) => {
+      if (g > 300) return; const tr = R.tr[tid], t = P.trechos.find(y => y.id === tid); if (!tr || !t || !isNum(tr.cj)) return;
+      if (tr.cj >= cjReq - 1e-4) return;
+      const D = galOf(t) ? galOf(t).H : (num(t.D) || 0) / 1000, esp = espTr(t), L = tr.L || trechoL(t) || 0;
+      let iLow = Math.max(c.imin / 100, (num(t.iFix) || 0) / 100); if (tr.h && tr.h.R > 0) iLow = Math.max(iLow, c.tauMin / (c.gama * tr.h.R));
+      const cmReq = cjReq + iLow * L, rec = Math.min(tr.tj - cjReq - D - esp, tr.tm - cmReq - D - esp), novo = Math.max(recLim, Math.min(+c.recob, rec));
+      if (!(num(t.recDes) > 0) || novo < num(t.recDes) - 1e-3) { t.recDes = +novo.toFixed(2); mexeu = true; }
+      const pvm = pvById(t.m), rp = R.pv[t.m], dz = +c.dz[(pvm || {}).defl] || 0;
+      R.ordem.filter(u => u.j === t.m).forEach(u => {
+        const tu = R.tr[u.id], dU = galOf(u) ? galOf(u).H : (num(u.D) || 0) / 1000, dzH = rp && isNum(rp.hf) ? rp.hf + ((tr.h || {}).y || 0) - ((tu && tu.h || {}).y || 0) : 0;
+        req(u.id, Math.max(cmReq + Math.max(dz, dzH > 0 ? dzH + 0.003 : 0), cmReq + D - dU), g + 1);
+      });
+    };
+    R.outlets.forEach(id => { const na = num((pvById(id) || {}).na); if (!isNum(na)) return; R.pv[id].ins.forEach(t => req(t.id, na + 0.005, 0)); });
+    if (!mexeu) break;
+    algum = true; autoCotas(true); calc(); autoCotas(true); calc();
+    try { T3diamPrimeiro(); } catch (e) {} autoCotas(true); calc();
+  }
+  return algum;
+}
+/* remanso do deságue alto: aumenta o Ø dos trechos que mais perdem carga entre o PV que extravasa e a saída,
+   até a linha piezométrica (a partir do NA) ficar com a folga mínima abaixo das tampas */
+function gerRemanso16() {
+  const c = P.crit, fol = +c.folgaPV || 0.3, mud = [];
+  for (let it = 0; it < 60; it++) {
+    calc();
+    const ruins = P.pvs.map(pv => ({id: pv.id, f: (R.pv[pv.id] || {}).folga})).filter(x => isNum(x.f) && x.f < fol - 1e-6).sort((a, b) => a.f - b.f);
+    if (!ruins.length) break;
+    const caminho = []; let v = ruins[0].id;
+    for (let g = 0; g < 300; g++) { const t = R.ordem.find(u => u.m === v); if (!t) break; caminho.push(t); v = t.j; }
+    let best = null;
+    caminho.forEach(t0 => { const t = P.trechos.find(y => y.id === t0.id), r = R.tr[t0.id]; if (!t || !r || galOf(t) || !r.piez) return;
+      const k = DIAMS.indexOf(+t.D); if (k < 0 || k >= DIAMS.length - 1) return;
+      const perda = (r.piez.carga ? r.piez.hfA : 0) + (R.pv[t.j] && !R.outlets.includes(t.j) ? 0 : 0) + (r.piez.hpv || 0);
+      if (!best || perda > best.perda) best = {t, perda}; });
+    if (!best || best.perda < 1e-3) break;
+    const nd = DIAMS[DIAMS.indexOf(+best.t.D) + 1]; mud.push(best.t.id + ': Ø' + best.t.D + ' → Ø' + nd);
+    best.t.D = nd; normSec(best.t);
+    // não diminuir para jusante
+    let w = best.t.j; for (let g = 0; g < 300; g++) { const t = P.trechos.find(u => u.m === w); if (!t) break; if (!galOf(t) && (+t.D || 0) < nd) { t.D = nd; normSec(t); } w = t.j; }
+    autoCotas(true); calc(); autoCotas(true);
+  }
+  calc(); return mud;
+}
+function gerSaidaAfogada16() { calc(); return R.outlets.some(id => { const na = num((pvById(id) || {}).na); return isNum(na) && R.pv[id].ins.some(t => { const x = R.tr[t.id]; return x && isNum(x.cj) && x.cj < na - 1e-4; }); }); }
+function gerEng16() {
+  const calc0 = calc; let ck = null;
+  calc = function () { const k = JSON.stringify(P); if (k === ck && R) return R; const r = calc0.apply(this, arguments); ck = k; return r; };
+  try {
+    const cand = [];
+    const prova = (nome, fn) => { const ini = JSON.stringify(P); try { fn(); const p = gerPont16(); cand.push({nome, p, s: JSON.stringify(P)}); } catch (e) { if (nome !== 'saida') console.error('DR-16 ' + nome, e); } P = JSON.parse(ini); ck = null; };
+    // A: como o gerador fez (acompanha o greide) + correção completa
+    prova('greide', () => { P.crit.cotasRaso = false; gerCorrigeTudo16(); });
+    // B: rede rasa (menor declividade admissível onde sobra recobrimento)
+    prova('rasa', () => { P.crit.cotasRaso = true; gerCorrigeTudo16(); });
+    // C: rede rasa + levantar a saída (recobrimento reduzido com proteção) quando o deságue tem NA
+    const rasa = cand.find(x => x.nome === 'rasa');
+    if (rasa && P.pvs.some(p => isNum(num(p.na)))) prova('saida', () => { P = JSON.parse(rasa.s); ck = null; if (!gerSaidaAfogada16() || !gerLevanta16()) throw new Error('saída já livre ou sem como levantar'); autoCorrigir(); try { T3sarjCorrige(); } catch (e) {} autoCotas(true); calc(); });
+    if (!cand.length) return;
+    // remanso: deságue alto que faz a água subir nas tampas — aumenta os Ø no caminho até a saída
+    cand.forEach(x => { if (x.p.e === 0) return; P = JSON.parse(x.s); ck = null; calc();
+      if (!R.checks.some(k => k.st === 'err' && /Linha piezométrica/.test(k.par))) return;
+      try { const m = gerRemanso16(); if (m.length) { const p = gerPont16(); if (p.e < x.p.e) { x.p = p; x.s = JSON.stringify(P); x.nome += '+remanso'; } } } catch (e) { console.error('DR-16 remanso', e); } });
+    // menor pontuação; empate em erros e alertas: saída livre antes de afogada, depois o custo
+    cand.forEach(x => { P = JSON.parse(x.s); ck = null; x.af = gerSaidaAfogada16() ? 1 : 0; });
+    cand.sort((a, b) => a.p.e - b.p.e || a.af - b.af || a.p.w - b.p.w || a.p.custo - b.p.custo);
+    P = JSON.parse(cand[0].s); ck = null; window.__gerVar16 = cand.map(x => ({nome: x.nome, e: x.p.e, w: x.p.w, custo: x.p.custo, af: x.af, prof: x.p.prof}));
+    window.__gerEsc16 = cand[0].nome;
+  } finally { calc = calc0; calc(); }
+}
+const _gerSemUI16 = gerSemUI;
+gerSemUI = function (fn) { if (!window.__ger16) return _gerSemUI16.apply(this, arguments); window.__ger16 = false; return _gerSemUI16.call(this, () => { fn(); gerEng16(); }); };
+
+/* lista agrupada de erros e alertas com motivo, sugestão e correção */
+const SUG16 = [
+  [/^Saída afogada/, 'Saída abaixo do NA do receptor, verificada pelo remanso (linha piezométrica a partir do NA): a água não chega às tampas nem às grelhas. Para ter saída livre: inserir outro deságue (acima, em "Deságues"), elevar o greide no lançamento (aterro) ou rever o NA de projeto. Na obra: válvula de retenção (flap) na boca de lançamento.', ''],
+  [/^Saída no deságue/, 'Mesmo levantando a rede ao mínimo com laje de proteção, a água do remanso sobe acima da folga das tampas. Insira outro deságue mais alto ou eleve o greide no lançamento.', ''],
+  [/^PV raso|Altura interna da câmara|Profundidade para a câmara|Pescoço curto/, 'PV raso: a rede está no recobrimento mínimo e não cabe a câmara mínima EMOP (1,40 m) + laje + pescoço. É comum nas cabeceiras e pode ficar como caixa de passagem/PV de câmara reduzida. Correção: aprofundar os PVs rasos até caber a câmara mínima (aprofunda a rede e encarece a escavação).', 'pvmin'],
+  [/^Profundidade$/, 'PV com mais de 4 m: escada, escoramento especial e maior custo. Correção: trocar o tubo dos trechos fundos por galeria de aduelas mais baixa (mesma vazão, seção menos alta).', 'gal'],
+  [/Modelo de PV na base EMOP/, 'A câmara necessária (tubos grandes ou muitas entradas) passa do maior PV quadrado da base: será PV especial em concreto armado, com projeto estrutural próprio (o orçamento usa o maior modelo da base como referência). Alternativa: dividir as entradas em dois PVs próximos.', ''],
+  [/^Recobrimento/, 'Recobrimento abaixo do mínimo sem proteção: o programa indica tubo PA-2 ou laje de proteção (entra no orçamento). Comum perto do deságue, onde a rede foi levantada para não afogar a saída.', ''],
+  [/Ramal — comprimento|Ramal/, 'Ramal longo ou fora do padrão: preveja caixa de passagem no meio do ramal ou um PV mais perto da caixa.', ''],
+  [/Velocidade/, 'Velocidade fora do intervalo: aumentar a declividade aprofundaria a rede mais de 1/3 do Ø. Avalie trocar o diâmetro na aba 7.', ''],
+  [/Recobrimento durante a obra/, 'A rede é assentada antes da terraplenagem: faça o aterro em camadas junto com o assentamento ou proteja o tubo durante a obra.', ''],
+  [/Declividade/, 'Declividade no limite mínimo adotado.', ''],
+  [/Largura alagada|Lâmina na sarjeta|Vazão × admissível/, 'Sarjeta acima do limite mesmo com caixas a 5 m: reduza a área da bacia ou mude o dispositivo de captação.', '']
+];
+function gerLista16() {
+  calc(); const g = {};
+  R.checks.filter(x => x.st === 'err' || x.st === 'warn').forEach(x => {
+    let k = x.par.replace(/ em \d+ PV\(s\)$/, '').replace(/ \([^)]*\)$/, '').replace(/ T\d+→T\d+$/, '');
+    const raso = x.st === 'warn' && /^(Altura interna da câmara|Profundidade para a câmara|Pescoço curto)/.test(k);
+    if (raso) k = 'PV raso — câmara mínima EMOP e pescoço';
+    const o = g[k] = g[k] || {par: k, st: x.st, el: [], lim: raso ? 'câmara ≥ ' + fmt(emopC().pvEmopHmin, 2) + ' m, pescoço ≥ ' + fmt(pvChamMin(), 2) + ' m' : x.lim, nota: x.nota || '', val: raso ? '' : x.val, sub: {}};
+    if (raso) { const sk = x.par.replace(/ \(.*$/, '').replace(/ em \d+ PV\(s\)$/, ''), n = (/ em (\d+) PV\(s\)$/.exec(x.par) || [])[1]; o.sub[sk] = n ? +n : (o.sub[sk] || 0) + 1;
+      o.n = Math.max(o.el.length, ...Object.values(o.sub)); o.val = Object.entries(o.sub).map(([a, b]) => a.toLowerCase() + ': ' + b + ' PV(s)').join(' · '); if (n) (x.val.match(/PV-\d+/g) || []).forEach(id => { if (!o.el.includes(id)) o.el.push(id); }); }
+    if (x.st === 'err') o.st = 'err'; if (!o.el.includes(x.el)) o.el.push(x.el);
+  });
+  return Object.values(g).map(o => { const s = SUG16.find(([re]) => re.test(o.par)); return Object.assign(o, {sug: s ? s[1] : '', acao: s ? s[2] : ''}); })
+    .sort((a, b) => (a.st === 'err' ? 0 : 1) - (b.st === 'err' ? 0 : 1) || b.el.length - a.el.length);
+}
+function gerInfo16(x) {
+  const pj = P;
+  const ext = pj.trechos.reduce((s, t) => s + (num(t.L) || 0), 0), maior = pj.trechos.reduce((m, t) => galOf(t) ? m : Math.max(m, num(t.D) || 0), 0);
+  Object.assign(x.info, {nPV: pj.pvs.length, nBL: pj.bls.length, nTr: pj.trechos.length, ext, maior: pj.trechos.some(galOf) ? 'galeria de aduelas' : 'Ø ' + maior + ' mm',
+    prof: Math.max(0, ...pj.pvs.map(p => (R.pv[p.id] || {}).prof || 0)), e: R.checks.filter(c => c.st === 'err').length, w: R.checks.filter(c => c.st === 'warn').length,
+    custo: custoRede().total, gal: pj.trechos.filter(galOf).map(t => ({id: t.id, sec: secLbl(t), Q: (R.tr[t.id] || {}).Q, S: (R.tr[t.id] || {}).S}))});
+  try { const banco = (x.info.orc && x.info.orc.banco) || GER.banco || 'sinapi', sol = SOLUCOES.find(s => s.k === 'rec') || SOLUCOES[0], o = orcLic(sol, banco);
+    x.info.orc = {banco, sol: sol.curto || sol.nome, total: o.total, sub: o.sub, bdi: o.bdi, semPreco: o.semPreco, ref: (LIC.refs || {})[banco] || '',
+      linhas: o.linhas.map(L => ({g: L.g, nome: L.nome, un: L.un, q: L.q, cod: L.r ? (L.b !== banco ? (BANCO_NOME[L.b] || L.b) + ' ' : '') + L.r.cod : '—', preco: L.preco, total: L.total}))}; } catch (e) { console.error('DR-16 orçamento', e); }
+  x.info.lista = gerLista16();
+  x.info.raso = !!pj.crit.cotasRaso; x.info.recDes = pj.trechos.filter(t => num(t.recDes) > 0).length;
+}
+const _gerProj16 = gerProjeto;
+gerProjeto = function (op) {
+  window.__ger16 = true; window.__gerVar16 = null; window.__gerEsc16 = '';
+  let x; try { x = _gerProj16.apply(this, arguments); } finally { window.__ger16 = false; }
+  if (x && x.p) { const P0 = P; try { P = x.p; calc(); x.info.lista = gerLista16(); x.info.raso = !!P.crit.cotasRaso; x.info.recDes = P.trechos.filter(t => num(t.recDes) > 0).length; x.info.var = window.__gerVar16; x.info.esc = window.__gerEsc16; } catch (e) { console.error(e); } finally { P = P0; calc(); } }
+  return x;
+};
+/* correções aplicadas na própria janela, na opção escolhida */
+function gerCorr16(i, acao) {
+  const x = GER.ops && GER.ops[i]; if (!x) return;
+  const P0 = P, antes = JSON.stringify(x.p); let msg = '';
+  try {
+    P = JSON.parse(antes); calc(); const e0 = R.checks.filter(c => c.st === 'err').length, w0 = R.checks.filter(c => c.st === 'warn').length;
+    gerSemUI(() => {
+      if (acao === 'pvmin') { P.crit.pvProfAuto = true; gerCorrigeTudo16(); autoCotas(true); calc(); autoCotas(true); calc(); }
+      if (acao === 'desfaz') { if (x.antes16) P = JSON.parse(x.antes16); }
+      if (acao === 'gal') { const s = T3sugGalerias(); s.forEach(g => { const t = P.trechos.find(y => y.id === g.id); if (!t) return; t.sec = 'gal'; t.galN = g.N; t.galB = g.B; t.galH = g.H; t.galE = ''; normSec(t); });
+        msg = s.length ? s.length + ' trecho(s) em galeria' : 'nenhum trecho fundo com galeria possível'; autoCotas(true); calc(); autoCotas(true); calc(); autoCorrigir(); }
+    });
+    calc(); const e1 = R.checks.filter(c => c.st === 'err').length, w1 = R.checks.filter(c => c.st === 'warn').length;
+    if (e1 > e0) { toast('Correção não aplicada: criaria ' + (e1 - e0) + ' erro(s) (' + (R.checks.find(c => c.st === 'err') || {}).par + '). A opção ficou como estava.'); return; }
+    if (acao !== 'desfaz') x.antes16 = antes; else x.antes16 = null;
+    x.p = P; gerInfo16(x);
+    toast('Correção aplicada na ' + GER_OP[i].nome + (msg ? ' (' + msg + ')' : '') + ': alertas ' + w0 + ' → ' + w1 + ', erros ' + e1 + '.');
+  } catch (err) { console.error(err); toast('Não foi possível corrigir: ' + err.message); x.p = JSON.parse(antes); }
+  finally { P = P0; calc(); gerTela(); }
+}
+const _gerTela16 = gerTela;
+gerTela = function () {
+  const res = _gerTela16.apply(this, arguments);
+  try {
+    if (!GER.ops) return res;
+    const cards = [...document.querySelectorAll('#ger-res > div > .card')];
+    cards.forEach((card, i) => {
+      const x = GER.ops[i]; if (!x || !x.info) return;
+      const L = x.info.lista || [], bt = card.querySelector('.bar-btns');
+      const nota = [];
+      if (x.info.raso) nota.push('rede rasa (menor declividade admissível onde sobra recobrimento)');
+      if (x.info.recDes) nota.push(x.info.recDes + ' trecho(s) com recobrimento reduzido e proteção para levantar a saída');
+      const d = document.createElement('details'); d.style.cssText = 'margin:.35rem 0;font-size:.76rem;border:1px solid var(--line,#ddd);border-radius:6px;padding:.3rem .45rem';
+      if (L.some(o => o.st === 'err')) d.open = true;
+      d.innerHTML = `<summary style="cursor:pointer;font-weight:600">${x.info.e ? '✕ ' + x.info.e + ' erro(s) · ' : '✓ sem erros · '}⚠ ${x.info.w} alerta(s) — motivos, sugestões e correções</summary>
+        ${x.antes16 ? `<div style="margin:.25rem 0"><button class="btn btn-secondary btn-sm" onclick="gerCorr16(${i},'desfaz')">↶ Desfazer a última correção desta opção</button></div>` : ''}
+        ${nota.length ? `<div style="color:var(--muted);margin:.25rem 0">Projetado com ${esc(nota.join('; '))}.</div>` : ''}
+        ${L.length ? L.map(o => `<div style="margin:.35rem 0;padding:.3rem .4rem;border-left:3px solid ${o.st === 'err' ? 'var(--err,#c62828)' : 'var(--warn,#d97706)'};background:${o.st === 'err' ? 'rgba(198,40,40,.06)' : 'rgba(217,119,6,.06)'}">
+          <b>${o.st === 'err' ? '✕' : '⚠'} ${esc(o.par)}</b> — ${Math.max(o.n || 0, o.el.length)} (${esc(o.el.slice(0, 8).join(', '))}${o.el.length > 8 ? '…' : ''})<br>
+          <span style="color:var(--muted)">${esc(o.val || '')}${o.lim ? ' · limite ' + esc(o.lim) : ''}</span><br>
+          ${esc(o.sug || o.nota || '')}
+          ${o.acao ? `<div style="margin-top:.25rem"><button class="btn btn-secondary btn-sm" onclick="this.disabled=true;this.textContent='⏳ Corrigindo… (pode levar alguns segundos)';setTimeout(()=>gerCorr16(${i},'${o.acao}'),30)">🛠 ${o.acao === 'pvmin' ? 'Aprofundar os PVs rasos' : 'Usar galeria mais baixa nos PVs fundos'}</button></div>` : ''}</div>`).join('') : '<div class="msg ok">✓ <span>Nada pendente.</span></div>'}`;
+      card.insertBefore(d, bt);
+    });
+  } catch (e) { console.error('DR-16 tela', e); }
+  return res;
 };
 </script>
 </body></html>
