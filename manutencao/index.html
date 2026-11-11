@@ -58,6 +58,12 @@ p{margin:6px 0}
 .tabs{display:flex;gap:2px;overflow-x:auto;border-bottom:1px solid var(--line);margin-bottom:18px}
 .tab{padding:10px 14px;border:0;background:none;font:inherit;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap}
 .tab.on{color:var(--accent);border-color:var(--accent)}
+.tabsw{display:flex;align-items:stretch;gap:4px;border-bottom:1px solid var(--line);margin-bottom:18px}
+.tabsw .tabs{flex:1 1 auto;min-width:0;border-bottom:0;margin-bottom:0;position:relative;scrollbar-width:none}
+.tabsw .tabs::-webkit-scrollbar{display:none}
+.tarr{flex:none;width:34px;height:34px;align-self:center;border:1px solid var(--line);background:var(--soft);color:var(--accent);font-size:22px;font-weight:800;line-height:1;cursor:pointer;border-radius:8px;padding:0}
+.tarr:disabled{opacity:.35;cursor:default}
+.tarr[hidden]{display:none}
 .kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;margin-bottom:18px}
 .kpi{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px 16px;box-shadow:var(--shadow)}
 .kpi .v{font-size:26px;font-weight:800}.kpi .l{font-size:13px;color:var(--muted)}
@@ -5152,7 +5158,7 @@ ocCard = function (o, oc) { const h = _card18.apply(this, arguments); if (!oc ||
   const orcOc = (o, oc) => orcDe(o, titOc(o, oc));
   const nomeT = (o, t) => t && t.k ? COMP[t.k].nome : (t && t.g ? ((grupo(o, t.g) || {}).g || '') + ' ' + ((grupo(o, t.g) || {}).d || '') : '');
   const varsTxt = t => t && t.k ? 'área ' + fN(t.A) + ' m² · esp. ' + fN(t.e * 100, 1) + ' cm' + (t.P ? ' · perímetro ' + fN(t.P) + ' m' : '') + (t.k === 'recup' ? ' · fresagem ' + fN((t.f != null ? t.f : .5) * 100, 0) + '%' : '') + (t.b ? ' · com recomposição de base' : '') : (t ? fq(t.q) : '');
-  window.__sp33 = { orcOc, orcDe, titOc, memPad, grupos, COMP, nomeT, varsTxt };
+  window.__sp33 = { orcOc, orcDe, titOc, memPad, grupos, COMP, nomeT, varsTxt, comps, fx, calc, conta, svcCod, r4 };
   window.__sp33Custo = (o, x) => { const r = orcOc(o, x); return r ? r.total : 0 };
   const temExec = (o, oc) => (o.execucoes || []).some(e => e.ocorrenciaId === oc.id);
   const _cp = custoPlan;
@@ -5350,6 +5356,128 @@ const _cm = calcMed;
   window.__sp33Memo = novo; window.__sp33Oficial = oficial;
   const _tp = tPainel; tPainel = function (o) { return S.tab === 'memo' ? novo(o) : _tp.apply(this, arguments) };
   const _pr = ACTS.sp33MemoPrint; ACTS.sp33MemoPrint = function () { const orig = abrirPreview; abrirPreview = (t, html, w) => { const o = O(), f = S.f.memo || { m: 'abertas' }; const L = o.execucoes.filter(e => f.m === 'abertas' ? !e.medicaoNum : String(e.medicaoNum) === String(f.m)); html = html.replace('<h2>1. Resumo por item</h2>', '<h2>Memória de cálculo (modelo oficial)</h2>' + oficial(o, L, can('medicao')) + '<h2>1. Resumo por item</h2>'); orig(t, html, w) }; try { _pr.apply(this, arguments) } finally { abrirPreview = orig } };
+})();
+</script>
+<script>
+/* SP-34d (11/11/2026): lançar memória de cálculo na aba “Memória de cálculo”.
+   Semiautomático: digite o código do item → o programa escolhe a composição (ou o título com proporção) e preenche
+   todas as linhas com a conta da memória da licitação (área, espessura, perímetro, base). Manual: linha por linha.
+   As memórias lançadas documentam a conta; não mudam medição, saldo nem boletim. */
+(function () {
+  const X = () => window.__sp33;
+  const fq = v => fN(v, 4).replace(/0{1,2}$/, '');
+  const hoje = () => new Date().toISOString().slice(0, 10);
+  const MD = { data: '', local: '', cod: '', sel: '', q: 1, A: 3, ecm: 0, P: 0, b: 0, f: null, linhas: [] };
+  const podeLancar = () => can('conferir') || can('medicao');
+
+  /* variáveis da composição escolhida (campos da aba; em branco = padrão da memória da licitação) */
+  function mdV(k) { const C = X().COMP[k]; const A = MD.A > 0 ? MD.A : 0; const e = MD.ecm > 0 ? MD.ecm / 100 : (C.e || .05);
+    const P = MD.P > 0 ? MD.P : (A > 0 ? X().r4(4 * Math.sqrt(A)) : 0);
+    return { A, e, P, f: MD.f != null ? MD.f : (C.f || .5), b: MD.b ? 1 : 0 } }
+
+  /* linhas calculadas pelo sistema (composição ou título com proporção) */
+  function mdAuto(o) { const sel = MD.sel; if (!sel) return [];
+    if (sel.startsWith('g:')) { const mp = X().memPad(o, sel.slice(2)); if (!mp || !(MD.q > 0)) return [];
+      return mp.G.itens.filter(s => mp.coef[s.id] > 0).map(s => { const qtd = X().r4(mp.coef[s.id] * MD.q);
+        return { servicoId: s.id, qtd, calc: 'coef. ' + fq(mp.coef[s.id]) + ' × ' + fq(MD.q) + ' ' + mp.main.unidade + ' do item ' + mp.main.codigo + ' (' + mp.fonte + ') = ' + fq(qtd), nota: '', man: false } }) }
+    const C = X().COMP[sel]; if (!C) return []; const V = mdV(sel), out = [];
+    C.it.filter(i => !i[4] || V.b).forEach(i => { const s = X().svcCod(o, i[0], i[1]); if (!s) return;
+      const F = X().fx(o, sel, i[0]), qtd = X().r4(X().calc(F.x, V)); if (qtd > 0) out.push({ servicoId: s.id, qtd, calc: F.t + ': ' + X().conta(F.x, V, qtd), nota: '', man: false }) });
+    return out }
+  /* recalcula as linhas automáticas; quantidade digitada à mão e observação ficam no lugar da linha (sem duplicar); linhas “＋ manual” ficam à parte */
+  function mdFill(o) { const ant = MD.linhas, add = ant.filter(r => r.add);
+    const auto = mdAuto(o).map(a => { const old = ant.find(r => !r.add && r.servicoId === a.servicoId); if (old) { a.nota = old.nota || '';
+        if (old.man) { a.qAuto = a.qtd; a.qtd = old.qtd; a.calc = 'digitado à mão (calculado: ' + fq(a.qAuto) + ') — ' + a.calc; a.man = true } } return a });
+    MD.linhas = [...auto, ...add] }
+  /* item digitado → descobre a composição (ou o título) ao qual ele pertence */
+  function mdAchaSel(o, cod) { const c = String(cod || '').trim(); if (!c) return '';
+    const k = X().comps(o).find(k => X().COMP[k].main === c || X().COMP[k].it.some(i => i[0] === c)); if (k) return k;
+    const G = X().grupos(o).find(G => G.itens.length > 1 && G.itens.some(s => String(s.codigo).trim() === c)); return G ? 'g:' + G.g : '' }
+
+  CHG.mdCod = el => { const o = O(); MD.cod = el.value.trim(); const sv = o.servicos.find(s => String(s.codigo).trim() === MD.cod);
+    if (MD.cod && !sv) { toast('Código “' + MD.cod + '” não encontrado na planilha desta obra.'); return }
+    MD.sel = mdAchaSel(o, MD.cod); if (MD.sel && !MD.sel.startsWith('g:') && !(MD.A > 0)) MD.A = 3;
+    MD.linhas = MD.linhas.filter(r => r.add); mdFill(o);
+    if (sv && !MD.sel && !MD.linhas.some(r => r.servicoId === sv.id)) MD.linhas.push({ servicoId: sv.id, qtd: 0, calc: 'lançado à mão', nota: '', man: true, add: true });
+    render() };
+  CHG.mdSel = el => { MD.sel = el.value; MD.linhas = MD.linhas.filter(r => r.add); mdFill(O()); render() };
+  CHG.mdVar = (el, d) => { const v = num(el.value) || 0;
+    if (d.f === 'A') MD.A = v; else if (d.f === 'ecm') MD.ecm = v; else if (d.f === 'P') MD.P = v; else if (d.f === 'b') MD.b = el.checked ? 1 : 0; else if (d.f === 'f') MD.f = v / 100; else if (d.f === 'q') MD.q = v;
+    mdFill(O()); render() };
+  CHG.mdQ = (el, d) => { const r = MD.linhas[+d.i]; if (!r) return; r.qtd = num(el.value) || 0; r.man = true; if (!r.add) r.calc = 'digitado à mão (calculado: ' + fq(r.qAuto != null ? r.qAuto : r.qtd) + ')'; };
+  CHG.mdNota = (el, d) => { const r = MD.linhas[+d.i]; if (r) r.nota = el.value };
+  CHG.mdSvc = (el, d) => { const r = MD.linhas[+d.i]; if (!r) return; r.servicoId = el.value; r.man = true; render() };
+  CHG.mdLin = (el, d) => { MD[d.k] = el.value };
+
+  ACTS.mdAdd = () => { MD.linhas.push({ servicoId: '', qtd: 0, calc: 'lançado à mão', nota: '', man: true, add: true }); render() };
+  ACTS.mdFill = () => { MD.linhas = MD.linhas.filter(r => r.add); mdFill(O()); render(); toast('Linhas refeitas pela composição. As linhas “＋ manual” ficaram.') };
+  ACTS.mdLimpa = () => { Object.assign(MD, { cod: '', sel: '', q: 1, A: 3, ecm: 0, P: 0, b: 0, f: null, linhas: [] }); render() };
+  ACTS.mdSalva = () => { const o = O(); const linhas = MD.linhas.filter(r => r.servicoId && r.qtd > 0);
+    if (!linhas.length) { toast('Nenhuma linha com item e quantidade.'); return }
+    const ent = { id: 'ml' + Date.now(), data: MD.data || hoje(), local: MD.local || '', sel: MD.sel || '', V: MD.sel && !MD.sel.startsWith('g:') ? mdV(MD.sel) : null,
+      nomeTit: MD.sel ? (MD.sel.startsWith('g:') ? (X().grupos(o).find(G => G.g === MD.sel.slice(2)) || {}).d : X().COMP[MD.sel].nome) : 'Manual',
+      linhas: linhas.map(r => ({ servicoId: r.servicoId, qtd: X().r4(r.qtd), calc: r.calc || '', nota: r.nota || '', man: !!r.man })), quem: quem(), em: new Date().toISOString() };
+    o.memLanc = o.memLanc || []; o.memLanc.push(ent); saveObra(o);
+    Object.assign(MD, { cod: '', sel: '', q: 1, A: 3, ecm: 0, P: 0, b: 0, f: null, linhas: [] }); render(); toast('Memória de cálculo lançada.') };
+  ACTS.mdDel = d => { const o = O(); if (!confirm('Apagar esta memória lançada?')) return; o.memLanc = (o.memLanc || []).filter(x => x.id !== d.id); saveObra(o); render() };
+
+  function mdCard(o) { if (!podeLancar()) return '';
+    const sel = MD.sel, isG = sel.startsWith('g:'), cs = X().comps(o), gs = X().grupos(o).filter(G => G.itens.length > 1);
+    const opts = `<option value="" ${!sel ? 'selected' : ''}>— manual (sem composição) —</option>` + cs.map(c => `<option value="${c}" ${sel === c ? 'selected' : ''}>${esc(X().COMP[c].nome)}</option>`).join('') + gs.map(G => `<option value="g:${esc(G.g)}" ${sel === 'g:' + G.g ? 'selected' : ''}>${esc(G.g + ' ' + G.d)} (proporção)</option>`).join('');
+    const dl = o.servicos.map(s => `<option value="${esc(s.codigo)}">${esc(String(s.descricao).slice(0, 70))} (${esc(s.unidade)})</option>`).join('');
+    const V = !isG && sel ? mdV(sel) : null;
+    const campos = V ? `<div class="g4" style="margin-top:8px"><label>Área (m²)<input inputmode="decimal" value="${fN(V.A)}" data-chg="mdVar" data-f="A"></label><label>Espessura (cm)<input inputmode="decimal" value="${fN(V.e * 100, 1)}" data-chg="mdVar" data-f="ecm"></label><label>Perímetro de corte (m) <span class="muted small">— vazio = 4 × √área</span><input inputmode="decimal" value="${MD.P > 0 ? fN(MD.P) : ''}" placeholder="${fN(V.P)}" data-chg="mdVar" data-f="P"></label>${sel === 'recup' ? `<label>Fração fresada (%)<input inputmode="decimal" value="${fN(V.f * 100, 0)}" data-chg="mdVar" data-f="f"></label>` : ''}</div>
+      <label class="chk" style="margin-top:6px"><input type="checkbox" ${V.b ? 'checked' : ''} data-chg="mdVar" data-f="b"> Recompor base (brita e imprimação entram na conta)</label>` : isG ? `<div class="g4" style="margin-top:8px"><label>Quantidade do item principal (${esc((X().memPad(o, sel.slice(2)) || { main: {} }).main.unidade || '')})<input inputmode="decimal" value="${fN(MD.q)}" data-chg="mdVar" data-f="q"></label></div>` : '';
+    const linhas = MD.linhas.map((r, i) => { const s = r.servicoId ? svcOf(o, r.servicoId) : null;
+      const itemCel = r.add || !s ? `<select data-chg="mdSvc" data-i="${i}" style="max-width:300px">${svcOptions(o, r.servicoId)}</select>` : `${esc(s.codigo)} · ${esc(String(s.descricao).slice(0, 60))}`;
+      return `<tr><td>${itemCel}</td><td class="small">${s ? esc(s.unidade) : ''}</td><td class="r"><input inputmode="decimal" style="width:100px;text-align:right" value="${r.qtd ? fq(r.qtd) : ''}" data-chg="mdQ" data-i="${i}"></td><td class="small">${esc(r.calc || '')}</td><td><input style="width:100%;min-width:160px" value="${esc(r.nota || '')}" placeholder="observação" data-chg="mdNota" data-i="${i}"></td><td><button class="btn mini dan" data-act="mdDelLin" data-i="${i}">✕</button></td></tr>` }).join('');
+    return `<div class="card" style="margin-top:12px"><h3>✍ Lançar memória de cálculo</h3>
+      <p class="muted small">Semiautomático: <b>digite o código do item</b> (ex.: 03.06 ou 04.01) e o programa escolhe a composição e preenche as linhas que dependem uma da outra (corte, limpeza, pintura, CBUQ ou PMF, compactação) com a conta da memória da licitação. Manual: use “+ linha manual” e escolha cada item. Você pode trocar a composição e ajustar qualquer quantidade.</p>
+      <div class="g4"><label>Data<input type="date" value="${MD.data || hoje()}" data-chg="mdLin" data-k="data"></label><label>Local<input value="${esc(MD.local)}" placeholder="rua, bairro" data-chg="mdLin" data-k="local"></label><label>Item (código)<input list="md-cods" value="${esc(MD.cod)}" placeholder="ex.: 03.06" data-chg="mdCod"><datalist id="md-cods">${dl}</datalist></label><label>Composição / título<select data-chg="mdSel">${opts}</select></label></div>
+      ${campos}
+      <div style="overflow:auto;margin-top:8px"><table class="tb" style="font-size:11px"><thead><tr><th>Item</th><th>Un</th><th class="r">Quantidade</th><th>Como foi calculado</th><th>Observação</th><th></th></tr></thead><tbody>${linhas || '<tr><td colspan="6" class="muted">Digite um código de item acima, ou use “+ linha manual”.</td></tr>'}</tbody></table></div>
+      <div class="row gap" style="margin-top:8px"><button class="btn" data-act="mdAdd">＋ linha manual</button><button class="btn" data-act="mdFill">↻ Recalcular pela composição</button><button class="btn" data-act="mdLimpa">Limpar</button><span class="sp"></span><button class="btn pri" data-act="mdSalva">💾 Salvar memória</button></div>
+      <p class="small muted" style="margin-top:6px">A memória lançada documenta a conta. Ela não muda a medição, o saldo nem o boletim.</p></div>`
+  }
+  function mdLista(o, ed) { const L = (o.memLanc || []).slice().sort((a, b) => String(b.data).localeCompare(String(a.data))); if (!L.length) return '';
+    return `<div class="card" style="margin-top:12px"><h3>Memórias lançadas (${L.length})</h3>${L.map(m => `<div class="card" style="margin-top:8px;padding:10px 12px"><div class="row gap" style="justify-content:space-between;flex-wrap:wrap"><b>${fData(m.data)} · ${esc(m.local || 'sem local')} · ${esc(m.nomeTit || '')}</b><span class="small muted">${esc(m.quem || '')}${m.em ? ' · ' + fData(m.em) : ''}</span></div>
+      ${m.V ? `<p class="small muted" style="margin:2px 0">${esc(X().varsTxt(Object.assign({ k: m.sel }, m.V)))}</p>` : ''}
+      <div style="overflow:auto"><table class="tb" style="font-size:11px"><thead><tr><th>Item</th><th>Un</th><th class="r">Quantidade</th><th>Como foi calculado</th><th>Observação</th></tr></thead><tbody>${m.linhas.map(r => { const s = svcOf(o, r.servicoId); return `<tr><td>${s ? esc(s.codigo) + ' · ' + esc(String(s.descricao).slice(0, 60)) : '<span class="neg">item removido</span>'}</td><td>${s ? esc(s.unidade) : ''}</td><td class="r">${fq(r.qtd)}</td><td class="small">${esc(r.calc || '')}${r.man ? ' <span class="chip" style="--c:#7b3fb0">à mão</span>' : ''}</td><td class="small">${esc(r.nota || '')}</td></tr>` }).join('')}</tbody></table></div>
+      ${ed !== false && podeLancar() ? `<div class="row gap" style="margin-top:6px"><button class="btn sm dan" data-act="mdDel" data-id="${esc(m.id)}">Apagar</button></div>` : ''}</div>`).join('')}</div>`
+  }
+  /* no PDF / impressão da aba */
+  const _pr2 = ACTS.sp33MemoPrint; ACTS.sp33MemoPrint = function () { const orig = abrirPreview;
+    abrirPreview = (t, html, w) => { const o = O(); html = html.replace('<h2>1. Resumo por item</h2>', ((o.memLanc || []).length ? '<h2>Memórias lançadas (semiautomáticas e manuais)</h2>' + mdLista(o, false) : '') + '<h2>1. Resumo por item</h2>'); orig(t, html, w) };
+    try { _pr2.apply(this, arguments) } finally { abrirPreview = orig } };
+  ACTS.mdDelLin = d => { MD.linhas.splice(+d.i, 1); render() };
+
+  /* entra na aba Memória de cálculo, logo abaixo do cabeçalho */
+  const _tpd = tPainel;
+  tPainel = function (o) { const h = _tpd.apply(this, arguments); if (S.tab !== 'memo') return h;
+    try { const i = h.indexOf('<div class="card" style="margin-top:12px">'), add = mdCard(o) + mdLista(o); return i < 0 ? h + add : h.slice(0, i) + add + h.slice(i) } catch (e) { console.warn('sp34d', e); return h } };
+})();
+</script>
+<script>
+/* SP-34e (11/11/2026): setas ‹ › na barra de abas (aparecem quando as abas não cabem na tela), roda do mouse e
+   arrastar com o dedo rolam a barra; a posição é lembrada e a aba ativa fica sempre visível ao trocar de aba. */
+(function () {
+  let X = 0;
+  const upd = w => { const n = w.querySelector('nav.tabs'), L = w.querySelector('.tarr.l'), R = w.querySelector('.tarr.r'), max = n.scrollWidth - n.clientWidth, ov = max > 2;
+    L.hidden = R.hidden = !ov; L.disabled = n.scrollLeft <= 2; R.disabled = n.scrollLeft >= max - 2 };
+  function monta() { const n = document.querySelector('#app nav.tabs'); if (!n || n.parentNode.classList.contains('tabsw')) return;
+    const w = document.createElement('div'); w.className = 'tabsw'; n.parentNode.insertBefore(w, n);
+    const mk = (c, t, ti) => { const b = document.createElement('button'); b.type = 'button'; b.className = 'tarr ' + c; b.textContent = t; b.title = ti; b.setAttribute('aria-label', ti); return b };
+    const L = mk('l', '‹', 'Abas anteriores'), R = mk('r', '›', 'Próximas abas'); w.append(L, n, R);
+    const passo = () => Math.max(160, Math.round(n.clientWidth * .6));
+    L.onclick = () => n.scrollBy({ left: -passo(), behavior: 'smooth' }); R.onclick = () => n.scrollBy({ left: passo(), behavior: 'smooth' });
+    n.addEventListener('scroll', () => { X = n.scrollLeft; upd(w) }, { passive: true });
+    n.addEventListener('wheel', e => { if (n.scrollWidth <= n.clientWidth || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return; n.scrollLeft += e.deltaY; e.preventDefault() }, { passive: false });
+    n.scrollLeft = X; const on = n.querySelector('.tab.on');
+    if (on) { const a = on.offsetLeft, b = a + on.offsetWidth; if (a < n.scrollLeft) n.scrollLeft = Math.max(0, a - 34); else if (b > n.scrollLeft + n.clientWidth) n.scrollLeft = b - n.clientWidth + 34 }
+    X = n.scrollLeft; upd(w) }
+  const _r = _render; _render = function () { const r = _r.apply(this, arguments); try { monta() } catch (e) { console.warn('abas', e) } return r };
+  window.addEventListener('resize', () => { const w = document.querySelector('#app .tabsw'); if (w) upd(w) });
+  try { monta() } catch (e) { }
 })();
 </script>
 </body>
