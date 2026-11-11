@@ -2660,7 +2660,9 @@ function T3caixas(K) {
     const A = new THREE.Vector3(x, K.Y(ciBL) + rD / 2, z), B = new THREE.Vector3(pxB - T3.cx, K.Y(ciPV) + rD / 2, -(pyB - T3.cz));
     K.add(T3link(A, B, rD / 2 + 0.05, T3mat(0xa8a29a, 0.4)), 'ramais');
     const ram = rb.ram || {}, lam = ram.carga ? rD : (isNum(ram.y) && ram.y > 0 ? Math.min(ram.y, rD) : 0), V = isNum(ram.V) ? ram.V : 0;
-    if (lam > 0.002) {
+    // PATCH DR-15: lâmina do ramal com seção de segmento circular (não atravessa a parede do tubo)
+    if (lam > 0.002 && typeof T3aguaDentro === 'function') T3aguaDentro((m, c) => K.add(m, c), {A, B, yInvA: K.Y(ciBL), yInvB: K.Y(ciPV), D: rD, lam, V, g: null, key: 'rm:' + b.id, op: 0.6, nMax: 30, semSup: true});
+    else if (lam > 0.002) {
       const dir = new THREE.Vector3().subVectors(B, A), L = dir.length(), mid = new THREE.Vector3().addVectors(A, B).multiplyScalar(0.5);
       const chord = ram.carga ? rD : 2 * Math.sqrt(Math.max(0, lam * (rD - lam)));
       const yb = (K.Y(ciBL) + K.Y(ciPV)) / 2;
@@ -2902,12 +2904,16 @@ function T3build() {
     const A = ea + eb < L0 - 0.2 ? A0.clone().addScaledVector(u0, ea) : A0, B = ea + eb < L0 - 0.2 ? B0.clone().addScaledVector(u0, -eb) : B0;
     const yInvA = A.y - D / 2, yInvB = B.y - D / 2;
     // parede (externa) e vazio (interno)
-    add(T3link(A, B, D / 2 + esp, T3mat(T3matCor(t.mat), 0.3)), 'tubo');
-    add(T3link(A, B, D / 2, T3mat(0x6f8294, 0.12)), 'tubo');
+    // PATCH DR-15: galeria = caixa retangular (células); tubo = cilindro
+    if (g && typeof T3galParede === 'function') T3galParede(add, A, B, g, T3mat(T3matCor(t.mat), 0.3), T3mat(0x6f8294, 0.12));
+    else { add(T3link(A, B, D / 2 + esp, T3mat(T3matCor(t.mat), 0.3)), 'tubo');
+      add(T3link(A, B, D / 2, T3mat(0x6f8294, 0.12)), 'tubo'); }
     const carga = !!(r.h && r.h.carga);
     const lam = carga ? D : (r.h && isNum(r.h.y) && r.h.y > 0 ? Math.min(r.h.y, D) : 0);
     const V = r.h && isNum(r.h.V) ? r.h.V : 0;
-    if (lam > 0) {
+    // PATCH DR-15: a água fica SEMPRE por dentro da parede (seção de segmento circular no tubo, células na galeria)
+    if (lam > 0 && typeof T3aguaDentro === 'function') T3aguaDentro(add, {A, B, yInvA, yInvB, D, lam, V, g, key: 'tr:' + t.id, op: 0.55, nMax: 70});
+    else if (lam > 0) {
       const dir = new THREE.Vector3().subVectors(B, A), L = dir.length();
       const mid = new THREE.Vector3().addVectors(A, B).multiplyScalar(0.5);
       const chord = carga ? Wd : 2 * Math.sqrt(Math.max(0, lam * (D - lam)));
@@ -9732,7 +9738,9 @@ function T3caixas(K) {
     const A = new THREE.Vector3(x, K.Y(ciBL) + rD / 2, z), B = new THREE.Vector3(pxB - T3.cx, K.Y(ciPV) + rD / 2, -(pyB - T3.cz));
     K.add(T3link(A, B, rD / 2 + 0.05, T3mat(0xa8a29a, 0.4)), 'ramais');
     const ram = rb.ram || {}, lam = ram.carga ? rD : (isNum(ram.y) && ram.y > 0 ? Math.min(ram.y, rD) : 0), V = isNum(ram.V) ? ram.V : 0;
-    if (lam > 0.002) {
+    // PATCH DR-15: lâmina do ramal com seção de segmento circular (não atravessa a parede do tubo)
+    if (lam > 0.002 && typeof T3aguaDentro === 'function') T3aguaDentro((m, c) => K.add(m, c), {A, B, yInvA: K.Y(ciBL), yInvB: K.Y(ciPV), D: rD, lam, V, g: null, key: 'rm:' + b.id, op: 0.6, nMax: 30, semSup: true});
+    else if (lam > 0.002) {
       const dir = new THREE.Vector3().subVectors(B, A), L = dir.length(), mid = new THREE.Vector3().addVectors(A, B).multiplyScalar(0.5);
       const chord = ram.carga ? rD : 2 * Math.sqrt(Math.max(0, lam * (rD - lam)));
       const yb = (K.Y(ciBL) + K.Y(ciPV)) / 2;
@@ -10909,6 +10917,463 @@ gerUsar = function (k) {
   const r = _gerUsar14.apply(this, arguments);
   try { if (typeof atualizarCustos === 'function') atualizarCustos(true); } catch (e) {}
   return r;
+};
+</script>
+<script>
+/* =====================================================================
+   PATCH DR-15 (11/11/2026) — 3D: a água nunca atravessa a parede.
+   Antes a lâmina era uma caixa retangular dentro de um tubo redondo: os
+   cantos de baixo saíam pela geratriz inferior (água "por dentro da
+   parede"). Agora:
+   - tubo e ramal: lâmina com seção de SEGMENTO CIRCULAR (a mesma forma da
+     água no tubo), raio um pouco menor que o do polígono da parede; a
+     superfície tem a largura exata da corda e as ondas morrem junto à
+     parede; as partículas ficam dentro da lâmina, do tamanho dela;
+   - galeria de aduelas: desenhada como caixa retangular (lajes, paredes e
+     septos entre as células) e a água em cada célula.
+   Só desenho: nenhum cálculo muda.
+   ===================================================================== */
+const T3_PSEG = 16;   // lados do cilindro da parede (T3link)
+function T3rw(D) { return D / 2 * Math.cos(Math.PI / T3_PSEG) - Math.max(0.003, D * 0.012); }
+// cota relativa ao fundo (geratriz inferior) limitada ao círculo da água
+function T3segY(D, h) { const c = D / 2, rw = T3rw(D); return Math.min(Math.max(h, c - rw + 0.002), c + rw); }
+function T3segCorda(D, h) { const c = D / 2, rw = T3rw(D), y = T3segY(D, h), dy = y - c; return 2 * Math.sqrt(Math.max(0, rw * rw - dy * dy)); }
+function T3segGeo(D, h, L) {
+  const c = D / 2, rw = T3rw(D), y = T3segY(D, h), sh = new THREE.Shape();
+  if (y >= c + rw - 0.0015) sh.absarc(0, c, rw, 0, Math.PI * 2, false);
+  else { const dy = y - c, w = Math.sqrt(Math.max(0, rw * rw - dy * dy)), a1 = Math.atan2(dy, w); sh.moveTo(w, y); sh.absarc(0, c, rw, a1, Math.PI - a1, true); sh.lineTo(w, y); }
+  const g = new THREE.ExtrudeGeometry(sh, {depth: Math.max(0.02, L), bevelEnabled: false, curveSegments: 28});
+  g.translate(0, 0, -Math.max(0.02, L) / 2); return g;
+}
+// eixos do trecho (os mesmos de T3basis, flat = false)
+function T3eixos(dir) {
+  const d = dir.clone().normalize(), perp = new THREE.Vector3(d.z, 0, -d.x).normalize(), up = new THREE.Vector3().crossVectors(d, perp).normalize();
+  return {d, perp, up};
+}
+// galeria de aduelas: lajes de fundo e de topo, paredes laterais e septos entre as células
+function T3galParede(add, A, B, g, mat) {
+  const dir = new THREE.Vector3().subVectors(B, A), L = dir.length(); if (L < 0.02) return;
+  const {perp, up} = T3eixos(dir), mid = new THREE.Vector3().addVectors(A, B).multiplyScalar(0.5);   // centro da seção
+  const pc = (w, h, x, y) => { const m = new THREE.Mesh(new THREE.BoxGeometry(Math.max(0.01, w), Math.max(0.01, h), L), mat);
+    m.position.copy(mid).addScaledVector(perp, x).addScaledVector(up, y); T3basis(m, dir, false); add(m, 'tubo'); };
+  const e = g.e, Wi = g.Wi, W = Wi + 2 * e;
+  pc(W, e, 0, -g.H / 2 - e / 2); pc(W, e, 0, g.H / 2 + e / 2);
+  pc(e, g.H, -Wi / 2 - e / 2, 0); pc(e, g.H, Wi / 2 + e / 2, 0);
+  for (let k = 1; k < g.N; k++) pc(e, g.H, -Wi / 2 + k * (g.B + e) - e / 2, 0);
+}
+// água por dentro: o: {A, B (eixo), yInvA, yInvB, D, lam, V, g, key, op, nMax, semSup}
+function T3aguaDentro(add, o) {
+  const dir = new THREE.Vector3().subVectors(o.B, o.A), L = dir.length(); if (L < 0.05) return;
+  const {perp} = T3eixos(dir), mid = new THREE.Vector3().addVectors(o.A, o.B).multiplyScalar(0.5);
+  const yMid = (o.yInvA + o.yInvB) / 2, D = o.D, g = o.g;
+  const Ai = o.A.clone(), Bi = o.B.clone(); Ai.y = o.yInvA; Bi.y = o.yInvB;
+  const seg = {A: Ai, B: Bi, dir: dir.clone().normalize(), L, lam: o.lam, chord: g ? g.B : T3segCorda(D, o.lam)};
+  if (g) {
+    const lam = Math.min(o.lam, g.H * 0.985);
+    for (let k = 0; k < g.N; k++) {
+      const x = -g.Wi / 2 + g.B / 2 + k * (g.B + g.e);
+      const m = new THREE.Mesh(new THREE.BoxGeometry(g.B * 0.97, lam, L), T3mat(0x2aa7c9, o.op));
+      m.position.copy(mid).addScaledVector(perp, x); m.position.y = yMid + lam / 2; T3basis(m, dir, false); add(m, 'agua'); T3lv(m, o.key + (k ? '#' + k : ''), yMid, lam, 'box');
+    }
+  } else {
+    const m = new THREE.Mesh(T3segGeo(D, o.lam, L), T3mat(0x2aa7c9, o.op));
+    m.position.copy(mid); m.position.y = yMid; T3basis(m, dir, false);
+    m.userData.seg = {D, L}; add(m, 'agua'); T3lv(m, o.key, yMid, o.lam, 'seg');
+    const cheio = T3segY(D, o.lam) >= D / 2 + T3rw(D) - 0.002;
+    if (!o.semSup && !cheio) {
+      const W = T3segCorda(D, o.lam) * 0.97;
+      if (W > 0.02) {
+        const sf = new THREE.Mesh(new THREE.PlaneGeometry(W, L, 8, 10), T3mat(0x7fd8ee, 0.6));
+        sf.position.copy(mid); sf.position.y = yMid + o.lam; T3basis(sf, dir, true);
+        sf.userData.seg = {D, W0: W}; add(sf, 'agua'); T3lv(sf, o.key, yMid, o.lam, 'surfseg');
+        const c = D / 2, rw = T3rw(D), y = T3segY(D, o.lam), folga = Math.min(c + rw - y, y - (c - rw));
+        (T3.wavesDentro = T3.wavesDentro || []).push({mesh: sf, W, V: o.V, amp: Math.max(0, Math.min(0.01 + 0.025 * (o.V || 0), 0.4 * folga))});
+      }
+    }
+  }
+  const n = Math.round(Math.min(o.nMax || 70, 6 + (o.V || 0) * 10));
+  const p = T3particles(null, seg, n * (g ? g.N : 1), 'tr', 1, 0x6fdcff, o.V);
+  // tamanho do ponto: o diâmetro visto (≈ size·tan 22,5°) cabe na lâmina
+  const sz = Math.max(0.025, Math.min(0.14, (g ? Math.min(o.lam, g.B) : o.lam) * 0.9));
+  p.pts.material.size = sz; p.dentro = {D, g, lam: g ? Math.min(o.lam, g.H * 0.985) : o.lam, r: sz * 0.414 / 2 + 0.004};
+  T3.parts.push(p);
+}
+// nível subindo/descendo: refaz a seção do segmento e a largura da superfície
+const _lvApply15 = T3lvApply;
+T3lvApply = function (m) {
+  const l = m.userData && m.userData.lv;
+  if (l && (l.kind === 'seg' || l.kind === 'surfseg')) {
+    const c = Math.max(0.0005, l.cur), s = m.userData.seg;
+    if (l.kind === 'seg') {
+      if (s.hAt == null || Math.abs(s.hAt - c) > 0.002 || c === l.h) { if (m.geometry) m.geometry.dispose(); m.geometry = T3segGeo(s.D, c, s.L); s.hAt = c; }
+    } else {
+      m.position.y = l.bottom + c;
+      const W = T3segCorda(s.D, c) * 0.97; m.scale.x = Math.max(0.01, W / Math.max(1e-6, s.W0));
+      m.visible = m.visible && W > 0.02;
+    }
+    T3.lev[l.key] = l.cur; return;
+  }
+  return _lvApply15.apply(this, arguments);
+};
+const _build15 = T3build;
+T3build = function () { T3.wavesDentro = []; return _build15.apply(this, arguments); };
+const _anim15 = window.T3animate;
+window.T3animate = function (t) {
+  _anim15(t);
+  if (!T3.scene || !T3.anim) return;
+  // ondas da superfície do tubo: zero junto à parede, máximas no meio
+  (T3.wavesDentro || []).forEach(w => {
+    const pos = w.mesh.geometry.attributes.position, k = 2.2 + (w.V || 0) * 0.5;
+    for (let i = 0; i < pos.count; i++) { const x = pos.getX(i), y = pos.getY(i), u = Math.min(1, Math.abs(2 * x / w.W)), tap = (1 - u * u) * (1 - u * u);
+      pos.setZ(i, Math.sin(t * (2 + (w.V || 0)) + x * k + y * 1.7) * w.amp * 0.6 * tap); }
+    pos.needsUpdate = true;
+  });
+  // partículas: sempre dentro da lâmina (segmento circular ou célula da galeria)
+  (T3.parts || []).forEach(p => {
+    const d = p.dentro; if (!d || !p.pts) return;
+    const s = p.seg, a = p.arr, side = new THREE.Vector3(-s.dir.z, 0, s.dir.x).normalize(), r = d.r;
+    for (let i = 0; i < p.n; i++) {
+      const f = (p.phase[i] + t * (0.15 + 0.06 * p.V)) % 1, bx = s.A.x + (s.B.x - s.A.x) * f, by = s.A.y + (s.B.y - s.A.y) * f, bz = s.A.z + (s.B.z - s.A.z) * f;
+      const q = 0.5 + 0.5 * Math.sin(t * 7 + i), wob = Math.sin(t * 9 + i * 3.1);
+      let y, x;
+      if (d.g) {
+        const g = d.g, k = i % g.N, xc = -g.Wi / 2 + g.B / 2 + k * (g.B + g.e), lo = r, hi = Math.max(r, d.lam - r);
+        y = lo + (hi - lo) * (0.25 + 0.5 * q); x = xc + wob * Math.max(0, g.B / 2 - r) * 0.8;
+      } else {
+        const c = d.D / 2, rw = T3rw(d.D), lo = c - rw + r, hi = Math.min(d.lam, c + rw) - r;
+        if (hi <= lo) { y = (c - rw + Math.min(d.lam, c + rw)) / 2; x = 0; }
+        else { y = lo + (hi - lo) * (0.25 + 0.5 * q); const dy = y - c, wy = Math.sqrt(Math.max(0, rw * rw - dy * dy)) - r; x = wob * Math.max(0, wy) * 0.8; }
+      }
+      a[i * 3] = bx + side.x * x; a[i * 3 + 1] = by + y; a[i * 3 + 2] = bz + side.z * x;
+    }
+    p.pts.geometry.attributes.position.needsUpdate = true;
+  });
+};
+</script>
+<script>
+/* =====================================================================
+   PATCH DR-15b (11/11/2026) — 🛠 Redimensionar do 3D faz a correção toda:
+   1. reduz o tubo que ficou com folga demais para a chuva atual (ex.: depois
+      de baixar a chuva), sem passar da velocidade máxima e sem diminuir de
+      montante para jusante;
+   2. aumenta o diâmetro/aduela onde falta capacidade (DR-14);
+   3. sarjeta: rua alagando (largura alagada, lâmina na guia ou vazão acima
+      da admissível) ganha boca de lobo a montante (a mesma do botão
+      "Acrescentar BL a montante" da aba 13), até atender;
+   4. correção da aba 7 (caixas, ramais, velocidade mínima, cotas);
+   5. quadro no 3D com o que mudou e o que ainda depende do projetista.
+   ===================================================================== */
+const T3_SARJ = /Largura alagada|Lâmina na sarjeta|Vazão × admissível/;
+function T3diamReduz() {
+  const mot = [], c = P.crit;
+  calc(); autoCotas(true); calc();
+  for (const t0 of R.ordem.slice()) {
+    const t = P.trechos.find(x => x.id === t0.id), r = t && R.tr[t.id]; if (!t || !r || galOf(t) || !(r.Q > 0) || !isNum(r.S) || !(r.S > 0)) continue;
+    let Dmin = c.dmin, gal = false;
+    R.ordem.filter(u => u.j === t.m).forEach(u => { const tu = P.trechos.find(x => x.id === u.id); if (galOf(tu)) gal = true; Dmin = Math.max(Dmin, num(tu && tu.D) || 0); });
+    if (gal) continue;
+    const D0 = +t.D, nd = escolheD(r.Q, r.S, Dmin); if (!(nd < D0)) continue;
+    const h = partFlow(r.Q, nd, r.S, c.nTubo); if (!h || h.carga || !isNum(h.V) || h.V > c.vmax) continue;
+    t.D = nd; normSec(t); mot.push(t.id + ': Ø' + D0 + ' → Ø' + nd);
+  }
+  if (mot.length) { calc(); autoCotas(true); calc(); autoCotas(true); calc(); }
+  return mot;
+}
+// caixa nova: ramal sempre a favor do fluxo (o PV mais próximo pode ficar a montante da caixa)
+function T3ligaRamal(b) {
+  try {
+    const G = geoRuas(), a0 = angRamal(G, b); b.ang = isNum(a0) ? +a0.toFixed(1) : b.ang;
+    if (!(a0 > 90.5)) return;
+    if (typeof fixRamalContra === 'function' && fixRamalContra(b.id)) { const a1 = angRamal(geoRuas(), b); if (!(a1 > 90.5)) { b.ang = +a1.toFixed(1); return; } }
+    const pv0 = b.pv, G2 = geoRuas(); let best = null;
+    P.pvs.filter(pv => pv.rua === b.rua).forEach(pv => { b.pv = pv.id; const a = angRamal(G2, b), L = ramalLGeo(G2, b);
+      if (isNum(a) && a <= 90.5 && isNum(L) && (!best || L < best.L)) best = {id: pv.id, L, a}; });
+    b.pv = best ? best.id : pv0; if (best) b.ang = +best.a.toFixed(1);
+  } catch (e) { console.error('DR-15 ramal', e); }
+}
+function T3sarjProblemas() { calc(); return [...new Set(R.checks.filter(x => x.tab === 'bls' && x.st !== 'ok' && T3_SARJ.test(x.par)).map(x => x.el))].filter(id => P.bls.some(b => b.id === id)); }
+function T3sarjCorrige() {
+  const mot = [], n0 = P.bls.length, cf = window.confirm;
+  window.confirm = () => true;
+  try {
+    for (let it = 0; it < 6; it++) {
+      const L = T3sarjProblemas(); if (!L.length || P.bls.length > n0 * 3 + 10) break;
+      let fez = 0;
+      L.forEach(id => {
+        const b = P.bls.find(x => x.id === id); if (!b) return;
+        // não aperta mais que 5 m entre caixas no mesmo lado da rua
+        const viz = P.bls.filter(x => x.id !== b.id && x.rua === b.rua && x.lado === b.lado).map(x => Math.abs(num(x.dist) - num(b.dist))).filter(d => d > 0.01);
+        if (viz.length && Math.min(...viz) < 10) { const S = (typeof sarjSentidoLado === 'function' ? sarjSentidoLado(b.rua, num(b.dist), b.lado) : greideDecl(b.rua, num(b.dist))), up = S == null || S >= 0 ? -1 : 1;
+          const ant = P.bls.filter(x => x.id !== b.id && x.rua === b.rua && x.lado === b.lado && (num(x.dist) - num(b.dist)) * up > 0).map(x => Math.abs(num(x.dist) - num(b.dist)));
+          if (ant.length && Math.min(...ant) < 10) return; }
+        const antes = P.bls.length; addBLMontante(id);
+        if (P.bls.length > antes) { const nb = P.bls.find(x => x.prox === id && !mot.some(m => m.startsWith(x.id + ':')));
+          if (nb) T3ligaRamal(nb);
+          mot.push((nb ? nb.id : 'nova BL') + ': acrescentada a montante da ' + id + (nb ? ' (est. ' + estLabel(num(nb.dist)) + ')' : '')); fez++; }
+      });
+      if (!fez) break;
+    }
+  } finally { window.confirm = cf; }
+  calc();
+  return mot;
+}
+// o que ainda sobra na verificação, agrupado (para o quadro do 3D)
+function T3restante() {
+  calc(); const g = {};
+  R.checks.filter(x => x.st === 'err' || x.st === 'warn').forEach(x => { const k = x.par.replace(/ em \d+ PV\(s\)$/, ''); (g[k] = g[k] || {st: x.st, el: [], lim: x.lim}); if (x.st === 'err') g[k].st = 'err'; if (!g[k].el.includes(x.el)) g[k].el.push(x.el); });
+  return Object.entries(g).map(([par, v]) => ({par, st: v.st, lim: v.lim, el: v.el})).sort((a, b) => (a.st === 'err' ? 0 : 1) - (b.st === 'err' ? 0 : 1));
+}
+const T3_PQ = [[/Grau de enchimento|em carga/i, 'acima do limite mesmo com o maior tubo: use galeria de aduelas na aba 7'],
+  [T3_SARJ, 'sarjeta ainda acima do limite: as caixas já estão a menos de 5 m; reduza a área da bacia ou mude o dispositivo'],
+  [/Altura interna da câmara|Profundidade para a câmara|Pescoço curto/, 'rede rasa (PV de cabeceira): para atender, aprofunde o início da rede (recobrimento mínimo na aba 1) — o programa não aprofunda sozinho'],
+  [/^Profundidade$/, 'PV fundo: veja a sugestão de galeria mais baixa'],
+  [/^Declividade$/, 'no limite mínimo (aviso apenas)'],
+  [/Ramal — comprimento/, 'ramal longo até o PV a jusante: preveja caixa de passagem ou um PV mais perto da caixa'],
+  [/Velocidade/, 'aumentar a declividade aprofundaria a rede mais de 1/3 do Ø: avalie no projeto']];
+function T3quadro15(x) {
+  const box = document.getElementById('t3-box'); if (!box) return;
+  let q = document.getElementById('t3-sug'); if (q) q.remove();
+  const blocos = [];
+  if (x.red.length) blocos.push('<b>Diâmetros reduzidos (folga demais para esta chuva) — ' + x.red.length + ':</b> ' + x.red.map(esc).join(' · '));
+  if (x.mot.length) blocos.push('<b>Diâmetros aumentados — ' + x.mot.length + ':</b> ' + x.mot.map(esc).join(' · '));
+  if (x.bls.length) blocos.push('<b>Bocas de lobo acrescentadas (rua alagando) — ' + x.bls.length + ':</b> ' + x.bls.map(esc).join(' · '));
+  if (x.sug.length) blocos.push('<b>Sugestão — galeria de aduelas para não aprofundar a rede:</b><br>' + x.sug.map(s => esc(s.id) + ' (Ø' + s.D + ', PV a ' + fmt(s.prof, 2) + ' m): ' + (s.N > 1 ? s.N + ' células de ' : '') + fmt(s.B, 2) + ' × ' + fmt(s.H, 2) + ' m — seção ' + fmt(Math.max(0, s.ganho), 2) + ' m mais baixa').join('<br>') + '<div style="opacity:.85">Para usar, troque a seção do trecho para galeria na aba 7. Nada foi trocado sozinho.</div>');
+  const rest = x.rest.filter(r => r.st === 'err' || !/^Declividade$/.test(r.par));
+  blocos.push(rest.length ? '<b style="color:#ffd27a">Ainda precisa da sua decisão (' + rest.reduce((a, r) => a + r.el.length, 0) + '):</b><br>' + rest.map(r => {
+      const pq = (T3_PQ.find(([re]) => re.test(r.par)) || [0, ''])[1];
+      return (r.st === 'err' ? '✕ ' : '⚠ ') + esc(r.par) + ' (' + esc(r.lim || '') + ') em ' + r.el.length + ': ' + esc(r.el.slice(0, 8).join(', ')) + (r.el.length > 8 ? '…' : '') + (pq ? ' — <i>' + esc(pq) + '</i>' : '');
+    }).join('<br>') + '<div style="opacity:.85">Lista completa na aba 13 (Verificação).</div>'
+    : '<b style="color:#9dffb0">✓ Nada pendente na verificação.</b>');
+  q = document.createElement('div'); q.id = 't3-sug';
+  q.style.cssText = 'position:absolute;left:50%;bottom:14px;transform:translateX(-50%);z-index:8;max-width:min(680px,calc(100% - 40px));max-height:48%;overflow:auto;background:rgba(10,40,70,.94);color:#fff;border:1px solid #9cd3ff;border-radius:8px;padding:.5rem .7rem;font:12px/1.45 system-ui,sans-serif;box-shadow:0 2px 10px rgba(0,0,0,.45)';
+  q.addEventListener('pointerdown', e => e.stopPropagation()); q.addEventListener('wheel', e => e.stopPropagation(), {passive: true});
+  q.innerHTML = '<div style="display:flex;gap:.5rem;align-items:flex-start"><div style="flex:1">' + blocos.map(b => '<div style="margin:.15rem 0 .35rem">' + b + '</div>').join('') +
+    '</div><button type="button" onclick="this.closest(\'#t3-sug\').remove()" style="background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.4);border-radius:4px;cursor:pointer;padding:0 .4rem">✕</button></div>';
+  box.appendChild(q);
+}
+T3redimensionar = function () {
+  if (!P || !R) return;
+  T3histProj();
+  const i = idf(P.crit.tcMin), f = typeof RAIN_FATOR === 'number' ? RAIN_FATOR : 1, n0 = T3nAlertas();
+  const msg = 'Redimensionar a rede e as caixas para a chuva atual do 3D (' + fmt(i, 0) + ' mm/h' + (Math.abs(f - 1) > 1e-3 ? ', ' + fmt(f, 2) + '× a chuva de projeto' : ', a chuva de projeto') + ')?\n\n' +
+    '• Tubo com folga demais para esta chuva: o diâmetro é reduzido (sem passar da velocidade máxima).\n' +
+    '• Trecho sem capacidade: aumenta primeiro o DIÂMETRO (ou a aduela), para não aprofundar a rede.\n' +
+    '• Rua alagando (largura alagada, lâmina na guia): acrescenta boca de lobo a montante.\n' +
+    '• Depois a correção da aba 7 (caixas, ramais, velocidade mínima) e as cotas. O que não der para resolver sozinho aparece num quadro.\n\n' +
+    'Você pode desfazer (↶) e refazer (↷) até 10 vezes.' +
+    (Math.abs(f - 1) > 1e-3 ? '\n\nAtenção: o memorial continua com a chuva de projeto da aba 2. A rede ficará dimensionada para esta chuva.' : '');
+  if (!confirm(msg)) return;
+  const antes = JSON.stringify(P); let red = [], mot = [], bls = [];
+  // cache: a correção chama o cálculo centenas de vezes sem mudar nada no projeto; só recalcula se P mudou
+  const calc0 = calc; let ck = null;
+  const calcCache = function () { const k = JSON.stringify(P) + '|' + (typeof RAIN_FATOR === 'number' ? RAIN_FATOR : 1); if (k === ck && R) return R; const r = calc0.apply(this, arguments); ck = k; return r; };
+  try { calc = calcCache; gerSemUI(() => {
+    red = T3diamReduz(); mot = T3diamPrimeiro(); bls = T3sarjCorrige(); autoCorrigir();
+    const m2 = T3diamPrimeiro(); if (m2.length) { mot = mot.concat(m2); autoCorrigir(); }
+  }); calc = calc0; }
+  catch (e) { calc = calc0; console.error(e); P = migrate(JSON.parse(antes)); calc(); T3build(); toast('Não foi possível redimensionar: ' + e.message); return; }
+  try { closeModal('modal-auto'); } catch (e) {}
+  try { DESFAZER = null; } catch (e) {}
+  // um trecho reduzido e depois aumentado de novo não é mudança
+  const A0 = JSON.parse(antes), dA = id => { const t = A0.trechos.find(x => x.id === id); return t ? +t.D : null; };
+  const fin = id => { const t = P.trechos.find(x => x.id === id); return t ? (galOf(t) ? secLbl(t) : 'Ø' + t.D) : ''; };
+  const ids = s => s.split(':')[0];
+  red = [...new Set(red.map(ids))].filter(id => { const t = P.trechos.find(x => x.id === id); return t && !galOf(t) && +t.D < dA(id); }).map(id => id + ': Ø' + dA(id) + ' → ' + fin(id));
+  mot = [...new Set(mot.map(ids))].filter(id => { const t = P.trechos.find(x => x.id === id); return t && (galOf(t) || +t.D > dA(id)); }).map(id => id + ': Ø' + dA(id) + ' → ' + fin(id));
+  const depois = JSON.stringify(P), nm = T3difs(A0, P);
+  if (depois === antes) { calc(); T3build(); T3dimUI(); T3quadro15({red: [], mot: [], bls: [], sug: T3sugGalerias(), rest: T3restante()}); toast('Nada a mudar: a rede e as caixas já atendem a esta chuva'); return; }
+  T3HIST.des.push(antes); if (T3HIST.des.length > 10) T3HIST.des.shift();
+  T3HIST.ref = [];
+  save(); calc(); if (typeof refreshRes === 'function') refreshRes(); T3build();
+  const n1 = T3nAlertas(), sug = T3sugGalerias(), rest = T3restante();
+  toast('Redimensionado para ' + fmt(i, 0) + ' mm/h: ' + nm + ' trecho(s)/caixa(s) alterado(s)' + (red.length ? ', ' + red.length + ' Ø reduzido(s)' : '') + (mot.length ? ', ' + mot.length + ' Ø aumentado(s)' : '') + (bls.length ? ', ' + bls.length + ' BL nova(s)' : '') + '. Alertas: ' + n0 + ' → ' + n1 + '. Use ↶ para desfazer.');
+  T3dimUI(); T3quadro15({red, mot, bls, sug, rest});
+};
+</script>
+<script>
+/* =====================================================================
+   PATCH DR-15c (11/11/2026) — Gerador "3 opções pela topografia": aviso de
+   rua que não existe na topografia. O gerador só usa as ruas da aba 3; uma
+   rua sem estacas com cota (criada por engano, ou cópia com ＋/⧉) é
+   desenhada como um toco de ~20 m colado na rua de referência, e uma
+   cópia fica por cima/ao lado da original. O quadro do gerador lista
+   essas ruas, com botão para excluir (só a rua; pede confirmação).
+   ===================================================================== */
+function gerRuasSuspeitas() {
+  const G = geoRuas(), comTopo = new Set(gerRuas().map(x => x.r.id)), out = [];
+  P.ruas.forEach(r => {
+    if (comTopo.has(r.id)) return;
+    const usada = P.ruas.some(o => o.ref === r.id && o.id !== r.id) || P.pvs.some(p => p.rua === r.id) || P.bls.some(b => b.rua === r.id);
+    out.push({r, tipo: 'semTopo', txt: 'sem estacas com cota (não existe na topografia)', pode: !usada});
+  });
+  const rs = P.ruas.map(r => ({r, g: G[r.id], ext: gerRuas().find(x => x.r.id === r.id)})).filter(x => x.g);
+  for (let i = 0; i < rs.length; i++) for (let j = i + 1; j < rs.length; j++) {
+    const a = rs[i], b = rs[j], cr = a.g.ux * b.g.uy - a.g.uy * b.g.ux; if (Math.abs(cr) > 0.2) continue;   // não paralelas
+    const a0 = a.ext ? a.ext.s0 : a.g.sMin + 10, a1 = a.ext ? a.ext.s1 : a.g.sMax - 10, b0 = b.ext ? b.ext.s0 : b.g.sMin + 10, b1 = b.ext ? b.ext.s1 : b.g.sMax - 10;
+    const pb0 = a.g.loc(b.g.at(b0)), pb1 = a.g.loc(b.g.at(b1)), off = Math.max(Math.abs(pb0.off), Math.abs(pb1.off));
+    const lim = ((+a.r.larg || 7) + (+b.r.larg || 7)) / 2 + Math.max(+a.r.passeio || 0, +b.r.passeio || 0);
+    const sob = Math.min(a1, Math.max(pb0.s, pb1.s)) - Math.max(a0, Math.min(pb0.s, pb1.s));
+    if (off < lim && sob > 5) [a, b].forEach(x => { if (!out.some(o => o.r === x.r && o.tipo === 'sob')) out.push({r: x.r, tipo: 'sob', txt: 'sobreposta/colada à ' + (x === a ? b.r.nome : a.r.nome) + ' (eixos a ' + fmt(off, 1) + ' m)', pode: false}); });
+  }
+  return out;
+}
+function gerExcluirRua(id) {
+  const r = ruaById(id); if (!r) return;
+  if (!confirm('Excluir a rua "' + (r.nome || r.id) + '" do projeto? Ela não tem estacas com cota na topografia.')) return;
+  P.ruas = P.ruas.filter(x => x.id !== id); P.estacas = P.estacas.filter(e => e.rua !== id);
+  GER.ops = null; save(); calc(); gerTela(); toast('Rua ' + (r.nome || r.id) + ' excluída.');
+}
+const _gerTela15 = gerTela;
+gerTela = function () {
+  const res = _gerTela15.apply(this, arguments);
+  try {
+    const L = gerRuasSuspeitas(), body = $('ger-body'); if (!L.length || !body) return res;
+    const d = document.createElement('div'); d.className = 'msg warn'; d.style.margin = '0 0 .7rem';
+    d.innerHTML = '⚠ <span><b>Ruas que não batem com a topografia (' + L.length + '):</b> o gerador usa só as ruas com estacas e cota (aba 3); estas aparecem na planta e no 3D como uma rua a mais, colada em outra.<br>' +
+      L.map(x => '• <b>' + esc(x.r.nome || x.r.id) + '</b> (' + esc(x.r.id) + '): ' + esc(x.txt) + (x.pode ? ' <button class="btn btn-secondary btn-sm" style="padding:.05rem .4rem;margin-left:.3rem" onclick="gerExcluirRua(\'' + esc(x.r.id) + '\')">🗑 Excluir esta rua</button>' : x.tipo === 'sob' ? ' — confira na aba 3 a rua de ligação, a estaca e o ângulo' : ' — tem outra rua, PV ou caixa ligada a ela: confira na aba 3')).join('<br>') + '</span>';
+    body.prepend(d);
+  } catch (e) { console.error('DR-15c', e); }
+  return res;
+};
+</script>
+<script>
+/* =====================================================================
+   PATCH DR-15d (11/11/2026) — VENTILAÇÃO das tubulações.
+   Conduto livre precisa de colchão de ar sobre a lâmina: com a água rápida
+   o escoamento arrasta ar (emulsão), a lâmina "incha" e o tubo pode
+   afogar e entrar em carga aos golpes. y/D máximo de cada trecho = o MENOR:
+     - y/D máximo dos critérios (DNIT 0,75);
+     - V > Vc = 6·√(g·Rh) (NBR 9649) → 0,50 (crit.yDvent);
+     - Froude 0,86–1,13 (superfície ondulada) → 0,70 (crit.yDfr);
+     - colchão de ar ≥ crit.folgaAr (0,10 m) entre a lâmina e o topo.
+   Entra na escolha do diâmetro (rede, ramais e gerador), no 🛠
+   Redimensionar do 3D (inclusive quando ele reduz o tubo), na verificação
+   (aba 13) e nos alertas do 3D. Liga/desliga e o limite ficam na aba 1.
+   ===================================================================== */
+const _mig15 = migrate;
+migrate = function () { const p = _mig15.apply(this, arguments); try { if (p && p.crit) { if (p.crit.ventVc == null || p.crit.ventVc === '') p.crit.ventVc = 1; if (!(num(p.crit.yDvent) > 0)) p.crit.yDvent = 0.50; if (!(num(p.crit.yDfr) > 0)) p.crit.yDfr = 0.70; if (p.crit.folgaAr == null || p.crit.folgaAr === '') p.crit.folgaAr = 0.10; } } catch (e) {} return p; };
+const _defCrit15 = defaultCrit;
+defaultCrit = function () { return Object.assign(_defCrit15.apply(this, arguments), {ventVc: 1, yDvent: 0.50, yDfr: 0.70, folgaAr: 0.10}); };
+Object.assign(CRITR, {yDvent: [0.40, 0.60], yDfr: [0.60, 0.75], folgaAr: [0.05, 0.20]});
+HELP['crit.ventVc'] = 'Ventilação do conduto (colchão de ar sobre a lâmina). Ligada, o y/D máximo de cada trecho é o MENOR entre: o y/D máximo (DNIT 0,75); 0,50 se a velocidade passar da crítica Vc = 6·√(g·Rh) (NBR 9649: a água arrasta ar e a lâmina incha); 0,70 com Froude entre 0,86 e 1,13 (superfície ondulada); e o que deixa o colchão de ar mínimo em metros. Vale para o dimensionamento, o Redimensionar do 3D, o gerador e a verificação.';
+HELP['crit.yDvent'] = 'y/D máximo quando a velocidade passa da crítica Vc = 6·√(g·Rh). NBR 9649: 0,50 (metade da seção para o ar).';
+HELP['crit.yDfr'] = 'y/D máximo com o regime perto do crítico (Froude entre 0,86 e 1,13): a superfície fica ondulada e as ondas batem no topo do tubo, tirando o ar. Folga maior que a normal; usual 0,70.';
+HELP['crit.folgaAr'] = 'Colchão de ar mínimo entre a lâmina e o topo do tubo ou da galeria, em metros (boa prática: 0,10 m). Pesa nos tubos pequenos (ramais) e garante a passagem de ar e de detritos flutuantes.';
+const T3ventOn = () => !(P && P.crit && (P.crit.ventVc === 0 || P.crit.ventVc === '0' || P.crit.ventVc === false));
+const Vcrit = h => h && isNum(h.R) && h.R > 0 ? 6 * Math.sqrt(9.81 * h.R) : Infinity;
+// y/D máximo para esta lâmina, com a ventilação: o menor dos limites que valem para ela
+function yDmotivos(h) {
+  const c = P.crit, base = +c.yD || 0.75, L = [{v: base, t: 'y/D máximo'}];
+  if (!T3ventOn() || !h || h.carga || !isNum(h.V)) return L;
+  const vc = Vcrit(h);
+  if (h.V > vc) L.push({v: num(c.yDvent) > 0 ? +c.yDvent : 0.50, t: 'V ' + fmt(h.V, 2) + ' > Vc ' + fmt(vc, 2) + ' m/s (ar arrastado)'});
+  if (isNum(h.Fr) && h.Fr > 0.86 && h.Fr < 1.13) L.push({v: num(c.yDfr) > 0 ? +c.yDfr : 0.70, t: 'Froude ' + fmt(h.Fr, 2) + ' (regime instável, superfície ondulada)'});
+  const D = +h.D || 0, fa = num(c.folgaAr); if (D > 0 && fa > 0) L.push({v: Math.max(0.05, (D - fa) / D), t: 'colchão de ar ≥ ' + fmt(fa * 100, 0) + ' cm'});
+  return L;
+}
+function yDlim(h) { return Math.min(...yDmotivos(h).map(x => x.v)); }
+const ventFalha = h => !!h && !h.carga && isNum(h.yD) && h.yD > yDlim(h) + 5e-4 && h.yD <= (+P.crit.yD || 0.75) + 5e-4;
+// diâmetro comercial: menor que atende o y/D E a ventilação
+const _escD15 = escolheD;
+escolheD = function (Q, S, Dmin) {
+  const c = P.crit;
+  for (const D of DIAMS) { if (D < Dmin) continue; const h = partFlow(Q, D, S, c.nTubo); if (!h.carga && h.yD != null && h.yD <= yDlim(h) + 1e-9) return D; }
+  return DIAMS[DIAMS.length - 1];
+};
+// galeria: a mesma regra na escolha da aduela
+const _escG15 = escolheGal;
+escolheGal = function (t, Q, S, Amin) {
+  const x = _escG15.apply(this, arguments);
+  try { if (!T3ventOn() || !x) return x;
+    const ok = (B, H) => { const g = galOf(Object.assign({}, t, {sec: 'gal', galB: B, galH: H, galE: ''})); if (!g) return false; const h = rectFlow(Q, g, S, P.crit.nTubo); return !h.carga && h.yD != null && h.yD <= yDlim(h) + 1e-9; };
+    if (ok(x.B, x.H)) return x;
+    const L = GAL_PAD.map(([B, H]) => ({B, H})).filter(o => o.B * o.H >= x.B * x.H - 1e-9 && o.B * o.H >= (Amin || 0) / Math.max(1, num(t.galN) || 1) - 1e-9).sort((a, b) => a.B * a.H - b.B * b.H || a.H - b.H);
+    return L.find(o => ok(o.B, o.H)) || x;
+  } catch (e) { return x; }
+};
+// verificação (aba 13)
+const _calc15 = calc;
+calc = function () {
+  const res = _calc15.apply(this, arguments);
+  try {
+    if (!T3ventOn()) return res;
+    (res.ordem || []).forEach(t => { const r = res.tr[t.id]; if (!r || !r.h || !(r.Q > 0)) return; const h = r.h; if (h.carga || !isNum(h.V) || !isNum(h.yD)) return;
+      const M = yDmotivos(h), lim = Math.min(...M.map(x => x.v)), base = M[0].v; if (!(lim < base - 1e-6)) return;
+      const ok = h.yD <= lim + 5e-4, gal = !!h.gal, mot = M.filter(x => x.v < base - 1e-6).sort((a, b) => a.v - b.v), D = +h.D || 0;
+      res.checks.push({tab: 'rede', el: t.id, par: 'Ventilação (colchão de ar)', val: (gal ? 'y/H ' : 'y/D ') + fmt(h.yD, 3) + ' · ar ' + fmt(Math.max(0, D - h.y) * 100, 0) + ' cm', lim: (gal ? 'y/H' : 'y/D') + ' ≤ ' + fmt(lim, 2) + ' — ' + mot[0].t, st: ok ? 'ok' : 'err',
+        nota: ok ? '' : 'Pouco ar sobre a lâmina para este escoamento: aumente o diâmetro (ou a aduela). Com Froude perto de 1, mudar a declividade também tira o trecho da faixa instável.'});
+      r.ventLim = lim; });
+    P.bls.forEach(b => { const rb = res.bl && res.bl[b.id], h = rb && rb.ram; if (!h || h.carga || !isNum(h.V) || !isNum(h.yD)) return;
+      const M = yDmotivos(h), lim = Math.min(...M.map(x => x.v)); if (!(lim < M[0].v - 1e-6) || h.yD <= lim + 5e-4) return;
+      res.checks.push({tab: 'bls', el: b.id, par: 'Ramal — ventilação (colchão de ar)', val: 'y/D ' + fmt(h.yD, 3), lim: 'y/D ≤ ' + fmt(lim, 2) + ' — ' + M.filter(x => x.v <= lim + 1e-9)[0].t, st: 'err', nota: 'Aumente o diâmetro do ramal.'}); });
+  } catch (e) { console.error('DR-15 ventilação', e); }
+  return res;
+};
+// aba 1: os dois campos junto do y/D máximo
+const _vProj15 = vProjeto;
+vProjeto = function () {
+  const h = _vProj15.apply(this, arguments);
+  try { const k = '<div class="section-title">Rede tronco</div><div class="fgrid">';
+    if (h.indexOf(k) < 0) return h;
+    return h.replace(k, k + fld('crit.ventVc', 'Ventilação do tubo (colchão de ar)', {type: 'sel', num: true, opts: [[1, 'Considerar (recomendado)'], [0, 'Não considerar']]}) + fld('crit.yDvent', 'y/D máximo com V > Vc', {step: 0.05}) + fld('crit.yDfr', 'y/D máximo com Froude 0,86–1,13', {step: 0.05}) + fld('crit.folgaAr', 'Colchão de ar mínimo (m)', {step: 0.01}));
+  } catch (e) { return h; }
+};
+// 3D: alerta conta a ventilação; Redimensionar aumenta o Ø também por ventilação
+const _nAl15 = T3nAlertas;
+T3nAlertas = function () {
+  const n = _nAl15.apply(this, arguments); if (!R || !P || !T3ventOn()) return n;
+  return n + (R.ordem || []).filter(t => R.tr[t.id] && ventFalha(R.tr[t.id].h)).length + P.bls.filter(x => R.bl[x.id] && ventFalha(R.bl[x.id].ram)).length;
+};
+T3diamPrimeiro = function () {
+  const mot = [];
+  for (let it = 0; it < 4; it++) {
+    calc(); autoCotas(true); calc(); let mudou = false;
+    for (const t0 of R.ordem.slice()) {
+      const t = P.trechos.find(x => x.id === t0.id), r = R.tr[t.id]; if (!r || !r.h || !isNum(r.S) || !(r.Q > 0)) continue;
+      const c = P.crit; if (!(r.h.carga || r.h.yD > yDlim(r.h) + 1e-9)) continue;
+      const vent = !r.h.carga && r.h.yD <= (+c.yD || 0.75) + 1e-9;
+      let Dmin = c.dmin, Amin = 0; R.ordem.filter(u => u.j === t.m).forEach(u => { Dmin = Math.max(Dmin, num(u.D) || 0); Amin = Math.max(Amin, aIntTr(u)); });
+      const tr = redimTrecho(t, r.Q, r.S, Math.max(Dmin, num(t.D) || 0), Math.max(Amin, aIntTr(t)));
+      if (tr) { t.iFix = ''; mot.push(t.id + ': ' + tr + (vent ? ' (ventilação)' : '')); mudou = true; calc(); }
+    }
+    if (!mudou) break;
+  }
+  // ramais: Ø pela ventilação também
+  P.bls.forEach(b => { const rb = R.bl[b.id], h = rb && rb.ram; if (!h || !(rb.Qeng > 0) || !(h.carga || h.yD > yDlim(h) + 1e-9)) return;
+    const d0 = num(b.rD) || 0, nd = escolheD(rb.Qeng, (num(b.rI) || 0) / 100, Math.max(P.crit.ramalDmin || 0, d0)); if (nd > d0) { b.rD = nd; mot.push(b.id + ': ramal Ø' + d0 + ' → Ø' + nd); calc(); } });
+  calc(); autoCotas(true); calc();
+  return mot;
+};
+T3_PQ.unshift([/entila/, 'pouco colchão de ar mesmo com o maior tubo: mude a declividade (degrau no PV) ou use galeria']);
+</script>
+<script>
+/* PATCH DR-15d (cont.): faixa de alerta no 3D também para o trecho que falha só pela ventilação */
+const _alert15 = T3alertas;
+T3alertas = function () {
+  const out = _alert15.apply(this, arguments);
+  try {
+    if (!T3.scene || !R || !P || !T3ventOn()) return out;
+    const ex = T3.exag || 1, G = geoRuas(), pvPos = new Map(); P.pvs.forEach(pv => { const q = posPV(G, pv); if (q) pvPos.set(pv.id, q); });
+    const zt = []; P.pvs.forEach(pv => { const r = R.pv[pv.id]; if (r && isNum(r.tp)) zt.push(r.tp); if (r && isNum(r.fundo)) zt.push(r.fundo); });
+    const base = (zt.length ? Math.min(...zt) : 0) - 2, Y = z => (z - base) * ex, P3 = (x, z, y) => new THREE.Vector3(x - T3.cx, y, -(z - T3.cz));
+    const lay = document.getElementById('t3-labels'); let n = 0;
+    (R.ordem || []).forEach(t => {
+      const r = R.tr[t.id]; if (!r || !ventFalha(r.h) || !isNum(r.cm) || !isNum(r.cj)) return;
+      const pa = pvPos.get(t.m), pb = pvPos.get(t.j); if (!pa || !pb) return;
+      const g = galOf(t), D = Math.max(0.1, g ? g.H : (isNum(r.D) ? r.D / 1000 : (num(t.D) || 400) / 1000)), esp = espTr(t) || 0, W = g ? Math.max(g.B, g.H) : D;
+      const A0 = P3(pa.x, pa.y, Y(r.cm) + D / 2), B0 = P3(pb.x, pb.y, Y(r.cj) + D / 2), ga = T3pvGeo(t.m), gb = T3pvGeo(t.j), u0 = new THREE.Vector3().subVectors(B0, A0), L0 = u0.length(); u0.normalize();
+      const ea = ga ? ga.m.L / 2 + ga.m.parede : 0, eb = gb ? gb.m.L / 2 + gb.m.parede : 0;
+      const A = ea + eb < L0 - 0.2 ? A0.clone().addScaledVector(u0, ea) : A0, B = ea + eb < L0 - 0.2 ? B0.clone().addScaledVector(u0, -eb) : B0; if (A.distanceTo(B) < 0.05) return;
+      const halo = T3link(A, B, W / 2 + esp + 0.08, new THREE.MeshBasicMaterial({color: 0xffb020, transparent: true, opacity: 0.35, depthWrite: false, side: THREE.DoubleSide}));
+      halo.userData.comp = 'alerta'; halo.userData.alerta = true; halo.renderOrder = 5; T3.scene.add(halo); T3.objs.push(halo); n++;
+      if (T3.alertas) T3.alertas.lst.push({id: t.id, carga: false, yD: r.h.yD, gal: !!g, vent: true});
+      if (lay) { const d = document.createElement('div'); d.className = 't3-lab t3-lab-pv'; d.style.cssText = 'background:rgba(170,90,10,.92);border-color:#ffd9a8;color:#fff;font-weight:600';
+        d.innerHTML = '⚠ ' + esc(t.id) + ': ventilação — ' + (g ? 'y/H ' : 'y/D ') + fmt(r.h.yD, 2) + ' &gt; ' + fmt(yDlim(r.h), 2); lay.appendChild(d);
+        T3.labels.push({pos: new THREE.Vector3().addVectors(A, B).multiplyScalar(0.5).add(new THREE.Vector3(0, W / 2 + esp + 0.35, 0)), el: d}); }
+    });
+    if (n) { T3alertaQuadro(); if (typeof T3labelsUpd === 'function') T3labelsUpd(); }
+  } catch (e) { console.error('DR-15 alerta ventilação', e); }
+  return out;
 };
 </script>
 </body></html>
