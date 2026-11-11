@@ -1985,7 +1985,7 @@ function atualizarCorteSeAberta(){ const pn=document.getElementById('pane-corte'
    simples: base, altura total e parte aparente (espelho)
    conjugado: sarjeta (base e altura) + meio-fio (largura e espelho)
 ══════════════════════════════════════════════════════ */
-const MF_PADRAO={tipo:'nenhum',base:15,alt:30,esp:15,sbase:30,salt:8,larg:12};
+const MF_PADRAO={tipo:'conjugado',base:15,alt:30,esp:15,sbase:30,salt:8,larg:12};
 let _mf=Object.assign({},MF_PADRAO);
 function mfTextoCurto(m){
   if(!m||m.tipo==='nenhum') return '';
@@ -2027,6 +2027,7 @@ function aplicarMeioFio(){
   const tipo=document.getElementById('mfi_tipo').value, n={tipo};
   if(tipo==='simples'){n.base=g('base');n.alt=g('alt');n.esp=g('esp1');if(!(n.base>0&&n.alt>0)){toast('Informe a base e a altura do meio-fio.',true);return;}}
   else if(tipo==='conjugado'){n.sbase=g('sbase');n.salt=g('salt');n.esp=g('esp2');n.larg=g('larg');if(!(n.sbase>0&&n.salt>0&&n.esp>0&&n.larg>0)){toast('Informe a sarjeta, o espelho e a largura do meio-fio.',true);return;}}
+  n.escolhido=true; /* o usuário decidiu: vale mesmo que seja “sem meio-fio” */
   _mf=Object.assign({},MF_PADRAO,_mf,n);
   fecharMeioFio(); calcTopo();
   toast(tipo==='nenhum'?'Meio-fio removido.':'Meio-fio definido.');
@@ -2852,7 +2853,8 @@ function aplicarProjeto(p){
   if(p.subleito){set('cbr-sub',p.subleito.cbr);set('exp-sub',p.subleito.exp);set('lencol',p.subleito.lencol);}
   if(p.base){set('base-mat',p.base.mat);document.getElementById('bloco-cm').value=p.base.bloco||'';set('areia-cm',p.base.areia);set('fpk',p.base.fpk);set('sub-ccr',p.base.subCCR);set('reforco',p.base.reforco&&p.base.reforco!=='0'?p.base.reforco:'');set('h-conf',p.base.hConf);set('cbr-ref',p.base.cbrRef);set('sobrecarga',p.base.sobrecarga);set('arred',p.base.arred);}
   if(p.secoes){set('c_talcorte',p.secoes.talCorte);set('c_talaterro',p.secoes.talAterro);set('c_berma',p.secoes.berma);set('c_ev',p.secoes.ev);}
-  _mf=Object.assign({},MF_PADRAO,p.meiofio||{});
+  /* projeto antigo gravado como “sem meio-fio” sem escolha explícita do usuário = padrão antigo → volta ao conjugado */
+  { const mfp=p.meiofio||null; _mf=Object.assign({},MF_PADRAO,(mfp&&(mfp.escolhido||mfp.tipo!=='nenhum'))?mfp:{}); }
   if(p.topo){set('cai-esq',p.topo.caiEsq);set('cai-dir',p.topo.caiDir);set('larg-pad',p.topo.largPad);if(p.topo.rows){topoRows=[...p.topo.rows];renderTopoTable();}}
   document.getElementById('n-custom-field').hidden=(document.getElementById('n-sel').value!=='custom');
   atualizarLogradouro();calcular();
