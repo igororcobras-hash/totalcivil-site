@@ -762,6 +762,8 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
       <button class="btn-add" onclick="abrirMeioFio()">Meio-fio…</button>
       <button class="tb-btn tb-btn-save" id="btn-gerar-greide" onclick="abrirGerarGreide()" title="Gera o greide do eixo (e das bordas esquerda e direita) a partir das cotas do terreno, respeitando a inclinação longitudinal mínima">Gerar greide…</button>
       <button class="btn-rem" id="btn-desfazer-greide" onclick="desfazerGreide()" style="display:none">↶ Desfazer greide</button>
+      <button class="tb-btn" onclick="importarExcelClick()" title="Importa estacas e cotas de uma planilha Excel: você escolhe a linha dos títulos, as linhas de dados e quais colunas importar">📥 Importar Excel</button>
+      <input type="file" id="imp-xls" accept=".xlsx,.xls,.xlsm,.csv" style="display:none" onchange="importarExcelArquivo(event)">
       <button class="tb-btn" id="btn-colunas" onclick="toggleColunasTopo()" title="Ocultar ou reexibir colunas da tabela de topografia">👁 Colunas</button>
       <span class="mf-resumo" style="font-size:11px;color:var(--fg2)"></span>
     </div>
@@ -1553,14 +1555,14 @@ function remEstaca(){if(topoRows.length>0){topoRows.pop();renderTopoTable();calc
 function renderTopoTable(){
   const tbody=document.getElementById('topo-tbody');
   tbody.innerHTML=topoRows.map((r,i)=>`<tr>
-    <td class="c1">${i+1}${r.ponto?` <span title="Ponto inserido com +Ponto" style="font-size:9px;font-weight:700;color:var(--accent2,#2563eb)">P</span> <button type="button" title="Excluir este ponto" onclick="remPonto(${i})" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:13px;padding:0 2px">×</button>`:''}</td>
+    <td class="c1">${i+1}${r.ponto?` <span title="${esc(r.obs||'Ponto inserido com +Ponto')}" style="font-size:9px;font-weight:700;color:var(--accent2,#2563eb)">P</span> <button type="button" title="Excluir este ponto" onclick="remPonto(${i})" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:13px;padding:0 2px">×</button>`:''}</td>
     <td class="ti c2"><input type="number" step="0.5" value="${r.est}" onchange="topoVal(${i},'est',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c3"><input type="number" step="0.01" value="${r.tEsq}" onchange="topoVal(${i},'tEsq',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c4"><input type="number" step="0.01" value="${r.tEixo}" onchange="topoVal(${i},'tEixo',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c5"><input type="number" step="0.01" value="${r.tDir}" onchange="topoVal(${i},'tDir',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c6"><input type="number" step="0.01" value="${r.greide}" onchange="topoVal(${i},'greide',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="to c7" id="tge-${i}">—</td>
-    <td class="to c8" id="tgd-${i}">—</td>
+    <td class="ti c7" id="tge-${i}"><input type="number" step="0.001" value="${r.gEsq==null?'':r.gEsq}" placeholder="auto" title="Vazio = calculado pelo caimento transversal; digite a cota do projeto para fixar" onchange="topoVal(${i},'gEsq',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="ti c8" id="tgd-${i}"><input type="number" step="0.001" value="${r.gDir==null?'':r.gDir}" placeholder="auto" title="Vazio = calculado pelo caimento transversal; digite a cota do projeto para fixar" onchange="topoVal(${i},'gDir',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="to c9" id="tdl-${i}">—</td>
     <td class="ti c10"><input type="number" step="0.5" value="${r.larg}" onchange="topoVal(${i},'larg',this.value)" style="width:50px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="to c11" id="tsit-${i}">—</td>
@@ -1571,13 +1573,26 @@ function renderTopoTable(){
   </tr>`).join('');
   aplicarColunasTopo();
 }
-function topoVal(i,k,val){topoRows[i][k]=parseFloat(val)||0;calcTopo();}
+function topoVal(i,k,val){
+  if(k==='gEsq'||k==='gDir'){ /* cota de greide lateral: vazio = automático (pelo caimento) */
+    const n=parseFloat(String(val).replace(',','.'));
+    if(String(val).trim()===''||isNaN(n)) delete topoRows[i][k]; else topoRows[i][k]=n;
+    calcTopo(); return;
+  }
+  topoRows[i][k]=parseFloat(val)||0;calcTopo();
+}
 /* Linhas da topografia com a geometria da seção de cada estaca (mesma da aba Seções transversais) */
 function topoLinhas(){
   const P=secaoParams(), num=x=>(x===''||x==null||isNaN(x))?null:+x;
   return topoRows.map((row,i)=>{
     const L={i,est:+row.est||0,te:num(row.tEsq),tc:num(row.tEixo),td:num(row.tDir),gr:num(row.greide),larg:+row.larg||0,na:null,ac:0,aa:0,ar:0,sit:'—',form:null,gE:null,gD:null};
-    if(L.gr!==null){ L.form=L.gr-P.eTot; L.gE=+(L.gr-(L.larg/2)*P.cEsq).toFixed(3); L.gD=+(L.gr-(L.larg/2)*P.cDir).toFixed(3); }
+    L.cE=P.cEsq; L.cD=P.cDir; L.gEusr=false; L.gDusr=false;
+    if(L.gr!==null){
+      L.form=L.gr-P.eTot;
+      const hb=L.larg/2, ge=num(row.gEsq), gd=num(row.gDir);
+      if(ge!==null&&hb>0){ L.cE=(L.gr-ge)/hb; L.gE=+ge.toFixed(3); L.gEusr=true; } else L.gE=+(L.gr-hb*P.cEsq).toFixed(3);
+      if(gd!==null&&hb>0){ L.cD=(L.gr-gd)/hb; L.gD=+gd.toFixed(3); L.gDusr=true; } else L.gD=+(L.gr-hb*P.cDir).toFixed(3);
+    }
     if(L.gr!==null&&L.tc!==null&&L.larg>0){
       const G=secaoGeom(L,P), A=secaoAreas(L,G,P);
       L.ac=A.ac; L.aa=A.aa; L.ar=A.ar;
@@ -1593,7 +1608,10 @@ function calcTopo(){
     const T=(id,t)=>{const e=document.getElementById(id); if(e) e.textContent=t;};
     T('tsit-'+L.i,L.sit); T('tac-'+L.i,L.sit==='—'?'—':fmt(L.ac,2)); T('taa-'+L.i,L.sit==='—'?'—':fmt(L.aa,2));
     T('tco-'+L.i,'—'); T('tat-'+L.i,'—');
-    T('tge-'+L.i,L.gE==null?'—':fmt(L.gE,3)); T('tgd-'+L.i,L.gD==null?'—':fmt(L.gD,3));
+    [['tge-','gEsq',L.gE,L.gEusr],['tgd-','gDir',L.gD,L.gDusr]].forEach(([p,k,val,usr])=>{
+      const td=document.getElementById(p+L.i), inp=td&&td.querySelector('input'); if(!inp) return;
+      inp.placeholder=val==null?'auto':fmt(val,3); inp.style.opacity=usr?'1':'.6';
+    });
     const nx=linhas[L.i+1], d=nx?nx.est-L.est:0;
     T('tdl-'+L.i,(nx&&d>0&&L.gr!=null&&nx.gr!=null)?fmt((nx.gr-L.gr)/d*100,2):'—');
   });
@@ -1632,7 +1650,7 @@ function calcTopo(){
    i_min (%) a cada trecho; onde o terreno já cai mais que isso, o greide segue o terreno.
    Bordas: greide do eixo − (largura/2) × caimento transversal de cada lado.
 ══════════════════════════════════════════════════════ */
-let _greideCfg={imin:0.5,sentido:'desc',cota:''}, _greideAnterior=null;
+let _greideCfg={imin:0.5,sentido:'desc',cota:''}, _greideAnterior=null, _greideLatAnt=null;
 function abrirGerarGreide(){
   if(topoRows.length<2){ toast('Inclua pelo menos 2 estacas com as cotas do terreno.',true); return; }
   const g=_greideCfg, md=document.getElementById('modal');
@@ -1659,7 +1677,8 @@ function gerarGreide(){
   const n=topoRows.length, T=topoRows.map(r=>+r.tEixo);
   if(T.some(x=>isNaN(x))){ toast('Há estaca sem cota do terreno no eixo.',true); return; }
   for(let i=1;i<n;i++){ if(!(topoRows[i].est>topoRows[i-1].est)){ toast('As estacas precisam estar em ordem crescente (estaca '+(i+1)+' ≤ anterior).',true); return; } }
-  _greideAnterior=topoRows.map(r=>r.greide);
+  _greideAnterior=topoRows.map(r=>r.greide); _greideLatAnt=topoRows.map(r=>[r.gEsq,r.gDir]);
+  topoRows.forEach(r=>{delete r.gEsq;delete r.gDir;}); /* greide novo: bordas voltam a ser calculadas pelo caimento */
   const G=new Array(n), f2=x=>Math.floor(x*100+1e-9)/100;
   const ini=sentido==='desc'?0:n-1;
   G[ini]=cota!=null?cota:T[ini];
@@ -1679,7 +1698,7 @@ function gerarGreide(){
 }
 function desfazerGreide(){
   if(!_greideAnterior||_greideAnterior.length!==topoRows.length){ toast('Nada para desfazer.',true); return; }
-  topoRows.forEach((r,i)=>r.greide=_greideAnterior[i]);
+  topoRows.forEach((r,i)=>{r.greide=_greideAnterior[i]; const l=(_greideLatAnt||[])[i]||[]; if(l[0]!=null) r.gEsq=l[0]; else delete r.gEsq; if(l[1]!=null) r.gDir=l[1]; else delete r.gDir;});
   _greideAnterior=null;
   document.getElementById('btn-desfazer-greide').style.display='none';
   document.getElementById('greide-resumo').textContent='';
@@ -1770,6 +1789,183 @@ function inserirPonto(){
 function remPonto(i){
   if(!topoRows[i]||!topoRows[i].ponto) return;
   topoRows.splice(i,1); renderTopoTable(); calcTopo();
+}
+/* ══════════════════════════════════════════════════════
+   IMPORTAR TOPOGRAFIA DO EXCEL
+   Escolha a planilha, a linha dos títulos (e, se houver, a 2ª linha de títulos), as linhas de
+   dados e a coluna de cada informação. Estaca aceita metros acumulados ou "N + metros" (1 + 17,73).
+══════════════════════════════════════════════════════ */
+let _imp=null;
+const IMP_CAMPOS=[['est','Estaca / distância (obrigatório)'],['tEsq','Terreno esq. (m)'],['tEixo','Terreno eixo (m)'],['tDir','Terreno dir. (m)'],['greide','Greide eixo (m)'],['larg','Largura (m)']];
+function importarExcelClick(){ document.getElementById('imp-xls').click(); }
+function importarExcelArquivo(ev){
+  const file=ev.target.files[0]; if(!file) return;
+  if(typeof XLSX==='undefined'){ toast('Biblioteca de Excel não carregada. Verifique a internet e recarregue a página.',true); ev.target.value=''; return; }
+  const rd=new FileReader();
+  rd.onload=e=>{ try{
+    const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+    if(!wb.SheetNames.length) throw new Error('arquivo sem planilhas.');
+    _imp={wb,nome:file.name,aba:wb.SheetNames[0]};
+    impAbrirModal(); impTrocarAba(wb.SheetNames[0]);
+  }catch(err){ toast('Não foi possível ler o Excel: '+err.message,true); } };
+  rd.readAsArrayBuffer(file); ev.target.value='';
+}
+const impTxt=v=>v!=null&&String(v).trim()!=='';
+const impEhNum=v=>typeof v==='number'&&isFinite(v);
+function impNum(v){
+  if(v==null||v==='') return NaN; if(typeof v==='number') return isFinite(v)?v:NaN;
+  let t=String(v).trim().replace(/\s/g,'');
+  if(/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(t)) t=t.replace(/\./g,'').replace(',','.'); else t=t.replace(',','.');
+  return /^-?\d*\.?\d+$/.test(t)?parseFloat(t):NaN;
+}
+function impEst(v,uni,comp){
+  if(typeof v==='string'){ const m=/^\s*(\d+)\s*\+\s*([\d.,]+)\s*$/.exec(v); if(m){ const x=impNum(m[2]); return isNaN(x)?NaN:parseInt(m[1],10)*comp+x; } }
+  const n=impNum(v); return isNaN(n)?NaN:(uni==='n'?n*comp:n);
+}
+function impLetra(j){ let t='',n=j+1; while(n>0){ const r=(n-1)%26; t=String.fromCharCode(65+r)+t; n=Math.floor((n-1)/26); } return t; }
+function impDetectar(){
+  const a=_imp.aoa, isT=x=>typeof x==='string'&&x.trim()!=='';
+  let h1=0;
+  for(let i=0;i<Math.min(a.length,80)&&!h1;i++){ const r=a[i]||[]; if(r.filter(isT).length>=3&&r.some(x=>isT(x)&&/estaca|extens|dist[aâ]ncia|progress/i.test(x))) h1=i+1; }
+  for(let i=0;i<Math.min(a.length,80)&&!h1;i++){ if((a[i]||[]).filter(isT).length>=3) h1=i+1; }
+  if(!h1) h1=1;
+  let h2=0;
+  for(let k=h1;k<Math.min(h1+3,a.length);k++){ const r=a[k]||[]; const t=r.filter(isT).length,n=r.filter(impEhNum).length; if(t>=2&&n===0){h2=k+1;break;} if(n>=3) break; }
+  const ult=Math.max(h1,h2); let r1=ult+1;
+  for(let k=ult;k<a.length;k++){ if((a[k]||[]).filter(impEhNum).length>=3){ r1=k+1; break; } }
+  let r2=r1;
+  for(let k=r1;k<=a.length;k++){ const r=a[k-1]||[]; if(r.filter(impTxt).length<2) break; r2=k; }
+  return {h1,h2,r1,r2};
+}
+function impRotulos(h1,h2){
+  const a=_imp.aoa, n=a.reduce((m,r)=>Math.max(m,(r||[]).length),0), lab=[]; let pai='';
+  for(let j=0;j<n;j++){
+    const x=impTxt((a[h1-1]||[])[j])?String(a[h1-1][j]).replace(/\s+/g,' ').trim():'';
+    const y=h2&&impTxt((a[h2-1]||[])[j])?String(a[h2-1][j]).replace(/\s+/g,' ').trim():'';
+    if(x) pai=x;
+    lab.push(y?((x||pai)&&(x||pai)!==y?(x||pai)+' · '+y:y):x);
+  }
+  return lab;
+}
+function impSugerir(rot){
+  const nz=t=>String(t||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase(), L=rot.map(nz);
+  const pick=(res,nao)=>{ for(const re of res){ const j=L.findIndex(t=>re.test(t)&&!(nao&&nao.test(t))); if(j>=0) return j; } return -1; };
+  const nao=/l\.?\s?b\b|largura|soleira|sarjeta/;
+  return {est:pick([/extens|distanc|acumul|progress/,/estaca/]), tEsq:pick([/esq/],nao), tEixo:pick([/eixo/]), tDir:pick([/dir/],nao), greide:pick([/greide/]), larg:pick([/largura/,/^larg/])};
+}
+function impAbrirModal(){
+  const md=document.getElementById('modal'); md.style.width='820px'; md.style.maxWidth='96vw';
+  md.innerHTML='<button class="m-close" onclick="impFechar()" aria-label="Fechar">×</button><h2>Importar topografia do Excel</h2>'+
+    '<p style="font-size:12px;color:var(--fg2)">Arquivo: <b>'+esc(_imp.nome)+'</b>. Confira a linha dos títulos, as linhas de dados e a coluna de cada informação. A prévia mostra como as estacas vão entrar.</p>'+
+    '<div class="mf-g" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr">'+
+      '<div class="mf-f"><label>Planilha</label><select id="im_aba" onchange="impTrocarAba(this.value)">'+_imp.wb.SheetNames.map(n=>'<option>'+esc(n)+'</option>').join('')+'</select></div>'+
+      '<div class="mf-f"><label>Linha dos títulos</label><input type="number" id="im_h1" min="1" step="1" onchange="impRecarregarTitulos()"></div>'+
+      '<div class="mf-f"><label>2ª linha de títulos (opc.)</label><input type="number" id="im_h2" min="0" step="1" placeholder="nenhuma" onchange="impRecarregarTitulos()"></div>'+
+      '<div class="mf-f"><label>Dados: da linha</label><input type="number" id="im_r1" min="1" step="1" onchange="impPrevia()"></div>'+
+      '<div class="mf-f"><label>até a linha</label><input type="number" id="im_r2" min="1" step="1" onchange="impPrevia()"></div></div>'+
+    '<div class="sec-title" style="margin-top:12px">Colunas a importar</div>'+
+    '<div class="mf-g" style="grid-template-columns:1fr 1fr 1fr">'+IMP_CAMPOS.map(c=>'<div class="mf-f"><label>'+c[1]+'</label><select id="im_c_'+c[0]+'" onchange="'+(c[0]==='est'?'impMudouEst()':'impPrevia()')+'"></select></div>').join('')+'</div>'+
+    '<div class="mf-g" style="grid-template-columns:2fr 1fr 2fr;margin-top:4px">'+
+      '<div class="mf-f"><label>A coluna da estaca está em</label><select id="im_uni" onchange="impPrevia()"><option value="m">Metros acumulados (ex.: 37,73)</option><option value="n">Número da estaca (0, 1, 2…) × comprimento</option></select></div>'+
+      '<div class="mf-f"><label>Comprimento da estaca (m)</label><input type="number" id="im_comp" value="20" min="1" step="1" onchange="impPrevia()"></div>'+
+      '<div class="mf-f"><label>Ao importar</label><select id="im_modo"><option value="sub">Substituir a planilha atual de estacas</option><option value="add">Acrescentar às estacas atuais</option></select></div></div>'+
+    '<div id="im_prev" style="margin-top:10px"></div>'+
+    '<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button type="button" class="tb-btn" onclick="impFechar()">Cancelar</button><button type="button" class="tb-btn tb-btn-save" id="im_ok" onclick="impAplicar()">Importar</button></div>';
+  document.getElementById('modal-bg').classList.add('open');
+}
+function impFechar(){ document.getElementById('modal-bg').classList.remove('open'); _imp=null; }
+function impTrocarAba(nome){
+  _imp.aba=nome; document.getElementById('im_aba').value=nome;
+  _imp.aoa=XLSX.utils.sheet_to_json(_imp.wb.Sheets[nome],{header:1,raw:true,blankrows:true,defval:null});
+  const d=impDetectar(), set=(id,v)=>{document.getElementById(id).value=v||'';};
+  set('im_h1',d.h1); set('im_h2',d.h2); set('im_r1',d.r1); set('im_r2',d.r2);
+  impRecarregarTitulos(true);
+}
+function impRecarregarTitulos(manterLinhas){
+  const h1=parseInt(document.getElementById('im_h1').value,10)||1, h2=parseInt(document.getElementById('im_h2').value,10)||0;
+  const rot=impRotulos(h1,h2), sug=impSugerir(rot);
+  IMP_CAMPOS.forEach(c=>{
+    const el=document.getElementById('im_c_'+c[0]);
+    el.innerHTML='<option value="-1">— não importar —</option>'+rot.map((t,j)=>'<option value="'+j+'">'+impLetra(j)+' · '+esc(t||'(sem título)')+'</option>').join('');
+    el.value=String(sug[c[0]]);
+  });
+  const e=sug.est>=0?String(rot[sug.est]||'').toLowerCase():'';
+  document.getElementById('im_uni').value=/extens|dist|acumul|progress|\(m\)/.test(e)?'m':(/estaca/.test(e)?'n':'m');
+  impPrevia();
+}
+function impMudouEst(){
+  const el=document.getElementById('im_c_est'), t=(el.selectedOptions[0]||{}).textContent||'';
+  if(el.value!=='-1') document.getElementById('im_uni').value=/extens|dist|acumul|progress|\(m\)/i.test(t)?'m':(/estaca/i.test(t)?'n':document.getElementById('im_uni').value);
+  impPrevia();
+}
+function impLer(){
+  const g=id=>document.getElementById(id), col=k=>parseInt(g('im_c_'+k).value,10);
+  const r1=parseInt(g('im_r1').value,10)||1, r2=parseInt(g('im_r2').value,10)||r1, comp=parseFloat(g('im_comp').value)||20, uni=g('im_uni').value;
+  const C={}; IMP_CAMPOS.forEach(c=>C[c[0]]=col(c[0]));
+  const aviso=[], rows=[], vazios=[]; let ign=0;
+  if(C.est<0) aviso.push('Escolha a coluna da estaca / distância.');
+  if(C.tEixo<0&&!(C.tEsq>=0&&C.tDir>=0)) aviso.push('Escolha a coluna do terreno no eixo (ou as duas bordas).');
+  const larg0=parseFloat(document.getElementById('larg-pad').value)||6;
+  if(!aviso.length){
+    for(let r=r1;r<=r2;r++){
+      const row=_imp.aoa[r-1]||[]; const est=impEst(row[C.est],uni,comp);
+      const n=k=>C[k]>=0?impNum(row[C[k]]):NaN;
+      let ex=n('tEixo'), ee=n('tEsq'), ed=n('tDir');
+      if(isNaN(ex)&&!isNaN(ee)&&!isNaN(ed)) ex=(ee+ed)/2;
+      if(!isNaN(est)&&isNaN(ex)&&['tEsq','tEixo','tDir','greide'].every(k=>isNaN(n(k)))){
+        const o=row.find(x=>typeof x==='string'&&x.trim()!==''&&isNaN(impNum(x))&&!/^\s*\d+\s*\+/.test(x));
+        vazios.push({est:+est.toFixed(3),obs:o?String(o).trim().slice(0,80):'',linha:r}); continue;
+      }
+      if(isNaN(est)||isNaN(ex)){ if(row.some(impTxt)) ign++; continue; }
+      const gr=n('greide'), lg=n('larg'), rd=x=>+x.toFixed(3);
+      rows.push({est:rd(est),tEsq:rd(isNaN(ee)?ex:ee),tEixo:rd(ex),tDir:rd(isNaN(ed)?ex:ed),greide:rd(isNaN(gr)?ex:gr),larg:rd(isNaN(lg)||lg<=0?larg0:lg),linha:r,
+        ponto:Math.abs(est/comp-Math.round(est/comp))>1e-6});
+    }
+    rows.sort((a,b)=>a.est-b.est);
+    const unicas=[]; let dup=0; rows.forEach(r=>{ if(unicas.length&&Math.abs(unicas[unicas.length-1].est-r.est)<1e-6) dup++; else unicas.push(r); });
+    let interp=0;
+    vazios.forEach(v=>{
+      if(unicas.some(u=>Math.abs(u.est-v.est)<1e-6)) return;
+      const a=unicas.filter(u=>u.est<v.est).pop(), b=unicas.find(u=>u.est>v.est);
+      const base=a||b; if(!base) return;
+      const t=(a&&b)?(v.est-a.est)/(b.est-a.est):0, f=k=>+(((a||b)[k])+(((b||a)[k])-((a||b)[k]))*t).toFixed(3);
+      unicas.push({est:v.est,tEsq:f('tEsq'),tEixo:f('tEixo'),tDir:f('tDir'),greide:f('greide'),larg:f('larg'),linha:v.linha,ponto:true,obs:v.obs,interp:true}); interp++;
+    });
+    unicas.sort((x,y)=>x.est-y.est);
+    if(interp) aviso.push(interp+' ponto(s) sem cotas na planilha (ex.: cruzamento de rua) entraram na posição certa com cotas interpoladas entre as estacas vizinhas — ajuste se tiver o levantamento.');
+    if(ign) aviso.push(ign+' linha(s) com texto/valor inválido foram ignoradas.');
+    if(dup) aviso.push(dup+' linha(s) repetida(s) na mesma estaca foram ignoradas (vale a primeira).');
+    if(C.greide<0) aviso.push('Sem coluna de greide: o greide ficou igual ao terreno do eixo. Use “Gerar greide…” depois.');
+    if(C.larg<0) aviso.push('Sem coluna de largura: usou a largura padrão da pista ('+fmt(larg0,2)+' m).');
+    return {rows:unicas,aviso,C};
+  }
+  return {rows:[],aviso,C};
+}
+function impPrevia(){
+  const L=impLer(), box=document.getElementById('im_prev'), ok=document.getElementById('im_ok'); if(!box) return;
+  _imp.ler=L; ok.disabled=!L.rows.length;
+  const w=L.aviso.map(a=>'<div style="font-size:11.5px;color:var(--warn-fg,#b45309)">⚠ '+esc(a)+'</div>').join('');
+  if(!L.rows.length){ box.innerHTML=w+'<div style="font-size:12px;color:var(--fg3);margin-top:4px">Nenhuma estaca válida nas linhas e colunas escolhidas.</div>'; return; }
+  const mostra=L.rows.slice(0,12);
+  box.innerHTML='<div style="font-size:12px;margin-bottom:4px"><b>'+L.rows.length+' estaca(s)/ponto(s)</b> serão importados ('+L.rows.filter(r=>r.ponto).length+' fora do múltiplo de '+fmt(parseFloat(document.getElementById('im_comp').value)||20,0)+' m, marcados como ponto). Prévia:</div>'+w+
+    '<div class="tw" style="max-height:230px;overflow:auto"><table><thead><tr><th>Linha Excel</th><th>Estaca (m)</th><th>Terreno esq.</th><th>Terreno eixo</th><th>Terreno dir.</th><th>Greide eixo</th><th>Largura</th></tr></thead><tbody>'+
+    mostra.map(r=>'<tr><td>'+r.linha+'</td><td>'+fmt(r.est,2)+(r.ponto?' <b style="color:var(--accent2,#2563eb)">P</b>':'')+(r.obs?' <span style="font-size:10px;color:var(--fg3)">'+esc(r.obs)+'</span>':'')+'</td><td>'+fmt(r.tEsq,3)+'</td><td>'+fmt(r.tEixo,3)+'</td><td>'+fmt(r.tDir,3)+'</td><td>'+fmt(r.greide,3)+'</td><td>'+fmt(r.larg,2)+'</td></tr>').join('')+
+    (L.rows.length>mostra.length?'<tr><td colspan="7" style="color:var(--fg3)">… e mais '+(L.rows.length-mostra.length)+' linha(s)</td></tr>':'')+'</tbody></table></div>';
+}
+function impAplicar(){
+  const L=_imp&&_imp.ler; if(!L||!L.rows.length) return;
+  const novas=L.rows.map(r=>({est:r.est,tEsq:r.tEsq,tEixo:r.tEixo,tDir:r.tDir,greide:r.greide,larg:r.larg,...(r.ponto?{ponto:true}:{}),...(r.obs?{obs:r.obs}:{})}));
+  const modo=document.getElementById('im_modo').value;
+  if(modo==='add'){
+    const todas=topoRows.concat(novas).sort((a,b)=>a.est-b.est), fim=[];
+    todas.forEach(r=>{ if(!fim.length||Math.abs(fim[fim.length-1].est-r.est)>1e-6) fim.push(r); });
+    topoRows=fim;
+  }else topoRows=novas;
+  _greideAnterior=null; const bd=document.getElementById('btn-desfazer-greide'); if(bd) bd.style.display='none';
+  const gr=document.getElementById('greide-resumo'); if(gr) gr.textContent='';
+  const n=novas.length; impFechar();
+  renderTopoTable(); calcTopo();
+  toast(n+' linha(s) importada(s) do Excel para a Topografia.');
 }
 let _topo=null;
 function volumesCamadas(totArea){
@@ -1943,7 +2139,7 @@ function secaoGeom(L, P) {
     return { tB: tB, yS: yS, yF: yF, k: k, h: h, corte: corte, y0: y0, tal: tal, s: s, d: d, semInt: semInt,
       yInt: yInt, tInt: tB + k * d, re: re };
   };
-  return { b: b, form: form, tE: tE, tC: tC, tD: tD, E: lado(tE, P.cEsq), D: lado(tD, P.cDir),
+  return { b: b, form: form, tE: tE, tC: tC, tD: tD, E: lado(tE, L.cE != null ? L.cE : P.cEsq), D: lado(tD, L.cD != null ? L.cD : P.cDir),
     hC: tC - form };
 }
 
@@ -1994,7 +2190,8 @@ function secaoSVG(L, G, P, papel) {
   const f3 = (x) => fmt(x, 3),f2 = (x) => fmt(x, 2);
   const sg = (x) => (x > 0 ? '+' : '') + fmt(x, 2);
   const halo = `paint-order="stroke" stroke="${C.bg}" stroke-width="3" stroke-linejoin="round"`;
-  const ysE = L.gr - b * P.cEsq,ysD = L.gr - b * P.cDir;
+  const cE = L.cE != null ? L.cE : P.cEsq,cD = L.cD != null ? L.cD : P.cDir;
+  const ysE = L.gr - b * cE,ysD = L.gr - b * cD;
   // rótulos com anti-sobreposição: cada texto procura a posição livre mais próxima
   const rots = [];
   const rot = (prio, txt, x, y, size, anchor, fill, bold, dir) => rots.push({ prio, txt, x, y, size, anchor, fill, bold, dir });
@@ -2055,8 +2252,8 @@ function secaoSVG(L, G, P, papel) {
   });
   // bermas
   if (P.berma > 0 && P.berma < b) {
-    s += `<polyline points="${pts([[-b, ysE], [-b + P.berma, L.gr - (b - P.berma) * P.cEsq]])}" fill="none" stroke="#8c8c8c" stroke-width="4"/>` +
-    `<polyline points="${pts([[b - P.berma, L.gr - (b - P.berma) * P.cDir], [b, ysD]])}" fill="none" stroke="#8c8c8c" stroke-width="4"/>`;
+    s += `<polyline points="${pts([[-b, ysE], [-b + P.berma, L.gr - (b - P.berma) * cE]])}" fill="none" stroke="#8c8c8c" stroke-width="4"/>` +
+    `<polyline points="${pts([[b - P.berma, L.gr - (b - P.berma) * cD], [b, ysD]])}" fill="none" stroke="#8c8c8c" stroke-width="4"/>`;
   }
   // meio-fio e sarjeta
   if (P.mf) {
@@ -2077,7 +2274,7 @@ function secaoSVG(L, G, P, papel) {
     });
   }
   // formação
-  s += `<line x1="${X(-b)}" y1="${Y(G.form - b * P.cEsq)}" x2="${X(b)}" y2="${Y(G.form - b * P.cDir)}" stroke="${C.acc}" stroke-width="1" stroke-dasharray="4 3"/>`;
+  s += `<line x1="${X(-b)}" y1="${Y(G.form - b * cE)}" x2="${X(b)}" y2="${Y(G.form - b * cD)}" stroke="${C.acc}" stroke-width="1" stroke-dasharray="4 3"/>`;
   // taludes
   [[G.E, -1], [G.D, 1]].forEach(([Ld, sn]) => {
     const x1 = sn * b,x2 = sn * (b + Ld.d);
@@ -2115,7 +2312,7 @@ function secaoSVG(L, G, P, papel) {
   const camTxt = P.camadas.map((c) => c[0].split(' (')[0] + ' ' + fmt(c[1] * 100, 1)).join(' · ');
   if (naFora) s += `<text x="${W / 2}" y="${yb + extraCotas + 58 + (nota ? 14 : 0)}" font-size="10" text-anchor="middle" fill="#2f7fd1">N.A. na cota ${f3(L.na)} (abaixo do quadro)</text>`;
   if (nota) s += `<text x="${W / 2}" y="${yb + extraCotas + 58}" font-size="10" font-weight="700" text-anchor="middle" fill="#3f7a2e">${nota}</text>`;
-  s += `<text x="${W / 2}" y="${yb + extraCotas + 30}" font-size="10" text-anchor="middle" fill="${C.fg3}">${geo}caimento ${fmt(P.cEsq * 100, 1)}% / ${fmt(P.cDir * 100, 1)}%${mfTxt}</text>` +
+  s += `<text x="${W / 2}" y="${yb + extraCotas + 30}" font-size="10" text-anchor="middle" fill="${C.fg3}">${geo}caimento ${fmt(cE * 100, 1)}% / ${fmt(cD * 100, 1)}%${mfTxt}</text>` +
   `<text x="${W / 2}" y="${yb + extraCotas + 44}" font-size="10" text-anchor="middle" fill="${C.fg3}">${camTxt} cm (total ${fmt(P.eTot * 100, 1)} cm)${P.ev !== 1 ? ' · escala vertical ×' + P.ev : ''}</text>`;
   // legenda
   const ly0 = H - legH + 6;
