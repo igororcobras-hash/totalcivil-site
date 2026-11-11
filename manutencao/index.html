@@ -386,12 +386,12 @@ function localEx(o,ex){const oc=o.ocorrencias.find(x=>x.id===ex.ocorrenciaId);co
  return {oc,rua,bairro:b,txt:[rua,b].filter(Boolean).join(' — ')||'(local não informado)',lat,lng}}
 function calcMed(o,f){const rows=[],mem=[],agg={},execIds=new Set();let naoConf=0;
  o.execucoes.forEach(ex=>{if(f.de&&ex.data<f.de)return;if(f.ate&&ex.data>f.ate)return;if(ex.medicaoNum&&!f.rep)return;if(f.conf&&!ex.conferida&&!ex.medicaoNum){naoConf++;return}
-  const L=localEx(o,ex);let used=false;ex.itens.forEach(it=>{const sv=svcOf(o,it.servicoId);if(!sv||!it.qtd)return;used=true;agg[sv.id]=r2((agg[sv.id]||0)+it.qtd);
+  const L=localEx(o,ex);let used=false;ex.itens.forEach(it=>{const sv=svcOf(o,it.servicoId);if(!sv||!it.qtd)return;used=true;agg[sv.id]=Math.round(((agg[sv.id]||0)+it.qtd)*1e4)/1e4;
    mem.push({data:ex.data,oc:L.oc?L.oc.num:null,local:L.txt,cod:sv.codigo,desc:sv.descricao,un:sv.unidade,qtd:it.qtd,med:ex.med,nota:(ex.desc||ex.descCampo||'').slice(0,200),medicao:ex.medicaoNum||null})});if(used)execIds.add(ex.id)});
  const ant={};o.execucoes.forEach(ex=>{if(!ex.medicaoNum||execIds.has(ex.id))return;ex.itens.forEach(it=>{ant[it.servicoId]=r2((ant[it.servicoId]||0)+it.qtd)})});
  const hq={};let histV=0;o.medicoes.forEach(md=>{if(md.hist&&md.qtds){histV=r2(histV+md.total);Object.keys(md.qtds).forEach(k=>{hq[k]=r2((hq[k]||0)+md.qtds[k])})}});const todas=[];
  let total=0,antValor=histV;
- o.servicos.forEach(sv=>{const q=agg[sv.id]||0;const a=ant[sv.id]||0;const h=hq[sv.id]||0;const pb=pbdi(o,sv);antValor=r2(antValor+t2(a*pb));const vq=q?t2(q*pb):0;total=r2(total+vq);
+ o.servicos.forEach(sv=>{const q=r2(agg[sv.id]||0);const a=ant[sv.id]||0;const h=hq[sv.id]||0;const pb=pbdi(o,sv);antValor=r2(antValor+t2(a*pb));const vq=q?t2(q*pb):0;total=r2(total+vq);
   todas.push({sid:sv.id,grupo:sv.grupo||null,item:sv.codigo,ref:sv.ref||'',desc:sv.descricao,un:sv.unidade,qtd:sv.qtd,preco:sv.preco,bdi:bdiP(o,sv),pbdi:pb,pbdiFix:+sv.pbdi>0?1:0,anterior:r2(a+h),qMed:q,valor:vq});
   if(!q)return;
   rows.push({cod:sv.codigo,desc:sv.descricao,un:sv.unidade,preco:pb,qtd:q,valor:vq,anterior:r2(a+h),acum:r2(a+h+q),contratada:sv.qtd,saldo:r2(sv.qtd-a-h-q)})});
@@ -1041,7 +1041,7 @@ function piAplicar(){if(!canPI()){toast('Sem permissão para aplicar o planejame
  let n=0;M.res.dias.forEach(d=>d.items.forEach(({oc,v})=>{if(S.perfil==='gestor'&&!oc.priConf){oc.priG=priEf(oc);oc.priConf=true}oc.semana=isoWeek(d.dia);oc.diaPlan=d.dia;if(!oc.servicoId)oc.servicoId=oc.servSug||M.p.svcPad||'';if(!(oc.qtdPlan>0)&&oc.qtdFiscal>0)oc.qtdPlan=oc.qtdFiscal;else if(!(oc.qtdPlan>0)&&oc.servicoId&&v.assum&&v.custoOk)oc.qtdPlan=v.q;log(oc,'Programada pelo planejamento instruído: '+fData(d.dia)+' ('+labSem(oc.semana)+')');recalcStatus(o,oc);n++}));
  saveObra(o);fecharModal(false);S.tab='plan';render();toast(n+' ocorrência(s) programadas pelo planejamento instruído.',6000)}
 /* ===================== conferência em campo, custo previsto/saldo e renovação ===================== */
-const custoPlan=(o,oc)=>{const sv=svcOf(o,oc.servicoId);return sv&&oc.qtdPlan?t2(oc.qtdPlan*pbdi(o,sv)):0};
+let custoPlan=(o,oc)=>{const sv=svcOf(o,oc.servicoId);return sv&&oc.qtdPlan?t2(oc.qtdPlan*pbdi(o,sv)):0};
 function saldoPlan(o){const base=o.valor>0?o.valor:o.servicos.reduce((s,x)=>r2(s+t2(x.qtd*pbdi(o,x))),0);
  const medido=o.medicoes.reduce((s,m)=>r2(s+m.total),0);const R=calcMed(o,{de:'',ate:'',conf:true,rep:false});
  let pend=0;o.execucoes.filter(e=>!e.conferida&&!e.medicaoNum).forEach(e=>e.itens.forEach(i=>{const sv=svcOf(o,i.servicoId);if(sv)pend=r2(pend+t2((num(i.qtd)||0)*pbdi(o,sv)))}));
@@ -1728,7 +1728,7 @@ const ACTS={
   $('#ex-df').value=txt;M.d.descOrigem=origem;st.textContent=origem==='local'?'Texto padrão aplicado (sem IA). Revise.':'Gerado por '+(origem==='gemini'?'Gemini':'Meta')+'. Revise antes de salvar.'},
  exSave(){const o=O(),d=M.d;d.data=$('#ex-data').value;if(!d.data){toast('Informe a data.');return}const antOc=M.novo?null:(o.execucoes.find(x=>x.id===d.id)||{}).ocorrenciaId;
   d.ocorrenciaId=$('#ex-oc').value||null;d.local=Object.assign({},d.local,{rua:$('#ex-rua').value.trim(),bairro:$('#ex-bairro').value.trim()});d.med={c:num($('#ex-mc').value),l:num($('#ex-ml').value),e:num($('#ex-me').value)};
-  d.itens=$$('.itemrow').map(r=>({servicoId:$('.it-svc',r).value,qtd:t2(num($('.it-qtd',r).value))})).filter(i=>i.servicoId&&i.qtd>0);d.descCampo=$('#ex-dc').value.trim();d.desc=$('#ex-df').value.trim();d.concluiu=$('#ex-conc').checked;d.equipe=$$('.eqrow').map(r=>{const v=$('.eq-sel',r).value.split(':');return {k:v[0],i:+v[1],q:parseInt($('.eq-q',r).value)||0}}).filter(x=>x.k&&x.q>0);
+  d.itens=$$('.itemrow').map(r=>({servicoId:$('.it-svc',r).value,qtd:Math.round(num($('.it-qtd',r).value)*1e4)/1e4})).filter(i=>i.servicoId&&i.qtd>0);d.descCampo=$('#ex-dc').value.trim();d.desc=$('#ex-df').value.trim();d.concluiu=$('#ex-conc').checked;d.equipe=$$('.eqrow').map(r=>{const v=$('.eq-sel',r).value.split(':');return {k:v[0],i:+v[1],q:parseInt($('.eq-q',r).value)||0}}).filter(x=>x.k&&x.q>0);
   if(!d.itens.length&&!d.desc&&!d.descCampo){toast('Lance ao menos um serviço com quantidade ou uma descrição.');return}
   if(!d.desc){d.desc=autoDesc(o,d);d.descOrigem=d.descOrigem||'padrao'}
   if(!M.novo){const rem=(M.orig||[]).filter(id=>!d.fotos.some(f=>f.id===id));rem.forEach(id=>{DB.del('fotos',id);fotoCache.delete(id)});const i=o.execucoes.findIndex(x=>x.id===d.id);if(o.execucoes[i].conferida){d.conferida=false;d.conferidaPor=null;toast('Execução alterada: precisa ser conferida de novo pelo fiscal.',4500)}o.execucoes[i]=d}else o.execucoes.push(d);
@@ -4501,6 +4501,9 @@ ACTS.sp29Ler = async d => { const meu = M; const res = $('#fl-res'); if (!meu ||
     if (t && t.rua) { $('#fl-q').value = t.rua + (t.bairro ? ', ' + t.bairro : ''); res.innerHTML = '<p class="small muted">A foto não tem coordenada escrita; buscando pelo endereço lido…</p>'; ACTS.sp19Busca(); return }
     res.innerHTML = '<p class="small" style="color:#b45309">Não consegui ler coordenada nem endereço nesta foto. Digite o endereço ou toque no mapa.</p>' }
   catch (e) { if (M === meu) res.innerHTML = '<p class="small" style="color:#b45309">Não foi possível ler a foto (sem internet para carregar o leitor?). Digite o endereço ou toque no mapa.</p>' } };
+/* SP-34: custo da ocorrência = real (executado) ou o orçamento pelo título da planilha (memória de cálculo padrão da obra) */
+const _custoOc33 = custoOc;
+custoOc = function (o, x) { const r = custoReal(o, x); if (r > 0) return r; try { const v = window.__sp33Custo ? window.__sp33Custo(o, x) : 0; if (v > 0) return v } catch (e) { } return _custoOc33.apply(this, arguments) };
 })();
 </script>
 
@@ -5038,6 +5041,315 @@ ocCard = function (o, oc) { const h = _card18.apply(this, arguments); if (!oc ||
     saveObra(o); fecharModal(false); render();
     toast('Planejamento modelo: ' + r.itens.length + ' ocorrência(s), ' + N + ' frente(s), ' + r.resumo.dias + ' dia(s) úteis.', 6000);
   };
+})();
+</script>
+<script>
+/* ===================== SP-34 (11/11/2026): orçamento da ocorrência pelas COMPOSIÇÕES da obra =====================
+   Base: Memória de Cálculo da licitação (Anexo II do TR — PE SRP 90010/2026, proc. 46964/2025), para os itens que
+   dependem um do outro. Tapa-buraco = corte (serra, pelo perímetro) + limpeza/pintura de ligação + CBUQ ou PMF
+   (execução e compactação, usinagem, CAP, agregados, transporte). Base de brita + imprimação só com “recompor base”.
+   Variáveis: A = área (m²), e = espessura (m), P = perímetro de corte (m), f = fração fresada, b = recompor base.
+   Títulos sem composição usam a proporção das medições (coeficiente por 1 unidade do item principal).
+   Estimado → empresa lança o real (pode recalcular pelas medidas) → fiscal aceita ou corrige → medição. */
+(function () {
+  const r4 = x => Math.round((+x || 0) * 10000) / 10000;
+  const nrm = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+  const fq = v => fN(v, 4).replace(/0{1,2}$/, '');
+  const BASE_TXT = 'Memória de Cálculo da licitação (Anexo II do TR — PE SRP 90010/2026)';
+  /* [código, ref EMOP, fórmula, cálculo, só com base] */
+  const COMP = {
+    tbcbuq: { nome: 'Tapa-buraco com CBUQ', main: '03.06', e: .05, it: [
+      ['03.01', '19.006.0022-2', 'P/60*0.5', 'Perímetro de corte ÷ 60 m/h × 50% (custo produtivo)'],
+      ['03.02', '19.006.0022-4', 'P/60*0.5', 'Perímetro de corte ÷ 60 m/h × 50% (custo improdutivo)'],
+      ['02.03', '08.026.0002-0', 'A', 'Área (limpeza e pintura de ligação após o recorte)'],
+      ['03.03', '08.001.0002-1', 'A*0.20', 'Área × 0,20 m (base de brita — só com recomposição de base)', 1],
+      ['03.04', '20.009.0001-1', 'A', 'Área (imprimação da base — só com recomposição de base)', 1],
+      ['03.05', '20.100.0060-0', 'A*0.74', 'Área × 0,74 kg/m² (material da imprimação — só com recomposição de base)', 1],
+      ['03.06', '20.004.0018-0', 'A*e*1.35', 'Área × espessura × 1,35 (medido na caçamba; espalhamento e compactação)'],
+      ['03.07', '20.009.0029-0', 'A*e', 'Área × espessura (usinagem do CBUQ)'],
+      ['03.08', '20.102.0008-0', 'A*e*2.30*0.055', 'Área × espessura × 2,30 t/m³ × 5,5% (CAP 50/70)'],
+      ['03.09', '20.113.0010-0', 'A*e*0.247', 'Área × espessura × 24,7% (cascalhinho)'],
+      ['03.10', '20.113.0011-0', 'A*e*0.248', 'Área × espessura × 24,8% (brita)'],
+      ['03.11', '20.113.0013-0', 'A*e*0.45', 'Área × espessura × 45% (pó de pedra)'],
+      ['03.12', '04.005.0143-1', 'A*e*2.30*50', 'Área × espessura × 2,30 t/m³ × 50 km (transporte do CBUQ)']] },
+    tbpmf: { nome: 'Tapa-buraco com PMF (asfalto frio)', main: '04.01', e: .05, it: [
+      ['04.03', '19.006.0022-2', 'P/60*0.5', 'Perímetro de corte ÷ 60 m/h × 50% (custo produtivo)'],
+      ['04.04', '19.006.0022-4', 'P/60*0.5', 'Perímetro de corte ÷ 60 m/h × 50% (custo improdutivo)'],
+      ['02.03', '08.026.0002-0', 'A', 'Área (limpeza e pintura de ligação após o recorte)'],
+      ['04.05', '08.001.0002-1', 'A*0.20', 'Área × 0,20 m (base de brita — só com recomposição de base)', 1],
+      ['04.06', '20.009.0001-1', 'A', 'Área (imprimação da base — só com recomposição de base)', 1],
+      ['04.07', '20.100.0060-0', 'A*0.74', 'Área × 0,74 kg/m² (material da imprimação — só com recomposição de base)', 1],
+      ['04.01', '20.004.0018-0', 'A*e*1.35', 'Área × espessura × 1,35 (medido na caçamba; espalhamento e compactação)'],
+      ['04.02', '60.009.0041-5', 'A*e', 'Área × espessura (PMF)'],
+      ['04.08', '04.005.0143-1', 'A*e*2.20*50', 'Área × espessura × 2,20 t/m³ × 50 km (transporte do PMF)']] },
+    recup: { nome: 'Recuperação do pavimento em CBUQ (estado crítico)', main: '06.04.01', e: .05, f: .5, it: [
+      ['06.01.01', '20.004.0025-0', 'A*0.20', 'Área × 0,20 m (reciclagem da base — só com recomposição de base)', 1],
+      ['06.01.02', '05.022.0015-0', 'A*f', 'Área × fração fresada (fresagem onde houver desnível)'],
+      ['06.02.01', '08.001.0002-1', 'A*0.20', 'Área × 0,20 m (base de brita — só com recomposição de base)', 1],
+      ['06.03.01', '20.009.0001-1', 'A', 'Área (imprimação — só com recomposição de base)', 1],
+      ['06.03.02', '14603', 'A*0.74', 'Área × 0,74 kg/m² (CM-30 — só com recomposição de base)', 1],
+      ['06.03.03', '04.005.0143-1', 'A*0.74/1000*50', 'Área × 0,74 kg/m² ÷ 1.000 × 50 km (transporte do CM-30)', 1],
+      ['02.03', '08.026.0002-0', 'A', 'Área (limpeza e pintura de ligação)'],
+      ['06.04.01', '08.015.0061-0', 'A*e*2.30', 'Área × espessura × 2,30 t/m³ (CBUQ aplicado e compactado)'],
+      ['06.04.02', '14601', 'A*e*2.30*52.1739', 'Toneladas de CBUQ × 52,1739 kg/t (CAP)'],
+      ['06.04.03', '00149', 'A*e*2.30*10.6226', 'Toneladas de CBUQ × 10,6226 kg/t (cimento)'],
+      ['06.04.04', '14543', 'A*e*2.30*0.5169', 'Toneladas de CBUQ × 0,5169 t/t (brita)'],
+      ['06.04.05', '14574', 'A*e*2.30*0.434', 'Toneladas de CBUQ × 0,434 t/t (pó de pedra)'],
+      ['06.04.06', '04.005.0143-1', 'A*e*2.30*50+A*f*0.05*2.30*50', 'CBUQ × 50 km + bota-fora do fresado (área fresada × 0,05 m × 2,30 t/m³ × 50 km)']] },
+    trinca: { nome: 'Tratamento de trincas (selagem)', main: '02.01', e: 0, it: [
+      ['02.01', '08.015.0022-0', 'A*2*0.8', 'Área × 2 m/m² × 80% (selagem de trinca)']] }
+  };
+  const refN = r => String(r || '').replace(/\s/g, '').toUpperCase();
+  function svcCod(o, cod, ref) { const L = o.servicos || []; return L.find(s => String(s.codigo).trim() === cod && (!ref || refN(s.ref).startsWith(refN(ref)))) || null }
+  const compOk = (o, k) => !!svcCod(o, COMP[k].main, COMP[k].it.find(i => i[0] === COMP[k].main)[1]);
+  const comps = o => Object.keys(COMP).filter(k => compOk(o, k));
+  const fx = (o, k, cod) => { const d = COMP[k].it.find(i => i[0] === cod); const ed = ((o.compEd || {})[k] || {})[cod]; return ed ? { x: ed.x, t: ed.t || (d && d[3]) || '' } : { x: d[2], t: d[3] } };
+  function calc(x, V) { const s = String(x || '').replace(/,/g, '.'); if (!/^[0-9AePfb.+\-*/() ]*$/.test(s) || !s.trim()) return 0; try { const v = Function('A', 'e', 'P', 'f', 'b', 'return (' + s + ')')(V.A, V.e, V.P, V.f, V.b); return isFinite(v) && v > 0 ? v : 0 } catch (er) { return 0 } }
+  function conta(x, V, q) { const s = String(x || '').replace(/,/g, '.').replace(/(\d)\.(\d)/g, '$1,$2').replace(/\*/g, ' × ').replace(/\//g, ' ÷ ').replace(/\+/g, ' + ')
+      .replace(/\bA\b/g, fN(V.A)).replace(/\be\b/g, fN(V.e, 3)).replace(/\bP\b/g, fN(V.P)).replace(/\bf\b/g, fN(V.f, 2)).replace(/\bb\b/g, V.b ? '1' : '0'); return s + ' = ' + fq(q) }
+
+  /* ---- títulos sem composição: proporção das medições (coeficiente por 1 un. do item principal) ---- */
+  const gKey = s => (s.grupo && s.grupo.c) ? String(s.grupo.c) : (String(s.codigo || '').split('.')[0] + '.');
+  function grupos(o) { const m = new Map(); (o.servicos || []).forEach(s => { const k = gKey(s); if (!m.has(k)) m.set(k, { g: k, d: (s.grupo && s.grupo.d) || '', itens: [] }); m.get(k).itens.push(s) }); return [...m.values()] }
+  const grupo = (o, g) => grupos(o).find(x => x.g === g);
+  function medQ(o) { const q = {}; (o.medicoes || []).forEach(md => { if (md.qtds) Object.keys(md.qtds).forEach(k => { q[k] = (q[k] || 0) + (+md.qtds[k] || 0) }); else (md.todas || []).forEach(t => { if (t.sid && t.qMed) q[t.sid] = (q[t.sid] || 0) + (+t.qMed || 0) }) }); return q }
+  function memPad(o, g) { const G = grupo(o, g); if (!G) return null; const ed = (o.memPad || {})[g];
+    const main = (ed && G.itens.find(s => s.id === ed.main)) || G.itens[0];
+    if (ed && ed.coef) return { G, main, coef: Object.assign({}, ed.coef, { [main.id]: 1 }), fonte: 'editada pelo gestor' };
+    const Q = medQ(o), bq = Q[main.id] || 0, coef = { [main.id]: 1 };
+    if (bq > 0) G.itens.forEach(s => { if (s.id !== main.id && Q[s.id] > 0) coef[s.id] = r4(Q[s.id] / bq) });
+    return { G, main, coef, fonte: bq > 0 ? 'proporção das medições fechadas' : 'sem medição do item principal' } }
+
+  /* ---- variáveis da ocorrência (descrição, estimativa editada, medidas do fiscal) ---- */
+  function varsOc(o, oc, k) { const ds = String(oc.desc || ''), nb = v => num(String(v).replace(/\./g, '').replace(',', '.'));
+    let A = 0, e = 0, P = 0, memo = [];
+    const mA = ds.match(/[áa]rea(?: média adotada)? ([\d.,]+) m²/i); if (mA) { A = nb(mA[1]); memo.push('área ' + fN(A) + ' m² (descrição)') }
+    const mE = ds.match(/(\d+(?:,\d+)?) ?cm\b/i); if (mE) e = nb(mE[1]) / 100;
+    const mT = ds.match(/CBUQ(?: até)? ([\d.,]+) t/i);
+    const cb = oc.insu && (oc.insu.mat || []).find(m => /CBUQ|PMF/i.test(m[0])); const ec = (COMP[k] && COMP[k].e) || .05;
+    if (!A && cb) { A = r4((+cb[1] || 0) / ((e || ec) * 2.4)); memo.push('área ' + fN(A) + ' m² pela estimativa editada (' + fN(+cb[1], 3) + ' t)') }
+    if (!A && mT) { A = r4(nb(mT[1]) / ((e || ec) * 2.4)); memo.push('área ' + fN(A) + ' m² pelo CBUQ da descrição') }
+    const m = oc.med || {}; if (oc.vistFiscal && m.c > 0 && m.l > 0) { const n = +m.n > 1 ? +m.n : 1; A = r4(m.c * m.l * n); P = r4(2 * (m.c + m.l) * n); if (m.e > 0) e = m.e / 100; memo = ['medidas do fiscal ' + (n > 1 ? n + ' × ' : '') + fN(m.c) + ' × ' + fN(m.l) + ' m' + (m.e ? ' × ' + fN(m.e, 0) + ' cm' : '')] }
+    if (!A && k !== 'recup') { A = 3; memo.push('área padrão de tapa-buraco 3 m²') }
+    if (!e) e = ec; if (!P && A) { P = r4(4 * Math.sqrt(A)); memo.push('perímetro ' + fN(P) + ' m (quadrado de mesma área)') }
+    const b = /\bBASE\b|AFUNDAMENT|RECALQUE|RECOMPOS/.test(nrm(ds + ' ' + (oc.sug || ''))) && !/HIPOTESE DE RECAPEAMENTO/.test(nrm(ds)) ? 1 : 0;
+    return { A, e, P, f: (COMP[k] && COMP[k].f) || .5, b, memo: memo.join('; ') } }
+  function autoTit(o, oc) { const tx = nrm([oc.desc, oc.sug, oc.solucao].join(' ')), C = comps(o); let k = null;
+    const buraco = /BURACO|TAPA|PANELA|CRATERA|AFUNDAMENTO/.test(tx), recup = /RECUPERACAO DO PAVIMENTO|RECAPE|FRESAG/.test(tx);
+    if (/\bPMF\b|ASFALTO FRIO/.test(tx) && C.includes('tbpmf')) k = 'tbpmf'; else if (recup && C.includes('recup')) k = 'recup'; else if (buraco && C.includes('tbcbuq')) k = 'tbcbuq'; else if (/TRINCA/.test(tx) && C.includes('trinca')) k = 'trinca';
+    if (!k) return null; const V = varsOc(o, oc, k); if (!(V.A > 0)) return null; return Object.assign({ k }, V, { fonte: 'automático pela descrição' }) }
+  function titOc(o, oc) { const t = oc.tit; if (t && t.k && COMP[t.k] && compOk(o, t.k)) return Object.assign({ f: COMP[t.k].f || .5, b: 0, P: 0 }, t, { memo: 'definido pelo gestor', fonte: 'gestor' });
+    if (t && t.g && grupo(o, t.g)) return { g: t.g, q: +t.q || 0, memo: 'quantidade definida pelo gestor', fonte: 'gestor' }; return autoTit(o, oc) }
+  function orcDe(o, t) { if (!t) return null;
+    if (t.k) { const C = COMP[t.k], V = { A: +t.A || 0, e: +t.e || 0, P: +t.P || 0, f: t.f != null ? +t.f : (C.f || .5), b: t.b ? 1 : 0 }; const falta = [];
+      const itens = C.it.filter(i => !i[4] || V.b).map(i => { const s = svcCod(o, i[0], i[1]); if (!s) { falta.push(i[0]); return null } const F = fx(o, t.k, i[0]), qtd = r4(calc(F.x, V)), pb = pbdi(o, s);
+        return qtd > 0 ? { id: s.id, sv: s, qtd, pb, v: t2(qtd * pb), calc: F.t + ': ' + conta(F.x, V, qtd) } : null }).filter(Boolean);
+      const main = svcCod(o, C.main);
+      return { t, V, nome: C.nome, main, itens, falta, total: r2(itens.reduce((a, i) => a + i.v, 0)) } }
+    const mp = memPad(o, t.g); if (!mp || !(t.q > 0)) return null;
+    const itens = mp.G.itens.filter(s => mp.coef[s.id] > 0).map(s => { const qtd = r4(mp.coef[s.id] * t.q), pb = pbdi(o, s); return { id: s.id, sv: s, qtd, pb, v: t2(qtd * pb), calc: 'coef. ' + fq(mp.coef[s.id]) + ' × ' + fq(t.q) + ' ' + mp.main.unidade + ' do item ' + mp.main.codigo + ' (' + mp.fonte + ') = ' + fq(qtd) } });
+    return { t, nome: mp.G.g + ' ' + mp.G.d, main: mp.main, itens, falta: [], total: r2(itens.reduce((a, i) => a + i.v, 0)) } }
+  const orcOc = (o, oc) => orcDe(o, titOc(o, oc));
+  const nomeT = (o, t) => t && t.k ? COMP[t.k].nome : (t && t.g ? ((grupo(o, t.g) || {}).g || '') + ' ' + ((grupo(o, t.g) || {}).d || '') : '');
+  const varsTxt = t => t && t.k ? 'área ' + fN(t.A) + ' m² · esp. ' + fN(t.e * 100, 1) + ' cm' + (t.P ? ' · perímetro ' + fN(t.P) + ' m' : '') + (t.k === 'recup' ? ' · fresagem ' + fN((t.f != null ? t.f : .5) * 100, 0) + '%' : '') + (t.b ? ' · com recomposição de base' : '') : (t ? fq(t.q) : '');
+  window.__sp33 = { orcOc, orcDe, titOc, memPad, grupos, COMP, nomeT, varsTxt };
+  window.__sp33Custo = (o, x) => { const r = orcOc(o, x); return r ? r.total : 0 };
+  const temExec = (o, oc) => (o.execucoes || []).some(e => e.ocorrenciaId === oc.id);
+  const _cp = custoPlan;
+  custoPlan = function (o, oc) { if (temExec(o, oc)) return 0; const r = orcOc(o, oc); if (r) return r.total; return oc.qtdPlanMan ? _cp(o, oc) : 0 };
+  saldoPlan = function (o) { const base = o.valor > 0 ? o.valor : o.servicos.reduce((s, x) => r2(s + t2(x.qtd * pbdi(o, x))), 0);
+    const medido = o.medicoes.reduce((s, m) => r2(s + m.total), 0); const R = calcMed(o, { de: '', ate: '', conf: true, rep: false });
+    let pend = 0; o.execucoes.filter(e => !e.conferida && !e.medicaoNum).forEach(e => e.itens.forEach(i => { const sv = svcOf(o, i.servicoId); if (sv) pend = r2(pend + t2((num(i.qtd) || 0) * pbdi(o, sv))) }));
+    const prog = ativas(o).filter(x => x.status !== 'medida' && x.status !== 'executada' && x.semana && custoPlan(o, x) > 0);
+    const progV = prog.reduce((s, x) => r2(s + custoPlan(o, x)), 0);
+    return { base, medido, aMedir: R.total, pend, prog: progV, nProg: prog.length, livre: r2(base - medido - R.total - pend - progV) } };
+  const _pv = piVol; piVol = function (o, oc) { const v = _pv.apply(this, arguments); try { if (v) { const r = orcOc(o, oc); if (r) { v.custo = r.total; v.custoOk = true } } } catch (e) { } return v };
+
+  function tabOrc(o, r, cus) { if (!r) return '';
+    return `<table class="tb" style="font-size:11px"><thead><tr><th>Item</th><th>Descrição</th><th>Un</th><th>Cálculo</th><th class="r">Quantidade</th>${cus ? '<th class="r">P. unit. c/ BDI</th><th class="r">Total (R$)</th>' : ''}</tr></thead><tbody>${r.itens.map(i => `<tr><td>${esc(i.sv.codigo)}</td><td>${esc(String(i.sv.descricao).slice(0, 60))}</td><td>${esc(i.sv.unidade)}</td><td class="small">${esc(i.calc)}</td><td class="r">${fq(i.qtd)}</td>${cus ? `<td class="r">${fN(i.pb)}</td><td class="r">${fN(i.v)}</td>` : ''}</tr>`).join('')}${cus ? `<tr><td colspan="6"><b>Total previsto</b></td><td class="r"><b>${fN(r.total)}</b></td></tr>` : ''}</tbody></table>
+    <p class="small muted" style="margin:3px 0 0">${r.t.k ? esc(varsTxt(r.t)) + (r.t.memo ? ' — ' + esc(r.t.memo) : '') + ' · Fórmulas: ' + BASE_TXT + '.' : esc(r.t.memo || '')}${r.falta.length ? ' <b style="color:#c0392b">Itens não achados na planilha desta obra: ' + r.falta.join(', ') + '.</b>' : ''}</p>` }
+
+  /* cartão da ocorrência */
+  const _card = ocCard;
+  ocCard = function (o, oc) { let h = _card.apply(this, arguments); try { if (!oc || oc.arquivo) return h; const r = orcOc(o, oc); if (!r) return h; const cus = can('medicao');
+    const b = `<details style="margin:6px 0;font-size:12px"><summary><b>📐 Serviço previsto:</b> ${esc(r.nome)} · ${esc(varsTxt(r.t))}${cus ? ' · <b>' + fR(r.total) + '</b>' : ''}${r.t.fonte === 'gestor' ? '' : ' <span class="muted">(automático)</span>'}</summary><div style="margin-top:4px;overflow:auto">${tabOrc(o, r, cus)}</div></details>`;
+    const k = h.lastIndexOf('</article>'); return k < 0 ? h + b : h.slice(0, k) + b + h.slice(k) } catch (e) { return h } };
+
+  /* planejar ocorrência */
+  const _mp = modalPlan;
+  modalPlan = function (oc) { let h = _mp.apply(this, arguments); try { const o = O(); const a = autoTit(o, oc), t = titOc(o, oc) || {}; const sel = oc.tit ? (oc.tit.k ? 'k:' + oc.tit.k : 'g:' + oc.tit.g) : '';
+    const opt = `<option value="">Automático pela descrição${a ? ' → ' + esc(COMP[a.k].nome) : ' (não identificado)'}</option><optgroup label="Composições da obra (memória da licitação)">${comps(o).map(k => `<option value="k:${k}" ${sel === 'k:' + k ? 'selected' : ''}>${esc(COMP[k].nome)}</option>`).join('')}</optgroup><optgroup label="Título inteiro da planilha (proporção das medições)">${grupos(o).map(G => `<option value="g:${esc(G.g)}" ${sel === 'g:' + G.g ? 'selected' : ''}>${esc(G.g + ' ' + G.d)}</option>`).join('')}</optgroup>`;
+    const v = (x, d) => x != null && x !== '' ? x : d;
+    const fs = `<fieldset style="margin-top:10px"><legend>📐 Serviço completo (composição da obra)</legend><p class="small muted">Tapa-buraco = corte com serra + limpeza/pintura de ligação + CBUQ ou PMF (execução e compactação, usinagem, CAP, agregados, transporte). Base de brita e imprimação só se marcar “recompor base”. Fórmulas: ${BASE_TXT}.</p>
+      <label>Serviço<select id="pl-tit" data-chg="sp33Prev">${opt}</select></label>
+      <div class="g4" id="pl-vars"><label>Área (m²)<input id="pl-A" inputmode="decimal" value="${t.A ? inp(t.A) : ''}" data-chg="sp33Prev"></label><label>Espessura (cm)<input id="pl-e" inputmode="decimal" value="${t.e ? inp(r4(t.e * 100)) : ''}" data-chg="sp33Prev"></label><label>Perímetro de corte (m)<input id="pl-P" inputmode="decimal" value="${t.P ? inp(t.P) : ''}" data-chg="sp33Prev"></label><label>Fresagem (% da área)<input id="pl-f" inputmode="decimal" value="${inp(r4(v(t.f, .5) * 100))}" data-chg="sp33Prev"></label></div>
+      <label class="chk"><input type="checkbox" id="pl-b" ${t.b ? 'checked' : ''} data-chg="sp33Prev"> Recompor base (brita graduada 20 cm + imprimação) — base comprometida/afundamento</label>
+      <label id="pl-qw" style="display:none">Quantidade do item principal do título<input id="pl-tq" inputmode="decimal" value="${t.q ? inp(t.q) : ''}" data-chg="sp33Prev"></label>
+      <div id="pl-tprev" style="overflow:auto"></div></fieldset>`;
+    const k = '<label>Forma de solução'; const p = h.indexOf(k); h = p < 0 ? h + fs : h.slice(0, p) + fs + h.slice(p);
+    setTimeout(() => prev(oc.id), 0); return h } catch (e) { console.warn('sp33 plan', e); return h } };
+  function lerPlan(oc) { const o = O(), s = ($('#pl-tit') || {}).value || ''; const a = autoTit(o, oc);
+    const V = { A: num(($('#pl-A') || {}).value), e: num(($('#pl-e') || {}).value) / 100, P: num(($('#pl-P') || {}).value), f: num(($('#pl-f') || {}).value) / 100, b: $('#pl-b') && $('#pl-b').checked ? 1 : 0 };
+    if (s.startsWith('g:')) return { g: s.slice(2), q: num(($('#pl-tq') || {}).value) };
+    const k = s.startsWith('k:') ? s.slice(2) : (a && a.k); if (!k) return null;
+    const d = a && a.k === k ? a : varsOc(o, oc, k); const t = { k, A: V.A || d.A, e: V.e || d.e, P: V.P || d.P, f: ($('#pl-f') || {}).value !== '' ? V.f : d.f, b: V.b };
+    t.auto = !s && a && Math.abs(t.A - a.A) < 1e-4 && Math.abs(t.e - a.e) < 1e-6 && Math.abs(t.P - a.P) < 1e-4 && t.b === a.b; return t }
+  function prev(id) { const o = O(), oc = o && o.ocorrencias.find(x => x.id === id); const box = $('#pl-tprev'); if (!oc || !box) return;
+    const s = ($('#pl-tit') || {}).value || '', isG = s.startsWith('g:'); $('#pl-vars').style.display = isG ? 'none' : ''; $('#pl-b').parentNode.style.display = isG ? 'none' : ''; $('#pl-qw').style.display = isG ? '' : 'none';
+    const t = lerPlan(oc); const r = t ? orcDe(o, Object.assign({ memo: t.k && !isG ? (t.auto ? (autoTit(o, oc) || {}).memo : 'informado no planejamento') : '' }, t)) : null;
+    if (t && t.k) { if (!$('#pl-A').value) $('#pl-A').value = inp(t.A); if (!$('#pl-e').value) $('#pl-e').value = inp(r4(t.e * 100)); if (!$('#pl-P').value) $('#pl-P').value = inp(t.P) }
+    box.innerHTML = r ? tabOrc(o, r, can('medicao')) : '<p class="small muted">Escolha o serviço e as medidas.</p>' }
+  CHG.sp33Prev = () => { if (M && M.id) prev(M.id) };
+  const _ps = ACTS.planSave;
+  ACTS.planSave = function () { try { const o = O(), id = M && M.id, oc = o.ocorrencias.find(x => x.id === id);
+      if (oc && $('#pl-tit')) { const t = lerPlan(oc);
+        if (t && !t.auto) { oc.tit = t.k ? { k: t.k, A: r4(t.A), e: r4(t.e), P: r4(t.P), f: r4(t.f), b: t.b, quem: quem(), em: new Date().toISOString() } : { g: t.g, q: r4(t.q), quem: quem(), em: new Date().toISOString() }; oc.qtdPlanMan = false;
+          const r = orcOc(o, oc); if (r && r.main) { $('#pl-serv').value = r.main.id; const mi = r.itens.find(i => i.id === r.main.id); if (mi) $('#pl-qtd').value = inp(mi.qtd) } log(oc, 'Serviço previsto: ' + nomeT(o, oc.tit) + ' · ' + varsTxt(oc.tit)) }
+        else if (t && t.auto) { delete oc.tit; oc.qtdPlanMan = false }
+        else { delete oc.tit; oc.qtdPlanMan = num($('#pl-qtd').value) > 0 } } } catch (e) { console.warn('sp33 save', e) }
+    return _ps.apply(this, arguments) };
+
+  /* composições e memória padrão da obra (aba Planejamento, abaixo do custo e saldo) */
+  const _sc = planSaldoCard;
+  planSaldoCard = function (o) { const h = _sc.apply(this, arguments); if (!can('plan')) return h; try { const cus = can('medicao'); const V1 = { A: 1, e: .05, P: 4, f: .5, b: 1 };
+    const cs = comps(o).map(k => { const C = COMP[k]; let tot = 0; const lin = C.it.map(i => { const s = svcCod(o, i[0], i[1]); const F = fx(o, k, i[0]); const q = calc(F.x, V1); const v = s ? t2(q * pbdi(o, s)) : 0; if (!i[4]) tot += v;
+        return `<tr><td>${esc(i[0])}</td><td>${s ? esc(String(s.descricao).slice(0, 60)) : '<span class="neg">não achado</span>'}</td><td>${s ? esc(s.unidade) : ''}</td><td><input class="sp33t" data-k="${k}" data-c="${i[0]}" value="${esc(F.t)}" style="width:100%;min-width:240px"></td><td><input class="sp33x" data-k="${k}" data-c="${i[0]}" value="${esc(F.x)}" style="width:150px;font-family:monospace"></td><td class="r">${fq(r4(q))}</td>${cus ? `<td class="r">${fN(v)}</td>` : ''}</tr>` }).join('');
+      return `<details style="margin-top:6px"><summary><b>${esc(C.nome)}</b>${cus ? ' · <b>' + fR(tot) + '</b> por m² (5 cm, sem base)' : ''}${(o.compEd || {})[k] ? ' <span class="chip" style="--c:#7b3fb0">editada</span>' : ''}</summary>
+        <div style="overflow:auto"><table class="tb" style="font-size:11px"><thead><tr><th>Item</th><th>Descrição</th><th>Un</th><th>Cálculo (texto da memória)</th><th>Fórmula</th><th class="r">Qtd. p/ 1 m² · 5 cm · P 4 m</th>${cus ? '<th class="r">R$</th>' : ''}</tr></thead><tbody>${lin}</tbody></table></div>
+        <div class="row gap" style="margin-top:6px"><button class="btn sm pri" data-act="sp33CSalva" data-k="${k}">💾 Salvar fórmulas</button><button class="btn sm" data-act="sp33CPad" data-k="${k}">↻ Voltar à memória da licitação</button></div></details>` }).join('');
+    const usados = new Set(); comps(o).forEach(k => COMP[k].it.forEach(i => usados.add(i[0].split('.')[0] + '.')));
+    const Q = medQ(o); const gs = grupos(o).filter(G => G.itens.length > 1 && !usados.has(G.g)).map(G => { const mp = memPad(o, G.g); return `<details style="margin-top:6px"><summary>${esc(G.g + ' ' + G.d)} · principal ${esc(mp.main.codigo)} <span class="muted small">— ${esc(mp.fonte)}</span></summary>
+      <div style="overflow:auto"><table class="tb" style="font-size:11px"><thead><tr><th>Item</th><th>Descrição</th><th>Un</th><th class="r">Medido acumulado</th><th class="r">Coef. por 1 ${esc(mp.main.unidade)}</th></tr></thead><tbody>${G.itens.map(s => `<tr><td>${esc(s.codigo)}</td><td>${esc(String(s.descricao).slice(0, 70))}</td><td>${esc(s.unidade)}</td><td class="r">${fN(Q[s.id] || 0)}</td><td class="r"><input class="sp33c" data-g="${esc(G.g)}" data-id="${s.id}" style="width:90px;text-align:right" value="${mp.coef[s.id] ? fN(mp.coef[s.id], 4) : ''}" ${s.id === mp.main.id ? 'disabled' : ''}></td></tr>`).join('')}</tbody></table></div>
+      <button class="btn sm" style="margin-top:6px" data-act="sp33MemSalva" data-g="${esc(G.g)}">💾 Salvar coeficientes</button></details>` }).join('');
+    return h + `<div style="height:16px"></div><div class="card"><h3>📐 Composições e memória de cálculo padrão da obra</h3><p class="muted small">Cada serviço leva todos os itens que dependem um do outro, com as fórmulas da <b>${BASE_TXT}</b>. Variáveis: <b>A</b> área (m²), <b>e</b> espessura (m), <b>P</b> perímetro de corte (m), <b>f</b> fração fresada. Itens de base (brita + imprimação) só entram quando o planejamento marca “recompor base”. O gestor pode ajustar texto e fórmula.</p>${cs || '<p class="small muted">A planilha desta obra não tem os itens das composições da licitação.</p>'}${gs ? '<h4 style="margin:12px 0 0">Outros títulos (proporção das medições)</h4>' + gs : ''}</div>` } catch (e) { console.warn('sp33 mem', e); return h } };
+  ACTS.sp33CSalva = d => { const o = O(); const ed = {}; document.querySelectorAll(`.sp33x[data-k="${d.k}"]`).forEach(i => { const c = i.dataset.c, t = (document.querySelector(`.sp33t[data-k="${d.k}"][data-c="${c}"]`) || {}).value || ''; const df = COMP[d.k].it.find(x => x[0] === c);
+      if (i.value.trim() !== df[2] || t.trim() !== df[3]) ed[c] = { x: i.value.trim(), t: t.trim() } });
+    o.compEd = o.compEd || {}; if (Object.keys(ed).length) o.compEd[d.k] = ed; else delete o.compEd[d.k]; saveObra(o); render(); toast('Fórmulas salvas.') };
+  ACTS.sp33CPad = d => { const o = O(); if (o.compEd) delete o.compEd[d.k]; saveObra(o); render(); toast('Voltou às fórmulas da memória da licitação.') };
+  ACTS.sp33MemSalva = d => { const o = O(); const mp = memPad(o, d.g); const coef = { [mp.main.id]: 1 }; document.querySelectorAll('.sp33c').forEach(i => { if (i.dataset.g !== d.g || i.disabled) return; const v = num(i.value); if (v > 0) coef[i.dataset.id] = r4(v) });
+    o.memPad = o.memPad || {}; o.memPad[d.g] = { main: mp.main.id, coef, quem: quem(), em: new Date().toISOString() }; saveObra(o); render(); toast('Coeficientes salvos.') };
+
+  /* execução: a empresa recebe os itens previstos e lança o REAL (ou recalcula pelas medidas executadas) */
+  const _en = exNovo;
+  exNovo = function (oc) { const r0 = _en.apply(this, arguments); try { if (!oc || !M || M.t !== 'ex') return r0; const o = O(); const r = orcOc(o, oc); if (!r) return r0;
+    M.d.itens = r.itens.map(i => ({ servicoId: i.id, qtd: i.qtd })); M.d.orcEst = { t: JSON.parse(JSON.stringify(r.t)), nome: r.nome, itens: r.itens.map(i => ({ id: i.id, qtd: i.qtd, calc: i.calc })) };
+    const b = document.querySelector('#modal #itens'); if (!b) return r0; b.innerHTML = M.d.itens.map(i => itemRow(o, i, '')).join('');
+    b.insertAdjacentHTML('beforebegin', `<div class="small" style="background:#fff7e6;border-left:3px solid #d98a00;padding:6px 8px;margin:6px 0">📐 Já preenchido com o previsto: <b>${esc(r.nome)}</b> · ${esc(varsTxt(r.t))}. <b>Troque pelas quantidades reais executadas</b> (inclua ou tire itens se precisar)${r.t.k ? ', ou preencha comprimento, largura e espessura executados acima e toque em <button class="btn sm" data-act="sp33Recalc">↻ Recalcular pelas medidas executadas</button>' : ''}. O fiscal confere e aceita ou corrige antes da medição.</div>`) } catch (e) { console.warn('sp33 ex', e) } return r0 };
+  ACTS.sp33Recalc = () => { const o = O(); if (!M || !M.d || !M.d.orcEst || !M.d.orcEst.t.k) return; const c = num($('#ex-mc').value), l = num($('#ex-ml').value), ec = num($('#ex-me').value);
+    if (!(c > 0 && l > 0)) { toast('Preencha comprimento e largura executados.'); return }
+    const t = Object.assign({}, M.d.orcEst.t, { A: r4(c * l), P: r4(2 * (c + l)), e: ec > 0 ? ec / 100 : M.d.orcEst.t.e, memo: 'medidas executadas' }); const r = orcDe(o, t); if (!r) return;
+    M.d.itens = r.itens.map(i => ({ servicoId: i.id, qtd: i.qtd })); M.d.calcReal = { t, itens: r.itens.map(i => ({ id: i.id, qtd: i.qtd, calc: i.calc })) };
+    $('#itens').innerHTML = M.d.itens.map(i => itemRow(o, i, '')).join(''); toast('Quantidades recalculadas pelas medidas executadas: ' + varsTxt(t) + '.') };
+
+  /* conferência do fiscal: aceita ou corrige (o conferido é o que vai para a medição) */
+  const _mc = modalConf;
+  modalConf = function (e) { let h = _mc.apply(this, arguments); try { const o = O(); const est = {}; ((e.orcEst && e.orcEst.itens) || []).forEach(i => est[i.id] = i.qtd);
+    const emp = {}; (e.itensEmpresa || e.itens || []).forEach(i => { if (i.servicoId) emp[i.servicoId] = (emp[i.servicoId] || 0) + (num(i.qtd) || 0) });
+    const cur = {}; (e.itens || []).forEach(i => { if (i.servicoId) cur[i.servicoId] = (cur[i.servicoId] || 0) + (num(i.qtd) || 0) });
+    const ids = [...new Set([...Object.keys(est), ...Object.keys(emp), ...Object.keys(cur)])].filter(id => svcOf(o, id)); const dis = can('conferir') && !e.medicaoNum ? '' : 'disabled';
+    const lin = id => { const s = svcOf(o, id); const dif = est[id] != null && emp[id] != null && est[id] > 0 && Math.abs(emp[id] - est[id]) / est[id] > .1; return `<tr class="sp33f" data-id="${id}"><td>${esc(s.codigo)}</td><td>${esc(String(s.descricao).slice(0, 60))}</td><td>${esc(s.unidade)}</td><td class="r">${est[id] != null ? fq(est[id]) : '—'}</td><td class="r" ${dif ? 'style="color:#c0392b;font-weight:600"' : ''}>${emp[id] != null ? fq(emp[id]) : '—'}</td><td class="r"><input class="sp33q" inputmode="decimal" style="width:95px;text-align:right" value="${cur[id] != null ? fq(cur[id]) : ''}" ${dis}></td></tr>` };
+    const fs = `<fieldset style="margin:8px 0"><legend>📏 Quantidades — o fiscal aceita ou corrige</legend><p class="small muted">Previsto = composição da ocorrência; Empresa = real lançado pela contratada; <b>Conferido</b> = o que vai para a medição (deixe igual para aceitar ou corrija; vazio ou 0 tira o item).${e.calcReal ? ' A empresa recalculou pelas medidas executadas: ' + esc(varsTxt(e.calcReal.t)) + '.' : ''}</p>
+      <div style="overflow:auto"><table class="tb" style="font-size:11px"><thead><tr><th>Item</th><th>Descrição</th><th>Un</th><th class="r">Previsto</th><th class="r">Empresa</th><th class="r">Conferido</th></tr></thead><tbody id="sp33fb">${ids.map(lin).join('')}</tbody></table></div>
+      <div class="row gap" style="margin-top:6px;align-items:flex-end"><label style="flex:1;margin:0">Incluir item<select id="sp33fs" ${dis}>${svcOptions(o, '')}</select></label><button class="btn sm" data-act="sp33fAdd" ${dis}>＋ incluir</button></div></fieldset>`;
+    const k = '<div class="cols">'; const p = h.indexOf(k); return p < 0 ? h + fs : h.slice(0, p) + fs + h.slice(p) } catch (er) { console.warn('sp33 conf', er); return h } };
+  ACTS.sp33fAdd = () => { const o = O(), id = ($('#sp33fs') || {}).value; if (!id || document.querySelector(`#sp33fb tr[data-id="${id}"]`)) return; const s = svcOf(o, id);
+    $('#sp33fb').insertAdjacentHTML('beforeend', `<tr class="sp33f" data-id="${id}"><td>${esc(s.codigo)}</td><td>${esc(String(s.descricao).slice(0, 60))}</td><td>${esc(s.unidade)}</td><td class="r">—</td><td class="r">—</td><td class="r"><input class="sp33q" inputmode="decimal" style="width:95px;text-align:right"></td></tr>`) };
+  const _co = ACTS.confOk;
+  ACTS.confOk = function (d) { try { const o = O(), e = o.execucoes.find(x => x.id === d.id);
+      if (e && !e.conferida && document.querySelector('#modal .sp33f')) { const F = fotosConf(e, o), q = (document.querySelector('input[name=cf-q]:checked') || {}).value;
+        const vai = q !== 'reprovada' && F.antes.length && F.depois.length && $('#cf-campo') && $('#cf-campo').checked;
+        if (vai) { const novo = []; document.querySelectorAll('#modal .sp33f').forEach(tr => { const v = num(tr.querySelector('.sp33q').value); if (v > 0) novo.push({ servicoId: tr.dataset.id, qtd: r4(v) }) });
+          const k = l => JSON.stringify((l || []).filter(i => i.servicoId && num(i.qtd) > 0).map(i => [i.servicoId, r4(num(i.qtd))]).sort());
+          if (k(novo) !== k(e.itens)) { if (!e.itensEmpresa) e.itensEmpresa = JSON.parse(JSON.stringify(e.itens)); e.itens = novo; e.corrFiscal = { quem: quem(), em: new Date().toISOString() };
+            const oc = e.ocorrenciaId && o.ocorrencias.find(x => x.id === e.ocorrenciaId); if (oc) log(oc, 'Quantidades da execução de ' + fData(e.data) + ' corrigidas pelo fiscal na conferência');
+            setTimeout(() => toast('Conferência aprovada com as quantidades corrigidas pelo fiscal: é isso que entra na medição.', 6000), 50) } } } } catch (er) { console.warn('sp33 confOk', er) }
+    return _co.apply(this, arguments) };
+  const _xc = exCard;
+  exCard = function (o, e) { const h = _xc.apply(this, arguments); return e && e.corrFiscal ? h.replace('<div class="chips">', '<div class="chips"><span class="chip" style="--c:#2563a8" title="Empresa lançou outras quantidades; vale o conferido">✏ quantidades corrigidas pelo fiscal</span>') : h };
+  /* explicação de cada quantidade (aba Memória de cálculo e nota da memória do Excel) */
+  window.__sp33Explica = (o, e, id, q) => { const p = []; const er = e.calcReal && e.calcReal.itens.find(i => i.id === id), es = e.orcEst && e.orcEst.itens.find(i => i.id === id);
+    if (es) p.push('Previsto: ' + es.calc); if (er) p.push('Executado: ' + er.calc);
+    const emp = ((e.itensEmpresa || []).find(i => i.servicoId === id) || {}).qtd;
+    if (e.itensEmpresa) p.push('lançado pela empresa ' + fq(emp || 0) + ' → conferido pelo fiscal ' + fq(q)); else if (e.conferida || e.medicaoNum) p.push('real lançado pela empresa e aceito pelo fiscal: ' + fq(q));
+    return p.join(' · ') };
+})();
+</script>
+<script>
+/* ===================== SP-34b (11/11/2026): aba “Memória de cálculo” =====================
+   Explica cada quantidade: previsto (título da planilha × coeficiente da memória padrão da obra, com a origem da
+   quantidade), lançado pela empresa, conferido/corrigido pelo fiscal e a medição em que entrou. */
+(function () {
+  const i = TABS.findIndex(t => t[0] === 'med'); if (!TABS.some(t => t[0] === 'memo')) TABS.splice(i + 1, 0, ['memo', 'Memória de cálculo']);
+  const X = () => window.__sp33;
+  const fq = v => fN(v, 4).replace(/0{1,2}$/, '');
+  const titTxt = (o, g) => { const G = X().grupos(o).find(x => x.g === g); return G ? G.g + ' ' + G.d : g };
+  function escopo(o) { const f = S.f.memo = S.f.memo || { m: 'abertas' }; const L = o.execucoes.filter(e => f.m === 'abertas' ? !e.medicaoNum : String(e.medicaoNum) === String(f.m)); return L.slice().sort((a, b) => a.data.localeCompare(b.data)) }
+  function blocoEx(o, e, cus) { const L = localEx(o, e), oc = e.ocorrenciaId && o.ocorrencias.find(x => x.id === e.ocorrenciaId);
+    const est = {}; ((e.orcEst && e.orcEst.itens) || []).forEach(i => est[i.id] = i.qtd);
+    const emp = {}; (e.itensEmpresa || e.itens || []).forEach(i => { if (i.servicoId) emp[i.servicoId] = (emp[i.servicoId] || 0) + (+i.qtd || 0) });
+    const con = {}; (e.itens || []).forEach(i => { if (i.servicoId) con[i.servicoId] = (con[i.servicoId] || 0) + (+i.qtd || 0) });
+    const ids = [...new Set([...Object.keys(est), ...Object.keys(emp), ...Object.keys(con)])].filter(id => svcOf(o, id));
+    let tot = 0; const es = {}; ((e.orcEst && e.orcEst.itens) || []).forEach(i => es[i.id] = i.calc || '');
+    const F = fotosConf(e, o); const md = e.med || {};
+    const sit = e.medicaoNum ? 'Medição nº ' + e.medicaoNum : e.conferida ? 'Conferida — entra na próxima medição' : e.qualidade === 'reprovada' ? 'Reprovada pelo fiscal' : 'Aguardando conferência do fiscal';
+    const lin = ids.map(id => { const s = svcOf(o, id), q = e.conferida || e.medicaoNum ? (con[id] || 0) : 0, v = t2(q * pbdi(o, s)); tot += v;
+      const ex = esc(window.__sp33Explica ? window.__sp33Explica(o, e, id, q) : (es[id] || '')) || 'incluído na execução';
+      return `<tr><td>${esc(s.codigo)}</td><td>${esc(String(s.descricao).slice(0, 70))}</td><td>${esc(s.unidade)}</td><td class="r">${est[id] != null ? fq(est[id]) : '—'}</td><td class="small">${ex}</td><td class="r">${emp[id] != null ? fq(emp[id]) : '—'}</td><td class="r"><b>${e.conferida || e.medicaoNum ? fq(con[id] || 0) : '—'}</b>${e.corrFiscal && (con[id] || 0) !== (emp[id] || 0) ? ' ✏' : ''}</td>${cus ? `<td class="r">${fN(pbdi(o, s))}</td><td class="r">${v ? fN(v) : '—'}</td>` : ''}</tr>` }).join('');
+    return `<div class="card" style="margin-top:10px;padding:10px 12px"><div class="row gap" style="justify-content:space-between;flex-wrap:wrap"><b>${fData(e.data)} · ${L.oc ? 'Ocorrência #' + L.oc.num : 'Serviço avulso'} · ${esc(L.txt)}</b><span class="chip" style="--c:${e.medicaoNum ? '#2e7d4f' : e.conferida ? '#2563a8' : '#b7791f'}">${esc(sit)}</span></div>
+      <p class="small" style="margin:4px 0">${oc && oc.lat != null ? 'Coordenadas ' + (+oc.lat).toFixed(6) + ', ' + (+oc.lng).toFixed(6) + ' · ' : ''}${md.c && md.l ? 'Medidas da execução: ' + fN(md.c) + ' × ' + fN(md.l) + ' m' + (md.e ? ' × ' + fN(md.e, 0) + ' cm' : '') + ' = ' + fN(md.c * md.l) + ' m²' + (md.e ? ' · ' + fq(md.c * md.l * md.e / 100) + ' m³' : '') + ' · ' : ''}Fotos: ${F.antes.length} antes, ${F.depois.length} depois${e.conferidaPor ? ' · Conferido por ' + esc(e.conferidaPor) : ''}${e.corrFiscal ? ' · ✏ quantidades corrigidas pelo fiscal' : ''}</p>
+      ${e.orcEst && e.orcEst.t ? `<p class="small muted" style="margin:2px 0">Previsto: ${esc(e.orcEst.nome || '')} · ${esc(X().varsTxt(e.orcEst.t))}${e.orcEst.t.memo ? ' — ' + esc(e.orcEst.t.memo) : ''}${e.calcReal ? ' · <b>Executado (medidas da empresa): ' + esc(X().varsTxt(e.calcReal.t)) + '</b>' : ''}</p>` : ''}
+      <div style="overflow:auto"><table class="tb" style="font-size:11px"><thead><tr><th>Item</th><th>Descrição</th><th>Un</th><th class="r">Previsto</th><th>Como foi calculado</th><th class="r">Empresa (real)</th><th class="r">Conferido (medição)</th>${cus ? '<th class="r">P. unit. c/ BDI</th><th class="r">Valor (R$)</th>' : ''}</tr></thead><tbody>${lin || '<tr><td colspan="9" class="muted">Sem quantidades lançadas.</td></tr>'}${cus && tot ? `<tr><td colspan="8"><b>Total desta execução</b></td><td class="r"><b>${fN(tot)}</b></td></tr>` : ''}</tbody></table></div>
+      ${e.desc ? `<p class="small" style="margin:4px 0 0"><b>Descrição (RDO):</b> ${esc(e.desc.slice(0, 400))}</p>` : ''}</div>` }
+  function resumo(o, L, cus) { const ag = {}; L.forEach(e => { if (!(e.conferida || e.medicaoNum)) return; (e.itens || []).forEach(i => { const s = svcOf(o, i.servicoId); if (!s || !(+i.qtd)) return; const a = ag[s.id] = ag[s.id] || { s, q: 0, n: 0 }; a.q += +i.qtd; a.n++ }) });
+    const ks = Object.values(ag).sort((a, b) => String(a.s.codigo).localeCompare(String(b.s.codigo), 'pt-BR', { numeric: true })); let tot = 0;
+    return ks.length ? `<div style="overflow:auto"><table class="tb" style="font-size:12px"><thead><tr><th>Item</th><th>Descrição</th><th>Un</th><th class="r">Nº de lançamentos</th><th class="r">Quantidade</th>${cus ? '<th class="r">P. unit. c/ BDI</th><th class="r">Valor (R$)</th>' : ''}</tr></thead><tbody>${ks.map(a => { const q = r2(a.q), v = t2(q * pbdi(o, a.s)); tot += v; return `<tr><td>${esc(a.s.codigo)}</td><td>${esc(String(a.s.descricao).slice(0, 80))}</td><td>${esc(a.s.unidade)}</td><td class="r">${a.n}</td><td class="r">${fN(q)}</td>${cus ? `<td class="r">${fN(pbdi(o, a.s))}</td><td class="r">${fN(v)}</td>` : ''}</tr>` }).join('')}${cus ? `<tr><td colspan="6"><b>Total</b></td><td class="r"><b>${fN(r2(tot))}</b></td></tr>` : ''}</tbody></table></div><p class="small muted">Soma das quantidades CONFERIDAS pelo fiscal (as que vão para o boletim). Execuções ainda não conferidas aparecem abaixo, mas não entram aqui.</p>` : '<p class="small muted">Nenhuma execução conferida neste recorte.</p>' }
+  function previstas(o, cus) { const L = ativas(o).filter(x => x.status !== 'medida' && x.status !== 'executada' && x.semana && !(o.execucoes || []).some(e => e.ocorrenciaId === x.id)).map(x => ({ x, r: X().orcOc(o, x) })).filter(p => p.r).sort((a, b) => String(a.x.semana).localeCompare(String(b.x.semana)) || a.x.num - b.x.num);
+    if (!L.length) return '<p class="small muted">Nenhuma ocorrência programada sem execução.</p>';
+    return `<div style="overflow:auto"><table class="tb" style="font-size:11px"><thead><tr><th>Semana</th><th>#</th><th>Local</th><th>Serviço</th><th>Medidas</th><th>Origem das medidas</th>${cus ? '<th class="r">Previsto (R$)</th>' : ''}</tr></thead><tbody>${L.map(({ x, r }) => `<tr><td>${esc(labSem(x.semana))}</td><td>${x.num}</td><td>${esc(ocLocal(x)).slice(0, 60)}</td><td>${esc(r.nome).slice(0, 50)}</td><td class="small">${esc(X().varsTxt(r.t))}</td><td class="small">${esc(r.t.memo || '')}</td>${cus ? `<td class="r">${fN(r.total)}</td>` : ''}</tr>`).join('')}${cus ? `<tr><td colspan="6"><b>Total programado</b></td><td class="r"><b>${fN(r2(L.reduce((a, p) => a + p.r.total, 0)))}</b></td></tr>` : ''}</tbody></table></div><p class="small muted">Cada serviço vira os seus itens pelas fórmulas da composição da obra (aba Planejamento). Abra a ocorrência para ver item por item com a conta.</p>` }
+  function tMemo(o) { const f = S.f.memo = S.f.memo || { m: 'abertas' }; const cus = can('medicao'); const L = escopo(o); const md = f.m !== 'abertas' && o.medicoes.find(m => String(m.num) === String(f.m));
+    const opt = `<option value="abertas" ${f.m === 'abertas' ? 'selected' : ''}>Execuções ainda não medidas (próxima medição)</option>` + o.medicoes.slice().sort((a, b) => b.num - a.num).map(m => `<option value="${m.num}" ${String(f.m) === String(m.num) ? 'selected' : ''}>Medição nº ${m.num} (${fData(m.de)} a ${fData(m.ate)})${m.hist ? ' — importada' : ''}</option>`).join('');
+    const hist = md && md.hist ? `<div class="alert" style="margin-top:8px">A medição nº ${md.num} foi importada do boletim oficial (sem execuções lançadas no programa): a memória dela é a do Excel oficial. As quantidades medidas dela entram nos coeficientes da memória de cálculo padrão da obra.</div>` : '';
+    return `<div class="card"><h3>🧮 Memória de cálculo</h3><p class="muted small">Explica cada quantidade da obra e da medição: o <b>previsto</b> (título da planilha × coeficiente da memória padrão da obra, com a origem da quantidade), o <b>real lançado pela empresa</b> e o <b>conferido pelo fiscal</b>, que é o que vai para o boletim.</p>
+      <div class="row gap" style="align-items:flex-end;flex-wrap:wrap"><label style="margin:0;min-width:320px">Mostrar<select data-chg="sp33Memo">${opt}</select></label><button class="btn" data-act="sp33MemoPrint">🖨 Imprimir / PDF</button></div>${hist}</div>
+      <div class="card" style="margin-top:12px"><h3>1. Resumo por item${f.m === 'abertas' ? ' (próxima medição)' : ' — medição nº ' + esc(f.m)}</h3>${resumo(o, L, cus)}</div>
+      <div class="card" style="margin-top:12px"><h3>2. Memória por execução (${L.length})</h3>${L.length ? L.map(e => blocoEx(o, e, cus)).join('') : '<p class="small muted">Nenhuma execução neste recorte.</p>'}</div>
+      ${f.m === 'abertas' ? `<div class="card" style="margin-top:12px"><h3>3. Previsto das ocorrências programadas (ainda sem execução)</h3>${previstas(o, cus)}</div>` : ''}` }
+  window.__sp33Memo = tMemo;
+  const _tp = tPainel; tPainel = function (o) { return S.tab === 'memo' ? tMemo(o) : _tp.apply(this, arguments) };
+  CHG.sp33Memo = el => { (S.f.memo = S.f.memo || {}).m = el.value; render() };
+  ACTS.sp33MemoPrint = () => { const o = O(); const f = S.f.memo || { m: 'abertas' }; const cus = can('medicao'); const L = escopo(o);
+    const html = docWrap('Memória de cálculo — ' + o.nome, `<section class="pg">${cabDoc(o, 'MEMÓRIA DE CÁLCULO', '<b>' + (f.m === 'abertas' ? 'Execuções ainda não medidas' : 'Medição nº ' + esc(f.m)) + '</b>')}<h2>1. Resumo por item</h2>${resumo(o, L, cus)}<h2>2. Memória por execução</h2>${L.map(e => blocoEx(o, e, cus)).join('')}${f.m === 'abertas' ? '<h2>3. Previsto das ocorrências programadas</h2>' + previstas(o, cus) : ''}</section>`, true);
+    abrirPreview('Memória de cálculo', html, true) };
+})();
+</script>
+<script>
+/* SP-34c (11/11/2026): memória no MODELO OFICIAL (o da planilha “Memória de cálculo” das medições 1ª–3ª):
+   título › item › linhas por data/local/ocorrência com COMP., LARG., ESP., ÁREA, VOLUME, QUANTIDADE, CONTRATADA,
+   ACUMULADO e SALDO; cada linha explica a quantidade. A mesma explicação vai para a “nota” da memória do Excel. */
+(function () {
+  const X = () => window.__sp33; const fq = v => fN(v, 4).replace(/0{1,2}$/, '');
+  const explica = (o, e, id, q) => window.__sp33Explica ? window.__sp33Explica(o, e, id, q) : '';
+const _cm = calcMed;
+  calcMed = function (o, f) { const R = _cm.apply(this, arguments); try { (R.memoria || []).forEach(m => { if (m.__sp33) return; const e = o.execucoes.find(x => x.data === m.data && (m.oc == null ? !x.ocorrenciaId : (o.ocorrencias.find(c => c.id === x.ocorrenciaId) || {}).num === m.oc) && (x.itens || []).some(i => { const s = svcOf(o, i.servicoId); return s && s.codigo === m.cod }));
+    if (!e) return; const it = e.itens.find(i => { const s = svcOf(o, i.servicoId); return s && s.codigo === m.cod }); const t = explica(o, e, it.servicoId, it.qtd); if (t) m.nota = t + (m.nota ? ' — ' + m.nota : ''); m.__sp33 = 1 }) } catch (er) { } return R };
+  function oficial(o, L, cus) { const rows = {}; L.forEach(e => { if (!(e.conferida || e.medicaoNum)) return; const Lx = localEx(o, e); (e.itens || []).forEach(i => { const s = svcOf(o, i.servicoId); if (!s || !(+i.qtd)) return; (rows[s.id] = rows[s.id] || []).push({ e, L: Lx, q: +i.qtd, nota: explica(o, e, s.id, +i.qtd) }) }) });
+    const ant = {}; o.execucoes.forEach(e => { if (!e.medicaoNum || L.indexOf(e) >= 0) return; e.itens.forEach(i => ant[i.servicoId] = (ant[i.servicoId] || 0) + (+i.qtd || 0)) });
+    (o.medicoes || []).forEach(md => { if (md.hist && md.qtds) Object.keys(md.qtds).forEach(k => ant[k] = (ant[k] || 0) + (+md.qtds[k] || 0)) });
+    let h = '', gcur = null;
+    o.servicos.forEach(s => { const R = rows[s.id]; if (!R) return; const G = (s.grupo && s.grupo.c) || '';
+      if (G !== gcur) { gcur = G; h += `<tr style="background:#eef1f6"><td><b>${esc(G)}</b></td><td colspan="11"><b>${esc((s.grupo && s.grupo.d) || '')}</b></td></tr>` }
+      const tq = Math.round(R.reduce((a, x) => a + x.q, 0) * 1e4) / 1e4, ac = r2((ant[s.id] || 0) + tq);
+      h += `<tr style="font-weight:600"><td>${esc(s.codigo)}</td><td>${esc(String(s.descricao).slice(0, 110))}</td><td>${esc(s.unidade)}</td><td></td><td></td><td></td><td></td><td></td><td class="r">${fq(tq)}</td><td class="r">${fN(s.qtd)}</td><td class="r">${fN(ac)}</td><td class="r ${s.qtd - ac < 0 ? 'neg' : ''}">${fN(r2(s.qtd - ac))}</td></tr>`;
+      R.sort((a, b) => a.e.data.localeCompare(b.e.data)).forEach(x => { const m = x.e.med || {}, c = +m.c || 0, l = +m.l || 0, es = +m.e || 0;
+        h += `<tr><td>${fData(x.e.data)}</td><td class="small">${esc(x.L.txt)}${x.L.oc ? ' — Ocorrência nº ' + x.L.oc.num : ''}${x.nota ? '<br><span class="muted">' + esc(x.nota) + '</span>' : ''}</td><td></td><td class="r">${c ? fN(c) : ''}</td><td class="r">${l ? fN(l) : ''}</td><td class="r">${es ? fN(es / 100) : ''}</td><td class="r">${c && l ? fN(c * l) : ''}</td><td class="r">${c && l && es ? fN(c * l * es / 100) : ''}</td><td class="r">${fq(x.q)}</td><td></td><td></td><td></td></tr>` }) });
+    return h ? `<div style="overflow:auto"><table class="tb" style="font-size:11px"><thead><tr><th>Item / data</th><th>Descrição / local / memória</th><th>Und.</th><th class="r">Comp. (m)</th><th class="r">Larg. (m)</th><th class="r">Esp. (m)</th><th class="r">Área (m²)</th><th class="r">Volume (m³)</th><th class="r">Quantidade</th><th class="r">Contratada</th><th class="r">Acumulado</th><th class="r">Saldo</th></tr></thead><tbody>${h}</tbody></table></div><p class="small muted">Mesmo formato da planilha “Memória de cálculo” das medições 1ª a 3ª (Excel oficial na aba Medição). Só entram as execuções conferidas pelo fiscal.</p>` : '<p class="small muted">Nenhuma execução conferida neste recorte.</p>' }
+  const _t = window.__sp33Memo; if (!_t) return;
+  const novo = function (o) { let h = _t.apply(this, arguments); const f = S.f.memo || { m: 'abertas' }; const L = o.execucoes.filter(e => f.m === 'abertas' ? !e.medicaoNum : String(e.medicaoNum) === String(f.m));
+    const sec = `<div class="card" style="margin-top:12px"><h3>Memória de cálculo — modelo oficial da obra</h3>${oficial(o, L, can('medicao'))}</div>`;
+    const k = '<div class="card" style="margin-top:12px"><h3>1. Resumo por item'; const p = h.indexOf(k); return p < 0 ? h + sec : h.slice(0, p) + sec + h.slice(p) };
+  window.__sp33Memo = novo; window.__sp33Oficial = oficial;
+  const _tp = tPainel; tPainel = function (o) { return S.tab === 'memo' ? novo(o) : _tp.apply(this, arguments) };
+  const _pr = ACTS.sp33MemoPrint; ACTS.sp33MemoPrint = function () { const orig = abrirPreview; abrirPreview = (t, html, w) => { const o = O(), f = S.f.memo || { m: 'abertas' }; const L = o.execucoes.filter(e => f.m === 'abertas' ? !e.medicaoNum : String(e.medicaoNum) === String(f.m)); html = html.replace('<h2>1. Resumo por item</h2>', '<h2>Memória de cálculo (modelo oficial)</h2>' + oficial(o, L, can('medicao')) + '<h2>1. Resumo por item</h2>'); orig(t, html, w) }; try { _pr.apply(this, arguments) } finally { abrirPreview = orig } };
 })();
 </script>
 </body>
