@@ -484,6 +484,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
   <div class="tab" data-tab="corte">Seções transversais</div>
   <div class="tab" data-tab="topo">Topografia</div>
   <div class="tab" data-tab="memo">Memória de Cálculo</div>
+  <div class="tab" data-tab="planta">Planta e 3D</div>
 </div>
 
 <div id="tabs-content">
@@ -803,6 +804,28 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
 </div>
 
 <!-- ══ ABA MEMÓRIA ══ -->
+<div class="tab-pane" id="pane-planta">
+  <div class="sec">
+    <div class="sec-title">Planta baixa e 3D · gerados a partir da Topografia, dos greides e das camadas</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <button type="button" class="tb-btn tb-btn-save" id="pl-b-planta" onclick="plModo('planta')">🗺 Planta baixa</button>
+      <button type="button" class="tb-btn" id="pl-b-3d" onclick="plModo('3d')">🧊 Ver em 3D</button>
+      <button type="button" class="tb-btn" onclick="_pl.modo==='planta'?plDesenhar(true):pl3DEnquadrar()">⤢ Enquadrar</button>
+      <button type="button" class="tb-btn" id="pl-b-svg" onclick="plBaixarSvg()" title="Baixa a planta atual (com o que está aceso) em SVG — abre no navegador, Inkscape, Illustrator ou AutoCAD (importar)">⬇ Planta (SVG)</button>
+      <button type="button" class="tb-btn" id="pl-b-png" style="display:none" onclick="plBaixarPng()">⬇ Imagem 3D (PNG)</button>
+      <span id="pl-ev-box" style="display:none;font-size:12px">Vistas: <button type="button" class="tb-btn" onclick="pl3DVista('iso')">Perspectiva</button> <button type="button" class="tb-btn" onclick="pl3DVista('topo')">Topo</button> <button type="button" class="tb-btn" onclick="pl3DVista('rua')">Nível da rua</button> &nbsp; Exagero vertical <input type="range" id="pl-ev" min="1" max="10" step="1" value="1" oninput="pl3D(true)" style="vertical-align:middle"> <b id="pl-ev-v">1×</b></span>
+      <span id="pl-msg" style="font-size:12px;color:var(--fg2)"></span>
+    </div>
+    <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+      <div id="pl-painel" style="width:300px;flex:none;max-height:780px;overflow:auto;border:1px solid var(--border,#ddd);border-radius:6px;padding:8px"></div>
+      <div style="flex:1;min-width:320px">
+        <div id="pl-svgwrap" style="height:780px;border:1px solid var(--border,#ddd);border-radius:6px;cursor:grab;overflow:hidden;user-select:none"></div>
+        <div id="pl-3dwrap" style="display:none;height:700px;border:1px solid var(--border,#ddd);border-radius:6px;overflow:hidden"></div>
+        <div style="font-size:11px;color:var(--fg2);margin-top:4px">Rolar o mouse = zoom · arrastar = mover (3D: botão esquerdo gira, direito move). Acenda ou apague os níveis para ver as cotas, espessuras e camadas. Eixos retos: a 1ª rua é a referência; ruas que se cruzam saem perpendiculares ao ponto do cruzamento (ângulo ajustável).</div>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="tab-pane" id="pane-memo">
   <div class="sec">
     <div class="sec-title">Memória de Cálculo · Pavimento Intertravado · IP-06/2004</div>
@@ -2204,7 +2227,7 @@ function volumesCamadas(totArea){
     {n:'Reforço',h:r.ref,m:'Material de CBR '+fmt(r.cbrRef,1)+'%'},
   ].filter(c=>c.h>0).map(c=>({...c,vol:(c.h/100)*totArea}));
 }
-function atualizarCorteSeAberta(){ const pn=document.getElementById('pane-corte'); if(pn&&pn.classList.contains('active')) updateCorte(); }
+function atualizarCorteSeAberta(){ const pn=document.getElementById('pane-corte'); if(pn&&pn.classList.contains('active')) updateCorte(); if(typeof atualizarPlantaSeAberta==='function') atualizarPlantaSeAberta(); }
 
 /* ══════════════════════════════════════════════════════
    MEIO-FIO (Topografia e Seções) — desenhado nas seções
@@ -3083,7 +3106,7 @@ function projetoParaJSON(){
     numN:{sel:document.getElementById('n-sel').value,custom:document.getElementById('n-custom').value},
     subleito:{cbr:document.getElementById('cbr-sub').value,exp:document.getElementById('exp-sub').value,lencol:document.getElementById('lencol').value},
     base:{mat:document.getElementById('base-mat').value,bloco:document.getElementById('bloco-cm').value,areia:document.getElementById('areia-cm').value,fpk:document.getElementById('fpk').value,subCCR:document.getElementById('sub-ccr').value,reforco:document.getElementById('reforco').value,hConf:document.getElementById('h-conf').value,cbrRef:document.getElementById('cbr-ref').value,sobrecarga:document.getElementById('sobrecarga').value,arred:document.getElementById('arred').value},
-    topo:{caiEsq:document.getElementById('cai-esq').value,caiDir:document.getElementById('cai-dir').value,largPad:document.getElementById('larg-pad').value,rows:(ruasSinc(),ruas[0].rows||topoRows),ruas:ruas.map(r=>({id:r.id,nome:r.nome||'',paralela:r.paralela||null,rows:r.rows||[]})),ruaAtiva:ruaAtiva},
+    topo:{caiEsq:document.getElementById('cai-esq').value,caiDir:document.getElementById('cai-dir').value,largPad:document.getElementById('larg-pad').value,rows:(ruasSinc(),ruas[0].rows||topoRows),ruas:ruas.map(r=>({id:r.id,nome:r.nome||'',paralela:r.paralela||null,geo:r.geo||null,rows:r.rows||[]})),ruaAtiva:ruaAtiva},
     secoes:{talCorte:document.getElementById('c_talcorte').value,talAterro:document.getElementById('c_talaterro').value,berma:document.getElementById('c_berma').value,ev:document.getElementById('c_ev').value},
     meiofio:_mf,
   };
@@ -3098,7 +3121,7 @@ function aplicarProjeto(p){
   /* projeto antigo gravado como “sem meio-fio” sem escolha explícita do usuário = padrão antigo → volta ao conjugado */
   { const mfp=p.meiofio||null; _mf=Object.assign({},MF_PADRAO,(mfp&&(mfp.escolhido||mfp.tipo!=='nenhum'))?mfp:{}); }
   if(p.topo){set('cai-esq',p.topo.caiEsq);set('cai-dir',p.topo.caiDir);set('larg-pad',p.topo.largPad);if(Array.isArray(p.topo.ruas)&&p.topo.ruas.length){
-      ruas=p.topo.ruas.map((r,i)=>({id:r.id||('r'+(i+1)),nome:r.nome||'',...(r.paralela?{paralela:r.paralela}:{}),rows:Array.isArray(r.rows)?[...r.rows]:[]}));
+      ruas=p.topo.ruas.map((r,i)=>({id:r.id||('r'+(i+1)),nome:r.nome||'',...(r.paralela?{paralela:r.paralela}:{}),...(r.geo?{geo:r.geo}:{}),rows:Array.isArray(r.rows)?[...r.rows]:[]}));
       ruaAtiva=Math.min(Math.max(+p.topo.ruaAtiva||0,0),ruas.length-1); topoRows=ruas[ruaAtiva].rows; renderTopoTable();
     }else if(p.topo.rows){ ruas=[{id:'r1',nome:'',rows:null}]; ruaAtiva=0; topoRows=[...p.topo.rows];renderTopoTable();}}
   document.getElementById('n-custom-field').hidden=(document.getElementById('n-sel').value!=='custom');
@@ -3186,6 +3209,489 @@ function ajusteFont(d){
 function toggleTheme(){const root=document.documentElement,cur=root.getAttribute('data-theme');root.setAttribute('data-theme',cur==='dark'?'light':'dark');try{localStorage.setItem('pint_theme',root.getAttribute('data-theme'));}catch(e){}}
 
 /* ══════════════════════════════════════════════════════
+   PLANTA BAIXA (técnica) E 3D (realista) · gerados da Topografia, dos greides e das camadas
+   Eixos retos: a 1ª rua segue o eixo X; outra rua que cruza uma já posicionada sai com o ângulo
+   escolhido no ponto do cruzamento; rua sem cruzamento fica paralela, afastada.
+   “Níveis” = terreno natural, cada camada do pavimento (cota do topo + espessura) e o fundo (formação).
+   Acender/apagar um nível mostra/oculta as cotas e o quadro na planta e a camada no 3D.
+══════════════════════════════════════════════════════ */
+let _pl={modo:'planta',vis:null,vb:null,drag:null,t3:null};
+function plVisPadrao(){ return {ruas:{},entorno:1,pista:1,paginacao:1,eixo:1,mf:1,estacas:1,numeros:1,larguras:1,decl:1,cruz:1,corte:0,quadro:1,legenda:1,carimbo:1,sombras:1,rot3d:1,niv:{terreno:1,c0:1},passo:1}; }
+function plVis(){
+  if(_pl.vis) return _pl.vis;
+  let v=plVisPadrao();
+  try{ const t=JSON.parse(localStorage.getItem('pint_planta_vis2')||'null'); if(t&&typeof t==='object') v=Object.assign(v,t,{niv:Object.assign(v.niv,t.niv||{}),ruas:t.ruas||{}}); }catch(e){}
+  return _pl.vis=v;
+}
+function plSalvarVis(){ try{ localStorage.setItem('pint_planta_vis2',JSON.stringify(plVis())); }catch(e){} }
+function plEsc(c,f){ const m=/^#?([0-9a-f]{6})$/i.exec(c||''); if(!m) return c; const n=parseInt(m[1],16); const k=x=>Math.max(0,Math.min(255,Math.round(x*f))); return 'rgb('+k(n>>16)+','+k((n>>8)&255)+','+k(n&255)+')'; }
+const PL_COD=['G','A','B','SB','R','R2'];
+function plNiveis(){
+  const P=secaoParams(), out=[{k:'terreno',nome:'Terreno natural',cod:'T',cor:'#6f8f3a',txt:'#3f5f1a',prof:null,esp:null}];
+  let prof=0;
+  P.camadas.forEach((c,k)=>{ out.push({k:'c'+k,nome:c[0]+(k===0?' (greide = topo)':''),cod:(k===0?'G':(/areia/i.test(c[0])?'A':/sub/i.test(c[0])?'SB':/refor/i.test(c[0])?'R':'B')),cor:c[2],txt:plEsc(c[2],0.55),prof,esp:c[1]}); prof+=c[1]; });
+  out.push({k:'form',nome:'Fundo / formação (subleito)',cod:'F',cor:'#7a6440',txt:'#5a4426',prof:P.eTot,esp:null});
+  return out;
+}
+const plOn=(v,k)=>!!(v.niv[k]);
+function plGeo(i){ const r=ruas[i]; if(!r.geo) r.geo={lado:'esq',ang:90,dist:30}; return r.geo; }
+function plLayout(){
+  ruasSinc();
+  const res=new Array(ruas.length).fill(null);
+  const mk=(A,sA,d)=>({A,sA,d,n:[-d[1],d[0]],pos:s=>[A[0]+(s-sA)*d[0],A[1]+(s-sA)*d[1]]});
+  const e0=i=>{ const r=(ruas[i].rows||[])[0]; return r?+r.est:0; };
+  res[0]=mk([0,0],e0(0),[1,0]);
+  let restam=ruas.length-1, guard=0;
+  while(restam>0&&guard++<30){
+    let prog=false;
+    ruas.forEach((ru,i)=>{
+      if(res[i]) return;
+      const lk=(ru.rows||[]).find(r=>r.cruz&&ruaIdx(r.cruz.rua)>=0&&res[ruaIdx(r.cruz.rua)]);
+      if(!lk) return;
+      const g=plGeo(i), sgn=g.lado==='dir'?-1:1, P=res[ruaIdx(lk.cruz.rua)], A=P.pos(lk.cruz.est), a=(+g.ang||90)*Math.PI/180*sgn;
+      res[i]=mk(A,+lk.est,[P.d[0]*Math.cos(a)-P.d[1]*Math.sin(a),P.d[0]*Math.sin(a)+P.d[1]*Math.cos(a)]); res[i].pai=ruaIdx(lk.cruz.rua); restam--; prog=true;
+    });
+    if(!prog){
+      const i=ruas.findIndex((r,k)=>!res[k]); const ru=ruas[i], g=plGeo(i), sgn=g.lado==='dir'?-1:1;
+      let pi=ru.paralela?ruaIdx(ru.paralela):0; if(pi<0||!res[pi]) pi=0;
+      const P=res[pi], q=P.pos(e0(i)), dd=(+g.dist||30)*sgn;
+      res[i]=mk([q[0]+P.n[0]*dd,q[1]+P.n[1]*dd],e0(i),P.d); res[i].pai=pi; res[i].paralela=true; restam--;
+    }
+  }
+  return res;
+}
+function plDados(){
+  const lay=plLayout(), v=plVis();
+  return ruas.map((ru,i)=>({i,id:ru.id,nome:nomeRua(i),L:topoLinhas(ru.rows||[]).filter(l=>l.gr!=null&&l.larg>0),lay:lay[i],rows:ru.rows||[]}))
+    .filter(d=>d.L.length>1&&v.ruas[d.id]!==0);
+}
+/* amostras a cada ≤ passo m, com interpolação linear entre as estacas */
+function plAmostras(d,passo){
+  const L=d.L, out=[], f=(a,b,t,k)=>{ const x=a[k],y=b[k]; if(x==null) return y; if(y==null) return x; return x+(y-x)*t; };
+  for(let k=0;k<L.length-1;k++){
+    const a=L[k], b=L[k+1], n=Math.max(1,Math.ceil((b.est-a.est)/passo));
+    for(let j=0;j<n;j++){ const t=j/n; out.push({est:a.est+(b.est-a.est)*t,gr:f(a,b,t,'gr'),gE:f(a,b,t,'gE'),gD:f(a,b,t,'gD'),tc:f(a,b,t,'tc'),te:f(a,b,t,'te'),td:f(a,b,t,'td'),larg:f(a,b,t,'larg'),sit:a.sit}); }
+  }
+  const z=L[L.length-1]; out.push({est:z.est,gr:z.gr,gE:z.gE,gD:z.gD,tc:z.tc,te:z.te,td:z.td,larg:z.larg,sit:z.sit});
+  out.forEach(s=>{ s.c=d.lay.pos(s.est); s.b=(s.larg||0)/2; if(s.tc==null) s.tc=s.gr; if(s.te==null) s.te=s.tc; if(s.td==null) s.td=s.tc; if(s.gE==null) s.gE=s.gr; if(s.gD==null) s.gD=s.gr; });
+  return out;
+}
+const plZ=(s,u)=>u>=0?s.gr+(s.gE-s.gr)*Math.min(u,s.b)/(s.b||1):s.gr+(s.gD-s.gr)*Math.min(-u,s.b)/(s.b||1);
+const plZT=(s,u)=>u>=0?s.tc+(s.te-s.tc)*Math.min(u,s.b)/(s.b||1):s.tc+(s.td-s.tc)*Math.min(-u,s.b)/(s.b||1);
+const plOff=(d,s,u)=>[s.c[0]+d.lay.n[0]*u,s.c[1]+d.lay.n[1]*u];
+function plPoligono(d,A,ext){ const l=A.map(s=>plOff(d,s,s.b+ext)), r=A.map(s=>plOff(d,s,-(s.b+ext))); return l.concat(r.reverse()); }
+function plDentro(p,poly){ let c=false; for(let i=0,j=poly.length-1;i<poly.length;j=i++){ const a=poly[i],b=poly[j]; if(((a[1]>p[1])!==(b[1]>p[1]))&&(p[0]<(b[0]-a[0])*(p[1]-a[1])/((b[1]-a[1])||1e-12)+a[0])) c=!c; } return c; }
+function plCorridas(A,fora){ const runs=[]; let cur=[]; for(let k=0;k<A.length-1;k++){ if(fora(A[k],A[k+1])){ if(!cur.length) cur.push(A[k]); cur.push(A[k+1]); } else if(cur.length){ runs.push(cur); cur=[]; } } if(cur.length>1) runs.push(cur); return runs; }
+function plMfLarg(P){ return P.mf?((P.mf.tipo==='conjugado'?(+P.mf.larg||0)+(+P.mf.sbase||0):(+P.mf.base||0))/100):0; }
+
+/* ── painel ── */
+function plAbrir(){
+  const msg=document.getElementById('pl-msg'); if(!msg) return;
+  msg.textContent=resultado?'':'Calcule o dimensionamento (aba Dimensionamento): a planta e o 3D usam as camadas do pavimento.';
+  plPainel(); if(_pl.modo==='planta') plDesenhar(true); else pl3D();
+}
+function atualizarPlantaSeAberta(){ const pn=document.getElementById('pane-planta'); if(pn&&pn.classList.contains('active')&&resultado){ plPainel(); if(_pl.modo==='planta') plDesenhar(); else pl3D(true); } }
+function plModo(m){
+  _pl.modo=m;
+  document.getElementById('pl-b-planta').classList.toggle('tb-btn-save',m==='planta'); document.getElementById('pl-b-3d').classList.toggle('tb-btn-save',m==='3d');
+  document.getElementById('pl-svgwrap').style.display=m==='planta'?'':'none'; document.getElementById('pl-3dwrap').style.display=m==='3d'?'':'none';
+  document.getElementById('pl-ev-box').style.display=m==='3d'?'':'none';
+  document.getElementById('pl-b-svg').style.display=m==='planta'?'':'none'; document.getElementById('pl-b-png').style.display=m==='3d'?'':'none';
+  if(m==='planta') plDesenhar(true); else pl3D();
+}
+function plPainel(){
+  const v=plVis(), box=document.getElementById('pl-painel'); if(!box) return;
+  const N=plNiveis();
+  const ck=(rot,on,fn,tip)=>'<label style="display:flex;gap:6px;align-items:center;font-size:12px;cursor:pointer;line-height:1.35"'+(tip?' title="'+tip+'"':'')+'><input type="checkbox" '+(on?'checked ':'')+'onchange="'+fn+'">'+rot+'</label>';
+  const o=k=>"plSet('"+k+"',0,this.checked)";
+  const tit=t=>'<div style="font-weight:700;font-size:11px;letter-spacing:.04em;text-transform:uppercase;color:var(--fg2);margin:10px 0 4px">'+t+'</div>';
+  let h=tit('Ruas')+ruas.map((r,i)=>ck('<b>'+esc(nomeRua(i))+'</b>',v.ruas[r.id]!==0,"plSet('ruas','"+r.id+"',this.checked)")).join('');
+  h+=tit('Níveis — cotas, espessuras e camadas')+N.map(n=>ck('<span style="display:inline-block;width:12px;height:12px;background:'+n.cor+';border:1px solid #666;border-radius:2px"></span><b style="color:'+n.txt+';min-width:18px">'+n.cod+'</b>'+esc(n.nome)+(n.esp?' <span style="color:var(--fg2)">· '+fmt(n.esp*100,1)+' cm</span>':''),plOn(v,n.k),"plSet('niv','"+n.k+"',this.checked)",'Planta: cotas e linha no quadro de camadas. 3D: superfície/camada.')).join('')+
+    '<div style="display:flex;gap:6px;margin-top:4px"><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plTodosNiveis(1)">Acender todos</button><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plTodosNiveis(0)">Apagar todos</button></div>';
+  h+=tit('Planta e 3D — elementos')+ck('Entorno / terreno lateral',v.entorno,o('entorno'))+ck('Pavimento (pista)',v.pista,o('pista'))+ck('Meio-fio e sarjeta',v.mf,o('mf'))+ck('Eixo',v.eixo,o('eixo'))+ck('Números das estacas',v.numeros,o('numeros'))+ck('Cruzamentos (conferência do greide)',v.cruz,o('cruz'));
+  h+=tit('Só na planta')+ck('Paginação dos blocos',v.paginacao,o('paginacao'))+ck('Marcas das estacas',v.estacas,o('estacas'))+ck('Cotas de largura da pista',v.larguras,o('larguras'))+ck('Setas de declividade (greide)',v.decl,o('decl'))+ck('Cores de corte / aterro',v.corte,o('corte'))+
+    ck('Quadro de camadas (esp., área, volume)',v.quadro,o('quadro'))+ck('Legenda',v.legenda,o('legenda'))+ck('Carimbo',v.carimbo,o('carimbo'))+
+    '<div style="margin-top:4px;font-size:12px">Rótulos a cada <select onchange="plSet(\'passo\',0,+this.value)" style="font-size:12px">'+[1,2,5,10].map(x=>'<option value="'+x+'"'+(v.passo==x?' selected':'')+'>'+(x==1?'estaca':x+' estacas')+'</option>').join('')+'</select></div>';
+  h+=tit('Só no 3D')+ck('Sombras',v.sombras,o('sombras'))+ck('Rótulos e medidas das camadas',v.rot3d,o('rot3d'));
+  h+=tit('Posição das ruas')+ruas.map((r,i)=>{
+    if(i===0) return '<div style="font-size:11px;color:var(--fg2);margin-bottom:4px"><b>'+esc(nomeRua(0))+'</b>: eixo de referência (reta, estacas crescendo para a direita).</div>';
+    const g=plGeo(i), lay=plLayout()[i], cruza=lay&&!lay.paralela;
+    return '<div style="font-size:11px;margin-bottom:6px;border-top:1px solid var(--border,#ddd);padding-top:4px"><b>'+esc(nomeRua(i))+'</b> — '+(cruza?'cruza (eixo × eixo)':'paralela / afastada')+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:2px">Lado <select style="font-size:11px" onchange="plGeoSet('+i+',\'lado\',this.value)"><option value="esq"'+(g.lado==='esq'?' selected':'')+'>esquerdo</option><option value="dir"'+(g.lado==='dir'?' selected':'')+'>direito</option></select>'+
+      (cruza?' Ângulo <input type="number" min="15" max="165" step="1" value="'+g.ang+'" style="width:52px;font-size:11px" onchange="plGeoSet('+i+',\'ang\',this.value)">°':' Afastamento <input type="number" min="5" step="1" value="'+g.dist+'" style="width:52px;font-size:11px" onchange="plGeoSet('+i+',\'dist\',this.value)"> m')+'</div></div>';
+  }).join('');
+  box.innerHTML=h;
+}
+function plRedesenhar(){ if(_pl.modo==='planta') plDesenhar(); else pl3D(true); }
+function plSet(grupo,k,val){ const v=plVis(); if(grupo==='ruas') v.ruas[k]=val?1:0; else if(grupo==='niv') v.niv[k]=val?1:0; else v[grupo]=(grupo==='passo')?val:(val?1:0); plSalvarVis(); plRedesenhar(); }
+function plTodosNiveis(on){ const v=plVis(); plNiveis().forEach(n=>v.niv[n.k]=on?1:0); plSalvarVis(); plPainel(); plRedesenhar(); }
+function plGeoSet(i,k,val){ const g=plGeo(i); g[k]=(k==='lado')?val:(parseFloat(val)||g[k]); plPainel(); if(_pl.modo==='planta') plDesenhar(true); else { if(_pl.t3) _pl.t3.pronto=false; pl3D(); } }
+function plNiceLen(x){ const e=Math.pow(10,Math.floor(Math.log10(x))); const m=x/e; return (m>=5?5:m>=2?2:1)*e; }
+
+/* ── PLANTA BAIXA TÉCNICA (SVG) ── */
+const PL_BANDA=200;
+function plBanda(){ const v=plVis(); return (v.quadro||v.legenda||v.carimbo)?PL_BANDA:0; }
+function plSvg(vb,Wpx){
+  const v=plVis(), D=plDados(), N=plNiveis(), P=secaoParams(), wmf=v.mf?plMfLarg(P):0;
+  const W=Wpx||1200, H=vb.h/vb.w*W, sc=W/vb.w, BH=plBanda()*W/1200, HT=H+BH;
+  const X=p=>(p[0]-vb.x)*sc, Y=p=>(-p[1]-vb.y)*sc, pt=p=>X(p).toFixed(1)+','+Y(p).toFixed(1);
+  const ang=dd=>{ let a=-Math.atan2(dd[1],dd[0])*180/Math.PI; if(a>90) a-=180; if(a<=-90) a+=180; return a; };
+  const F='font-family="Arial,Helvetica,sans-serif"';
+  const T=(x,y,t,o)=>{ o=o||{}; return '<text x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" font-size="'+(o.fs||10)+'" fill="'+(o.c||'#111')+'" text-anchor="'+(o.a||'start')+'"'+(o.b?' font-weight="700"':'')+(o.r!=null?' transform="rotate('+o.r.toFixed(1)+' '+x.toFixed(1)+' '+y.toFixed(1)+')"':'')+(o.h===0?'':' paint-order="stroke" stroke="'+(o.hc||'#fff')+'" stroke-width="'+(o.hw||3)+'" stroke-linejoin="round"')+'>'+esc(t)+'</text>'; };
+  const ocup=[]; const livre=(x,y,w,h)=>{ for(const r of ocup) if(x<r[0]+r[2]&&x+w>r[0]&&y<r[1]+r[3]&&y+h>r[1]) return false; ocup.push([x,y,w,h]); return true; };
+  let defs='', s='', top='';
+  const A=D.map(d=>plAmostras(d,1));
+  // paginação dos blocos (padrão tijolinho 20×10 cm), na escala real, girada com a rua
+  D.forEach((d,j)=>{
+    const t=0.4*sc, a=ang(d.lay.d), o=d.lay.pos(d.L[0].est);
+    if(v.paginacao&&t>=7){
+      const r=t/4, bl=t/2; let rr='';
+      for(let q=0;q<4;q++){ const off=(q%2)?bl/2:0; for(let c=-1;c<3;c++){ rr+='<rect x="'+(c*bl+off).toFixed(2)+'" y="'+(q*r).toFixed(2)+'" width="'+bl.toFixed(2)+'" height="'+r.toFixed(2)+'" fill="none" stroke="#a59c8c" stroke-width="'+Math.min(1,0.06*r).toFixed(2)+'"/>'; } }
+      defs+='<pattern id="plpg'+j+'" patternUnits="userSpaceOnUse" width="'+t.toFixed(2)+'" height="'+t.toFixed(2)+'" patternTransform="translate('+X(o).toFixed(1)+','+Y(o).toFixed(1)+') rotate('+(-Math.atan2(d.lay.d[1],d.lay.d[0])*180/Math.PI).toFixed(2)+')"><rect width="'+t.toFixed(2)+'" height="'+t.toFixed(2)+'" fill="#e3ded3"/>'+rr+'</pattern>';
+    }
+  });
+  defs+='<marker id="plar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,1 L10,5 L0,9 z" fill="#1d4ed8"/></marker>'+
+        '<marker id="pltk" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M2,8 L8,2" stroke="#111" stroke-width="1.4"/></marker>';
+  // 1) entorno
+  if(v.entorno) D.forEach((d,j)=>{ s+='<polygon points="'+plPoligono(d,A[j],wmf+4).map(pt).join(' ')+'" fill="#e6eedb" stroke="none"/>'; });
+  // 2) meio-fio + sarjeta (por baixo das pistas: no cruzamento o meio-fio some sob a outra pista)
+  if(v.mf&&wmf>0) D.forEach((d,j)=>{
+    const sb=P.mf.tipo==='conjugado'?(+P.mf.sbase||0)/100:0;
+    [1,-1].forEach(sg=>{
+      const ring=(u0,u1)=>A[j].map(q=>plOff(d,q,sg*(q.b+u0))).concat(A[j].slice().reverse().map(q=>plOff(d,q,sg*(q.b+u1))));
+      if(sb>0) s+='<polygon points="'+ring(0,sb).map(pt).join(' ')+'" fill="#c9ccd1" stroke="#80858d" stroke-width="0.6"/>';
+      s+='<polygon points="'+ring(sb,wmf).map(pt).join(' ')+'" fill="#a9aeb6" stroke="#5b616b" stroke-width="0.8"/>';
+    });
+  });
+  // 3) pistas
+  if(v.pista) D.forEach((d,j)=>{
+    const poly=plPoligono(d,A[j],0).map(pt).join(' ');
+    s+='<polygon points="'+poly+'" fill="'+(v.paginacao&&0.4*sc>=7?'url(#plpg'+j+')':'#ddd7cb')+'" stroke="#333" stroke-width="1"/>';
+    if(v.corte){ const cor={Corte:'rgba(220,60,40,.28)',Aterro:'rgba(40,110,220,.28)',Misto:'rgba(240,160,30,.30)'};
+      for(let k=0;k<d.L.length-1;k++){ const c=cor[d.L[k].sit]; if(!c) continue; const a=d.L[k],b=d.L[k+1];
+        const q=[plOff(d,{c:d.lay.pos(a.est)},a.larg/2),plOff(d,{c:d.lay.pos(b.est)},b.larg/2),plOff(d,{c:d.lay.pos(b.est)},-b.larg/2),plOff(d,{c:d.lay.pos(a.est)},-a.larg/2)];
+        s+='<polygon points="'+q.map(pt).join(' ')+'" fill="'+c+'" stroke="none"/>'; } }
+  });
+  // 4) eixo (traço-ponto)
+  if(v.eixo) D.forEach((d,j)=>{ s+='<polyline points="'+A[j].map(q=>pt(q.c)).join(' ')+'" fill="none" stroke="#c0392b" stroke-width="1" stroke-dasharray="14 3 2 3"/>'; });
+  // 5) estacas, larguras, cotas
+  D.forEach((d,j)=>{
+    const a=ang(d.lay.d), nx=d.lay.n;
+    d.L.forEach((l,k)=>{
+      const c=d.lay.pos(l.est), b=l.larg/2, ex=b+(v.mf?wmf:0), eh=Math.abs(l.est/20-Math.round(l.est/20))<1e-6, idx=Math.round(l.est/20);
+      const mostra=!eh||k===0||k===d.L.length-1||idx%v.passo===0;
+      if(v.estacas){ const p1=plOff(d,{c},ex+0.6), p2=plOff(d,{c},-(ex+0.6)); s+='<line x1="'+X(p1).toFixed(1)+'" y1="'+Y(p1).toFixed(1)+'" x2="'+X(p2).toFixed(1)+'" y2="'+Y(p2).toFixed(1)+'" stroke="'+(eh?'#111':'#1d4ed8')+'" stroke-width="'+(eh?0.9:0.8)+'"'+(eh?'':' stroke-dasharray="4 2"')+'/>'; }
+      if(v.numeros&&mostra){ const p=plOff(d,{c},ex+1.2); const t=eh?('EST. '+idx):('EST. '+estacaTxt(l.est)); const x=X(p),y=Y(p); top+=T(x,y,t,{fs:10,b:1,c:eh?'#111':'#1d4ed8',r:a-90,a:'start'}); }
+      if(v.larguras&&mostra&&v.pista){
+        const sh=Math.min(1.5,(d.L[k+1]?d.L[k+1].est-l.est:1.5)/3), cc=d.lay.pos(l.est+(k===d.L.length-1?-sh:sh));
+        const p1=plOff(d,{c:cc},b), p2=plOff(d,{c:cc},-b);
+        top+='<line x1="'+X(p1).toFixed(1)+'" y1="'+Y(p1).toFixed(1)+'" x2="'+X(p2).toFixed(1)+'" y2="'+Y(p2).toFixed(1)+'" stroke="#111" stroke-width="0.7" marker-start="url(#pltk)" marker-end="url(#pltk)"/>';
+        const m=plOff(d,{c:cc},b*0.45); top+=T(X(m),Y(m),fmt(l.larg,2),{fs:9,r:a-90,a:'middle',c:'#111'});
+      }
+      if(mostra){
+        const lin=N.filter(n=>plOn(v,n.k)).map(n=>{ const h=n.k==='terreno'?l.tc:l.gr-(n.prof||0); return h==null?null:[n,h]; }).filter(Boolean);
+        if(lin.length){
+          const fs=9, lh=fs+2, w=fs*0.62*8.5, hh=lin.length*lh+4;
+          let ok=false, x=0, y=0, base=plOff(d,{c},-(ex+1.0));
+          for(let tent=0;tent<6&&!ok;tent++){ const q=plOff(d,{c},-(ex+1.0+tent*(hh/sc+0.5))); x=X(q)+(nx[0]>=0?-w-2:2); y=Y(q)+(tent?0:-hh/2); if(Math.abs(nx[1])>0.7){ x=X(q)-w/2; y=Y(q)+(nx[1]>0?4:-hh-4); } ok=livre(x,y,w,hh); base=q; }
+          if(ok){
+            top+='<line x1="'+X(plOff(d,{c},-ex)).toFixed(1)+'" y1="'+Y(plOff(d,{c},-ex)).toFixed(1)+'" x2="'+(x+(X(base)<x?0:w)).toFixed(1)+'" y2="'+(y+hh/2).toFixed(1)+'" stroke="#999" stroke-width="0.5"/>';
+            top+='<rect x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+hh.toFixed(1)+'" fill="#fff" fill-opacity=".9" stroke="#bbb" stroke-width="0.5"/>';
+            lin.forEach((q,i2)=>{ top+=T(x+3,y+lh*(i2+1),q[0].cod,{fs,b:1,c:q[0].txt,h:0})+T(x+w-3,y+lh*(i2+1),fmt(q[1],3),{fs,a:'end',c:'#111',h:0}); });
+          }
+        }
+      }
+      // seta de declividade no trecho
+      if(v.decl&&k<d.L.length-1){ const nb=d.L[k+1], dd=nb.est-l.est; if(dd>0.5&&l.gr!=null&&nb.gr!=null){
+        const i=(nb.gr-l.gr)/dd*100, desce=i<0, m1=l.est+dd*0.30, m2=l.est+dd*0.70, u=b*0.5;
+        const pa=plOff(d,{c:d.lay.pos(desce?m1:m2)},u), pb=plOff(d,{c:d.lay.pos(desce?m2:m1)},u);
+        top+='<line x1="'+X(pa).toFixed(1)+'" y1="'+Y(pa).toFixed(1)+'" x2="'+X(pb).toFixed(1)+'" y2="'+Y(pb).toFixed(1)+'" stroke="#1d4ed8" stroke-width="1.2" marker-end="url(#plar)"/>';
+        const pm=plOff(d,{c:d.lay.pos(l.est+dd*0.5)},u+0.25*Math.max(1,12/sc)); top+=T(X(pm),Y(pm)-3,'i = '+fmt(Math.abs(i),2)+' %',{fs:9,a:'middle',r:a,c:'#1d4ed8'}); } }
+    });
+    // nome da rua
+    const km=Math.floor(d.L.length/2), lm=d.L[Math.max(0,km-1)], e1=(d.L[km].est+lm.est)/2, p0=d.lay.pos(e1), pn=plOff(d,{c:p0},Math.max(d.L[km].larg,lm.larg)/2+(v.mf?wmf:0)+(v.entorno?4.5:1.5)+22/sc);
+    top+=T(X(pn),Y(pn),d.nome.toUpperCase(),{fs:13,b:1,c:'#0f3d73',r:ang(d.lay.d),a:'middle'});
+  });
+  // 6) cruzamentos
+  if(v.cruz) D.forEach(d=>{ d.rows.forEach(r=>{ if(!r.cruz) return; const ib=ruaIdx(r.cruz.rua); if(ib<0||ib<d.i) return; const o=D.find(x=>x.i===ib); if(!o) return;
+    const p=d.lay.pos(r.est), g1=itpRows(d.rows,r.est,'greide'), g2=itpRows(o.rows,r.cruz.est,'greide'), df=(g1!=null&&g2!=null)?g1-g2:null, ruim=df!=null&&Math.abs(df)>0.02;
+    const x=X(p), y=Y(p);
+    top+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="6" fill="none" stroke="'+(ruim?'#b91c1c':'#15803d')+'" stroke-width="1.6"/><path d="M'+(x-9)+','+y+' h18 M'+x+','+(y-9)+' v18" stroke="'+(ruim?'#b91c1c':'#15803d')+'" stroke-width="0.8"/>';
+    const lines=['CRUZAMENTO DE EIXOS','EST. '+estacaTxt(r.est)+' ('+d.nome+')  ×  EST. '+estacaTxt(r.cruz.est)+' ('+o.nome+')','Greide: '+fmt(g1,3)+'  /  '+fmt(g2,3)+(df!=null?('   Δ = '+(df>0?'+':'')+fmt(df*100,1)+' cm '+(ruim?'⚠':'✓')):'')];
+    const w=Math.max(...lines.map(t=>t.length))*5.4+10, h=lines.length*12+6; let bx=x+14, by=y-h-14; if(!livre(bx,by,w,h)){ by=y+14; livre(bx,by,w,h); }
+    top+='<line x1="'+x+'" y1="'+y+'" x2="'+bx+'" y2="'+(by+h/2)+'" stroke="'+(ruim?'#b91c1c':'#15803d')+'" stroke-width="0.7"/><rect x="'+bx.toFixed(1)+'" y="'+by.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+h+'" fill="#fff" stroke="'+(ruim?'#b91c1c':'#15803d')+'" stroke-width="0.8"/>';
+    lines.forEach((t,i2)=>{ top+=T(bx+5,by+12*(i2+1),t,{fs:9,b:i2===0,c:i2===2&&ruim?'#b91c1c':'#111',h:0}); });
+  }); });
+  // 7) quadro de camadas (só os níveis acesos)
+  let ov='';
+  if(v.quadro&&resultado){
+    const area=(_topo&&_topo.totArea)||0, Vc=volumesCamadas(area), cams=N.filter(n=>n.esp&&plOn(v,n.k));
+    const rows=[['Nível','Camada','Esp. (cm)','Área (m²)','Volume (m³)']];
+    cams.forEach(n=>{ const vv=Vc.find(x=>x.n&&n.nome.toLowerCase().indexOf(String(x.n).toLowerCase().split(' ')[0])>=0); rows.push([n.cod,n.nome.replace(' (greide = topo)',''),fmt(n.esp*100,1),fmt(area,2),vv?fmt(vv.vol,2):fmt(area*n.esp,2)]); });
+    if(cams.length>1) rows.push(['','Espessura das camadas acesas',fmt(cams.reduce((x,n)=>x+n.esp,0)*100,1),'','']);
+    rows.push(['','Pavimento total (IP-06/2004)',fmt(P.eTot*100,1),'','']);
+    if(P.mf){ rows.push(['MF',P.mf.tipo==='conjugado'?('Meio-fio + sarjeta: sarjeta '+P.mf.sbase+'×'+P.mf.salt+' · meio-fio '+P.mf.larg+' · espelho '+P.mf.esp):('Meio-fio '+P.mf.base+'×'+P.mf.alt+' · espelho '+P.mf.esp),'cm',fmt(((_topo&&_topo.extensao)||0)*2,1)+' m','']); }
+    if(_topo&&_topo.porRua&&_topo.porRua.length>1) _topo.porRua.forEach(p=>rows.push(['',p.nome+' — ext. '+fmt(p.ext,2)+' m','',fmt(p.area,2),'']));
+    const cw=[34,250,60,72,80], tw=cw.reduce((a,b)=>a+b,0), rh=14, x0=356, y0=H+8;
+    ov+='<rect x="'+x0+'" y="'+y0+'" width="'+tw+'" height="'+(rh*(rows.length+1)+4)+'" fill="#fff" stroke="#111" stroke-width="1"/>'+T(x0+6,y0+12,'QUADRO DE CAMADAS DO PAVIMENTO — NÍVEIS ACESOS',{fs:10,b:1,h:0});
+    rows.forEach((r,i2)=>{ let cx=x0; const yy=y0+rh*(i2+1)+12; if(i2===0||i2===1) ov+='<line x1="'+x0+'" y1="'+(yy-11)+'" x2="'+(x0+tw)+'" y2="'+(yy-11)+'" stroke="#111" stroke-width="0.6"/>';
+      r.forEach((t,c2)=>{ const n=N.find(q=>q.cod===r[0]); ov+=T(c2>=2?cx+cw[c2]-4:cx+4,yy,t,{fs:9,b:i2===0||c2===0,a:c2>=2?'end':'start',c:(c2===0&&n)?n.txt:'#111',h:0}); cx+=cw[c2]; }); });
+    if(!cams.length) ov+=T(x0+6,y0+rh*2+12,'(acenda um nível de camada para ver espessura e volume)',{fs:9,c:'#666',h:0});
+  }
+  // 8) legenda
+  if(v.legenda){
+    const it=[['pav','Pavimento intertravado (blocos 20×10 cm)'],['mf','Meio-fio / sarjeta de concreto'],['eixo','Eixo da via'],['est','Estaca inteira (20 m)'],['pto','Ponto / estaca fracionária'],['decl','Sentido de escoamento (declividade)'],['cz','Cruzamento de eixos']];
+    N.filter(n=>plOn(v,n.k)).forEach(n=>it.push(['niv:'+n.k,n.cod+' = cota '+(n.k==='terreno'?'do terreno natural':n.k==='form'?'do fundo / formação':'do topo: '+n.nome.replace(' (greide = topo)','')+(n.k==='c0'?' (greide)':''))]));
+    if(v.corte) it.push(['c1','Trecho em corte'],['c2','Trecho em aterro'],['c3','Trecho misto']);
+    const lh=13, por=Math.ceil(it.length/(it.length>11?2:1)), w=334, h=BH-16, x0=12, y0=H+8, cwid=it.length>11?166:334;
+    ov+='<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+h+'" fill="#fff" stroke="#111"/>'+T(x0+6,y0+13,'LEGENDA',{fs:10,b:1,h:0});
+    it.forEach((q,i2)=>{ const col=Math.floor(i2/por), yy=y0+24+(i2%por)*lh, sx=x0+6+col*cwid, k=q[0];
+      if(k==='pav') ov+='<rect x="'+sx+'" y="'+(yy-4)+'" width="22" height="9" fill="#e3ded3" stroke="#333" stroke-width="0.8"/><path d="M'+(sx+7)+','+(yy-4)+' v4.5 M'+(sx+15)+','+(yy-4)+' v4.5 M'+(sx+11)+','+(yy+0.5)+' v4.5 M'+sx+','+(yy+0.5)+' h22" stroke="#a59c8c" stroke-width="0.6"/>';
+      else if(k==='mf') ov+='<rect x="'+sx+'" y="'+(yy-4)+'" width="22" height="9" fill="#a9aeb6" stroke="#5b616b" stroke-width="0.8"/>';
+      else if(k==='eixo') ov+='<line x1="'+sx+'" y1="'+yy+'" x2="'+(sx+22)+'" y2="'+yy+'" stroke="#c0392b" stroke-dasharray="8 2 2 2"/>';
+      else if(k==='est') ov+='<line x1="'+(sx+11)+'" y1="'+(yy-5)+'" x2="'+(sx+11)+'" y2="'+(yy+5)+'" stroke="#111"/>';
+      else if(k==='pto') ov+='<line x1="'+(sx+11)+'" y1="'+(yy-5)+'" x2="'+(sx+11)+'" y2="'+(yy+5)+'" stroke="#1d4ed8" stroke-dasharray="3 2"/>';
+      else if(k==='decl') ov+='<line x1="'+sx+'" y1="'+yy+'" x2="'+(sx+20)+'" y2="'+yy+'" stroke="#1d4ed8" stroke-width="1.2" marker-end="url(#plar)"/>';
+      else if(k==='cz') ov+='<circle cx="'+(sx+11)+'" cy="'+yy+'" r="4.5" fill="none" stroke="#15803d" stroke-width="1.4"/>';
+      else if(k.indexOf('niv:')===0){ const n=N.find(z=>z.k===k.slice(4)); ov+='<rect x="'+sx+'" y="'+(yy-4)+'" width="22" height="9" fill="'+n.cor+'" stroke="#666" stroke-width="0.6"/>'+T(sx+11,yy+3.5,n.cod,{fs:8,b:1,a:'middle',c:'#111',h:0}); }
+      else { const cc={c1:'rgba(220,60,40,.45)',c2:'rgba(40,110,220,.45)',c3:'rgba(240,160,30,.5)'}[k]; ov+='<rect x="'+sx+'" y="'+(yy-4)+'" width="22" height="9" fill="'+cc+'"/>'; }
+      ov+=T(sx+28,yy+3.5,q[1],{fs:it.length>11?7.6:9,h:0}); });
+  }
+  // 9) carimbo + escala + norte
+  const bar=plNiceLen(vb.w/5);
+  if(v.carimbo){
+    const w=W-356-(v.quadro?514:0)-24, h=BH-16, x0=W-w-12, y0=H+8, ob=(document.getElementById('logradouro-inp')||{}).value||'—', rp=(document.getElementById('resp-inp')||{}).value||'—', dt=new Date().toLocaleDateString('pt-BR');
+    ov+='<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+h+'" fill="#fff" stroke="#111" stroke-width="1.2"/><line x1="'+x0+'" y1="'+(y0+22)+'" x2="'+(x0+w)+'" y2="'+(y0+22)+'" stroke="#111"/><line x1="'+x0+'" y1="'+(y0+66)+'" x2="'+(x0+w)+'" y2="'+(y0+66)+'" stroke="#111"/>'+
+      T(x0+8,y0+15,'PLANTA BAIXA — PAVIMENTO INTERTRAVADO',{fs:11,b:1,h:0})+T(x0+8,y0+36,'Obra: '+ob,{fs:9.5,h:0})+T(x0+8,y0+50,'Resp. técnico: '+rp,{fs:9.5,h:0})+T(x0+8,y0+62,'Dimensionamento: IP-06/2004 · Data: '+dt,{fs:9,h:0,c:'#333'})+
+      T(x0+8,y0+84,'ESCALA GRÁFICA',{fs:8,b:1,h:0})+T(x0+8,y0+h-8,'Cotas em metros · espessuras em cm · eixos esquemáticos (retos)',{fs:8,h:0,c:'#333'})+T(x0+w-8,y0+84,'TOTAL CIVIL',{fs:11,b:1,a:'end',h:0,c:'#0f3d73'});
+    const bx=x0+8, by=y0+100, bw=Math.min(bar*sc,w-24); for(let q=0;q<4;q++) ov+='<rect x="'+(bx+bw/4*q).toFixed(1)+'" y="'+by+'" width="'+(bw/4).toFixed(1)+'" height="4" fill="'+(q%2?'#fff':'#111')+'" stroke="#111" stroke-width="0.6"/>';
+    ov+=T(bx,by+13,'0',{fs:8,h:0})+T(bx+bw/2,by+13,fmt(bar/2,0),{fs:8,h:0,a:'middle'})+T(bx+bw,by+13,bar+' m',{fs:8,h:0,a:'middle'});
+  }
+  { const bx=20, by=H-20, bw=bar*sc; ov+='<line x1="'+bx+'" y1="'+by+'" x2="'+(bx+bw).toFixed(1)+'" y2="'+by+'" stroke="#000" stroke-width="3"/>'+T(bx,by-6,bar+' m',{fs:11,h:0}); }
+  ov+='<g transform="translate('+(W-36)+',44)"><circle r="18" fill="#fff" stroke="#111"/><path d="M0,-16 L6,8 L0,3 L-6,8 Z" fill="#111"/>'+T(0,-21,'N',{fs:11,b:1,a:'middle',h:0})+'</g>';
+  const fx='<rect x="1" y="1" width="'+(W-2)+'" height="'+(H-2).toFixed(1)+'" fill="none" stroke="#111" stroke-width="1.4"/>'+(BH?'<rect x="0" y="'+H.toFixed(1)+'" width="'+W+'" height="'+BH.toFixed(1)+'" fill="#f4f4f1"/>':'');
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+W+' '+HT.toFixed(1)+'" width="100%" height="100%" '+F+' style="background:#fdfdfb"><defs>'+defs+'<clipPath id="plclip"><rect x="0" y="0" width="'+W+'" height="'+H.toFixed(1)+'"/></clipPath></defs><g clip-path="url(#plclip)">'+s+top+'</g>'+fx+ov+'</svg>';
+}
+function plLimites(){
+  const D=plDados(), P=secaoParams(), w=plMfLarg(P)+6; let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  D.forEach(d=>{ d.L.forEach(l=>{ const c=d.lay.pos(l.est), b=l.larg/2+w; x0=Math.min(x0,c[0]-b);x1=Math.max(x1,c[0]+b);y0=Math.min(y0,c[1]-b);y1=Math.max(y1,c[1]+b); }); });
+  if(x0>x1){ x0=0;x1=100;y0=-20;y1=20; } return {x0,x1,y0,y1};
+}
+function plDesenhar(enquadrar){
+  const el=document.getElementById('pl-svgwrap'); if(!el) return;
+  if(!resultado){ el.innerHTML='<div style="padding:30px;color:var(--fg2)">Calcule o dimensionamento primeiro.</div>'; return; }
+  const w=el.clientWidth||1100, h=el.clientHeight||640;
+  const asp=Math.max(0.15,h/w-plBanda()/1200);
+  if(_pl.vb&&!enquadrar) _pl.vb.h=_pl.vb.w*asp;
+  if(enquadrar||!_pl.vb){ const b=plLimites(), bw=b.x1-b.x0, bh=b.y1-b.y0; let vw=Math.max(bw,bh/asp)*1.18; const vh=vw*asp; _pl.vb={x:b.x0-(vw-bw)/2,y:-b.y1-(vh-bh)/2,w:vw,h:vh}; }
+  el.innerHTML=plSvg(_pl.vb,1200);
+  if(!el.dataset.ev){ el.dataset.ev='1';
+    el.addEventListener('wheel',e=>{ e.preventDefault(); const r=el.getBoundingClientRect(), hd=r.height*(1-plBanda()/1200*r.width/r.height), fx=(e.clientX-r.left)/r.width, fy=Math.min(1,(e.clientY-r.top)/hd), f=e.deltaY<0?0.8:1.25, vb=_pl.vb;
+      const nw=vb.w*f, nh=vb.h*f; _pl.vb={x:vb.x+(vb.w-nw)*fx,y:vb.y+(vb.h-nh)*fy,w:nw,h:nh}; plDesenhar(); },{passive:false});
+    el.addEventListener('mousedown',e=>{ _pl.drag={x:e.clientX,y:e.clientY,vb:Object.assign({},_pl.vb)}; el.style.cursor='grabbing'; e.preventDefault(); });
+    window.addEventListener('mousemove',e=>{ const d=_pl.drag; if(!d) return; const r=el.getBoundingClientRect(), hd=r.height-plBanda()/1200*r.width; _pl.vb={x:d.vb.x-(e.clientX-d.x)/r.width*d.vb.w,y:d.vb.y-(e.clientY-d.y)/hd*d.vb.h,w:d.vb.w,h:d.vb.h}; if(!_pl.raf){ _pl.raf=requestAnimationFrame(()=>{ _pl.raf=0; plDesenhar(); }); } });
+    window.addEventListener('mouseup',()=>{ if(_pl.drag){ _pl.drag=null; el.style.cursor='grab'; } });
+  }
+}
+function plBaixarSvg(){
+  if(!resultado){ toast('Calcule primeiro.',true); return; }
+  if(!_pl.vb) plDesenhar(true);
+  const svg=plSvg(_pl.vb,1800).replace('width="100%" height="100%"','width="1800" height="'+Math.round(1800*_pl.vb.h/_pl.vb.w+plBanda()*1.5)+'"');
+  triggerDownload(new Blob(['<?xml version="1.0" encoding="UTF-8"?>\n'+svg],{type:'image/svg+xml'}),'intertravado_planta_'+carimbo()+'.svg');
+}
+
+/* ── 3D REALISTA (three.js r128, mesma versão da Drenagem) ── */
+const PL_THREE='https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js', PL_ORBIT='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
+const _plLibs={};
+function plCarregar(u){ if(_plLibs[u]) return _plLibs[u]; return _plLibs[u]=new Promise((ok,fail)=>{ const s=document.createElement('script'); s.src=u; s.async=true; s.onload=ok; s.onerror=()=>{ delete _plLibs[u]; fail(new Error('sem conexão')); }; document.head.appendChild(s); }); }
+function pl3D(manter){
+  const wrap=document.getElementById('pl-3dwrap'); if(!wrap) return;
+  if(!resultado){ wrap.innerHTML='<div style="padding:30px;color:var(--fg2)">Calcule o dimensionamento primeiro.</div>'; return; }
+  const msg=document.getElementById('pl-msg'); if(!window.THREE) msg.textContent='Carregando o 3D…';
+  (window.THREE?Promise.resolve():plCarregar(PL_THREE)).then(()=>window.THREE.OrbitControls?0:plCarregar(PL_ORBIT)).then(()=>{ msg.textContent=''; pl3Dmontar(manter); })
+  .catch(()=>{ msg.textContent='Não foi possível carregar a biblioteca 3D (verifique a conexão com a internet).'; });
+}
+/* texturas geradas no próprio programa (sem baixar imagens) */
+function plTex(tipo){
+  const T=window.THREE, cache=_pl.tex||(_pl.tex={}); if(cache[tipo]) return cache[tipo];
+  const cv=document.createElement('canvas'), N=tipo==='pav'?512:256; cv.width=cv.height=N; const g=cv.getContext('2d');
+  let seed=7; const rnd=()=>{ seed=(seed*16807)%2147483647; return seed/2147483647; };
+  if(tipo==='pav'){ /* blocos 20×10 cm em fiada (tijolinho), ladrilho de 40×40 cm */
+    g.fillStyle='#6f6a62'; g.fillRect(0,0,N,N);
+    const r=N/4, bl=N/2, j=5;
+    for(let q=0;q<4;q++){ const off=(q%2)?bl/2:0; for(let c=-1;c<3;c++){ const x=c*bl+off, y=q*r; const v=150+Math.round(rnd()*26-13), t=Math.round(rnd()*8-4);
+      g.fillStyle='rgb('+(v+t+6)+','+(v+t+2)+','+(v-4)+')'; g.fillRect(x+j/2,y+j/2,bl-j,r-j);
+      for(let k=0;k<260;k++){ const a=rnd()*40-20; g.fillStyle='rgba('+(a>0?255:0)+','+(a>0?255:0)+','+(a>0?255:0)+','+(Math.abs(a)/220)+')'; g.fillRect(x+j/2+rnd()*(bl-j),y+j/2+rnd()*(r-j),1.6,1.6); }
+      g.fillStyle='rgba(255,255,255,.16)'; g.fillRect(x+j/2,y+j/2,bl-j,2); g.fillRect(x+j/2,y+j/2,2,r-j);
+      g.fillStyle='rgba(0,0,0,.18)'; g.fillRect(x+j/2,y+r-j/2-2,bl-j,2); g.fillRect(x+bl-j/2-2,y+j/2,2,r-j); } }
+  }else if(tipo==='grama'){
+    g.fillStyle='#5f8a3a'; g.fillRect(0,0,N,N);
+    for(let k=0;k<9000;k++){ const v=rnd(); g.fillStyle=v<0.5?'rgba(40,80,25,.35)':v<0.85?'rgba(120,160,70,.35)':'rgba(150,130,80,.25)'; g.fillRect(rnd()*N,rnd()*N,1+rnd()*2,1+rnd()*3); }
+  }else if(tipo==='concreto'||tipo==='sarjeta'){
+    g.fillStyle=tipo==='concreto'?'#b9b8b1':'#9fa09b'; g.fillRect(0,0,N,N);
+    for(let k=0;k<6000;k++){ const v=rnd(); g.fillStyle=v<0.5?'rgba(0,0,0,.08)':'rgba(255,255,255,.12)'; g.fillRect(rnd()*N,rnd()*N,1.5,1.5); }
+  }else{ /* granular / solo, tingido pela cor da camada */
+    g.fillStyle='#bbbbbb'; g.fillRect(0,0,N,N);
+    for(let k=0;k<5000;k++){ const v=rnd(), s=1+rnd()*(tipo==='areia'?1.2:3.5); g.fillStyle=v<0.5?'rgba(0,0,0,.22)':'rgba(255,255,255,.28)'; g.beginPath(); g.arc(rnd()*N,rnd()*N,s/2,0,7); g.fill(); }
+  }
+  const t=new T.CanvasTexture(cv); t.wrapS=t.wrapT=T.RepeatWrapping; t.encoding=T.sRGBEncoding; if(_pl.t3) t.anisotropy=_pl.t3.rd.capabilities.getMaxAnisotropy();
+  return cache[tipo]=t;
+}
+function plSprite(txt,o){
+  const T=window.THREE; o=o||{}; const fs=48, pad=14, cv=document.createElement('canvas'), g=cv.getContext('2d');
+  const lines=String(txt).split('\n'); g.font='bold '+fs+'px Arial'; const w=Math.ceil(Math.max(...lines.map(l=>g.measureText(l).width)))+pad*2, h=lines.length*(fs+8)+pad*2;
+  cv.width=w; cv.height=h; g.font='bold '+fs+'px Arial';
+  g.fillStyle=o.bg||'rgba(255,255,255,.88)'; g.strokeStyle=o.bd||'#334'; g.lineWidth=4; g.beginPath(); if(g.roundRect) g.roundRect(2,2,w-4,h-4,12); else g.rect(2,2,w-4,h-4); g.fill(); g.stroke();
+  g.fillStyle=o.c||'#111'; g.textBaseline='top'; lines.forEach((l,i)=>g.fillText(l,pad,pad+i*(fs+8)));
+  const tx=new T.CanvasTexture(cv); tx.encoding=T.sRGBEncoding;
+  const sp=new T.Sprite(new T.SpriteMaterial({map:tx,depthTest:o.dt!==false,transparent:true,sizeAttenuation:false})); const k=(o.alt||0.9)*0.026/(fs+8); sp.scale.set(w*k,h*k,1); sp.renderOrder=10; sp.userData.tela=1; return sp;
+}
+function plRuido(x,y){ const h=(i,j)=>{ const n=Math.sin(i*127.1+j*311.7)*43758.5453; return n-Math.floor(n); }; const i=Math.floor(x),j=Math.floor(y),fx=x-i,fy=y-j,sx=fx*fx*(3-2*fx),sy=fy*fy*(3-2*fy);
+  const a=h(i,j),b=h(i+1,j),c=h(i,j+1),d=h(i+1,j+1); return a+(b-a)*sx+(c-a)*sy+(a-b-c+d)*sx*sy; }
+function pl3Dmontar(manter){
+  const T=window.THREE, wrap=document.getElementById('pl-3dwrap'), v=plVis(), N=plNiveis(), D=plDados(), P=secaoParams();
+  const ev=parseFloat(document.getElementById('pl-ev').value)||1; document.getElementById('pl-ev-v').textContent=ev+'×';
+  let t=_pl.t3;
+  if(!t){
+    wrap.innerHTML=''; const rd=new T.WebGLRenderer({antialias:true,preserveDrawingBuffer:true}); wrap.appendChild(rd.domElement); rd.domElement.style.display='block';
+    rd.outputEncoding=T.sRGBEncoding; rd.toneMapping=T.ACESFilmicToneMapping; rd.toneMappingExposure=0.92; rd.shadowMap.enabled=true; rd.shadowMap.type=T.PCFSoftShadowMap; rd.setPixelRatio(Math.min(2,window.devicePixelRatio||1));
+    const sc=new T.Scene();
+    const cv=document.createElement('canvas'); cv.width=2; cv.height=256; const g=cv.getContext('2d'); const gr=g.createLinearGradient(0,0,0,256); gr.addColorStop(0,'#6fa8dc'); gr.addColorStop(0.55,'#bcd8ef'); gr.addColorStop(1,'#e4edf3'); g.fillStyle=gr; g.fillRect(0,0,2,256);
+    const sky=new T.CanvasTexture(cv); sky.encoding=T.sRGBEncoding; sc.background=sky;
+    sc.add(new T.HemisphereLight(0xdfefff,0x4f6338,0.55));
+    const sun=new T.DirectionalLight(0xfff1d8,1.05); sun.castShadow=true; sun.shadow.mapSize.set(2048,2048); sun.shadow.bias=-0.0004; sun.shadow.normalBias=0.02; sc.add(sun); sc.add(sun.target);
+    const cam=new T.PerspectiveCamera(42,1,0.1,8000); const ctl=new T.OrbitControls(cam,rd.domElement); ctl.enableDamping=true; ctl.dampingFactor=0.09; ctl.maxPolarAngle=Math.PI*0.495; ctl.screenSpacePanning=true;
+    t=_pl.t3={rd,sc,cam,ctl,sun,grp:null};
+    const loop=()=>{ if(_pl.modo!=='3d'||!document.getElementById('pane-planta').classList.contains('active')){ t.run=false; return; } ctl.update(); rd.render(sc,cam); requestAnimationFrame(loop); };
+    t.loop=()=>{ if(!t.run){ t.run=true; loop(); } };
+    window.addEventListener('resize',()=>{ if(_pl.modo==='3d') plRedimensionar3D(); });
+  }
+  plRedimensionar3D();
+  if(t.grp){ t.sc.remove(t.grp); t.grp.traverse(o=>{ if(o.geometry) o.geometry.dispose(); if(o.material&&!o.material.userData.keep){ if(o.material.map&&o.isSprite) o.material.map.dispose(); o.material.dispose(); } }); }
+  const grp=new T.Group(); t.grp=grp; t.sc.add(grp);
+  t.rd.shadowMap.enabled=!!v.sombras;
+  // cota de referência
+  let zmin=1e9; D.forEach(d=>d.L.forEach(l=>{ zmin=Math.min(zmin,l.gr-P.eTot,l.tc==null?1e9:l.tc); })); if(zmin>1e8) zmin=0; zmin-=0.5;
+  const W3=(p,z)=>new T.Vector3(p[0],(z-zmin)*ev,-p[1]);
+  const mat={};
+  const M=(k,cor,tex,rep,extra)=>{ if(mat[k]) return mat[k]; const mm=new T.MeshStandardMaterial(Object.assign({color:new T.Color(cor),roughness:0.92,metalness:0,side:T.DoubleSide},extra||{})); if(tex){ mm.map=tex; } return mat[k]=mm; };
+  /* superfície em fita a partir de seções transversais (lista de pontos 3D por amostra) */
+  const fita=(secs,uvf,mm,fechar)=>{
+    const pos=[], uv=[], n=secs[0].length;
+    for(let a=0;a<secs.length-1;a++) for(let c=0;c<n-1;c++){
+      const p1=secs[a][c],p2=secs[a][c+1],p3=secs[a+1][c+1],p4=secs[a+1][c];
+      [p1,p2,p3,p1,p3,p4].forEach(p=>pos.push(p.x,p.y,p.z));
+      if(uvf){ [[a,c],[a,c+1],[a+1,c+1],[a,c],[a+1,c+1],[a+1,c]].forEach(q=>{ const u=uvf(q[0],q[1]); uv.push(u[0],u[1]); }); }
+    }
+    if(fechar){ [0,secs.length-1].forEach(a=>{ const s=secs[a]; for(let c=1;c<n-2;c++){ [s[0],s[c],s[c+1]].forEach(p=>pos.push(p.x,p.y,p.z)); if(uvf) uv.push(0,0,0,0,0,0); } }); }
+    const g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(pos,3)); if(uvf) g.setAttribute('uv',new T.Float32BufferAttribute(uv,2)); g.computeVertexNormals();
+    const me=new T.Mesh(g,mm); me.castShadow=true; me.receiveShadow=true; grp.add(me); return me;
+  };
+  const A=D.map(d=>plAmostras(d,1));
+  const foot=D.map((d,j)=>plPoligono(d,A[j],0)), footMf=D.map((d,j)=>plPoligono(d,A[j],plMfLarg(P)+0.05));
+  const dentroOutra=(j,p,arr,soAnteriores)=>D.some((o,k)=>k!==j&&(!soAnteriores||k<j)&&plDentro(p,arr[k]));
+  const wmf=v.mf?plMfLarg(P):0, sb=P.mf&&P.mf.tipo==='conjugado'?(+P.mf.sbase||0)/100:0;
+  const camadas=N.filter(n=>n.esp);
+  D.forEach((d,j)=>{
+    const Aj=A[j];
+    // ── camadas do pavimento (volumes), recortadas onde já existe a pista de uma rua anterior
+    const runsPav=plCorridas(Aj,(a,b)=>!dentroOutra(j,[(a.c[0]+b.c[0])/2,(a.c[1]+b.c[1])/2],foot,true));
+    camadas.forEach((n,ci)=>{
+      if(!v.pista||!plOn(v,n.k)) return;
+      const tx=ci===0?null:plTex(/areia/i.test(n.nome)?'areia':'gran');
+      const mm=ci===0?M('blocoLado','#8d8a82',null):M('cam'+ci,n.cor,tx);
+      if(tx){ tx.repeat&&0; }
+      runsPav.forEach(R=>{
+        const secs=R.map(s=>{ const us=[s.b,s.b/2,0,-s.b/2,-s.b]; const topo=us.map(u=>W3(plOff(d,s,u),plZ(s,u)-n.prof)), fundo=us.slice().reverse().map(u=>W3(plOff(d,s,u),plZ(s,u)-n.prof-n.esp)); return topo.concat(fundo,[topo[0]]); });
+        const s0=R[0].est;
+        fita(secs,tx?((a,c)=>[(R[a].est-s0)/1.5,c/3]):null,mm,true);
+        if(ci===0){ /* superfície dos blocos com textura de paginação */
+          const tp=R.map(s=>[s.b,s.b/2,0,-s.b/2,-s.b].map(u=>{ const q=W3(plOff(d,s,u),plZ(s,u)-n.prof); q.y+=0.004; return q; }));
+          const px=plTex('pav'), mp=M('pav','#ffffff',px,null,{roughness:0.85});
+          fita(tp,(a,c)=>[(R[a].est-s0)/0.4,(R[a].b-[R[a].b,R[a].b/2,0,-R[a].b/2,-R[a].b][c])/0.4],mp,false);
+        }
+      });
+    });
+    // ── terreno natural (lâmina transparente sobre a pista: mostra corte e aterro)
+    if(plOn(v,'terreno')){
+      const secs=Aj.map(s=>[s.b,0,-s.b].map(u=>W3(plOff(d,s,u),plZT(s,u))));
+      const me=fita(secs,null,M('terr','#7b5a34',null,null,{transparent:true,opacity:0.38,depthWrite:false,roughness:1}),false); me.castShadow=false; me.renderOrder=5;
+    }
+    // ── meio-fio e sarjeta (concreto), sem passar por dentro da pista de outra rua
+    if(v.mf&&P.mf) [1,-1].forEach(sg=>{
+      const runs=plCorridas(Aj,(a,b)=>{ const m={c:[(a.c[0]+b.c[0])/2,(a.c[1]+b.c[1])/2],b:(a.b+b.b)/2}; return !dentroOutra(j,plOff(d,m,sg*(m.b+wmf/2)),foot,false); });
+      runs.forEach(R=>{
+        const zE=s=>plZ(s,sg*s.b);
+        if(P.mf.tipo==='conjugado'){
+          const salt=(+P.mf.salt||8)/100, esp=(+P.mf.esp||15)/100;
+          fita(R.map(s=>{ const e=zE(s), u0=sg*s.b, u1=sg*(s.b+sb); return [W3(plOff(d,s,u0),e),W3(plOff(d,s,u1),e+0.015),W3(plOff(d,s,u1),e-salt),W3(plOff(d,s,u0),e-salt),W3(plOff(d,s,u0),e)]; }),(a,c)=>[(R[a].est-R[0].est)/1,c/4],M('sarj','#ffffff',plTex('sarjeta')),true);
+          fita(R.map(s=>{ const e=zE(s)+0.015, u0=sg*(s.b+sb), u1=sg*(s.b+wmf), r=0.02*sg; return [W3(plOff(d,s,u0),e),W3(plOff(d,s,u0+r),e+esp),W3(plOff(d,s,u1),e+esp),W3(plOff(d,s,u1),e-salt-0.1),W3(plOff(d,s,u0),e-salt-0.1),W3(plOff(d,s,u0),e)]; }),(a,c)=>[(R[a].est-R[0].est)/1,c/5],M('mf','#ffffff',plTex('concreto')),true);
+        }else{
+          const alt=(+P.mf.alt||30)/100, esp=(+P.mf.esp||15)/100;
+          fita(R.map(s=>{ const e=zE(s), u0=sg*s.b, u1=sg*(s.b+wmf); return [W3(plOff(d,s,u0),e),W3(plOff(d,s,u0),e+esp),W3(plOff(d,s,u1),e+esp),W3(plOff(d,s,u1),e+esp-alt),W3(plOff(d,s,u0),e+esp-alt),W3(plOff(d,s,u0),e)]; }),(a,c)=>[(R[a].est-R[0].est)/1,c/5],M('mf','#ffffff',plTex('concreto')),true);
+        }
+      });
+    });
+    // ── eixo
+    if(v.eixo){ const g=new T.BufferGeometry().setFromPoints(Aj.map(s=>{ const q=W3(s.c,s.gr); q.y+=0.03; return q; })); const ln=new T.Line(g,new T.LineDashedMaterial({color:0xd03020,dashSize:1.2,gapSize:0.5})); ln.computeLineDistances(); grp.add(ln); }
+    // ── rótulos 3D
+    if(v.rot3d||v.numeros){
+      if(v.numeros) d.L.forEach((l,k)=>{ const eh=Math.abs(l.est/20-Math.round(l.est/20))<1e-6, idx=Math.round(l.est/20); if(eh&&k>0&&k<d.L.length-1&&idx%v.passo) return;
+        const sp=plSprite(eh?'EST. '+idx:'EST. '+estacaTxt(l.est),{alt:0.55,c:eh?'#111':'#1d4ed8'}); const p=plOff(d,{c:d.lay.pos(l.est)},l.larg/2+wmf+0.6); sp.position.copy(W3(p,l.gr+0.6)); grp.add(sp); });
+      const s0=Aj[Math.floor(Aj.length/2)]; const nm=plSprite(d.nome,{alt:0.85,c:'#0f3d73'}); nm.position.copy(W3(plOff(d,s0,0),s0.gr+3.5)); grp.add(nm);
+      if(v.rot3d&&v.pista){ /* medidas das camadas na face da última seção (corte) */
+        const s=Aj[Aj.length-1]; let y=0, ord=0;
+        camadas.filter(n=>plOn(v,n.k)).forEach(n=>{ const sp=plSprite(n.cod+' · '+n.nome.replace(' (greide = topo)','')+' — '+fmt(n.esp*100,1)+' cm · topo '+fmt(s.gr-n.prof,3),{alt:0.5,bg:'rgba(255,255,255,.93)',bd:n.cor}); const q=plOff(d,s,-(s.b+wmf+1.6)); const z=plZ(s,0)-n.prof-n.esp/2; sp.position.copy(W3(q,z)); sp.center.set(0,0.5+(ord++)*1.08); sp.position.copy(W3(q,plZ(s,0)-0.0)); grp.add(sp); });
+      }
+    }
+  });
+  // ── cruzamentos
+  if(v.cruz) D.forEach(d=>d.rows.forEach(r=>{ if(!r.cruz) return; const ib=ruaIdx(r.cruz.rua); const o=D.find(x=>x.i===ib); if(!o||ib<d.i) return;
+    const g1=itpRows(d.rows,r.est,'greide'), g2=itpRows(o.rows,r.cruz.est,'greide'), df=g1-g2, ruim=Math.abs(df)>0.02;
+    const sp=plSprite('Cruzamento\nΔ greide '+(df>0?'+':'')+fmt(df*100,1)+' cm '+(ruim?'⚠':'✓'),{alt:0.6,c:ruim?'#b91c1c':'#15803d',bd:ruim?'#b91c1c':'#15803d'}); sp.position.copy(W3(d.lay.pos(r.est),Math.max(g1,g2)+1.6)); grp.add(sp);
+    const pin=new T.Mesh(new T.CylinderGeometry(0.06,0.06,1.4*ev>1.4?1.4:1.4,8),new T.MeshStandardMaterial({color:ruim?0xb91c1c:0x15803d})); pin.position.copy(W3(d.lay.pos(r.est),Math.max(g1,g2)+0.7)); grp.add(pin); }));
+  // ── terreno contínuo: malha que segue o terreno natural e desce/sobe em talude até o meio-fio
+  let bb=new T.Box3().setFromObject(grp); if(bb.isEmpty()) return;
+  if(v.entorno){
+    const esp=P.mf?((+P.mf.esp||15)/100):0, mg=140;
+    let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; A.forEach(Aj=>Aj.forEach(q=>{ x0=Math.min(x0,q.c[0]);x1=Math.max(x1,q.c[0]);y0=Math.min(y0,q.c[1]);y1=Math.max(y1,q.c[1]); })); x0-=mg;x1+=mg;y0-=mg;y1+=mg;
+    const cel=Math.max(1,Math.max(x1-x0,y1-y0)/260), nx=Math.ceil((x1-x0)/cel), ny=Math.ceil((y1-y0)/cel);
+    const H=(p)=>{ let best=null, sw=0, sh=0, sc=0;
+      for(let j=0;j<D.length;j++){ const d=D[j], Aj=A[j], ly=d.lay, dx=p[0]-ly.A[0], dy=p[1]-ly.A[1];
+        const al=dx*ly.d[0]+dy*ly.d[1]+ly.sA, lat=dx*ly.n[0]+dy*ly.n[1], s0=Aj[0].est, sN=Aj[Aj.length-1].est;
+        const ac=Math.min(sN,Math.max(s0,al)), over=Math.abs(al-ac); let k=0; while(k<Aj.length-2&&Aj[k+1].est<ac) k++; const qa=Aj[k], qb=Aj[k+1], tt=(qb.est-qa.est)>0?(ac-qa.est)/(qb.est-qa.est):0;
+        const q={gr:qa.gr+(qb.gr-qa.gr)*tt,gE:qa.gE+(qb.gE-qa.gE)*tt,gD:qa.gD+(qb.gD-qa.gD)*tt,tc:qa.tc+(qb.tc-qa.tc)*tt,te:qa.te+(qb.te-qa.te)*tt,td:qa.td+(qb.td-qa.td)*tt,b:(qa.b+(qb.b-qa.b)*tt)};
+        const cw=q.b+wmf, sg=lat>=0?1:-1, nat=plZT(q,lat), topo=plZ(q,sg*q.b)+(v.mf?esp:0);
+        if(Math.abs(lat)<=cw&&over<0.01) return {h:plZ(q,Math.max(-q.b,Math.min(q.b,lat)))-0.12,c:0};
+        const e=Math.hypot(Math.max(0,Math.abs(lat)-cw),over), dlt=nat-topo, tw=Math.max(1.2,Math.abs(dlt)*1.5), t1=Math.min(1,e/tw), sm=t1*t1*(3-2*t1);
+        const hh=topo+dlt*sm, cc=(1-t1)*Math.min(1,Math.abs(dlt)/0.25), w=1/Math.pow(e+0.3,3);
+        sw+=w; sh+=w*hh; sc+=w*cc; }
+      return {h:sh/sw,c:sc/sw}; };
+    const pos=[], col=[], uv=[], idx=[];
+    for(let iy=0;iy<=ny;iy++) for(let ix=0;ix<=nx;ix++){ const p=[x0+ix*cel,y0+iy*cel], r=H(p), q=W3(p,r.h); pos.push(q.x,q.y,q.z); uv.push(p[0]/3,p[1]/3);
+      const c=r.c, nz=0.80+0.30*plRuido(p[0]/22,p[1]/22)+0.12*plRuido(p[0]/5,p[1]/5), sec=0.92+0.16*plRuido(p[0]/40+7,p[1]/40+3);
+      col.push((1-c*0.10)*nz*sec,(1-c*0.40)*nz,(1-c*0.62)*nz*(2-sec)*0.9); }
+    for(let iy=0;iy<ny;iy++) for(let ix=0;ix<nx;ix++){ const a=iy*(nx+1)+ix, b2=a+1, c2=a+nx+1, d2=c2+1; idx.push(a,b2,c2,b2,d2,c2); }
+    const g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(pos,3)); g.setAttribute('color',new T.Float32BufferAttribute(col,3)); g.setAttribute('uv',new T.Float32BufferAttribute(uv,2)); g.setIndex(idx); g.computeVertexNormals();
+    const mg2=new T.MeshStandardMaterial({map:plTex('grama'),vertexColors:true,roughness:1,metalness:0});
+    const me=new T.Mesh(g,mg2); me.receiveShadow=true; grp.add(me);
+    bb=new T.Box3().setFromObject(grp);
+  }
+  const bbR=new T.Box3(); A.forEach(Aj=>Aj.forEach(q=>bbR.expandByPoint(W3(q.c,q.gr)))); const cen=bbR.getCenter(new T.Vector3()), szR=bbR.getSize(new T.Vector3()), R=Math.max(szR.x,szR.z,20);
+  t.sc.fog=v.entorno?new T.Fog(0xe4edf3,R*0.9,R*2.6):null;
+  // sol e sombras ajustados ao tamanho da cena
+  const sun=t.sun; sun.position.set(cen.x+R*0.6,cen.y+R*0.9,cen.z+R*0.45); sun.target.position.copy(cen); const c=sun.shadow.camera; c.left=-R*0.8;c.right=R*0.8;c.top=R*0.8;c.bottom=-R*0.8;c.near=0.5;c.far=R*4; c.updateProjectionMatrix();
+  let alvo=cen.clone(); const cz=D.length?D[0].rows.find(r=>r.cruz):null; if(cz){ const l=D[0].L.find(x=>Math.abs(x.est-cz.est)<0.01)||D[0].L[0]; alvo=W3(D[0].lay.pos(cz.est),l.gr); }
+  if(!manter||!t.pronto){ const Rv=Math.min(R,90); t.cam.position.set(alvo.x+Rv*0.42,alvo.y+Rv*0.30,alvo.z+Rv*0.55); t.ctl.target.copy(alvo); t.cam.far=R*30; t.cam.near=Math.max(0.05,R/2000); t.cam.updateProjectionMatrix(); t.pronto=true; }
+  t.loop();
+}
+function plRedimensionar3D(){ const t=_pl.t3, wrap=document.getElementById('pl-3dwrap'); if(!t||!wrap) return; const w=wrap.clientWidth||900, h=wrap.clientHeight||600; t.rd.setSize(w,h); t.cam.aspect=w/h; t.cam.updateProjectionMatrix(); }
+function pl3DEnquadrar(){ if(_pl.t3) _pl.t3.pronto=false; pl3D(false); }
+function pl3DVista(tipo){ const t=_pl.t3; if(!t||!t.grp) return; const bb=new window.THREE.Box3().setFromObject(t.grp), c=bb.getCenter(new window.THREE.Vector3()), s=bb.getSize(new window.THREE.Vector3()), R=Math.max(s.x,s.z,20)*0.25;
+  const P={topo:[0,R*3.2,0.01],iso:[R*1.4,R*1.7,R*2.9],rua:[R*1.6,R*0.18,R*0.6]}[tipo]||[R,R,R]; t.cam.position.set(c.x+P[0],c.y+P[1],c.z+P[2]); t.ctl.target.copy(c); }
+function plBaixarPng(){ const t=_pl.t3; if(!t) return; t.rd.render(t.sc,t.cam); t.rd.domElement.toBlob(b=>triggerDownload(b,'intertravado_3d_'+carimbo()+'.png')); }
+
+/* ══════════════════════════════════════════════════════
    TABS
 ══════════════════════════════════════════════════════ */
 document.querySelectorAll('.tab').forEach(t=>{
@@ -3195,6 +3701,7 @@ document.querySelectorAll('.tab').forEach(t=>{
     t.classList.add('active');
     document.getElementById('pane-'+t.dataset.tab).classList.add('active');
     if(t.dataset.tab==='corte') updateCorte();
+    if(t.dataset.tab==='planta') plAbrir();
   });
 });
 
