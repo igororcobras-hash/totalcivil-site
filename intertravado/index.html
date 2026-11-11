@@ -1711,7 +1711,63 @@ function desfazerGreide(){
 const TOPO_COLS=[[2,'Estaca'],[3,'Terreno esq.'],[4,'Terreno eixo'],[5,'Terreno dir.'],[6,'Greide eixo'],[7,'Greide esq.'],[8,'Greide dir.'],[9,'Declive long.'],[10,'Largura'],[11,'Situação'],[12,'Corte (m²)'],[13,'Aterro (m²)'],[14,'Vol. corte'],[15,'Vol. aterro']];
 let topoOcultas=[];
 try{ const t=JSON.parse(localStorage.getItem('pint_topo_ocultas')||'[]'); if(Array.isArray(t)) topoOcultas=t.filter(x=>TOPO_COLS.some(c=>c[0]===x)); }catch(e){}
+/* Ordem das colunas: arrastar o título para outro lugar, como no Excel (a coluna # fica sempre primeiro). */
+let topoOrdem=[];
+try{ const t=JSON.parse(localStorage.getItem('pint_topo_ordem')||'[]'); if(Array.isArray(t)) topoOrdem=t; }catch(e){}
+function topoOrdemAtual(){
+  const base=[2,3,4,5,6,7,8,9,10,11,12,13,14,15];
+  const o=topoOrdem.filter(c=>base.indexOf(c)>=0).filter((c,i,a)=>a.indexOf(c)===i);
+  base.forEach(c=>{ if(o.indexOf(c)<0) o.push(c); });
+  return o;
+}
+function aplicarOrdemTopo(){
+  const tb=document.getElementById('tbl-topo'); if(!tb) return;
+  const ord=topoOrdemAtual();
+  tb.querySelectorAll('tr').forEach(tr=>{
+    const m={}; Array.prototype.forEach.call(tr.children,c=>{ const k=/\bc(\d+)\b/.exec(c.className); if(k) m[+k[1]]=c; });
+    if(!m[1]) return;
+    let ant=m[1];
+    ord.forEach(c=>{ if(m[c]){ if(ant.nextElementSibling!==m[c]) ant.after(m[c]); ant=m[c]; } });
+  });
+}
+function moverColunaTopo(col,alvo,depois){
+  if(col===alvo) return;
+  const o=topoOrdemAtual().filter(c=>c!==col), i=o.indexOf(alvo);
+  o.splice(depois?i+1:i,0,col); topoOrdem=o;
+  try{ localStorage.setItem('pint_topo_ordem',JSON.stringify(o)); }catch(e){}
+  aplicarOrdemTopo(); atualizarOrdemBtn();
+}
+function ordemOriginalTopo(){
+  topoOrdem=[]; try{ localStorage.removeItem('pint_topo_ordem'); }catch(e){}
+  aplicarOrdemTopo(); atualizarOrdemBtn();
+}
+function atualizarOrdemBtn(){
+  const b=document.getElementById('btn-ordem-topo'); if(b) b.style.display=topoOrdemAtual().join()==='2,3,4,5,6,7,8,9,10,11,12,13,14,15'?'none':'';
+}
+function topoArrastar(){
+  const tr=document.querySelector('#tbl-topo thead tr'); if(!tr||tr.dataset.dnd) return; tr.dataset.dnd='1';
+  let arr=null;
+  const num=th=>{ const k=th&&/\bc(\d+)\b/.exec(th.className); return k?+k[1]:0; };
+  Array.prototype.forEach.call(tr.children,th=>{
+    if(num(th)<2) return;
+    th.draggable=true; th.style.cursor='grab'; th.title='Arraste para mudar a coluna de lugar';
+    th.addEventListener('dragstart',e=>{ arr=num(th); e.dataTransfer.effectAllowed='move'; try{e.dataTransfer.setData('text/plain',String(arr));}catch(x){} th.style.opacity='.5'; });
+    th.addEventListener('dragend',()=>{ th.style.opacity=''; tr.querySelectorAll('th').forEach(t=>t.style.boxShadow=''); });
+    th.addEventListener('dragover',e=>{
+      if(!arr) return; e.preventDefault();
+      const r=th.getBoundingClientRect(), dep=e.clientX>r.left+r.width/2;
+      tr.querySelectorAll('th').forEach(t=>t.style.boxShadow='');
+      th.style.boxShadow=dep?'inset -3px 0 0 var(--accent2,#2563eb)':'inset 3px 0 0 var(--accent2,#2563eb)';
+    });
+    th.addEventListener('drop',e=>{
+      if(!arr) return; e.preventDefault();
+      const r=th.getBoundingClientRect(); moverColunaTopo(arr,num(th),e.clientX>r.left+r.width/2); arr=null;
+    });
+  });
+  atualizarOrdemBtn();
+}
 function aplicarColunasTopo(){
+  aplicarOrdemTopo(); topoArrastar();
   let st=document.getElementById('topo-colcss');
   if(!st){ st=document.createElement('style'); st.id='topo-colcss'; document.head.appendChild(st); }
   st.textContent=topoOcultas.map(c=>'#tbl-topo .c'+c).join(',')+(topoOcultas.length?'{display:none}':'');
@@ -1719,10 +1775,10 @@ function aplicarColunasTopo(){
   if(btn) btn.textContent='👁 Colunas'+(topoOcultas.length?' ('+topoOcultas.length+' oculta'+(topoOcultas.length>1?'s':'')+')':'');
   document.querySelectorAll('#topo-cols input[data-col]').forEach(i=>{ i.checked=topoOcultas.indexOf(+i.dataset.col)<0; });
 }
-function montarColunasTopo(){
+function montarColunasTopo(){ setTimeout(atualizarOrdemBtn,0);
   const box=document.getElementById('topo-cols'); if(!box||box.dataset.ok) return; box.dataset.ok='1';
   box.innerHTML='<span class="tc-tit">Mostrar colunas:</span>'+TOPO_COLS.map(c=>'<label><input type="checkbox" data-col="'+c[0]+'" checked onchange="setColunaTopo('+c[0]+',this.checked)">'+c[1]+'</label>').join('')+
-    '<span class="tc-grp"><button type="button" class="tb-btn" onclick="colunasTopoGrupo(\'terreno\')">Ocultar terreno</button><button type="button" class="tb-btn" onclick="colunasTopoGrupo(\'todas\')">Mostrar todas</button></span>';
+    '<span class="tc-grp"><button type="button" class="tb-btn" id="btn-ordem-topo" style="display:none" onclick="ordemOriginalTopo()">↺ Ordem original</button><button type="button" class="tb-btn" onclick="colunasTopoGrupo(\'terreno\')">Ocultar terreno</button><button type="button" class="tb-btn" onclick="colunasTopoGrupo(\'todas\')">Mostrar todas</button></span>';
 }
 function setColunaTopo(c,mostrar){
   topoOcultas=topoOcultas.filter(x=>x!==c); if(!mostrar) topoOcultas.push(c);
