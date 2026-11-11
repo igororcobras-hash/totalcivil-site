@@ -811,6 +811,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
       <button type="button" class="tb-btn tb-btn-save" id="pl-b-planta" onclick="plModo('planta')">🗺 Planta baixa</button>
       <button type="button" class="tb-btn" id="pl-b-3d" onclick="plModo('3d')">🧊 Ver em 3D</button>
       <button type="button" class="tb-btn" onclick="_pl.modo==='planta'?plDesenhar(true):pl3DEnquadrar()">⤢ Enquadrar</button>
+      <button type="button" class="tb-btn" onclick="plZoom(0.7)" title="Aproximar">＋</button><button type="button" class="tb-btn" onclick="plZoom(1.43)" title="Afastar">－</button>
       <button type="button" class="tb-btn" id="pl-b-svg" onclick="plBaixarSvg()" title="Baixa a planta atual (com o que está aceso) em SVG — abre no navegador, Inkscape, Illustrator ou AutoCAD (importar)">⬇ Planta (SVG)</button>
       <button type="button" class="tb-btn" id="pl-b-png" style="display:none" onclick="plBaixarPng()">⬇ Imagem 3D (PNG)</button>
       <span id="pl-ev-box" style="display:none;font-size:12px">Vistas: <button type="button" class="tb-btn" onclick="pl3DVista('iso')">Perspectiva</button> <button type="button" class="tb-btn" onclick="pl3DVista('topo')">Topo</button> <button type="button" class="tb-btn" onclick="pl3DVista('rua')">Nível da rua</button> &nbsp; Exagero vertical <input type="range" id="pl-ev" min="1" max="10" step="1" value="1" oninput="pl3D(true)" style="vertical-align:middle"> <b id="pl-ev-v">1×</b></span>
@@ -819,9 +820,11 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
     <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
       <div id="pl-painel" style="width:300px;flex:none;max-height:780px;overflow:auto;border:1px solid var(--border,#ddd);border-radius:6px;padding:8px"></div>
       <div style="flex:1;min-width:320px">
-        <div id="pl-svgwrap" style="height:780px;border:1px solid var(--border,#ddd);border-radius:6px;cursor:grab;overflow:hidden;user-select:none"></div>
+        <style>@media (max-width:700px){#pl-svgwrap,#pl-3dwrap{height:68vh!important}#pl-painel{width:100%!important;max-height:none!important}#pl-svgwrap,#pl-3dwrap{touch-action:none}}</style>
+        <div id="pl-svgwrap" style="height:780px;touch-action:none;border:1px solid var(--border,#ddd);border-radius:6px;cursor:grab;overflow:hidden;user-select:none"></div>
+        <div id="pl-banda" style="display:none;overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--border,#ddd);border-top:none;border-radius:0 0 6px 6px;background:#f4f4f1"></div>
         <div id="pl-3dwrap" style="display:none;height:700px;border:1px solid var(--border,#ddd);border-radius:6px;overflow:hidden"></div>
-        <div style="font-size:11px;color:var(--fg2);margin-top:4px">Rolar o mouse = zoom · arrastar = mover (3D: botão esquerdo gira, direito move). Acenda ou apague os níveis para ver as cotas, espessuras e camadas. Eixos retos: a 1ª rua é a referência; ruas que se cruzam saem perpendiculares ao ponto do cruzamento (ângulo ajustável).</div>
+        <div style="font-size:11px;color:var(--fg2);margin-top:4px">Computador: rolar o mouse = zoom, arrastar = mover (3D: botão esquerdo gira, direito move). Celular: 1 dedo move (3D: gira), 2 dedos = zoom (3D: 2 dedos também movem). Acenda ou apague os níveis para ver as cotas, espessuras e camadas. Eixos retos: a 1ª rua é a referência; ruas que se cruzam saem perpendiculares ao ponto do cruzamento (ângulo ajustável).</div>
       </div>
     </div>
   </div>
@@ -3294,7 +3297,7 @@ function atualizarPlantaSeAberta(){ const pn=document.getElementById('pane-plant
 function plModo(m){
   _pl.modo=m;
   document.getElementById('pl-b-planta').classList.toggle('tb-btn-save',m==='planta'); document.getElementById('pl-b-3d').classList.toggle('tb-btn-save',m==='3d');
-  document.getElementById('pl-svgwrap').style.display=m==='planta'?'':'none'; document.getElementById('pl-3dwrap').style.display=m==='3d'?'':'none';
+  document.getElementById('pl-svgwrap').style.display=m==='planta'?'':'none'; { const bd=document.getElementById('pl-banda'); if(bd&&m!=='planta') bd.style.display='none'; } document.getElementById('pl-3dwrap').style.display=m==='3d'?'':'none';
   document.getElementById('pl-ev-box').style.display=m==='3d'?'':'none';
   document.getElementById('pl-b-svg').style.display=m==='planta'?'':'none'; document.getElementById('pl-b-png').style.display=m==='3d'?'':'none';
   if(m==='planta') plDesenhar(true); else pl3D();
@@ -3330,7 +3333,7 @@ function plNiceLen(x){ const e=Math.pow(10,Math.floor(Math.log10(x))); const m=x
 
 /* ── PLANTA BAIXA TÉCNICA (SVG) ── */
 const PL_BANDA=200;
-function plBanda(){ const v=plVis(); return (v.quadro||v.legenda||v.carimbo)?PL_BANDA:0; }
+function plBanda(){ if(_pl.semBanda) return 0; const v=plVis(); return (v.quadro||v.legenda||v.carimbo)?PL_BANDA:0; }
 function plSvg(vb,Wpx){
   const v=plVis(), D=plDados(), N=plNiveis(), P=secaoParams(), wmf=v.mf?plMfLarg(P):0;
   const W=Wpx||1200, H=vb.h/vb.w*W, sc=W/vb.w, BH=plBanda()*W/1200, HT=H+BH;
@@ -3424,7 +3427,7 @@ function plSvg(vb,Wpx){
   }); });
   // 7) quadro de camadas (só os níveis acesos)
   let ov='';
-  if(v.quadro&&resultado){
+  if(BH>0&&v.quadro&&resultado){
     const area=(_topo&&_topo.totArea)||0, Vc=volumesCamadas(area), cams=N.filter(n=>n.esp&&plOn(v,n.k));
     const rows=[['Nível','Camada','Esp. (cm)','Área (m²)','Volume (m³)']];
     cams.forEach(n=>{ const vv=Vc.find(x=>x.n&&n.nome.toLowerCase().indexOf(String(x.n).toLowerCase().split(' ')[0])>=0); rows.push([n.cod,n.nome.replace(' (greide = topo)',''),fmt(n.esp*100,1),fmt(area,2),vv?fmt(vv.vol,2):fmt(area*n.esp,2)]); });
@@ -3439,7 +3442,7 @@ function plSvg(vb,Wpx){
     if(!cams.length) ov+=T(x0+6,y0+rh*2+12,'(acenda um nível de camada para ver espessura e volume)',{fs:9,c:'#666',h:0});
   }
   // 8) legenda
-  if(v.legenda){
+  if(BH>0&&v.legenda){
     const it=[['pav','Pavimento intertravado (blocos 20×10 cm)'],['mf','Meio-fio / sarjeta de concreto'],['eixo','Eixo da via'],['est','Estaca inteira (20 m)'],['pto','Ponto / estaca fracionária'],['decl','Sentido de escoamento (declividade)'],['cz','Cruzamento de eixos']];
     N.filter(n=>plOn(v,n.k)).forEach(n=>it.push(['niv:'+n.k,n.cod+' = cota '+(n.k==='terreno'?'do terreno natural':n.k==='form'?'do fundo / formação':'do topo: '+n.nome.replace(' (greide = topo)','')+(n.k==='c0'?' (greide)':''))]));
     if(v.corte) it.push(['c1','Trecho em corte'],['c2','Trecho em aterro'],['c3','Trecho misto']);
@@ -3459,7 +3462,7 @@ function plSvg(vb,Wpx){
   }
   // 9) carimbo + escala + norte
   const bar=plNiceLen(vb.w/5);
-  if(v.carimbo){
+  if(BH>0&&v.carimbo){
     const w=W-356-(v.quadro?514:0)-24, h=BH-16, x0=W-w-12, y0=H+8, ob=(document.getElementById('logradouro-inp')||{}).value||'—', rp=(document.getElementById('resp-inp')||{}).value||'—', dt=new Date().toLocaleDateString('pt-BR');
     ov+='<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+h+'" fill="#fff" stroke="#111" stroke-width="1.2"/><line x1="'+x0+'" y1="'+(y0+22)+'" x2="'+(x0+w)+'" y2="'+(y0+22)+'" stroke="#111"/><line x1="'+x0+'" y1="'+(y0+66)+'" x2="'+(x0+w)+'" y2="'+(y0+66)+'" stroke="#111"/>'+
       T(x0+8,y0+15,'PLANTA BAIXA — PAVIMENTO INTERTRAVADO',{fs:11,b:1,h:0})+T(x0+8,y0+36,'Obra: '+ob,{fs:9.5,h:0})+T(x0+8,y0+50,'Resp. técnico: '+rp,{fs:9.5,h:0})+T(x0+8,y0+62,'Dimensionamento: IP-06/2004 · Data: '+dt,{fs:9,h:0,c:'#333'})+
@@ -3467,7 +3470,7 @@ function plSvg(vb,Wpx){
     const bx=x0+8, by=y0+100, bw=Math.min(bar*sc,w-24); for(let q=0;q<4;q++) ov+='<rect x="'+(bx+bw/4*q).toFixed(1)+'" y="'+by+'" width="'+(bw/4).toFixed(1)+'" height="4" fill="'+(q%2?'#fff':'#111')+'" stroke="#111" stroke-width="0.6"/>';
     ov+=T(bx,by+13,'0',{fs:8,h:0})+T(bx+bw/2,by+13,fmt(bar/2,0),{fs:8,h:0,a:'middle'})+T(bx+bw,by+13,bar+' m',{fs:8,h:0,a:'middle'});
   }
-  { const bx=20, by=H-20, bw=bar*sc; ov+='<line x1="'+bx+'" y1="'+by+'" x2="'+(bx+bw).toFixed(1)+'" y2="'+by+'" stroke="#000" stroke-width="3"/>'+T(bx,by-6,bar+' m',{fs:11,h:0}); }
+  if(!(BH>0&&v.carimbo)){ const bx=20, by=H-20, bw=bar*sc; ov+='<line x1="'+bx+'" y1="'+by+'" x2="'+(bx+bw).toFixed(1)+'" y2="'+by+'" stroke="#000" stroke-width="3"/>'+T(bx,by-6,bar+' m',{fs:11,h:0}); }
   ov+='<g transform="translate('+(W-36)+',44)"><circle r="18" fill="#fff" stroke="#111"/><path d="M0,-16 L6,8 L0,3 L-6,8 Z" fill="#111"/>'+T(0,-21,'N',{fs:11,b:1,a:'middle',h:0})+'</g>';
   const fx='<rect x="1" y="1" width="'+(W-2)+'" height="'+(H-2).toFixed(1)+'" fill="none" stroke="#111" stroke-width="1.4"/>'+(BH?'<rect x="0" y="'+H.toFixed(1)+'" width="'+W+'" height="'+BH.toFixed(1)+'" fill="#f4f4f1"/>':'');
   return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+W+' '+HT.toFixed(1)+'" width="100%" height="100%" '+F+' style="background:#fdfdfb"><defs>'+defs+'<clipPath id="plclip"><rect x="0" y="0" width="'+W+'" height="'+H.toFixed(1)+'"/></clipPath></defs><g clip-path="url(#plclip)">'+s+top+'</g>'+fx+ov+'</svg>';
@@ -3484,14 +3487,35 @@ function plDesenhar(enquadrar){
   const asp=Math.max(0.15,h/w-plBanda()/1200);
   if(_pl.vb&&!enquadrar) _pl.vb.h=_pl.vb.w*asp;
   if(enquadrar||!_pl.vb){ const b=plLimites(), bw=b.x1-b.x0, bh=b.y1-b.y0; let vw=Math.max(bw,bh/asp)*1.18; const vh=vw*asp; _pl.vb={x:b.x0-(vw-bw)/2,y:-b.y1-(vh-bh)/2,w:vw,h:vh}; }
-  el.innerHTML=plSvg(_pl.vb,1200);
+  const mob=w<700; _pl.semBanda=mob;
+  el.innerHTML=plSvg(_pl.vb,mob?Math.max(320,w):1200);
+  _pl.semBanda=false;
+  const bd=document.getElementById('pl-banda');
+  if(bd){ const v=plVis();
+    if(mob&&(v.quadro||v.legenda||v.carimbo)){ const H=_pl.vb.h/_pl.vb.w*1200; bd.style.display='';
+      bd.innerHTML='<div style="font-size:11px;color:var(--fg2);margin:4px 0">Legenda, quadro de camadas e carimbo (arraste para o lado):</div><div style="width:1100px">'+plSvg(_pl.vb,1200).replace(/viewBox="[^"]*"/,'viewBox="0 '+H.toFixed(1)+' 1200 '+PL_BANDA+'"').replace('width="100%" height="100%"','width="1100" height="'+Math.round(PL_BANDA*1100/1200)+'"')+'</div>';
+    }else{ bd.style.display='none'; bd.innerHTML=''; } }
   if(!el.dataset.ev){ el.dataset.ev='1';
     el.addEventListener('wheel',e=>{ e.preventDefault(); const r=el.getBoundingClientRect(), hd=r.height*(1-plBanda()/1200*r.width/r.height), fx=(e.clientX-r.left)/r.width, fy=Math.min(1,(e.clientY-r.top)/hd), f=e.deltaY<0?0.8:1.25, vb=_pl.vb;
       const nw=vb.w*f, nh=vb.h*f; _pl.vb={x:vb.x+(vb.w-nw)*fx,y:vb.y+(vb.h-nh)*fy,w:nw,h:nh}; plDesenhar(); },{passive:false});
     el.addEventListener('mousedown',e=>{ _pl.drag={x:e.clientX,y:e.clientY,vb:Object.assign({},_pl.vb)}; el.style.cursor='grabbing'; e.preventDefault(); });
     window.addEventListener('mousemove',e=>{ const d=_pl.drag; if(!d) return; const r=el.getBoundingClientRect(), hd=r.height-plBanda()/1200*r.width; _pl.vb={x:d.vb.x-(e.clientX-d.x)/r.width*d.vb.w,y:d.vb.y-(e.clientY-d.y)/hd*d.vb.h,w:d.vb.w,h:d.vb.h}; if(!_pl.raf){ _pl.raf=requestAnimationFrame(()=>{ _pl.raf=0; plDesenhar(); }); } });
     window.addEventListener('mouseup',()=>{ if(_pl.drag){ _pl.drag=null; el.style.cursor='grab'; } });
+    const tq=e=>Array.prototype.map.call(e.touches,t=>[t.clientX,t.clientY]);
+    el.addEventListener('touchstart',e=>{ const t=tq(e); _pl.toq={t,vb:Object.assign({},_pl.vb)}; if(t.length>=1) e.preventDefault(); },{passive:false});
+    el.addEventListener('touchmove',e=>{ const g=_pl.toq; if(!g) return; e.preventDefault(); const t=tq(e), r=el.getBoundingClientRect(), hd=r.height-plBanda()/1200*r.width, vb=g.vb;
+      if(t.length===1&&g.t.length===1){ _pl.vb={x:vb.x-(t[0][0]-g.t[0][0])/r.width*vb.w,y:vb.y-(t[0][1]-g.t[0][1])/hd*vb.h,w:vb.w,h:vb.h}; }
+      else if(t.length>=2&&g.t.length>=2){ const d0=Math.hypot(g.t[0][0]-g.t[1][0],g.t[0][1]-g.t[1][1]), d1=Math.hypot(t[0][0]-t[1][0],t[0][1]-t[1][1]); if(d0<5) return;
+        const f=d0/d1, cx0=((g.t[0][0]+g.t[1][0])/2-r.left)/r.width, cy0=((g.t[0][1]+g.t[1][1])/2-r.top)/hd, cx1=((t[0][0]+t[1][0])/2-r.left)/r.width, cy1=((t[0][1]+t[1][1])/2-r.top)/hd;
+        const nw=vb.w*f, nh=vb.h*f; _pl.vb={x:vb.x+vb.w*cx0-nw*cx1,y:vb.y+vb.h*cy0-nh*cy1,w:nw,h:nh}; }
+      else return;
+      if(!_pl.raf){ _pl.raf=requestAnimationFrame(()=>{ _pl.raf=0; plDesenhar(); }); } },{passive:false});
+    el.addEventListener('touchend',e=>{ const t=tq(e); _pl.toq=t.length?{t,vb:Object.assign({},_pl.vb)}:null; });
   }
+}
+function plZoom(f){
+  if(_pl.modo==='planta'){ const vb=_pl.vb; if(!vb) return; const nw=vb.w*f, nh=vb.h*f; _pl.vb={x:vb.x+(vb.w-nw)/2,y:vb.y+(vb.h-nh)/2,w:nw,h:nh}; plDesenhar(); return; }
+  const t=_pl.t3; if(!t) return; const d=t.cam.position.clone().sub(t.ctl.target).multiplyScalar(f); t.cam.position.copy(t.ctl.target).add(d);
 }
 function plBaixarSvg(){
   if(!resultado){ toast('Calcule primeiro.',true); return; }
