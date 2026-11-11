@@ -591,7 +591,8 @@ body.cel table.t-cel td[data-l]::before{content:attr(data-l);font-size:.8rem;fon
       <div class="bar-btns" style="margin-top:1rem">
         <button class="btn btn-primary btn-sm" onclick="novoProjeto(false)">＋ Novo em branco</button>
         <button class="btn btn-secondary btn-sm" onclick="novoProjeto(true)">＋ Exemplo simples (2 ruas)</button>
-        <button class="btn btn-secondary btn-sm" onclick="novoProjeto('bairro')">＋ Exemplo de bairro (6 ruas)</button>
+        <button class="btn btn-secondary btn-sm" onclick="novoProjeto('bairro')">＋ Exemplo — malha 6 × 4 (plano)</button>
+        <button class="btn btn-secondary btn-sm" onclick="novoProjeto('bairroDeclive')">＋ Exemplo — malha 6 × 4 com declive na metade</button>
         <button class="btn btn-secondary btn-sm" onclick="duplicarProjeto()">⧉ Duplicar atual</button>
       </div>
       <p class="hint" style="font-size:.75rem;color:var(--muted)">Os projetos ficam guardados no navegador deste aparelho. Use Backup para levar para outro aparelho.</p>
@@ -762,60 +763,33 @@ function exampleProject() {
   return p;
 }
 
-/* Exemplo de bairro: 3 ruas leste–oeste × 3 ruas norte–sul (9 cruzamentos).
-   Terreno cai 0,6 % para leste e 1,0 % para sul. Coletores nas ruas L–O correm para
-   leste até o tronco da Rua Gonçalves Dias, que corre para sul até o canal. */
-function exampleBairro() {
-  const p = blankProject('Exemplo — Bairro com 6 ruas (3 × 3 cruzamentos)');
+/* Exemplo de malha: 6 ruas leste–oeste × 4 ruas norte–sul (24 cruzamentos), quadras de 100 m.
+   Terreno: cai 0,6 % para leste e 1,0 % para sul. Com declive=true, a metade sul da malha
+   (y < −250 m) cai 2 % para sul. Só a TOPOGRAFIA (ruas, estacas, eixo, meio-fio e muro,
+   todos preenchidos): a rede (PVs, bocas de lobo, trechos, bacias) é gerada pelo
+   🧭 Gerar a drenagem pela topografia. */
+function exampleBairro(declive) {
+  const p = blankProject(declive ? 'Exemplo — malha 6 × 4 ruas com declive na metade' : 'Exemplo — malha 6 × 4 ruas (terreno plano)');
   p.proj.municipio = 'Município / UF'; p.proj.local = 'Loteamento Jardim das Flores';
-  p.proj.obs = 'Exemplo funcional de microdrenagem em malha de 6 ruas: três ruas no sentido leste–oeste cortadas por três ruas no sentido norte–sul. Coletores nas ruas leste–oeste descarregam no tronco da Rua Gonçalves Dias, que lança no canal ao sul.';
-  const cota = (x, y) => +(12.0 - 0.006 * x + 0.010 * y).toFixed(3);    // terreno
-  const EW = [['R1', 'Rua das Acácias', 0, 'mfs30'], ['R2', 'Rua dos Ipês', -100, 'mfs30'], ['R3', 'Rua das Palmeiras', -200, 'mf15']];
-  const NS = [['R4', 'Rua Castro Alves', 20, 'mf15'], ['R5', 'Rua Olavo Bilac', 120, 'mf15'], ['R6', 'Rua Gonçalves Dias', 220, 'mfs45']];
+  p.proj.obs = 'Exemplo de malha: seis ruas no sentido leste–oeste cortadas por quatro ruas no sentido norte–sul (24 cruzamentos). ' + (declive ? 'A metade sul do terreno tem declive de 2 %, o dobro do de 1,0 % da metade norte. ' : 'Terreno com declive de 1,0 % para o sul e 0,6 % para o leste. ') + 'Clique em 🧭 Gerar a drenagem pela topografia (aba 3) para projetar a rede.';
+  const yCota = y => y >= -250 ? 0.010 * y : 0.010 * (-250) + (declive ? 0.020 : 0.010) * (y + 250);
+  const cota = (x, y) => +(12.0 - 0.006 * x + yCota(y)).toFixed(3);
+  const EW = [['R1', 'Rua das Acácias', 0, 'mfs30'], ['R2', 'Rua dos Ipês', -100, 'mfs30'], ['R3', 'Rua das Palmeiras', -200, 'mf15'],
+              ['R4', 'Rua das Hortênsias', -300, 'mf15'], ['R5', 'Rua das Magnólias', -400, 'mf15'], ['R6', 'Rua dos Jacarandás', -500, 'mf15']];
+  const NS = [['R7', 'Rua Castro Alves', 20, 'mf15'], ['R8', 'Rua Olavo Bilac', 120, 'mf15'], ['R9', 'Rua Gonçalves Dias', 220, 'mfs45'], ['R10', 'Rua Rui Barbosa', 320, 'mf15']];
   const mfAttr = k => ({mf: k, mfH: MEIOFIO[k].h, sjW: MEIOFIO[k].W, sjI: MEIOFIO[k].Sw || ''});
-  // ruas L–O: R1 é a referência (direção leste); R2 e R3 posicionadas pelos cruzamentos com R4
+  // ruas L–O: R1 é a referência (direção leste); as demais posicionadas pelos cruzamentos
   p.ruas.push(Object.assign({id: 'R1', nome: EW[0][1], larg: 7, passeio: 2, it: 3, az: 0}, mfAttr(EW[0][3])));
   NS.forEach(([id, nome, x, mf]) => p.ruas.push(Object.assign({id, nome, larg: 7, passeio: 2, it: 2.5, ref: 'R1', refDist: x, ang: -90, dist0: 20}, mfAttr(mf))));
-  EW.slice(1).forEach(([id, nome, y, mf]) => p.ruas.push(Object.assign({id, nome, larg: 7, passeio: 2, it: 3, ref: 'R4', refDist: 20 - y, ang: 90, dist0: 20}, mfAttr(mf))));
-  // estacas a cada 20 m (0 a 240 m em todas as ruas)
-  for (let d = 0; d <= 240; d += 20) {
-    EW.forEach(([id, , y]) => p.estacas.push({rua: id, dist: d, cota: cota(d, y), obs: [20, 120, 220].includes(d) ? 'cruzamento' : ''}));
-    NS.forEach(([id, , x]) => p.estacas.push({rua: id, dist: d, cota: cota(x, 20 - d), obs: [20, 120, 220].includes(d) ? 'cruzamento' : ''}));
-  }
-  const pv = (id, rua, dist, defl, obs) => ({id, rua, dist, tipo: PVTIPOS[0], dpv: 1000, tampaCl: TAMPAS[0], tampa: '', defl, na: '', obs: obs || ''});
-  const tr = (id, m, j, L, D) => ({id, m, j, L: L || '', D: D || 400, cm: '', cj: '', mat: MATS[1], aL: '', cL: '', tcL: ''});
-  // tronco na Rua Gonçalves Dias (R6), de norte para sul
-  const T = [['PV-T1', 20, 'd90', 'Cruzamento com a Rua das Acácias'], ['PV-T2', 70, 'reta'], ['PV-T3', 120, 'T', 'Cruzamento com a Rua dos Ipês'], ['PV-T4', 170, 'reta'], ['PV-T5', 220, 'T', 'Cruzamento com a Rua das Palmeiras'], ['PV-T6', 240, 'reta', 'Lançamento no canal']];
-  T.forEach(([id, d, df, ob]) => p.pvs.push(pv(id, 'R6', d, df, ob)));
-  p.pvs[p.pvs.length - 1].na = 5.00;
-  for (let k = 0; k < T.length - 1; k++) p.trechos.push(tr('TR' + (k + 1), T[k][0], T[k + 1][0]));
-  // coletores nas ruas L–O: PVs em 20 (cruz. R4), 70, 120 (cruz. R5), 170 → PV do tronco
-  const chegada = {R1: 'PV-T1', R2: 'PV-T3', R3: 'PV-T5'};
-  EW.forEach(([rua, nome], k) => {
-    const ids = [20, 70, 120, 170].map((d, j) => { const id = 'PV-' + (k + 1) + String.fromCharCode(65 + j); p.pvs.push(pv(id, rua, d, j === 0 ? 'ini' : 'reta', d === 20 ? 'Cruzamento com a Rua Castro Alves' : d === 120 ? 'Cruzamento com a Rua Olavo Bilac' : '')); return id; });
-    for (let j = 0; j < 3; j++) p.trechos.push(tr('C' + (k + 1) + '.' + (j + 1), ids[j], ids[j + 1]));
-    p.trechos.push(tr('C' + (k + 1) + '.4', ids[3], chegada[rua], 50));
-  });
-  // bocas-de-lobo, ramais e bacias
-  let nb = 0;
-  const addBL = (rua, dist, lado, pvId, A, C, modelo, rL) => {
-    const id = 'BL-' + String(++nb).padStart(2, '0'), m = CAIXAS[modelo];
-    p.bls.push({id, modelo, rua, dist, lado, tipo: m.tipo, L: m.L, a: 0.05, gL: m.gL || 0.9, gB: m.gB || 0.3, ga: 60, fr: BLTIPOS[m.tipo].fr, S: '', z: '', prox: '', pv: pvId, rL: rL || 6, rD: 400, rI: 2.0, constr: m.constr, cxB: m.cxB, cxL: m.cxL, cxH: m.cxH});
-    p.bacias.push({id: 'B' + nb, nome: 'Quadra + meia pista — ' + ruaNomeEx(rua) + ' est. ' + estLabel(dist) + ' (' + (lado === 'D' ? 'dir.' : 'esq.') + ')', A, C, dest: id, tcMode: 'man', tc: 10, kL: '', kH: ''});
-  };
-  const ruaNomeEx = id => (p.ruas.find(r => r.id === id) || {}).nome || id;
-  EW.forEach(([rua], k) => {
-    [[70, 'PV-' + (k + 1) + 'B'], [170, 'PV-' + (k + 1) + 'D']].forEach(([d, pvId]) => ['E', 'D'].forEach(l => addBL(rua, d, l, pvId, 0.18, 0.70, k === 2 ? 'bls-bl' : 'bld-pm')));
-  });
-  NS.slice(0, 2).forEach(([rua], n) => {
-    const col = n === 0 ? 'A' : 'C';
-    [[15, 'PV-1' + col, 0.06], [115, 'PV-2' + col, 0.16], [215, 'PV-3' + col, 0.16]].forEach(([d, pvId, A]) => ['E', 'D'].forEach(l => addBL(rua, d, l, pvId, A, 0.65, 'bls-pm', 8)));
-  });
-  // caixas de ralo na mesma estaca do PV (a seção transversal do PV mostra a caixa e o ramal no plano do corte)
-  [[70, 'PV-T2'], [170, 'PV-T4']].forEach(([d, pvId]) => ['E', 'D'].forEach(l => addBL('R6', d, l, pvId, 0.20, 0.70, 'bld-pm')));
-  [[20, 'PV-T1'], [120, 'PV-T3'], [220, 'PV-T5']].forEach(([d, pvId]) => ['E', 'D'].forEach(l => addBL('R6', d, l, pvId, 0.08, 0.70, 'cxr-pm')));
-  // praça a montante lançando direto no PV do início do tronco
-  p.bacias.push({id: 'B' + (nb + 1), nome: 'Praça central (galeria de lote)', A: 0.35, C: 0.30, dest: 'PV-2B', tcMode: 'man', tc: 15, kL: '', kH: ''});
+  EW.slice(1).forEach(([id, nome, y, mf]) => p.ruas.push(Object.assign({id, nome, larg: 7, passeio: 2, it: 3, ref: 'R7', refDist: 20 - y, ang: 90, dist0: 20}, mfAttr(mf))));
+  // estacas a cada 20 m: ruas L–O de 0 a 340 m (x); ruas N–S de 0 a 540 m (y = 20 − d)
+  for (let d = 0; d <= 340; d += 20) EW.forEach(([id, , y]) => p.estacas.push({rua: id, dist: d, cota: cota(d, y), tn: cota(d, y), obs: [20, 120, 220, 320].includes(d) ? 'cruzamento' : ''}));
+  for (let d = 0; d <= 540; d += 20) NS.forEach(([id, , x]) => p.estacas.push({rua: id, dist: d, cota: cota(x, 20 - d), tn: cota(x, 20 - d), obs: d >= 0 && d <= 520 && (20 - d) % 100 === 0 ? 'cruzamento' : ''}));
+  // meio-fio e muro (cotas do terreno natural): pé do meio-fio = eixo − desnível da seção-tipo; muro = meio-fio + altura + 2 % do passeio
+  p.ruas.forEach(r => p.estacas.filter(e => e.rua === r.id).forEach(e => {
+    const mf = +(natEst(e) - topoDeltaPad(r)).toFixed(3), mu = +(mf + (r.mfH || 0.15) + 0.02 * (+r.passeio || 0)).toFixed(3);
+    e.mfE = mf; e.mfD = mf; e.muE = mu; e.muD = mu;
+  }));
   return p;
 }
 /* ---------------- estado ---------------- */
@@ -848,9 +822,11 @@ function loadAll() {
   CFG = Object.assign({empresa: '', sub: '', rodape: '', logo: '', tema: '', device: ''}, lsGet(LS_CFG, {}));
   if (!DB.list) DB.list = {};
   // exemplo de bairro (6 ruas): acrescentado uma única vez e aberto na planta baixa
-  if (!DB.exBairro) {
-    const id = uid(); P = migrate(exampleBairro());
-    DB.list[id] = {nome: P.proj.nome, upd: Date.now(), data: P}; DB.cur = id; DB.exBairro = id;
+  // exemplo 3 × 3 antigo (o "exemplo atual"): excluído a pedido do dono; o modelo 6 × 4 o substitui
+  if (DB.exBairro) { if (DB.list[DB.exBairro]) delete DB.list[DB.exBairro]; if (DB.cur === DB.exBairro) DB.cur = null; DB.exBairro = null; }
+  if (!DB.exMalha || !DB.list[DB.exMalha]) {
+    const id = uid(); P = migrate(exampleBairro(false));
+    DB.list[id] = {nome: P.proj.nome, upd: Date.now(), data: P}; DB.cur = id; DB.exMalha = id;
     BAIRRO_PENDENTE = true;
     lsSet(LS_PROJ, DB);
   }
@@ -859,7 +835,7 @@ function loadAll() {
 }
 let BAIRRO_PENDENTE = false;
 function abrirBairro() {
-  if (DB.exBairro && DB.list[DB.exBairro]) { abrirProjeto(DB.exBairro); showTab('planta'); return; }
+  if (DB.exMalha && DB.list[DB.exMalha]) { abrirProjeto(DB.exMalha); showTab('planta'); return; }
   novoProjeto('bairro');
 }
 let saveTimer = null;
@@ -2038,7 +2014,7 @@ function vProjeto() {
     desktop: '<b>Computador:</b> digite nas planilhas e veja os resultados na mesma linha. Toque em <b>?</b> para a explicação de cada campo e em ▸ para as sugestões de correção.'
   };
   return `<h3>Projeto</h3>
-  <div class="card" style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap;padding:.8rem 1rem"><button class="btn btn-primary btn-sm" onclick="abrirBairro()">🗺 Abrir exemplo de bairro (6 ruas)</button><span style="font-size:.8rem;color:var(--muted);flex:1;min-width:220px">3 ruas horizontais cruzadas por 3 verticais, com 9 cruzamentos, rede dimensionada, planta, perfis, seções e orçamento. Seus projetos ficam em <b>Projetos</b>.</span></div>
+  <div class="card" style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap;padding:.8rem 1rem"><button class="btn btn-primary btn-sm" onclick="abrirBairro()">🗺 Abrir exemplo de malha (6 × 4 ruas)</button><span style="font-size:.8rem;color:var(--muted);flex:1;min-width:220px">3 ruas horizontais cruzadas por 3 verticais, com 9 cruzamentos, rede dimensionada, planta, perfis, seções e orçamento. Seus projetos ficam em <b>Projetos</b>.</span></div>
   ${dev && tips[dev] ? `<div class="dev-tip"><div>💡</div><div>${tips[dev]}</div></div>` : ''}
   <div class="card"><h4>Identificação</h4><div class="fgrid">
     ${fld('proj.nome', 'Nome do projeto', {type: 'txt', w2: true})}
@@ -3496,11 +3472,11 @@ function openProjetos() {
 }
 function abrirProjeto(id) { saveNow(); DB.cur = id; P = migrate(DB.list[id].data); lsSet(LS_PROJ, DB); afterLoad(); verificarMesNovo(); closeModal('modal-projetos'); toast('Projeto aberto'); }
 function novoProjeto(ex) {
-  saveNow(); const id = uid(); P = ex === 'bairro' ? exampleBairro() : ex ? exampleProject() : blankProject('Novo projeto');
-  if (ex === 'bairro') { calc(); autoDimensionar(); }
-  else if (ex) { calc(); autoCotas(true); calc(); autoCotas(true); }   // 2 passadas: os degraus dependem da perda em cada PV
+  saveNow(); const id = uid(), malha = ex === 'bairro' || ex === 'bairroDeclive';
+  P = malha ? exampleBairro(ex === 'bairroDeclive') : ex ? exampleProject() : blankProject('Novo projeto');
+  if (!malha && ex) { calc(); autoCotas(true); calc(); autoCotas(true); }   // 2 passadas: os degraus dependem da perda em cada PV
   DB.cur = id; saveNow(); afterLoad(); closeModal('modal-projetos');
-  if (ex === 'bairro') { DB.exBairro = id; autoCorrigir(); closeModal('modal-auto'); DESFAZER = null; showTab('planta'); toast('Exemplo de bairro criado e dimensionado automaticamente'); }
+  if (malha) { if (ex === 'bairro') DB.exMalha = id; toast('Projetando a rede do exemplo (30 a 60 s)…'); setTimeout(() => { gerarRedeExemplo(); afterLoad(); showTab('planta'); toast('Exemplo criado: rede projetada pela topografia, sem erros. Use 🧭 na aba 3 para outras opções.'); }, 60); }
   else showTab('projeto');
   verificarMesNovo();
 }
@@ -3618,7 +3594,7 @@ function init() {
   document.addEventListener('change', e => { if (e.target.dataset && e.target.dataset.p && (e.target.tagName === 'SELECT' || e.target.dataset.full)) onField(e); });
   document.querySelectorAll('.modal-backdrop').forEach(m => m.addEventListener('click', e => { if (e.target === m) m.classList.remove('open'); }));
   matchMedia('(prefers-color-scheme: dark)').addEventListener && matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (TAB === 'perfil') drawPerfil(); });
-  if (BAIRRO_PENDENTE) { autoCorrigir(); closeModal('modal-auto'); DESFAZER = null; TAB = 'planta'; BAIRRO_PENDENTE = false; saveNow(); setTimeout(() => toast('Novo: exemplo de bairro com 6 ruas (3 horizontais × 3 verticais). Seus projetos anteriores continuam em Projetos.'), 900); }
+  if (BAIRRO_PENDENTE) { TAB = 'ruas'; BAIRRO_PENDENTE = false; saveNow(); setTimeout(() => toast('Novo exemplo: malha de 6 ruas × 4 ruas. Clique em 🧭 Gerar a drenagem pela topografia (aba 3) para projetar a rede.'), 900); }
   // A tela de ambiente aparece sempre ao abrir; a escolha anterior vem marcada como "Atual".
   abrirAmbiente();
   window.addEventListener('beforeunload', saveNow);
@@ -8320,7 +8296,8 @@ function novoProjetoMenu() {
     <div style="display:flex;flex-direction:column;gap:.6rem">
       <button class="btn btn-primary" onclick="closeModal('modal-nuvem');novoProjeto()">Projeto em branco</button>
       <button class="btn btn-secondary" onclick="closeModal('modal-nuvem');novoProjeto(true)">Exemplo — rua com cruzamento</button>
-      <button class="btn btn-secondary" onclick="closeModal('modal-nuvem');novoProjeto('bairro')">Exemplo — bairro com 6 ruas</button></div>`;
+      <button class="btn btn-secondary" onclick="closeModal('modal-nuvem');novoProjeto('bairro')">Exemplo — malha 6 × 4 ruas (plano)</button>
+      <button class="btn btn-secondary" onclick="closeModal('modal-nuvem');novoProjeto('bairroDeclive')">Exemplo — malha 6 × 4 com declive na metade</button></div>`;
   openModal('modal-nuvem');
 }
 /* barra do projeto (sempre visível): Novo · Abrir · Salvar · Salvar como */
@@ -8465,7 +8442,7 @@ function topoTela() {
   if (!ruaById(TOPO_RUA)) TOPO_RUA = P.ruas[0].id;
   const rua = ruaById(TOPO_RUA), larg = +rua.larg || 7, pas = +rua.passeio || 2, idx = P.estacas.map((e, i) => ({e, i})).filter(x => x.e.rua === TOPO_RUA).sort((a, b) => (+a.e.dist || 0) - (+b.e.dist || 0));
   const inp = (i, k, ph) => `<input type="number" step="0.001" inputmode="decimal" style="width:100%;min-width:84px" value="${isNum(k === 'cota' ? natEst(P.estacas[i]) : num(P.estacas[i][k])) ? (k === 'cota' ? natEst(P.estacas[i]) : P.estacas[i][k]) : ''}" placeholder="${ph}" onchange="topoSet(${i},'${k}',this.value)"/>`;
-  box.innerHTML = `<div class="bar-btns" style="flex-wrap:wrap;gap:.35rem;margin-bottom:.6rem">${P.ruas.map(r => `<button class="btn ${r.id === TOPO_RUA ? 'btn-primary' : 'btn-secondary'} btn-sm" onclick="TOPO_RUA='${r.id}';topoTela()">${esc(r.nome || r.id)}</button>`).join('')}</div>
+  box.innerHTML = `<div class="bar-btns" style="flex-wrap:wrap;gap:.35rem;margin-bottom:.6rem">${P.ruas.map(r => `<span style="display:inline-flex;gap:0"><button class="btn ${r.id === TOPO_RUA ? 'btn-primary' : 'btn-secondary'} btn-sm" style="border-radius:6px 0 0 6px" onclick="TOPO_RUA='${r.id}';topoTela()">${esc(r.nome || r.id)}</button><button class="btn btn-danger btn-sm" style="border-radius:0 6px 6px 0;padding:.25rem .45rem" title="Excluir esta rua da topografia (com as estacas, PVs, bocas de lobo e trechos dela)" onclick="topoExcluirRua('${r.id}')">🗑</button></span>`).join('')}</div>
     <p style="font-size:.82rem;color:var(--muted);margin:.2rem 0 .6rem">Lado <b>esquerdo / direito</b> olhando no sentido crescente das estacas. <b>Meio-fio</b> = cota do pé do meio-fio (linha d'água da sarjeta), a ${fmt(larg / 2, 2)} m do eixo (metade da pista). <b>Muro</b> = cota do alinhamento, a ${fmt(larg / 2 + pas, 2)} m do eixo. Em branco = calculado pela seção-tipo da rua (valor em cinza). Só o eixo é obrigatório. <b>Todas as cotas desta tela são do terreno natural.</b> O greide de projeto e os cortes e aterros ficam em <b>🏗 Terraplenagem</b>.</p>
     <div class="tbl-wrap"><table><thead><tr><th>Estaca</th><th>Eixo — terreno natural (m)</th><th>Meio-fio esq. (m)</th><th>Meio-fio dir. (m)</th><th>Muro esq. (m)</th><th>Muro dir. (m)</th><th></th></tr></thead><tbody>
     ${idx.map(({e, i}) => { const pE = cotaMF(TOPO_RUA, +e.dist, 'E'), pD = cotaMF(TOPO_RUA, +e.dist, 'D'), dl = topoDeltaPad(rua), z = natEst(e);
@@ -11697,5 +11674,48 @@ gerTela = function () {
   } catch (e) { console.error('DR-16 tela', e); }
   return res;
 };
+</script>
+
+<script>
+/* =====================================================================
+   PATCH DR-17 (11/11/2026) — Exemplo em malha 6 × 4 (com e sem declive na
+   metade); botão 🗑 em cada rua da topografia (excluir rua com estacas,
+   PVs, bocas de lobo, bacias e trechos ligados a ela); gerar a rede do
+   exemplo pelo gerador de 3 opções (opção recomendada, sem erros).
+   ===================================================================== */
+/* gera a rede do exemplo (opção Recomendada) e troca o projeto atual por ela */
+function gerarRedeExemplo() {
+  GER.disp = 'gr'; GER.lote = 30; GER.C = 0.7; GER.saidas = []; GER.saida = ''; GER.ops = null;
+  // mesmo caminho do botão 🧭: propõe o greide de terraplenagem antes de projetar (checkbox marcado por padrão)
+  if (GER.propGr !== false && !P.ruas.some(r => temTerra(r.id))) terraPropor(true);
+  const x = gerProjeto(GER_OP[1]);
+  if (x && x.p) { P = migrate(JSON.parse(JSON.stringify(x.p))); }
+  calc(); return x;
+}
+/* exclui a rua da topografia com tudo o que depende dela; recusa se outra rua é posicionada a partir dela */
+function excluirRuaCompleta(id) {
+  const r = ruaById(id); if (!r) return false;
+  const nome = r.nome || r.id;
+  const dependem = P.ruas.filter(o => o.id !== id && o.ref === id).map(o => o.nome || o.id);
+  if (dependem.length) { toast('Não dá para excluir "' + nome + '": ' + dependem.join(', ') + ' é(são) posicionada(s) a partir dela (referência na aba 3). Exclua antes essas ruas ou troque a referência delas.'); return false; }
+  const pvs = P.pvs.filter(p => p.rua === id).map(p => p.id), bls = P.bls.filter(b => b.rua === id).map(b => b.id);
+  const bacs = P.bacias.filter(b => bls.includes(b.dest)).map(b => b.id);
+  const tr = P.trechos.filter(t => pvs.includes(t.m) || pvs.includes(t.j));
+  const ne = P.estacas.filter(e => e.rua === id).length;
+  const extra = pvs.length || bls.length ? '\n\nTambém serão excluídos: ' + pvs.length + ' PV(s), ' + bls.length + ' boca(s) de lobo, ' + bacs.length + ' bacia(s) e ' + tr.length + ' trecho(s) ligados a eles.' : '';
+  if (!confirm('Excluir a rua "' + nome + '" e suas ' + ne + ' estaca(s)?' + extra + '\n\nEsta ação não tem desfazer.')) return false;
+  P.estacas = P.estacas.filter(e => e.rua !== id);
+  P.trechos = P.trechos.filter(t => !tr.includes(t));
+  P.pvs = P.pvs.filter(p => p.rua !== id);
+  P.bacias = P.bacias.filter(b => !bacs.includes(b.id));
+  P.bls = P.bls.filter(b => b.rua !== id);
+  P.bls.forEach(b => { if (pvs.includes(b.pv)) b.pv = ''; if (bls.includes(b.prox)) b.prox = ''; });
+  P.ruas = P.ruas.filter(x => x.id !== id);
+  if (TOPO_RUA === id) TOPO_RUA = null;
+  GER.ops = null; save(); calc(); renderTab();
+  toast('Rua "' + nome + '" excluída' + (pvs.length || bls.length ? ' junto com ' + pvs.length + ' PV(s) e ' + bls.length + ' boca(s) de lobo' : '') + '.' + (P.pvs.length ? ' A rede ficou incompleta: gere de novo pelo 🧭 para reconectar as ruas restantes.' : ''));
+  return true;
+}
+function topoExcluirRua(id) { if (excluirRuaCompleta(id)) topoTela(); }
 </script>
 </body></html>
