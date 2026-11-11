@@ -1885,7 +1885,7 @@ function renderRuasBar(){
   const el=document.getElementById('ruas-bar'); if(!el) return;
   if(ruas.length<2){ el.innerHTML=''; el.style.display='none'; return; }
   el.style.display='flex';
-  el.innerHTML='<span style="font-size:12px;font-weight:700;color:var(--fg2)">Ruas:</span>'+ruas.map((r,i)=>{
+  el.innerHTML='<span style="font-size:12px;font-weight:700;color:var(--fg2)" title="Gerar greide, + Ponto, + Estaca e Importar Excel agem só na rua selecionada">Ruas (a rua selecionada recebe as alterações e a importação):</span>'+ruas.map((r,i)=>{
     const on=i===ruaAtiva, par=r.paralela&&ruaIdx(r.paralela)>=0?' · paralela à '+nomeRua(ruaIdx(r.paralela)):'';
     return '<span style="display:inline-flex;align-items:center;gap:4px;border:1px solid '+(on?'var(--accent2,#2563eb)':'var(--border,#ccc)')+';background:'+(on?'var(--accent2,#2563eb)':'transparent')+';color:'+(on?'#fff':'var(--fg)')+';border-radius:14px;padding:2px 8px;font-size:12px">'+
       '<a href="#" onclick="trocarRua('+i+');return false" style="color:inherit;text-decoration:none;font-weight:'+(on?700:500)+'" title="'+esc(nomeRua(i)+par)+'">'+esc(nomeRua(i))+(par?' <small>∥</small>':'')+'</a>'+
@@ -1925,6 +1925,7 @@ function abrirRua(){
     '<div id="nr_cz"><div class="mf-f"><label for="nr_eo">Estaca onde o EIXO da nova rua cruza o EIXO da rua existente (medida na rua existente)</label><input type="text" id="nr_eo" placeholder="ex.: 2+10,67  ou  50,67"></div>'+
     '<div class="mf-f"><label for="nr_en">Estaca do eixo da nova rua nesse cruzamento (medida na nova rua; 0 se ela começa ali)</label><input type="text" id="nr_en" value="0" placeholder="ex.: 0"></div>'+
     '<p style="font-size:11px;color:var(--fg2)">Aceita metros (50,67) ou estaca+metros (2+10,67 = 2×20 + 10,67). Se não houver linha nessa estaca, o programa cria um ponto interpolado nas duas ruas. O greide das duas ruas será comparado no cruzamento.</p></div>'+
+    '<label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:10px"><input type="checkbox" id="nr_imp" checked> Importar a planilha Excel desta rua logo depois de criar</label>'+
     '<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button type="button" class="tb-btn" onclick="fecharPonto()">Cancelar</button><button type="button" class="tb-btn tb-btn-save" onclick="criarRua()">Criar rua</button></div>';
   document.getElementById('modal-bg').classList.add('open'); ruaRelMuda();
   setTimeout(()=>{const e=document.getElementById('nr_nome'); if(e){e.focus();e.select();}},50);
@@ -1938,6 +1939,7 @@ function criarRua(){
     eo=parseEstaca(document.getElementById('nr_eo').value); en=parseEstaca(document.getElementById('nr_en').value);
     if(isNaN(eo)||isNaN(en)||eo<0||en<0){ toast('Informe as estacas do cruzamento (ex.: 2+10,67 ou 50,67).',true); return; }
   }
+  const abrirImp=!!(document.getElementById('nr_imp')&&document.getElementById('nr_imp').checked);
   const id='r'+(Math.max(0,...ruas.map(r=>+String(r.id).slice(1)||0))+1);
   const v=k=>{ const x=rel==='cruza'?itpRows(ruas[io].rows,eo,k):null; return x==null?(k==='larg'?6:100):+x.toFixed(3); };
   const base={tEsq:v('tEsq'),tEixo:v('tEixo'),tDir:v('tDir'),greide:v('greide'),larg:v('larg')};
@@ -1948,6 +1950,7 @@ function criarRua(){
     const m=marcarCruz(ni,en,io,eo); renderTopoTable(); calcTopo();
     toast('Rua criada. Cruzamento marcado em '+estacaTxt(en)+' desta rua = '+estacaTxt(eo)+' de '+nomeRua(io)+(m.foraB?' (fora do trecho lançado da outra rua: confira as cotas)':'')+'. Digite ou importe as cotas.');
   }else toast('Rua criada (paralela à '+nomeRua(io)+'). Digite ou importe as cotas.');
+  if(abrirImp) setTimeout(importarExcelClick,250);
 }
 function abrirCruz(i){
   const row=topoRows[i]; if(!row) return;
@@ -2076,7 +2079,7 @@ function impSugerir(rot){
 }
 function impAbrirModal(){
   const md=document.getElementById('modal'); md.style.width='820px'; md.style.maxWidth='96vw';
-  md.innerHTML='<button class="m-close" onclick="impFechar()" aria-label="Fechar">×</button><h2>Importar topografia do Excel</h2>'+
+  md.innerHTML='<button class="m-close" onclick="impFechar()" aria-label="Fechar">×</button><h2>Importar topografia do Excel'+(ruas.length>1?' — para: <span style="color:var(--accent2,#2563eb)">'+esc(nomeRua(ruaAtiva))+'</span>':'')+'</h2>'+
     '<p style="font-size:12px;color:var(--fg2)">Arquivo: <b>'+esc(_imp.nome)+'</b>. Confira a linha dos títulos, as linhas de dados e a coluna de cada informação. A prévia mostra como as estacas vão entrar.</p>'+
     '<div class="mf-g" style="grid-template-columns:2fr 1fr 1fr 1fr 1fr">'+
       '<div class="mf-f"><label>Planilha</label><select id="im_aba" onchange="impTrocarAba(this.value)">'+_imp.wb.SheetNames.map(n=>'<option>'+esc(n)+'</option>').join('')+'</select></div>'+
@@ -2177,6 +2180,7 @@ function impAplicar(){
   const L=_imp&&_imp.ler; if(!L||!L.rows.length) return;
   const novas=L.rows.map(r=>({est:r.est,tEsq:r.tEsq,tEixo:r.tEixo,tDir:r.tDir,greide:r.greide,larg:r.larg,...(r.ponto?{ponto:true}:{}),...(r.obs?{obs:r.obs}:{})}));
   const modo=document.getElementById('im_modo').value;
+  const marcas=topoRows.filter(r=>r.cruz).map(r=>({est:r.est,cruz:r.cruz})); /* cruzamentos já marcados desta rua */
   if(modo==='add'){
     const todas=topoRows.concat(novas).sort((a,b)=>a.est-b.est), fim=[];
     todas.forEach(r=>{ if(!fim.length||Math.abs(fim[fim.length-1].est-r.est)>1e-6) fim.push(r); });
@@ -2184,9 +2188,10 @@ function impAplicar(){
   }else topoRows=novas;
   _greideAnterior=null; const bd=document.getElementById('btn-desfazer-greide'); if(bd) bd.style.display='none';
   const gr=document.getElementById('greide-resumo'); if(gr) gr.textContent='';
+  if(modo!=='add') marcas.forEach(m=>{ const ib=ruaIdx(m.cruz.rua); if(ib>=0&&ib!==ruaAtiva) marcarCruz(ruaAtiva,m.est,ib,m.cruz.est); }); /* a substituição não perde o cruzamento */
   const n=novas.length; impFechar();
   renderTopoTable(); calcTopo();
-  toast(n+' linha(s) importada(s) do Excel para a Topografia.');
+  toast(n+' linha(s) importada(s) do Excel para '+(ruas.length>1?'a rua “'+nomeRua(ruaAtiva)+'” (as outras ruas não foram alteradas)':'a Topografia')+'.');
 }
 let _topo=null;
 function volumesCamadas(totArea){
