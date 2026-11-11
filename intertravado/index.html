@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Pavimento Intertravado</title>
-<script src="/assistente-abas.js" data-tabs=".tab[data-tab]" data-auxilio="proprio"></script>
+<script src="/assistente-abas.js" data-tabs=".tab[data-tab]" data-auxilio="proprio" data-recolhido="1"></script>
 <script src="/estado-pagina.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
@@ -171,6 +171,11 @@ tbody td{padding:5px 8px;border-top:1px solid var(--border);vertical-align:middl
 .ti{background:var(--inp)}
 
 /* ── BUTTONS ── */
+.topo-cols{display:none;flex-wrap:wrap;gap:6px 14px;align-items:center;border:1px solid var(--border,#cbd5e1);border-radius:6px;padding:8px 10px;margin-bottom:8px;font-size:11px;background:var(--bg2,#f8fafc)}
+.topo-cols.open{display:flex}
+.topo-cols label{display:flex;align-items:center;gap:4px;cursor:pointer;white-space:nowrap}
+.topo-cols .tc-grp{display:flex;gap:6px;margin-left:auto}
+.topo-cols .tc-tit{font-weight:700;color:var(--fg2)}
 .btn-add{background:var(--ok);color:var(--ok-fg);border:1px solid var(--ok-border);border-radius:4px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer}
 .btn-rem{background:var(--warn);color:var(--warn-fg);border:1px solid var(--warn-border);border-radius:4px;padding:3px 10px;font-size:11px;font-weight:600;cursor:pointer}
 
@@ -560,6 +565,11 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
   <div class="sec">
     <div class="sec-title">Camadas e materiais · §7 e §8</div>
     <div class="g4">
+      <div class="f" data-ajuda="bloco">
+        <label for="bloco-cm">Espessura do bloco intertravado (cm)</label>
+        <input type="number" id="bloco-cm" min="4" max="14" step="1" value="" placeholder="Vazio = automático" oninput="calcular()" onchange="blocoAviso()">
+        <div class="fmsg" id="m-bloco-cm"></div>
+      </div>
       <div class="f" data-ajuda="areia">
         <label for="areia-cm">Areia de assentamento (cm)</label>
         <input type="number" id="areia-cm" min="2" max="8" step="0.5" value="5" oninput="calcular()">
@@ -637,16 +647,16 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
         </table>
       </div>
       <div style="margin-top:8px;font-size:10px;color:var(--fg3)" id="nota-camadas">
-        Proc. A: sub-base pela Figura 6.1 e base cimentada pela Figura 6.2 (N ≥ 1,5×10⁶).<br>
-        Proc. B: espessura granular HBG pela Figura 6.3; base cimentada com K = 1,65.
+        Proc. A: sub-base pela Figura 6.3 e base cimentada pela Figura 6.2 (N ≥ 1,5×10⁶).<br>
+        Proc. B: espessura granular HBG pelo gráfico HBG do Proc. B; base cimentada com K = 1,65.
       </div>
     </div>
   </div>
 
   <div class="sec" id="sec-fig61">
-    <div class="sec-title">Figura 6.1 da IP-06 · espessura necessária de sub-base (Proc. A)</div>
+    <div class="sec-title">Figura 6.3 do manual IP-06 · espessura necessária de sub-base (Proc. A)</div>
     <div id="fig61-box" class="fig-box"></div>
-    <div style="font-size:10.5px;color:var(--fg3);margin:6px 0 10px">Curvas de CBR do subleito 2% a 7% redesenhadas da Figura 6.1. Abaixo da linha vermelha vale a espessura mínima: 10 cm (N &lt; 5×10⁵) ou 15 cm (N ≥ 5×10⁵). O ponto mostra a leitura do projeto quando o Proc. A está escolhido.</div>
+    <div style="font-size:10.5px;color:var(--fg3);margin:6px 0 10px">Curvas de CBR do subleito 2% a 7% redesenhadas da Figura 6.3 do manual. Abaixo da linha vermelha vale a espessura mínima: 10 cm (N &lt; 5×10⁵) ou 15 cm (N ≥ 5×10⁵). O ponto mostra a leitura do projeto quando o Proc. A está escolhido.</div>
     <div class="sec-title" style="margin-top:4px">Sub-base por tráfego e CBR do subleito (cm) · lido no gráfico → adotado</div>
     <div class="tw" id="fig61-tab"></div>
   </div>
@@ -742,16 +752,21 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
       <button class="btn-rem" onclick="remEstaca()">− Remover</button>
       <button class="tb-btn tb-btn-save" onclick="calcTopo()">Recalcular</button>
       <button class="btn-add" onclick="abrirMeioFio()">Meio-fio…</button>
+      <button class="tb-btn tb-btn-save" id="btn-gerar-greide" onclick="abrirGerarGreide()" title="Gera o greide do eixo (e das bordas esquerda e direita) a partir das cotas do terreno, respeitando a inclinação longitudinal mínima">Gerar greide…</button>
+      <button class="btn-rem" id="btn-desfazer-greide" onclick="desfazerGreide()" style="display:none">↶ Desfazer greide</button>
+      <button class="tb-btn" id="btn-colunas" onclick="toggleColunasTopo()" title="Ocultar ou reexibir colunas da tabela de topografia">👁 Colunas</button>
       <span class="mf-resumo" style="font-size:11px;color:var(--fg2)"></span>
     </div>
+    <div id="topo-cols" class="topo-cols"></div>
+    <div id="greide-resumo" style="font-size:11px;color:var(--fg2);margin-bottom:8px"></div>
     <div id="topo-totals" class="topo-totals"></div>
     <div class="tw">
       <table id="tbl-topo">
         <thead><tr>
-          <th>#</th><th>Estaca (m)</th>
-          <th>Terreno esq. (m)</th><th>Terreno eixo (m)</th><th>Terreno dir. (m)</th>
-          <th>Greide eixo (m)</th><th>Largura (m)</th>
-          <th>Situação</th><th>Corte (m²)</th><th>Aterro (m²)</th><th>Vol. corte até a próxima (m³)</th><th>Vol. aterro até a próxima (m³)</th>
+          <th class="c1">#</th><th class="c2">Estaca (m)</th>
+          <th class="c3">Terreno esq. (m)</th><th class="c4">Terreno eixo (m)</th><th class="c5">Terreno dir. (m)</th>
+          <th class="c6">Greide eixo (m)</th><th class="c7">Greide esq. (m)</th><th class="c8">Greide dir. (m)</th><th class="c9">Declive long. até a próxima (%)</th><th class="c10">Largura (m)</th>
+          <th class="c11">Situação</th><th class="c12">Corte (m²)</th><th class="c13">Aterro (m²)</th><th class="c14">Vol. corte até a próxima (m³)</th><th class="c15">Vol. aterro até a próxima (m³)</th>
         </tr></thead>
         <tbody id="topo-tbody"></tbody>
       </table>
@@ -804,8 +819,8 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
 /* ══════════════════════════════════════════════════════
    ÁBACOS DA IP-06/2004 (SIURB/PMSP)
 ══════════════════════════════════════════════════════ */
-// Figura 6.3 · Procedimento B · espessura de base puramente granular HBG (cm).
-// Valores transcritos do quadro da própria Figura 6.3. Células em branco = mínimo de 15 cm.
+// Gráfico HBG · Procedimento B · espessura de base puramente granular HBG (cm).
+// Valores transcritos do quadro do próprio gráfico HBG. Células em branco = mínimo de 15 cm.
 const HBG_N  = [1e3,2e3,4e3,8e3,1e4,2e4,4e4,8e4,1e5,2e5,4e5,8e5,1e6,2e6,4e6,8e6,1e7];
 const HBG_CBR= [2,2.5,3,3.5,4,5,6,8,10,15,20];
 const HBG_TAB= [
@@ -829,7 +844,7 @@ const HBG_TAB= [
 ];
 const HBG_MIN=15;
 
-// Figura 6.1 · Procedimento A · espessura necessária de sub-base (cm), curvas CBR 2 a 7 %.
+// Figura 6.3 · Procedimento A · espessura necessária de sub-base (cm), curvas CBR 2 a 7 %.
 // Leitura digital das curvas do gráfico (erro de leitura ≈ 0,1 cm). Confere com o exemplo
 // §7.1.2 (N = 10⁵, CBR 5 % → 17,5 → 18 cm).
 const HSB_N  = [1e4,2e4,5e4,1e5,2e5,5e5,1e6,2e6,5e6,1e7,2e7,5e7,1e8];
@@ -942,21 +957,22 @@ async function triggerDownload(blob,filename){
 ══════════════════════════════════════════════════════ */
 const AJUDA={
   n:`<b>Número N</b> — total de passagens do eixo simples padrão previstas na vida de projeto (10 anos para tráfego leve a meio pesado; 12 anos para pesado e muito pesado).<br><b>Quadro 6.1 da IP-06/2004 (N característico):</b><br>• Leve (via local): 10⁵<br>• Médio (local e coletora): 5×10⁵<br>• Meio pesado (coletoras): 2×10⁶<br>• Pesado (coletoras e estruturais): 2×10⁷<br>• Muito pesado (estruturais): 5×10⁷<br>• Faixa de ônibus: 10⁷ (volume médio) ou 5×10⁷ (volume pesado)<br><i>Se você calculou o N do seu tráfego, escolha "Informar N calculado".</i><br>N acima de 10⁷ (pesado): a IP-06 pede estudos mais detalhados, aprovados pela SIURB/PMSP.`,
-  ncustom:`<b>N calculado</b> — número acumulado de solicitações do eixo padrão obtido do estudo de tráfego (classificação conforme IP-02 da PMSP).<br>Pode digitar por extenso (300000) ou em notação científica (3e5).<br><b>Faixas dos gráficos:</b> Figura 6.1 de 10⁴ a 10⁸; Figura 6.3 de 10³ a 10⁷.`,
-  proc:`<b>Procedimento de dimensionamento (§6 e Quadro 6.2)</b><br><b>Proc. A</b> (ABCP ET-27): sub-base pela Figura 6.1; base cimentada só quando N ≥ 1,5×10⁶ (10 cm até 10⁷; acima, Figura 6.2). Recomendado para N até 10⁵ e para N acima de 1,5×10⁶.<br><b>Proc. B</b> (PCA/USACE): espessura granular HBG pela Figura 6.3. Pode ser executada toda em base granular ou dividida em sub-base granular + base cimentada (HBG − sub-base)/1,65. Recomendado para N entre 10⁵ e 1,5×10⁶. Blocos de no mínimo 8 cm.<br><b>Prioridade (Quadro 6.2):</b> Leve A · Médio B · Meio pesado A ou B · Pesado A.<br><b>Se ficar laranja:</b> o procedimento é permitido, mas não é o 1º recomendado para este N; troque para comparar a espessura total.<br><b>Se ficar vermelho:</b> Proc. B com N acima de 10⁷ está fora da Figura 6.3; use o Proc. A.`,
-  cbr:`<b>CBR do subleito</b> — Índice de Suporte Califórnia representativo do solo de fundação, com energia do Ensaio Normal (§5). Pode ser medido "in situ" em vias existentes.<br><b>Como o programa usa:</b><br>• abaixo de 2% → fora dos gráficos: prever reforço ou substituição (solos moles, orgânicos ou turfosos) e informar o CBR do material de empréstimo<br>• 2 a 7% → curvas das Figuras 6.1 e 6.3<br>• Proc. A: CBR ≥ 20% (N &lt; 5×10⁵) ou ≥ 30% (N ≥ 5×10⁵) dispensa a sub-base (§7.1.1a)<br><b>Se ficar laranja (CBR 2 a 3%):</b> o cálculo vale, mas compare com um reforço preenchendo "CBR do material do reforço".<br><b>Se ficar vermelho (abaixo de 2%):</b> preencha o CBR do material de substituição e a espessura do estudo geotécnico.`,
+  ncustom:`<b>N calculado</b> — número acumulado de solicitações do eixo padrão obtido do estudo de tráfego (classificação conforme IP-02 da PMSP).<br>Pode digitar por extenso (300000) ou em notação científica (3e5).<br><b>Faixas dos gráficos:</b> Figura 6.3 (sub-base) de 10⁴ a 10⁸; gráfico HBG (Proc. B) de 10³ a 10⁷.`,
+  proc:`<b>Procedimento de dimensionamento (§6 e Quadro 6.2)</b><br><b>Proc. A</b> (ABCP ET-27): sub-base pela Figura 6.3; base cimentada só quando N ≥ 1,5×10⁶ (10 cm até 10⁷; acima, Figura 6.2). Recomendado para N até 10⁵ e para N acima de 1,5×10⁶.<br><b>Proc. B</b> (PCA/USACE): espessura granular HBG pela Figura 6.3. Pode ser executada toda em base granular ou dividida em sub-base granular + base cimentada (HBG − sub-base)/1,65. Recomendado para N entre 10⁵ e 1,5×10⁶. Blocos de no mínimo 8 cm.<br><b>Prioridade (Quadro 6.2):</b> Leve A · Médio B · Meio pesado A ou B · Pesado A.<br><b>Se ficar laranja:</b> o procedimento é permitido, mas não é o 1º recomendado para este N; troque para comparar a espessura total.<br><b>Se ficar vermelho:</b> Proc. B com N acima de 10⁷ está fora da Figura 6.3; use o Proc. A.`,
+  cbr:`<b>CBR do subleito</b> — Índice de Suporte Califórnia representativo do solo de fundação, com energia do Ensaio Normal (§5). Pode ser medido "in situ" em vias existentes.<br><b>Como o programa usa:</b><br>• abaixo de 2% → fora dos gráficos: prever reforço ou substituição (solos moles, orgânicos ou turfosos) e informar o CBR do material de empréstimo<br>• 2 a 7% → curvas da Figura 6.3 (sub-base) e do gráfico HBG (Proc. B)<br>• Proc. A: CBR ≥ 20% (N &lt; 5×10⁵) ou ≥ 30% (N ≥ 5×10⁵) dispensa a sub-base (§7.1.1a)<br><b>Se ficar laranja (CBR 2 a 3%):</b> o cálculo vale, mas compare com um reforço preenchendo "CBR do material do reforço".<br><b>Se ficar vermelho (abaixo de 2%):</b> preencha o CBR do material de substituição e a espessura do estudo geotécnico.`,
   exp:`<b>Expansão do subleito</b> — inchamento medido no ensaio CBR após imersão.<br><b>IP-06 §5:</b> se CBR &gt; 2% e expansão ≥ 2%, o laboratório determina a sobrecarga que reduz a expansão para menos de 2%, e o peso próprio do pavimento precisa ser igual ou maior que essa pressão.<br><b>Como preencher:</b><br>• expansão abaixo de 2% → nada a fazer (campo verde)<br>• expansão de 2% ou mais → aparece o campo "Sobrecarga"; informe a pressão que o laboratório achou para baixar a expansão a menos de 2%<br>• o campo fica <b>verde</b> quando o peso do pavimento for igual ou maior que essa sobrecarga, e <b>vermelho</b> quando for menor (aí aumente as camadas, por exemplo com reforço, ou trate o solo expansivo)<br><i>Enquanto a sobrecarga não for informada, o campo fica laranja, como lembrete.</i>`,
   sobrecarga:`<b>Sobrecarga exigida (kPa)</b> — pressão que, no ensaio de laboratório, reduz a expansão do subleito para menos de 2% (§5).<br>O programa calcula a pressão do pavimento somando espessura × peso específico típico de cada camada (blocos 22, areia 17, base granular 21, base cimentada 23, sub-base 21, reforço 20 kN/m³) e avisa se ficar abaixo.<br>Quando atende, este campo e o da expansão ficam verdes; quando não atende, os dois ficam vermelhos.<br><i>Um pavimento intertravado leve pesa por volta de 5 a 8 kPa. 1 kPa ≈ 0,01 kgf/cm².</i>`,
   lencol:`<b>Profundidade do lençol d'água</b> — distância do nível d'água subterrâneo até o greide de terraplenagem.<br><b>IP-06 §8.1:</b> o dimensionamento pressupõe drenagem superficial adequada e lençol a pelo menos 1,50 m do greide. Se não atender, rebaixar com drenos ou apresentar solução alternativa à SIURB/PMSP.<br><b>Se ficar laranja (menos de 1,50 m):</b> preveja drenos profundos, eleve o greide ou apresente solução alternativa à SIURB/PMSP.<br><i>Deixe vazio se não houver sondagem.</i>`,
   cbrref:`<b>CBR do reforço ou do material de substituição</b><br>Use quando o subleito for fraco (CBR baixo) ou quando houver substituição de solo mole por material de empréstimo (§5).<br>Com este valor o programa:<br>• dimensiona as camadas de cima com o CBR do reforço<br>• calcula a espessura do reforço pela diferença de leituras no mesmo gráfico: H(CBR subleito) − H(CBR reforço)<br><b>Se ficar laranja:</b> o CBR digitado não é maior que o do subleito, e o reforço é ignorado; use um material melhor ou deixe vazio.<br><i>Vazio = sem reforço.</i>`,
-  reforco:`<b>Espessura do reforço (cm)</b><br>Vazio: o programa calcula automaticamente = H(CBR do subleito) − H(CBR do reforço), lidos na Figura 6.1 (Proc. A) ou 6.3 (Proc. B).<br>Preenchido: usa o seu valor e avisa se for menor que o necessário.<br>Com CBR do subleito abaixo de 2% (fora do gráfico) a espessura deve vir do estudo geotécnico (IP-01) e precisa ser informada aqui.<br><b>Se ficar laranja:</b> a espessura digitada é menor que a necessária (o aviso mostra quanto); aumente ou deixe vazio. Também fica laranja se faltar o CBR do reforço.<br>O reforço também ajuda a vencer a sobrecarga de subleito expansivo (§5): cada 5 cm somam cerca de 1 kPa.`,
+  reforco:`<b>Espessura do reforço (cm)</b><br>Vazio: o programa calcula automaticamente = H(CBR do subleito) − H(CBR do reforço), lidos na Figura 6.3 (Proc. A) ou no gráfico HBG (Proc. B).<br>Preenchido: usa o seu valor e avisa se for menor que o necessário.<br>Com CBR do subleito abaixo de 2% (fora do gráfico) a espessura deve vir do estudo geotécnico (IP-01) e precisa ser informada aqui.<br><b>Se ficar laranja:</b> a espessura digitada é menor que a necessária (o aviso mostra quanto); aumente ou deixe vazio. Também fica laranja se faltar o CBR do reforço.<br>O reforço também ajuda a vencer a sobrecarga de subleito expansivo (§5): cada 5 cm somam cerca de 1 kPa.`,
+  bloco:`<b>Espessura do bloco intertravado (cm)</b> — vazio: o programa adota a espessura do Quadro 6.3 da IP-06 para o N de projeto (6 cm até 5×10⁵; 8 cm até 10⁷; 10 cm acima; mínimo de 8 cm no Proc. B).<br>Você pode digitar outra espessura. Nesse caso o programa avisa o que muda (espessura total, peso próprio, formação, volumes, custo) e o que continua igual (camadas inferiores, K = 1,65, fpk mínimo).`,
   areia:`<b>Camada de assentamento</b> — areia (eventualmente pó-de-pedra) onde os blocos são assentados e vibrados.<br><b>IP-06 §8.3:</b> no máximo 5% de silte e argila e no máximo 10% retido na peneira 4,8 mm; sem torrões, matéria orgânica ou substâncias nocivas.<br><b>Espessura:</b> os exemplos da IP-06 (§7.1.2 e §7.2.1) adotam 5 cm compactada; a faixa usual de execução é 3 a 5 cm.<br><i>Não conta como camada estrutural.</i><br><b>Se ficar laranja:</b> a espessura está fora de 3 a 5 cm; use 5 cm.<br><i>Vazio = 5 cm.</i>`,
   fpk:`<b>Resistência característica à compressão dos blocos (fpk)</b><br><b>Quadro 6.3 da IP-06:</b><br>• N ≤ 5×10⁵ → blocos de 6 cm, 35 MPa<br>• 5×10⁵ &lt; N &lt; 10⁷ → 8 cm, 35 a 50 MPa<br>• N ≥ 10⁷ → 10 cm, 50 MPa<br>Os blocos devem atender à EM-6 (SIURB/PMSP) e às NBR 9780 e NBR 9781 (§7.1.1b e §8.4).<br><b>Se ficar vermelho:</b> o fpk está abaixo do mínimo para este N; especifique o valor que o aviso indica.<br><i>Vazio = 35 MPa.</i>`,
   subccr:`<b>Sub-base granular sob a base cimentada (Proc. B)</b><br>Parte da espessura HBG executada em material granular; o restante vira base cimentada: H<sub>cim</sub> = (HBG − H<sub>sub-base</sub>) / 1,65.<br>O exemplo §7.2.1 adota 15 cm. Espessura mínima de base cimentada: 10 cm.<br><b>Se ficar laranja:</b> menos de 15 cm (use 15 cm ou mais), ou a sub-base já atinge sozinha a HBG (reduza-a ou use base granular única).<br><i>Só aparece no Proc. B com base cimentada. Vazio = 15 cm.</i>`,
-  hconf:`<b>Leitura própria do gráfico (opcional)</b><br>Se você mesmo leu o valor no gráfico da norma, digite aqui e ele substitui a leitura automática:<br>• Proc. A → sub-base da Figura 6.1<br>• Proc. B → HBG da Figura 6.3<br><b>Se ficar laranja:</b> a sua leitura difere mais de 15% da automática (confira no gráfico) ou está abaixo do mínimo da norma (o programa usa o mínimo).<br>Também serve para engrossar a sub-base ou a HBG quando for preciso mais peso sobre um subleito expansivo.<br><i>Vazio = leitura automática (o valor aparece no campo).</i>`,
+  hconf:`<b>Leitura própria do gráfico (opcional)</b><br>Se você mesmo leu o valor no gráfico da norma, digite aqui e ele substitui a leitura automática:<br>• Proc. A → sub-base da Figura 6.3<br>• Proc. B → HBG do gráfico do Proc. B<br><b>Se ficar laranja:</b> a sua leitura difere mais de 15% da automática (confira no gráfico) ou está abaixo do mínimo da norma (o programa usa o mínimo).<br>Também serve para engrossar a sub-base ou a HBG quando for preciso mais peso sobre um subleito expansivo.<br><i>Vazio = leitura automática (o valor aparece no campo).</i>`,
   arred:`<b>Arredondamento</b><br>Ao centímetro: igual aos exemplos da IP-06 (17,5 → 18 cm; 8,48 → 10 cm pelo mínimo).<br>Múltiplo de 5 cm: prática comum de obra, mais conservadora.<br>Sempre arredonda para cima e respeita os mínimos da norma.`,
   'r-n':`<b>N adotado</b> e a classe de tráfego correspondente pelas faixas do Quadro 6.1.`,
-  'r-h-est':`<b>Leitura automática do gráfico</b> — Proc. A: sub-base da Figura 6.1; Proc. B: HBG da Figura 6.3, já com o CBR de projeto (do reforço, se houver). CBR exatamente sobre uma curva (2, 3, 4, 5, 6 ou 7%) é lido direto nela; entre duas curvas, por interpolação logarítmica. A figura e o quadro por tráfego estão no fim desta aba.`,
+  'r-h-est':`<b>Leitura automática do gráfico</b> — Proc. A: sub-base da Figura 6.3; Proc. B: HBG do gráfico do Proc. B, já com o CBR de projeto (do reforço, se houver). CBR exatamente sobre uma curva (2, 3, 4, 5, 6 ou 7%) é lido direto nela; entre duas curvas, por interpolação logarítmica. A figura e o quadro por tráfego estão no fim desta aba.`,
   'r-h-usado':`<b>Valor usado</b> — a leitura automática, ou a sua leitura própria se você preencheu esse campo. Já inclui os mínimos da norma.`,
   'r-cbr-min-sb':`<b>CBR mínimo do material da sub-base</b> (§7.1.1a): 20% quando N &lt; 5×10⁵ e 30% quando N ≥ 5×10⁵.`,
   'r-fpk-min':`<b>fpk mínimo</b> pelo Quadro 6.3: 35 MPa até N &lt; 10⁷ e 50 MPa para N ≥ 10⁷.`,
@@ -969,7 +985,7 @@ const AJUDA={
   'l-blocos':`<b>Blocos (peças) de concreto</b> — espessura pelo Quadro 6.3 (6, 8 ou 10 cm). No Proc. B o mínimo é 8 cm (§7.2).`,
   'l-areia':`<b>Areia de assentamento</b> — material conforme §8.3; espessura usual 3 a 5 cm (5 cm nos exemplos).`,
   'l-base':`<b>Base</b> — Proc. A: base cimentada só para N ≥ 1,5×10⁶ (10 cm até 10⁷; Figura 6.2 acima). Proc. B: base granular = HBG (mín. 15 cm) ou base cimentada = (HBG − sub-base)/1,65 (mín. 10 cm).`,
-  'l-sb':`<b>Sub-base</b> — Proc. A: Figura 6.1 com CBR ≥ 20% ou 30%; mínimo 10 cm (N &lt; 5×10⁵) ou 15 cm (N ≥ 5×10⁵) para subleito com CBR acima de 7%; dispensada se o subleito já tiver o CBR exigido. Proc. B com base cimentada: espessura informada por você.`,
+  'l-sb':`<b>Sub-base</b> — Proc. A: Figura 6.3 com CBR ≥ 20% ou 30%; mínimo 10 cm (N &lt; 5×10⁵) ou 15 cm (N ≥ 5×10⁵) para subleito com CBR acima de 7%; dispensada se o subleito já tiver o CBR exigido. Proc. B com base cimentada: espessura informada por você.`,
   'l-ref':`<b>Reforço do subleito</b> — material de CBR maior que o subleito; espessura pela diferença de leituras no gráfico ou informada pelo estudo geotécnico.`,
   'l-total':`<b>Espessura total</b> da estrutura (todas as camadas) e a pressão que ela aplica no subleito (peso próprio), usada na verificação de expansão do §5.`,
 };
@@ -1044,7 +1060,7 @@ function atualizarLogradouro(){
 /* ══════════════════════════════════════════════════════
    MENSAGENS NOS CAMPOS
 ══════════════════════════════════════════════════════ */
-const CAMPOS=['n-sel','n-custom','base-mat','cbr-sub','exp-sub','sobrecarga','lencol','cbr-ref','reforco','areia-cm','fpk','sub-ccr','h-conf'];
+const CAMPOS=['n-sel','n-custom','base-mat','cbr-sub','exp-sub','sobrecarga','lencol','cbr-ref','reforco','bloco-cm','areia-cm','fpk','sub-ccr','h-conf'];
 function limparMarcas(){ CAMPOS.forEach(id=>marcar(id,'','')); }
 function marcar(id,nivel,txt){
   const m=document.getElementById('m-'+id), inp=document.getElementById(id);
@@ -1055,16 +1071,16 @@ function marcar(id,nivel,txt){
 /* ══════════════════════════════════════════════════════
    LEITURAS DOS GRÁFICOS
 ══════════════════════════════════════════════════════ */
-// Figura 6.1: sub-base (Proc. A)
+// Figura 6.3: sub-base (Proc. A)
 function lerFig61(N,CBR){
   const cbrMin=N<5e5?20:30, hMin=N<5e5?10:15;
   if(CBR>=cbrMin) return {H:0,dispensa:true,hMin,cbrMin,txt:`CBR ${fmt(CBR,1)}% ≥ ${cbrMin}% → sub-base dispensada (§7.1.1a)`};
   if(CBR<2) return {H:null,fora:true,hMin,cbrMin};
-  if(CBR>7) return {H:hMin,minimo:true,hMin,cbrMin,txt:`7% < CBR < ${cbrMin}% → espessura mínima de ${hMin} cm da Figura 6.1`};
+  if(CBR>7) return {H:hMin,minimo:true,hMin,cbrMin,txt:`7% < CBR < ${cbrMin}% → espessura mínima de ${hMin} cm da Figura 6.3`};
   const i=interp2D(HSB_N,HSB_CBR,HSB_TAB,N,CBR);
   return {...i,H:Math.max(i.H,hMin),Hlido:i.H,hMin,cbrMin,foraN:N<1e4||N>1e8};
 }
-// Figura 6.3: HBG (Proc. B)
+// Gráfico HBG (Proc. B)
 function lerFig63(N,CBR){
   if(CBR<2) return {H:null,fora:true};
   const i=interp2D(HBG_N,HBG_CBR,HBG_TAB,N,Math.min(CBR,20));
@@ -1073,7 +1089,7 @@ function lerFig63(N,CBR){
 
 
 /* ══════════════════════════════════════════════════════
-   FIGURA 6.1 DESENHADA + QUADRO POR TRÁFEGO
+   FIGURA 6.3 DESENHADA + QUADRO POR TRÁFEGO
 ══════════════════════════════════════════════════════ */
 const TRAF_61=[['Leve',1e5],['Médio',5e5],['Meio pesado',2e6],['Ônibus · volume médio',1e7],['Pesado',2e7],['Muito pesado / ônibus pesado',5e7]];
 function supTxt(n){return fmtN(n);}
@@ -1082,7 +1098,7 @@ function fig61SVG(r,papel){
               :{fg:'var(--fg)',fg2:'var(--fg2)',fg3:'var(--fg3)',bg:'var(--bg2)',acc:'var(--accent2)',g1:'var(--border)',g2:'var(--fg3)'};
   const W=820,H=500,x0=62,x1=730,y0=46,y1=420;
   const X=n=>x0+(Math.log10(n)-4)/4*(x1-x0), Y=h=>y1-h/70*(y1-y0);
-  let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Arial, Helvetica, sans-serif" role="img" aria-label="Figura 6.1 da IP-06">`;
+  let s=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="Arial, Helvetica, sans-serif" role="img" aria-label="Figura 6.3 da IP-06">`;
   s+=`<rect width="${W}" height="${H}" fill="${C.bg}"/>`;
   // grade
   for(let d=4;d<8;d++) for(let k=1;k<=9;k++){ const n=k*Math.pow(10,d); const x=X(n);
@@ -1205,8 +1221,8 @@ function calcular(){
 
   // ── procedimento
   if((mat==='GRAN'||mat==='CCR')&&N>1e7){
-    marcar('base-mat','err','A Figura 6.3 (Proc. B) só vai até N = 10⁷. Para corrigir: escolha o Proc. A, que o Quadro 6.2 recomenda para tráfego pesado.');
-    A('err','Proc. B fora do gráfico: a Figura 6.3 termina em N = 10⁷ e o N adotado é '+fmtN(N)+'. O cálculo usa a linha de 10⁷ (contra a segurança). Pelo Quadro 6.2, para tráfego pesado a 1ª prioridade é o Proc. A.');
+    marcar('base-mat','err','O gráfico HBG (Proc. B) só vai até N = 10⁷. Para corrigir: escolha o Proc. A, que o Quadro 6.2 recomenda para tráfego pesado.');
+    A('err','Proc. B fora do gráfico: o gráfico HBG termina em N = 10⁷ e o N adotado é '+fmtN(N)+'. O cálculo usa a linha de 10⁷ (contra a segurança). Pelo Quadro 6.2, para tráfego pesado a 1ª prioridade é o Proc. A.');
   }else if(!procOk){
     marcar('base-mat','warn','Para este N o Quadro 6.2 recomenda o '+procRecTxt+'. Opções: manter este procedimento (é permitido, só não é o 1º recomendado) ou trocar para o recomendado e comparar a espessura total.');
   }else marcar('base-mat','ok','Procedimento recomendado para este N (Quadro 6.2).');
@@ -1244,8 +1260,8 @@ function calcular(){
 
   // ── leitura do gráfico com o CBR de projeto
   let leit, h_graf=null, h_usado=null, figRef;
-  if(mat==='PROCA'){ leit=lerFig61(N,CBRp); figRef='Figura 6.1'; }
-  else { leit=lerFig63(N,CBRp); figRef='Figura 6.3'; }
+  if(mat==='PROCA'){ leit=lerFig61(N,CBRp); figRef='Figura 6.3'; }
+  else { leit=lerFig63(N,CBRp); figRef='gráfico HBG'; }
   cbrMin_sb=mat==='PROCA'?leit.cbrMin:cbrMin_sb;
   if(leit.fora){
     resultado=null; limparResultados();
@@ -1261,13 +1277,13 @@ function calcular(){
     const dif=h_graf>0?Math.abs(hConf-h_graf)/h_graf:1;
     if(dif>0.15) marcar('h-conf','warn','Difere '+Math.round(dif*100)+'% da leitura automática ('+fmt(h_graf,1)+' cm). Opções: conferir a leitura no gráfico ou deixar vazio para usar a automática.');
     else marcar('h-conf','ok','Próxima da leitura automática ('+fmt(h_graf,1)+' cm).');
-    if(mat==='PROCA'&&!leit.dispensa&&hConf<leit.hMin){ h_usado=leit.hMin; marcar('h-conf','warn','Abaixo do mínimo de '+leit.hMin+' cm da Figura 6.1; o cálculo usou o mínimo. Para tirar o aviso: digite '+leit.hMin+' cm ou mais, ou deixe vazio.'); }
-    if(mat!=='PROCA'&&hConf<HBG_MIN){ h_usado=HBG_MIN; marcar('h-conf','warn','Abaixo do mínimo de 15 cm da Figura 6.3; o cálculo usou o mínimo. Para tirar o aviso: digite 15 cm ou mais, ou deixe vazio.'); }
+    if(mat==='PROCA'&&!leit.dispensa&&hConf<leit.hMin){ h_usado=leit.hMin; marcar('h-conf','warn','Abaixo do mínimo de '+leit.hMin+' cm da Figura 6.3; o cálculo usou o mínimo. Para tirar o aviso: digite '+leit.hMin+' cm ou mais, ou deixe vazio.'); }
+    if(mat!=='PROCA'&&hConf<HBG_MIN){ h_usado=HBG_MIN; marcar('h-conf','warn','Abaixo do mínimo de 15 cm do gráfico HBG; o cálculo usou o mínimo. Para tirar o aviso: digite 15 cm ou mais, ou deixe vazio.'); }
   }
   if(leit.foraN) A('warn','N = '+fmtN(N)+' fora da faixa da '+figRef+' ('+(mat==='PROCA'?'10⁴ a 10⁸':'10³ a 10⁷')+'): usada a borda do gráfico. Confira o N do estudo de tráfego'+(mat!=='PROCA'&&N>1e7?' ou use o Proc. A':'')+'.');
   if(mat==='PROCA'&&leit.minimo){
     const h7=interp2D(HSB_N,HSB_CBR,HSB_TAB,N,7).H;
-    if(h7>leit.hMin+0.5) sugest.push('Para CBR entre 7% e '+leit.cbrMin+'% a Figura 6.1 só fixa o mínimo de '+leit.hMin+' cm; para CBR próximo de 7% considere a curva de 7% ('+fmt(h7,1)+' cm), a favor da segurança.');
+    if(h7>leit.hMin+0.5) sugest.push('Para CBR entre 7% e '+leit.cbrMin+'% a Figura 6.3 só fixa o mínimo de '+leit.hMin+' cm; para CBR próximo de 7% considere a curva de 7% ('+fmt(h7,1)+' cm), a favor da segurança.');
   }
 
   // ── blocos (Quadro 6.3; Proc. B mínimo 8 cm, §7.2)
@@ -1275,8 +1291,32 @@ function calcular(){
   if(N<=5e5){bloco_q=6;fpk_min=35;}
   else if(N<1e7){bloco_q=8;fpk_min=35;}
   else{bloco_q=10;fpk_min=50;}
-  const bloco_teo=(mat!=='PROCA')?Math.max(8,bloco_q):bloco_q;
-  const blocoObs=(mat!=='PROCA'&&bloco_q<8)?'mín. 8 cm no Proc. B (§7.2)':'Quadro 6.3';
+  const bloco_auto=(mat!=='PROCA')?Math.max(8,bloco_q):bloco_q;
+  let bloco_teo=bloco_auto;
+  let blocoObs=(mat!=='PROCA'&&bloco_q<8)?'mín. 8 cm no Proc. B (§7.2)':'Quadro 6.3';
+  let bloco_usr=null;
+  const blocoIn=v('bloco-cm');
+  if(!isNaN(blocoIn)&&blocoIn!==0){
+    if(blocoIn<4||blocoIn>14){
+      marcar('bloco-cm','err','Informe entre 4 e 14 cm ou deixe vazio (automático: '+bloco_auto+' cm). Enquanto isso o cálculo usa '+bloco_auto+' cm.');
+      A('err','Espessura do bloco fora de 4 a 14 cm: o cálculo usou o automático ('+bloco_auto+' cm).');
+    }else if(blocoIn===bloco_auto){
+      marcar('bloco-cm','ok','Igual ao automático (Quadro 6.3).');
+    }else{
+      bloco_usr=blocoIn; bloco_teo=blocoIn;
+      const d=blocoIn-bloco_auto, ad=Math.abs(d), dP=ad*GAMA.blocos/100;
+      blocoObs='definida por você (automático: '+bloco_auto+' cm)';
+      const comum='<b>Muda no cálculo:</b> espessura total do pavimento '+(d<0?'−':'+')+ad+' cm; cota de formação (greide − espessura total) '+(d<0?'sobe':'desce')+' '+ad+' cm, alterando corte/aterro nas seções e na Topografia; peso próprio sobre o subleito '+(d<0?'cai':'sobe')+' ≈ '+fmt(dP,2)+' kPa (vale na checagem de expansão ≥ 2%, §5); volume de blocos e custo (as composições SINAPI/SCO existem para 6, 8 e 10 cm: usa-se a mais próxima).<br><b>Não muda:</b> sub-base, base e HBG (Figuras 6.2 e 6.3 e gráfico HBG), K = 1,65 e fpk mínimo — a IP-06 não relaciona a espessura do bloco com esses valores, então o programa não dá crédito nem penalidade estrutural.';
+      if(d<0){
+        marcar('bloco-cm','warn','<b>Espessura REDUZIDA</b> (Quadro 6.3 pede '+bloco_auto+' cm para N = '+fmtN(N)+').<br>'+comum+'<br><b>Risco:</b> bloco mais fino distribui pior a carga das rodas, quebra e desgasta mais, e fica fora do Quadro 6.3; só use com justificativa técnica registrada na memória.');
+        A('warn','Bloco de '+blocoIn+' cm, menor que os '+bloco_auto+' cm do Quadro 6.3: fora da norma (risco de quebra e desgaste). Camadas inferiores não foram alteradas.');
+        if(mat!=='PROCA'&&blocoIn<8){ A('err','Proc. B exige bloco de no mínimo 8 cm (§7.2); o valor digitado é '+blocoIn+' cm.'); }
+      }else{
+        marcar('bloco-cm','warn','<b>Espessura AUMENTADA</b> (Quadro 6.3 pede '+bloco_auto+' cm para N = '+fmtN(N)+').<br>'+comum+'<br><b>Atenção:</b> bloco mais espesso custa mais e não reduz base nem sub-base; aumenta o peso próprio (ajuda quando a expansão do subleito é ≥ 2%) e a escavação.');
+        A('warn','Bloco de '+blocoIn+' cm, maior que os '+bloco_auto+' cm do Quadro 6.3: aumenta custo e escavação sem reduzir base/sub-base.');
+      }
+    }
+  }
   if(fpkI<fpk_min){ marcar('fpk','err','Abaixo do mínimo de '+fpk_min+' MPa para N = '+fmtN(N)+' (Quadro 6.3). Para corrigir: especifique blocos com fpk de '+fpk_min+' MPa ou mais.'); A('err','fpk de '+fpkI+' MPa abaixo do mínimo de '+fpk_min+' MPa (Quadro 6.3): especifique blocos com '+fpk_min+' MPa ou mais.'); }
   else if(N>5e5&&N<1e7&&fpkI<50) marcar('fpk','ok','Atende. Para 5×10⁵ < N < 10⁷ o Quadro 6.3 admite de 35 a 50 MPa.');
   else marcar('fpk','ok','Atende ao Quadro 6.3.');
@@ -1358,7 +1398,7 @@ function calcular(){
   resultado={N,sel,classe:classe.nome,CBR,CBRp,usaRef,cbrRef:usaRef?cbrRef:null,exp:isNaN(exp)?null:exp,sobre:isNaN(sobre)?null:sobre,
     len:isNaN(len)?null:len,mat,fpkI,areia,passo,
     proc:procNome,procRec:procRecTxt,procOk,figRef,leit,h_est:h_graf,h_usado,hConf:(!isNaN(hConf)&&hConf>0)?hConf:null,
-    bloco_q,bloco_teo,blocoObs,fpk_min,cbr_min_sb:cbrMin_sb,
+    bloco_q,bloco_teo,bloco_auto,bloco_usr,blocoObs,fpk_min,cbr_min_sb:cbrMin_sb,
     base_teo,h_base_teo:base_teo,h_base_adot:base_adot,base_nome,base_tipo,
     h_sb_teo:sb_teo,h_sb_adot:sb_adot,sb_nome,sb_disp:mat==='PROCA'&&leit.dispensa,
     ref_teo,ref:ref_adot,refInfo,calc,total,pressao,cond,alertas,sugest};
@@ -1372,10 +1412,11 @@ function calcular(){
 }
 
 /* Campos "vazio = automático": mostram o valor que o programa usa quando ficam vazios */
+function blocoAviso(){ const r=resultado; if(r&&r.bloco_usr) toast('Espessura do bloco alterada por você ('+r.bloco_usr+' cm; automático '+r.bloco_auto+' cm). Leia o aviso abaixo do campo.',true); }
 function atualizarPlaceholders(){
   const r=resultado, ph=(id,t)=>{const e=document.getElementById(id); if(e) e.placeholder=t;};
   // valores que o cálculo usa quando estes campos ficam vazios (ver calcular)
-  ph('areia-cm','Vazio = automático (5 cm)'); ph('fpk','Vazio = automático (35 MPa)'); ph('sub-ccr','Vazio = automático (15 cm)');
+  ph('bloco-cm','Vazio = automático'+(r?' ('+r.bloco_auto+' cm)':'')); ph('areia-cm','Vazio = automático (5 cm)'); ph('fpk','Vazio = automático (35 MPa)'); ph('sub-ccr','Vazio = automático (15 cm)');
   if(!r){ ph('reforco','Vazio = automática'); ph('h-conf','Vazio = automático'); return; }
   const up=x=>x<=0?0:(r.passo===5?Math.ceil(x/5-1e-9)*5:Math.ceil(x-1e-9));
   if(!r.usaRef) ph('reforco','Vazio = automática (informe o CBR do reforço)');
@@ -1415,11 +1456,11 @@ function atualizarResultados(){
   T('tc-base-label',r.base_nome);
   T('tc-base-teo',r.h_base_teo>0?fmt(r.h_base_teo,1)+' cm':'—');
   T('tc-base-adot',r.h_base_adot>0?r.h_base_adot+' cm':'Dispensada');
-  T('tc-base-sit',r.h_base_adot===0?'N < 1,5×10⁶ (§7.1)':r.base_tipo==='cim'?'mín. 10 cm '+(r.mat==='PROCA'?(r.N>=1e7?'· Fig. 6.2':'· §7.1'):'· K = 1,65'):'mín. 15 cm · Fig. 6.3'); C('tc-base-sit',true);
+  T('tc-base-sit',r.h_base_adot===0?'N < 1,5×10⁶ (§7.1)':r.base_tipo==='cim'?'mín. 10 cm '+(r.mat==='PROCA'?(r.N>=1e7?'· Fig. 6.2':'· §7.1'):'· K = 1,65'):'mín. 15 cm · gráfico HBG'); C('tc-base-sit',true);
   T('tc-sb-label',r.sb_nome);
   T('tc-sb-teo',r.h_sb_teo>0?fmt(r.h_sb_teo,1)+' cm':'—');
   T('tc-sb-adot',r.h_sb_adot>0?r.h_sb_adot+' cm':(r.sb_disp?'Dispensada':'—'));
-  T('tc-sb-sit',r.sb_disp?'subleito CBR ≥ '+r.cbr_min_sb+'%':r.mat==='PROCA'?'CBR ≥ '+r.cbr_min_sb+'% · Fig. 6.1':r.mat==='CCR'?'granular · '+(r.h_sb_adot>=15?'≥ 15 cm':'⚠ < 15 cm'):'—'); C('tc-sb-sit',r.mat==='CCR'?r.h_sb_adot>=15:true);
+  T('tc-sb-sit',r.sb_disp?'subleito CBR ≥ '+r.cbr_min_sb+'%':r.mat==='PROCA'?'CBR ≥ '+r.cbr_min_sb+'% · Fig. 6.3':r.mat==='CCR'?'granular · '+(r.h_sb_adot>=15?'≥ 15 cm':'⚠ < 15 cm'):'—'); C('tc-sb-sit',r.mat==='CCR'?r.h_sb_adot>=15:true);
   T('tc-ref-teo',r.usaRef?fmt(r.ref_teo,1)+' cm':'—');
   T('tc-ref-adot',r.ref>0?r.ref+' cm':'—');
   T('tc-ref-sit',r.usaRef?'CBR '+fmt(r.cbrRef,1)+'% · '+r.refInfo:'sem reforço'); C('tc-ref-sit',r.usaRef?true:null);
@@ -1504,27 +1545,31 @@ function remEstaca(){if(topoRows.length>0){topoRows.pop();renderTopoTable();calc
 function renderTopoTable(){
   const tbody=document.getElementById('topo-tbody');
   tbody.innerHTML=topoRows.map((r,i)=>`<tr>
-    <td>${i+1}</td>
-    <td class="ti"><input type="number" step="0.5" value="${r.est}" onchange="topoVal(${i},'est',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="ti"><input type="number" step="0.01" value="${r.tEsq}" onchange="topoVal(${i},'tEsq',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="ti"><input type="number" step="0.01" value="${r.tEixo}" onchange="topoVal(${i},'tEixo',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="ti"><input type="number" step="0.01" value="${r.tDir}" onchange="topoVal(${i},'tDir',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="ti"><input type="number" step="0.01" value="${r.greide}" onchange="topoVal(${i},'greide',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="ti"><input type="number" step="0.5" value="${r.larg}" onchange="topoVal(${i},'larg',this.value)" style="width:50px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="to" id="tsit-${i}">—</td>
-    <td class="to" id="tac-${i}">—</td>
-    <td class="to" id="taa-${i}">—</td>
-    <td class="to" id="tco-${i}">—</td>
-    <td class="to" id="tat-${i}">—</td>
+    <td class="c1">${i+1}</td>
+    <td class="ti c2"><input type="number" step="0.5" value="${r.est}" onchange="topoVal(${i},'est',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="ti c3"><input type="number" step="0.01" value="${r.tEsq}" onchange="topoVal(${i},'tEsq',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="ti c4"><input type="number" step="0.01" value="${r.tEixo}" onchange="topoVal(${i},'tEixo',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="ti c5"><input type="number" step="0.01" value="${r.tDir}" onchange="topoVal(${i},'tDir',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="ti c6"><input type="number" step="0.01" value="${r.greide}" onchange="topoVal(${i},'greide',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="to c7" id="tge-${i}">—</td>
+    <td class="to c8" id="tgd-${i}">—</td>
+    <td class="to c9" id="tdl-${i}">—</td>
+    <td class="ti c10"><input type="number" step="0.5" value="${r.larg}" onchange="topoVal(${i},'larg',this.value)" style="width:50px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="to c11" id="tsit-${i}">—</td>
+    <td class="to c12" id="tac-${i}">—</td>
+    <td class="to c13" id="taa-${i}">—</td>
+    <td class="to c14" id="tco-${i}">—</td>
+    <td class="to c15" id="tat-${i}">—</td>
   </tr>`).join('');
+  aplicarColunasTopo();
 }
 function topoVal(i,k,val){topoRows[i][k]=parseFloat(val)||0;calcTopo();}
 /* Linhas da topografia com a geometria da seção de cada estaca (mesma da aba Seções transversais) */
 function topoLinhas(){
   const P=secaoParams(), num=x=>(x===''||x==null||isNaN(x))?null:+x;
   return topoRows.map((row,i)=>{
-    const L={i,est:+row.est||0,te:num(row.tEsq),tc:num(row.tEixo),td:num(row.tDir),gr:num(row.greide),larg:+row.larg||0,na:null,ac:0,aa:0,ar:0,sit:'—',form:null};
-    if(L.gr!==null) L.form=L.gr-P.eTot;
+    const L={i,est:+row.est||0,te:num(row.tEsq),tc:num(row.tEixo),td:num(row.tDir),gr:num(row.greide),larg:+row.larg||0,na:null,ac:0,aa:0,ar:0,sit:'—',form:null,gE:null,gD:null};
+    if(L.gr!==null){ L.form=L.gr-P.eTot; L.gE=+(L.gr-(L.larg/2)*P.cEsq).toFixed(3); L.gD=+(L.gr-(L.larg/2)*P.cDir).toFixed(3); }
     if(L.gr!==null&&L.tc!==null&&L.larg>0){
       const G=secaoGeom(L,P), A=secaoAreas(L,G,P);
       L.ac=A.ac; L.aa=A.aa; L.ar=A.ar;
@@ -1540,6 +1585,9 @@ function calcTopo(){
     const T=(id,t)=>{const e=document.getElementById(id); if(e) e.textContent=t;};
     T('tsit-'+L.i,L.sit); T('tac-'+L.i,L.sit==='—'?'—':fmt(L.ac,2)); T('taa-'+L.i,L.sit==='—'?'—':fmt(L.aa,2));
     T('tco-'+L.i,'—'); T('tat-'+L.i,'—');
+    T('tge-'+L.i,L.gE==null?'—':fmt(L.gE,3)); T('tgd-'+L.i,L.gD==null?'—':fmt(L.gD,3));
+    const nx=linhas[L.i+1], d=nx?nx.est-L.est:0;
+    T('tdl-'+L.i,(nx&&d>0&&L.gr!=null&&nx.gr!=null)?fmt((nx.gr-L.gr)/d*100,2):'—');
   });
   _topo=null;
   if(topoRows.length<2){document.getElementById('topo-totals').innerHTML='';document.getElementById('sec-volumes').hidden=true;atualizarCorteSeAberta();return;}
@@ -1568,6 +1616,112 @@ function calcTopo(){
       `<tr><td>${c.n}</td><td class="to">${c.h}</td><td class="to">${fmt(totArea,2)}</td><td class="to">${fmt(c.vol,2)}</td><td>${c.m}</td></tr>`).join('');
   }else document.getElementById('sec-volumes').hidden=true;
   atualizarCorteSeAberta();
+}
+
+/* ══════════════════════════════════════════════════════
+   GERAR GREIDE · eixo + bordas esq./dir. com declividade longitudinal mínima
+   O greide nunca fica acima do terreno do eixo (só corte) e cai no mínimo
+   i_min (%) a cada trecho; onde o terreno já cai mais que isso, o greide segue o terreno.
+   Bordas: greide do eixo − (largura/2) × caimento transversal de cada lado.
+══════════════════════════════════════════════════════ */
+let _greideCfg={imin:0.5,sentido:'desc',cota:''}, _greideAnterior=null;
+function abrirGerarGreide(){
+  if(topoRows.length<2){ toast('Inclua pelo menos 2 estacas com as cotas do terreno.',true); return; }
+  const g=_greideCfg, md=document.getElementById('modal');
+  md.style.width='430px';
+  md.innerHTML='<button class="m-close" onclick="fecharGerarGreide()" aria-label="Fechar">×</button><h2>Gerar greide</h2>'+
+    '<p style="font-size:12px;color:var(--fg2)">O programa lê a <b>cota do terreno no eixo</b> de cada estaca e calcula o greide do eixo. Os greides esquerdo e direito saem do greide do eixo e dos caimentos transversais. <b>Substitui</b> os greides atuais (dá para desfazer).</p>'+
+    '<div class="mf-f"><label for="gg_imin">Inclinação longitudinal mínima (%)</label><input type="number" id="gg_imin" min="0" max="20" step="0.1" value="'+g.imin+'"></div>'+
+    '<div class="mf-f"><label for="gg_sent">Sentido de escoamento</label><select id="gg_sent">'+
+      '<option value="desc"'+(g.sentido==='desc'?' selected':'')+'>Greide desce no sentido das estacas crescentes</option>'+
+      '<option value="asc"'+(g.sentido==='asc'?' selected':'')+'>Greide sobe no sentido das estacas crescentes (escoa para a estaca 0)</option></select></div>'+
+    '<div class="mf-f"><label for="gg_cota">Cota do greide na estaca de partida (m) — vazio = cota do terreno</label><input type="number" id="gg_cota" step="0.01" value="'+g.cota+'"></div>'+
+    '<p style="font-size:11px;color:var(--fg3);margin-top:8px">Referência usual: 0,5% é o mínimo recomendado para escoamento superficial em vias urbanas (em trechos planos, use meio-fio com sarjeta). Depois de gerar, você pode ajustar qualquer cota do greide à mão.</p>'+
+    '<div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end"><button type="button" class="tb-btn" onclick="fecharGerarGreide()">Cancelar</button><button type="button" class="tb-btn tb-btn-save" onclick="gerarGreide()">Gerar greide</button></div>';
+  document.getElementById('modal-bg').classList.add('open');
+}
+function fecharGerarGreide(){ document.getElementById('modal-bg').classList.remove('open'); }
+function gerarGreide(){
+  const imin=parseFloat(String(document.getElementById('gg_imin').value).replace(',','.'));
+  const sentido=document.getElementById('gg_sent').value;
+  const cotaTxt=String(document.getElementById('gg_cota').value).trim().replace(',','.');
+  if(isNaN(imin)||imin<0||imin>20){ toast('Informe a inclinação mínima entre 0 e 20 %.',true); return; }
+  const cota=cotaTxt===''?null:parseFloat(cotaTxt);
+  if(cotaTxt!==''&&isNaN(cota)){ toast('Cota de partida inválida.',true); return; }
+  const n=topoRows.length, T=topoRows.map(r=>+r.tEixo);
+  if(T.some(x=>isNaN(x))){ toast('Há estaca sem cota do terreno no eixo.',true); return; }
+  for(let i=1;i<n;i++){ if(!(topoRows[i].est>topoRows[i-1].est)){ toast('As estacas precisam estar em ordem crescente (estaca '+(i+1)+' ≤ anterior).',true); return; } }
+  _greideAnterior=topoRows.map(r=>r.greide);
+  const G=new Array(n), f2=x=>Math.floor(x*100+1e-9)/100;
+  const ini=sentido==='desc'?0:n-1;
+  G[ini]=cota!=null?cota:T[ini];
+  if(sentido==='desc'){
+    for(let i=1;i<n;i++){ const d=topoRows[i].est-topoRows[i-1].est; G[i]=Math.min(T[i],f2(G[i-1]-imin/100*d)); }
+  }else{
+    for(let i=n-2;i>=0;i--){ const d=topoRows[i+1].est-topoRows[i].est; G[i]=Math.min(T[i],f2(G[i+1]-imin/100*d)); }
+  }
+  let nTer=0,nMin=0,cMax=0;
+  for(let i=0;i<n;i++){ topoRows[i].greide=+G[i].toFixed(2); if(Math.abs(G[i]-T[i])<0.0005) nTer++; else {nMin++; cMax=Math.max(cMax,T[i]-G[i]);} }
+  _greideCfg={imin,sentido,cota:cotaTxt};
+  fecharGerarGreide();
+  renderTopoTable(); calcTopo();
+  document.getElementById('btn-desfazer-greide').style.display='';
+  document.getElementById('greide-resumo').innerHTML='Greide gerado com inclinação longitudinal mínima de <b>'+fmt(imin,2)+' %</b> ('+(sentido==='desc'?'desce no sentido das estacas':'sobe no sentido das estacas')+'): '+nTer+(nTer===1?' estaca acompanha':' estacas acompanham')+' o terreno e '+nMin+(nMin===1?' segue':' seguem')+' a inclinação mínima (corte máximo no eixo ≈ '+fmt(cMax,2)+' m). Greides esquerdo e direito = greide do eixo − (largura/2) × caimento transversal.';
+  toast('Greide gerado: eixo, borda esquerda e borda direita.');
+}
+function desfazerGreide(){
+  if(!_greideAnterior||_greideAnterior.length!==topoRows.length){ toast('Nada para desfazer.',true); return; }
+  topoRows.forEach((r,i)=>r.greide=_greideAnterior[i]);
+  _greideAnterior=null;
+  document.getElementById('btn-desfazer-greide').style.display='none';
+  document.getElementById('greide-resumo').textContent='';
+  renderTopoTable(); calcTopo(); toast('Greide anterior restaurado.');
+}
+
+/* ══════════════════════════════════════════════════════
+   COLUNAS DA TOPOGRAFIA · ocultar e reexibir
+══════════════════════════════════════════════════════ */
+const TOPO_COLS=[[2,'Estaca'],[3,'Terreno esq.'],[4,'Terreno eixo'],[5,'Terreno dir.'],[6,'Greide eixo'],[7,'Greide esq.'],[8,'Greide dir.'],[9,'Declive long.'],[10,'Largura'],[11,'Situação'],[12,'Corte (m²)'],[13,'Aterro (m²)'],[14,'Vol. corte'],[15,'Vol. aterro']];
+let topoOcultas=[];
+try{ const t=JSON.parse(localStorage.getItem('pint_topo_ocultas')||'[]'); if(Array.isArray(t)) topoOcultas=t.filter(x=>TOPO_COLS.some(c=>c[0]===x)); }catch(e){}
+function aplicarColunasTopo(){
+  let st=document.getElementById('topo-colcss');
+  if(!st){ st=document.createElement('style'); st.id='topo-colcss'; document.head.appendChild(st); }
+  st.textContent=topoOcultas.map(c=>'#tbl-topo .c'+c).join(',')+(topoOcultas.length?'{display:none}':'');
+  const btn=document.getElementById('btn-colunas');
+  if(btn) btn.textContent='👁 Colunas'+(topoOcultas.length?' ('+topoOcultas.length+' oculta'+(topoOcultas.length>1?'s':'')+')':'');
+  document.querySelectorAll('#topo-cols input[data-col]').forEach(i=>{ i.checked=topoOcultas.indexOf(+i.dataset.col)<0; });
+}
+function montarColunasTopo(){
+  const box=document.getElementById('topo-cols'); if(!box||box.dataset.ok) return; box.dataset.ok='1';
+  box.innerHTML='<span class="tc-tit">Mostrar colunas:</span>'+TOPO_COLS.map(c=>'<label><input type="checkbox" data-col="'+c[0]+'" checked onchange="setColunaTopo('+c[0]+',this.checked)">'+c[1]+'</label>').join('')+
+    '<span class="tc-grp"><button type="button" class="tb-btn" onclick="colunasTopoGrupo(\'terreno\')">Ocultar terreno</button><button type="button" class="tb-btn" onclick="colunasTopoGrupo(\'todas\')">Mostrar todas</button></span>';
+}
+function setColunaTopo(c,mostrar){
+  topoOcultas=topoOcultas.filter(x=>x!==c); if(!mostrar) topoOcultas.push(c);
+  try{ localStorage.setItem('pint_topo_ocultas',JSON.stringify(topoOcultas)); }catch(e){}
+  aplicarColunasTopo();
+}
+function colunasTopoGrupo(g){
+  topoOcultas=g==='todas'?[]:[3,4,5];
+  try{ localStorage.setItem('pint_topo_ocultas',JSON.stringify(topoOcultas)); }catch(e){}
+  aplicarColunasTopo();
+}
+function toggleColunasTopo(){ montarColunasTopo(); document.getElementById('topo-cols').classList.toggle('open'); aplicarColunasTopo(); }
+/* Shift+Enter (ou Enter) na tabela da topografia: vai para a mesma coluna da linha de baixo */
+function topoTeclado(){
+  const tb=document.getElementById('topo-tbody'); if(!tb||tb.dataset.kb) return; tb.dataset.kb='1';
+  tb.addEventListener('keydown',function(e){
+    if(e.key!=='Enter'||e.isComposing) return;
+    const inp=e.target; if(!inp||inp.tagName!=='INPUT') return;
+    const td=inp.closest('td'), tr=td&&td.parentElement; if(!tr) return;
+    e.preventDefault();
+    const dir=e.ctrlKey?-1:1;
+    const alvo=dir>0?tr.nextElementSibling:tr.previousElementSibling;
+    const prox=alvo&&alvo.cells[td.cellIndex]&&alvo.cells[td.cellIndex].querySelector('input');
+    inp.dispatchEvent(new Event('change',{bubbles:true}));
+    if(prox){ prox.focus(); try{prox.select();}catch(x){} }
+  });
 }
 let _topo=null;
 function volumesCamadas(totArea){
@@ -2048,27 +2202,27 @@ function montarMemoria(r){
 
   const L=r.leit;
   if(r.mat==='PROCA'){
-    h('5 · Sub-base — Figura 6.1');
+    h('5 · Sub-base — Figura 6.3');
     kv('CBR de projeto:',fmt(r.CBRp,1)+' %'+(r.usaRef?' (do reforço)':''));
     kv('CBR mínimo do material da sub-base (§7.1.1a):',r.cbr_min_sb+' % ('+(r.N<5e5?'N < 5×10⁵':'N ≥ 5×10⁵')+')');
     if(L.dispensa) f(L.txt);
     else if(L.minimo) f(L.txt);
     else{
       memLeitura(L,f,p,'H','cm');
-      if(L.Hlido<L.hMin) f('mínimo da Figura 6.1 = '+L.hMin+' cm → '+L.hMin+' cm');
+      if(L.Hlido<L.hMin) f('mínimo da Figura 6.3 = '+L.hMin+' cm → '+L.hMin+' cm');
     }
     if(r.hConf) kv('Leitura própria do gráfico:',fmt(r.hConf,1)+' cm (substitui a leitura automática)');
     kv('Sub-base adotada:',r.h_sb_adot>0?r.h_sb_adot+' cm ('+arrTxt+')':'dispensada');
     M.push({fig:'61'});
-    p('Conferência da Figura 6.1: sub-base lida sobre cada curva de CBR para os tráfegos do Quadro 6.1 (leitura → mínimo adotado quando a curva fica abaixo dele).');
+    p('Conferência da Figura 6.3: sub-base lida sobre cada curva de CBR para os tráfegos do Quadro 6.1 (leitura → mínimo adotado quando a curva fica abaixo dele).');
     M.push({tab:tabelaFig61Itens()});
     h('6 · Base — §7.1 e Figura 6.2');
     if(r.N<1.5e6) f('N = '+N+' < 1,5×10⁶ → camada de base não é necessária');
     else f(r.calc.baseRegra+' → adotado '+r.h_base_adot+' cm de base cimentada');
   }else{
-    h('5 · Espessura granular HBG — Figura 6.3');
+    h('5 · Espessura granular HBG — gráfico do Proc. B');
     kv('CBR de projeto:',fmt(r.CBRp,1)+' %'+(r.usaRef?' (do reforço)':'')+(r.CBRp>20?' (acima de 20%: usa a coluna de 20%)':''));
-    p('Quadro da Figura 6.3 (células em branco = mínimo de 15 cm).');
+    p('Quadro do gráfico HBG (células em branco = mínimo de 15 cm).');
     memLeitura(L,f,p,'HBG','cm');
     if(r.hConf) kv('Leitura própria do gráfico:',fmt(r.hConf,1)+' cm (substitui a leitura automática)');
     kv('HBG usada:',fmt(r.h_usado,1)+' cm');
@@ -2094,15 +2248,15 @@ function montarMemoria(r){
 
   h((r.usaRef?'8':'7')+' · Blocos de concreto — Quadro 6.3');
   f('N ≤ 5×10⁵ → 6 cm, 35 MPa · 5×10⁵ < N < 10⁷ → 8 cm, 35 a 50 MPa · N ≥ 10⁷ → 10 cm, 50 MPa');
-  f('N = '+N+' → '+r.bloco_q+' cm'+(r.bloco_teo!==r.bloco_q?' → '+r.bloco_teo+' cm (mínimo do Proc. B)':'')+' · fpk mínimo '+r.fpk_min+' MPa');
+  f('N = '+N+' → '+r.bloco_q+' cm'+(r.bloco_auto!==r.bloco_q?' → '+r.bloco_auto+' cm (mínimo do Proc. B)':'')+(r.bloco_usr?' → '+r.bloco_usr+' cm (espessura definida pelo projetista, diferente do automático de '+r.bloco_auto+' cm)':'')+' · fpk mínimo '+r.fpk_min+' MPa');
   kv('fpk especificado:',r.fpkI+' MPa → '+(r.fpkI>=r.fpk_min?'atende':'NÃO atende'));
   kv('Areia de assentamento:',fmt(r.areia,1)+' cm — areia ou pó-de-pedra com no máximo 5% de silte e argila e 10% retido na peneira 4,8 mm (§8.3)');
 
   h((r.usaRef?'9':'8')+' · Estrutura dimensionada');
   const lin=[['Blocos de concreto',r.bloco_q,r.bloco_teo,'Quadro 6.3 · fpk ≥ '+r.fpk_min+' MPa'],
              ['Areia de assentamento',r.areia,r.areia,'§8.3']];
-  lin.push([r.base_nome,r.h_base_teo>0?fmt(r.h_base_teo,1):'—',r.h_base_adot>0?r.h_base_adot:'dispensada',r.mat==='PROCA'?(r.N>=1e7?'Figura 6.2':'§7.1'):r.mat==='GRAN'?'Figura 6.3':'K = 1,65; mín. 10 cm']);
-  if(r.h_sb_adot>0||r.sb_disp) lin.push([r.sb_nome,r.h_sb_teo>0?fmt(r.h_sb_teo,1):'—',r.h_sb_adot>0?r.h_sb_adot:'dispensada',r.mat==='PROCA'?'Figura 6.1':'§7.2.1']);
+  lin.push([r.base_nome,r.h_base_teo>0?fmt(r.h_base_teo,1):'—',r.h_base_adot>0?r.h_base_adot:'dispensada',r.mat==='PROCA'?(r.N>=1e7?'Figura 6.2':'§7.1'):r.mat==='GRAN'?'Gráfico HBG':'K = 1,65; mín. 10 cm']);
+  if(r.h_sb_adot>0||r.sb_disp) lin.push([r.sb_nome,r.h_sb_teo>0?fmt(r.h_sb_teo,1):'—',r.h_sb_adot>0?r.h_sb_adot:'dispensada',r.mat==='PROCA'?'Figura 6.3':'§7.2.1']);
   if(r.ref>0) lin.push(['Reforço (CBR '+fmt(r.cbrRef,1)+'%)',fmt(r.ref_teo,1),r.ref,r.refInfo]);
   lin.push(['Subleito (CBR '+fmt(r.CBR,1)+'%)','','','']);
   M.push({tab:{cab:['Camada','Calculada (cm)','Adotada (cm)','Critério'],lin}});
@@ -2371,8 +2525,8 @@ function itensTopo(){
   M.push({h:'Topografia · padrões'}); itensPadroesSecao(M);
   M.push({kv:['Espessura do pavimento:',fmt(resultado.total,1)+' cm (formação = greide − espessura)']});
   M.push({h:'Estacas, áreas e volumes'});
-  M.push({tab:{cab:['Estaca (m)','Terreno esq.','Terreno eixo','Terreno dir.','Greide','Largura (m)','Situação','Corte (m²)','Aterro (m²)','Vol. corte (m³)','Vol. aterro (m³)'],
-    lin:T.lin.map(o=>[c(o.L.est,2),c(o.L.te,3),c(o.L.tc,3),c(o.L.td,3),c(o.L.gr,3),c(o.L.larg,2),o.L.sit,c(o.L.ac,2),c(o.L.aa,2),c(o.vc,2),c(o.va,2)])}});
+  M.push({tab:{cab:['Estaca (m)','Terreno esq.','Terreno eixo','Terreno dir.','Greide eixo','Greide esq.','Greide dir.','Largura (m)','Situação','Corte (m²)','Aterro (m²)','Vol. corte (m³)','Vol. aterro (m³)'],
+    lin:T.lin.map(o=>[c(o.L.est,2),c(o.L.te,3),c(o.L.tc,3),c(o.L.td,3),c(o.L.gr,3),c(o.L.gE,3),c(o.L.gD,3),c(o.L.larg,2),o.L.sit,c(o.L.ac,2),c(o.L.aa,2),c(o.vc,2),c(o.va,2)])}});
   M.push({kv:['Corte total:',fmt(T.tc,2)+' m³']}); M.push({kv:['Aterro total:',fmt(T.ta,2)+' m³']});
   if(T.tr>0) M.push({kv:['Reaterro lateral:',fmt(T.tr,2)+' m³']});
   M.push({kv:['Área pavimentada:',fmt(T.tA,2)+' m²']}); M.push({kv:['Bota-fora (saldo):',fmt(Math.max(0,T.tc-T.ta),2)+' m³']});
@@ -2394,7 +2548,7 @@ function exportarTabExcel(tab){
       ['Leitura do gráfico (cm):',+r.h_est.toFixed(1)],['Valor usado (cm):',+r.h_usado.toFixed(1)],[''],
       ['Camada','Adotada (cm)','Observação'],...camadasLista(),[''],
       ...r.alertas.map(a=>['Alerta:',a.txt]),...r.sugest.map(t=>['Sugestão:',t]),[''],
-      ['FIGURA 6.1 — SUB-BASE POR TRÁFEGO E CBR (cm)'],T61.cab,...T61.lin.map(l=>l.map(x=>pdfTexto(x)))];
+      ['FIGURA 6.3 — SUB-BASE POR TRÁFEGO E CBR (cm)'],T61.cab,...T61.lin.map(l=>l.map(x=>pdfTexto(x)))];
   }else if(tab==='corte'){
     sheet='Secoes Transversais';fname='intertravado_secoes_'+carimbo()+'.xlsx';
     rows=[['SEÇÕES TRANSVERSAIS POR ESTACA'],['Trecho:',secaoFaixaTexto()],[''],
@@ -2404,8 +2558,8 @@ function exportarTabExcel(tab){
   }else if(tab==='topo'){
     sheet='Topografia';fname='intertravado_topografia_'+carimbo()+'.xlsx';
     const T=linhasTopoVolumes(), n=(x,d)=>x==null?'':+x.toFixed(d);
-    rows=[['TOPOGRAFIA — CORTE E ATERRO'],['Estaca','Terreno esq.','Terreno eixo','Terreno dir.','Greide eixo','Largura','Situação','Corte (m²)','Aterro (m²)','Vol. corte (m³)','Vol. aterro (m³)'],
-      ...T.lin.map(o=>[o.L.est,o.L.te,o.L.tc,o.L.td,o.L.gr,o.L.larg,o.L.sit,n(o.L.ac,2),n(o.L.aa,2),n(o.vc,2),n(o.va,2)]),[''],
+    rows=[['TOPOGRAFIA — CORTE E ATERRO'],['Estaca','Terreno esq.','Terreno eixo','Terreno dir.','Greide eixo','Greide esq.','Greide dir.','Largura','Situação','Corte (m²)','Aterro (m²)','Vol. corte (m³)','Vol. aterro (m³)'],
+      ...T.lin.map(o=>[o.L.est,o.L.te,o.L.tc,o.L.td,o.L.gr,n(o.L.gE,3),n(o.L.gD,3),o.L.larg,o.L.sit,n(o.L.ac,2),n(o.L.aa,2),n(o.vc,2),n(o.va,2)]),[''],
       ['Corte total (m³):',n(T.tc,2)],['Aterro total (m³):',n(T.ta,2)],['Reaterro (m³):',n(T.tr,2)],['Área pavimentada (m²):',n(T.tA,2)]];
   }else{
     return exportarExcel();
@@ -2440,7 +2594,7 @@ function projetoParaJSON(){
     ident:{logradouro:document.getElementById('logradouro-inp').value,responsavel:document.getElementById('resp-inp').value},
     numN:{sel:document.getElementById('n-sel').value,custom:document.getElementById('n-custom').value},
     subleito:{cbr:document.getElementById('cbr-sub').value,exp:document.getElementById('exp-sub').value,lencol:document.getElementById('lencol').value},
-    base:{mat:document.getElementById('base-mat').value,areia:document.getElementById('areia-cm').value,fpk:document.getElementById('fpk').value,subCCR:document.getElementById('sub-ccr').value,reforco:document.getElementById('reforco').value,hConf:document.getElementById('h-conf').value,cbrRef:document.getElementById('cbr-ref').value,sobrecarga:document.getElementById('sobrecarga').value,arred:document.getElementById('arred').value},
+    base:{mat:document.getElementById('base-mat').value,bloco:document.getElementById('bloco-cm').value,areia:document.getElementById('areia-cm').value,fpk:document.getElementById('fpk').value,subCCR:document.getElementById('sub-ccr').value,reforco:document.getElementById('reforco').value,hConf:document.getElementById('h-conf').value,cbrRef:document.getElementById('cbr-ref').value,sobrecarga:document.getElementById('sobrecarga').value,arred:document.getElementById('arred').value},
     topo:{caiEsq:document.getElementById('cai-esq').value,caiDir:document.getElementById('cai-dir').value,largPad:document.getElementById('larg-pad').value,rows:topoRows},
     secoes:{talCorte:document.getElementById('c_talcorte').value,talAterro:document.getElementById('c_talaterro').value,berma:document.getElementById('c_berma').value,ev:document.getElementById('c_ev').value},
     meiofio:_mf,
@@ -2451,7 +2605,7 @@ function aplicarProjeto(p){
   if(p.ident){set('logradouro-inp',p.ident.logradouro);set('resp-inp',p.ident.responsavel);}
   if(p.numN){set('n-sel',N_MAP[p.numN.sel]||p.numN.sel==='custom'?p.numN.sel:'1e5');set('n-custom',p.numN.custom);}
   if(p.subleito){set('cbr-sub',p.subleito.cbr);set('exp-sub',p.subleito.exp);set('lencol',p.subleito.lencol);}
-  if(p.base){set('base-mat',p.base.mat);set('areia-cm',p.base.areia);set('fpk',p.base.fpk);set('sub-ccr',p.base.subCCR);set('reforco',p.base.reforco&&p.base.reforco!=='0'?p.base.reforco:'');set('h-conf',p.base.hConf);set('cbr-ref',p.base.cbrRef);set('sobrecarga',p.base.sobrecarga);set('arred',p.base.arred);}
+  if(p.base){set('base-mat',p.base.mat);document.getElementById('bloco-cm').value=p.base.bloco||'';set('areia-cm',p.base.areia);set('fpk',p.base.fpk);set('sub-ccr',p.base.subCCR);set('reforco',p.base.reforco&&p.base.reforco!=='0'?p.base.reforco:'');set('h-conf',p.base.hConf);set('cbr-ref',p.base.cbrRef);set('sobrecarga',p.base.sobrecarga);set('arred',p.base.arred);}
   if(p.secoes){set('c_talcorte',p.secoes.talCorte);set('c_talaterro',p.secoes.talAterro);set('c_berma',p.secoes.berma);set('c_ev',p.secoes.ev);}
   _mf=Object.assign({},MF_PADRAO,p.meiofio||{});
   if(p.topo){set('cai-esq',p.topo.caiEsq);set('cai-dir',p.topo.caiDir);set('larg-pad',p.topo.largPad);if(p.topo.rows){topoRows=[...p.topo.rows];renderTopoTable();}}
@@ -2516,6 +2670,8 @@ document.querySelectorAll('.tab').forEach(t=>{
   try{const th=localStorage.getItem('pint_theme');if(th)document.documentElement.setAttribute('data-theme',th);const fe=parseFloat(localStorage.getItem('pint_fonte'));if(FONTE_PASSOS.indexOf(fe)>=0)fonteEscala=fe;aplicarFonte();}catch(e){}
   topoRows=[{est:0,tEsq:100,tEixo:100,tDir:100,greide:100,larg:6},{est:20,tEsq:100,tEixo:100,tDir:100,greide:100,larg:6}];
   renderTopoTable();
+  calcTopo();
+  topoTeclado();
   iniciarAjuda();
   atualizarFig61();
 })();
@@ -3242,7 +3398,7 @@ function renderAdmin(lista){
           norma: 'DNIT 111/2009-ES — largura mínima de pista conforme hierarquia viária.' },
         { sel: '.btn-add',
           titulo: '4 / 5 — Adicionar estacas',
-          dica: 'Clique "+ Estaca" para cada perfil transversal levantado. Para cada estaca informe: distância acumulada (m), cotas do terreno natural à esquerda, no eixo e à direita (m), cota do greide no eixo (m) e largura (m). O programa calcula corte, aterro e volumes de cada camada automaticamente.',
+          dica: 'Clique "+ Estaca" para cada perfil transversal levantado. Para cada estaca informe: distância acumulada (m), cotas do terreno natural à esquerda, no eixo e à direita (m), cota do greide no eixo (m) e largura (m). Ou digite só as cotas do terreno e clique em "Gerar greide…": o programa gera o greide do eixo e das bordas esquerda e direita respeitando a inclinação longitudinal mínima que você informar. A tabela mostra o declive entre estacas; use "Colunas" para ocultar ou reexibir colunas. O programa calcula corte, aterro e volumes de cada camada automaticamente.',
           norma: 'A cota de formação = cota do greide − espessura total das camadas dimensionadas.' },
         { sel: '#pane-topo .tb-btn-excel',
           titulo: '5 / 5 — Exportar Topografia',
