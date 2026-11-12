@@ -2780,13 +2780,16 @@ function secaoSelecionadas(){
 function secaoCabecalho(){
   return ['Estaca (m)','Situação','Largura (m)','Greide (m)','Formação (m)','Terreno Esq. (m)','Terreno Eixo (m)','Terreno Dir. (m)',
     'Altura Esq. (m)','Altura Eixo (m)','Altura Dir. (m)','Área Corte (m²)','Área Aterro (m²)','Área Reaterro (m²)',
+    'Vol. Corte até a próxima (m³)','Vol. Aterro até a próxima (m³)','Vol. Reaterro até a próxima (m³)',
     'Talude Esq. (H:V)','Distância Talude Esq. (m)','Talude Dir. (H:V)','Distância Talude Dir. (m)'];
 }
 function secaoTabela(){
   const n=(x,d)=>x===null||x===undefined||isNaN(x)?'':Number(Number(x).toFixed(d===undefined?3:d));
-  return secaoSelecionadas().filter(o=>o.G).map(o=>{
-    const L=o.L,G=o.G, tal=Ld=>(Ld.tal<=0?'vertical':n(Ld.tal,2)+':1')+(Ld.semInt?' (sem encontro)':'');
-    return [n(L.est),L.sit,n(L.larg,2),n(L.gr),n(G.form),n(G.tE0!=null?G.tE0:G.tE),n(G.tC),n(G.tD0!=null?G.tD0:G.tD),n(G.E.h),n(G.hC),n(G.D.h),n(L.ac,2),n(L.aa,2),n(L.ar,2),tal(G.E),n(G.E.d,2),tal(G.D),n(G.D.d,2)];
+  const g=secaoSelecionadas().filter(o=>o.G);
+  return g.map((o,i)=>{
+    const L=o.L,G=o.G, tal=Ld=>(Ld.tal<=0?'vertical':String(n(Ld.tal,2)).replace('.',',')+':1')+(Ld.semInt?' (sem encontro)':'');
+    const nx=g[i+1]&&g[i+1].L, d=nx?nx.est-L.est:0, vol=k=>(nx&&d>0)?n(((L[k]||0)+(nx[k]||0))/2*d,2):'';
+    return [n(L.est),L.sit,n(L.larg,2),n(L.gr),n(G.form),n(G.tE0!=null?G.tE0:G.tE),n(G.tC),n(G.tD0!=null?G.tD0:G.tD),n(G.E.h),n(G.hC),n(G.D.h),n(L.ac,2),n(L.aa,2),n(L.ar,2),vol('ac'),vol('aa'),vol('ar'),tal(G.E),n(G.E.d,2),tal(G.D),n(G.D.d,2)];
   });
 }
 function secaoTotais(){
@@ -2796,8 +2799,9 @@ function secaoTotais(){
   return T;
 }
 function secaoLinhasTotais(){
-  const T=secaoTotais(), n=x=>Number(x.toFixed(2)), v=(r,c)=>{ const l=new Array(18).fill(''); l[0]=r; l[11]=n(c[0]); l[12]=n(c[1]); l[13]=n(c[2]); return l; };
-  return [v('Total das áreas (m²)',[T.aC,T.aA,T.aR]), v('Total dos volumes (m³)',[T.vC,T.vA,T.vR])];
+  const T=secaoTotais(), n=x=>Number(x.toFixed(2)), l=new Array(21).fill('');
+  l[0]='Total (áreas em m² · volumes em m³)'; [T.aC,T.aA,T.aR,T.vC,T.vA,T.vR].forEach((x,k)=>{ l[11+k]=n(x); });
+  return [l];
 }
 function secaoFaixaTexto(){
   const sel=secaoSelecionadas(); if(!sel.length) return 'nenhuma estaca';
@@ -2841,11 +2845,12 @@ function updateCorte(){
   box.innerHTML=html;
   if(info) info.textContent='Mostrando '+secaoFaixaTexto()+(semDados?' · '+semDados+' sem dados completos':'')+'.';
   if(resumo){
-    const cab=secaoCabecalho(),lin=secaoTabela();
+    const cab0=secaoCabecalho(),lin0=secaoTabela(), temR=lin0.some(r=>(+r[13]||0)>0||(+r[16]||0)>0), mostra=i=>temR||i!==16;
+    const cab=cab0.filter((c,i)=>mostra(i)), idx=cab0.map((c,i)=>i).filter(mostra), lin=lin0.map(r=>r.filter((c,i)=>mostra(i)));
     resumo.innerHTML='<div class="tw"><table><thead><tr>'+cab.map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
-      lin.map(r=>'<tr>'+r.map((c,i)=>'<td'+(i>1?' style="text-align:right"':'')+'>'+(typeof c!=='number'?c:i===0?String(c).replace('.',','):fmt(c,[2,11,12,13,15,17].indexOf(i)>=0?2:3))+'</td>').join('')+'</tr>').join('')+'</tbody>'+
-      '<tfoot>'+secaoLinhasTotais().map(r=>'<tr style="font-weight:700;background:var(--bg2,#eef2f7);border-top:2px solid var(--fg3,#889)"><td colspan="11">'+r[0]+'</td>'+[11,12,13].map(i=>'<td style="text-align:right">'+fmt(r[i],2)+'</td>').join('')+'<td colspan="4"></td></tr>').join('')+'</tfoot></table></div>'+
-      '<p style="font-size:11px;color:var(--fg3);margin:6px 2px 0">Total das áreas = soma das áreas de cada seção listada. Total dos volumes = média das áreas de duas seções seguidas × distância entre elas (só entre seções com dados completos).</p>';
+      lin.map(r=>'<tr>'+r.map((c,j)=>{ const i=idx[j]; return '<td'+(i>1?' style="text-align:right"':'')+'>'+(typeof c!=='number'?c:i===0?String(c).replace('.',','):fmt(c,[2,11,12,13,14,15,16,18,20].indexOf(i)>=0?2:3))+'</td>'; }).join('')+'</tr>').join('')+'</tbody>'+
+      '<tfoot>'+secaoLinhasTotais().map(r=>'<tr style="font-weight:700;background:var(--bg2,#eef2f7);border-top:2px solid var(--fg3,#889)"><td colspan="11">'+r[0]+'</td>'+[11,12,13,14,15,16].filter(mostra).map(i=>'<td style="text-align:right">'+fmt(r[i],2)+'</td>').join('')+'<td colspan="4"></td></tr>').join('')+'</tfoot></table></div>'+
+      '<p style="font-size:11px;color:var(--fg3);margin:6px 2px 0">Áreas de corte, aterro e reaterro de cada seção = diferença entre o terreno natural e o greide/formação projetados. Volume de cada linha = média das áreas desta seção e da seguinte × distância entre elas (mesma conta das tabelas da Topografia; a última linha não tem seção seguinte). Total = soma das áreas e soma dos volumes.</p>';
   }
 }
 function svgParaPng(svg,W,H){
@@ -3211,8 +3216,8 @@ function itensSecoes(){
   M.push({h:'Quadro resumo das seções'});
   M.push({kv:['Trecho:',secaoFaixaTexto()]});
   const c=x=>typeof x==='number'?String(x).replace('.',','):x;
-  M.push({tab:{cab:['Estaca','Situação','Largura (m)','Greide (m)','Formação (m)','Terreno eixo (m)','Corte (m²)','Aterro (m²)','Reaterro (m²)'],
-    lin:secaoTabela().concat(secaoLinhasTotais()).map(l=>[l[0],l[1],l[2],l[3],l[4],l[6],l[11],l[12],l[13]].map(c))}});
+  M.push({tab:{cab:['Estaca','Situação','Largura (m)','Greide (m)','Formação (m)','Terreno eixo (m)','Corte (m²)','Aterro (m²)','Reaterro (m²)','Vol. corte (m³)','Vol. aterro (m³)','Vol. reaterro (m³)'],
+    lin:secaoTabela().concat(secaoLinhasTotais()).map(l=>[l[0],l[1],l[2],l[3],l[4],l[6],l[11],l[12],l[13],l[14],l[15],l[16]].map(c))}});
   const el=document.getElementById('exp_perfis');
   if(!el||el.checked){
     M.push({h:'Seções transversais por estaca'});
@@ -3524,14 +3529,14 @@ function plPainel(){
   let h=tit('Ruas')+ruas.map((r,i)=>ck('<b>'+esc(nomeRua(i))+'</b>',v.ruas[r.id]!==0,"plSet('ruas','"+r.id+"',this.checked)")).join('');
   h+=tit('Níveis — cotas, espessuras e camadas')+N.map(n=>ck('<span style="display:inline-block;width:12px;height:12px;background:'+n.cor+';border:1px solid #666;border-radius:2px"></span><b style="color:'+n.txt+';min-width:18px">'+n.cod+'</b>'+esc(n.nome)+(n.esp?' <span style="color:var(--fg2)">· '+fmt(n.esp*100,1)+' cm</span>':''),plOn(v,n.k),"plSet('niv','"+n.k+"',this.checked)",'Planta: cotas e linha no quadro de camadas. 3D: superfície/camada.')).join('')+
     '<div style="display:flex;gap:6px;margin-top:4px"><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plTodosNiveis(1)">Acender todos</button><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plTodosNiveis(0)">Apagar todos</button></div>';
+  h+=tit('Níveis do cenário 3D (assentam no terreno do entorno)')+ck('Casas',v.casas,o('casas'),'Casas dos quintais. Só ilustração: não entra em nenhum cálculo. Sai com exagero vertical maior que 1×.')+ck('Muros e portões',v.muros,o('muros'),'Muros das divisas e da frente dos lotes, com os portões.')+ck('Árvores e palmeiras do cenário',v.arvc,o('arvc'),'Árvores dos quintais e do campo.')+ck('Grama 3D (tufos com vento)',v.grama,o('grama'),'Os tufos de grama em volta das ruas. O terreno verde é o “Entorno / terreno lateral”.')+ck('Árvores que você locou',v.objArv,o('objArv'),'As de 🌳 Árvores e postes, sempre na cota do chão debaixo delas.')+ck('Postes que você locou',v.objPoste,o('objPoste'),'Os de 🌳 Árvores e postes, sempre na cota do chão debaixo deles.')+
+    '<div style="display:flex;gap:6px;margin-top:4px"><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plCenarioTodos(1)">Mostrar todo o cenário</button><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plCenarioTodos(0)">Ocultar todo o cenário</button></div>'+
+    '<div style="font-size:11px;color:var(--fg2);margin-top:2px">Sem “Entorno / terreno lateral” ligado, o terreno não aparece, mas o que está ligado continua na cota dele.</div>';
   h+=tit('Planta e 3D — elementos')+ck('Entorno / terreno lateral',v.entorno,o('entorno'))+ck('Calçada (ligar em Topografia › 🚶 Calçada…)',v.calcada,o('calcada'))+ck('Pavimento (pista)',v.pista,o('pista'))+ck('Meio-fio e sarjeta',v.mf,o('mf'))+ck('Eixo',v.eixo,o('eixo'))+ck('Números das estacas',v.numeros,o('numeros'))+ck('Cruzamentos (conferência do greide)',v.cruz,o('cruz'));
   h+=tit('Só na planta')+ck('Paginação dos blocos',v.paginacao,o('paginacao'))+ck('Marcas das estacas',v.estacas,o('estacas'))+ck('Cotas de largura da pista',v.larguras,o('larguras'))+ck('Setas de declividade (greide)',v.decl,o('decl'))+ck('Cores de corte / aterro',v.corte,o('corte'))+
     ck('Quadro de camadas (esp., área, volume)',v.quadro,o('quadro'))+ck('Legenda',v.legenda,o('legenda'))+ck('Carimbo',v.carimbo,o('carimbo'))+
     '<div style="margin-top:4px;font-size:12px">Rótulos a cada <select onchange="plSet(\'passo\',0,+this.value)" style="font-size:12px">'+[1,2,5,10].map(x=>'<option value="'+x+'"'+(v.passo==x?' selected':'')+'>'+(x==1?'estaca':x+' estacas')+'</option>').join('')+'</select></div>';
   h+=tit('Só no 3D')+ck('Sombras',v.sombras,o('sombras'))+ck('Rótulos e medidas das camadas',v.rot3d,o('rot3d'))+ck('Lâmina do terreno natural sobre a pista (corte/aterro)',v.lamina,o('lamina'),'Película marrom translúcida na cota do terreno natural. Desligada deixa a cor do pavimento uniforme.');
-  h+=tit('Níveis do cenário 3D (assentam no terreno do entorno)')+ck('Casas',v.casas,o('casas'),'Casas dos quintais. Só ilustração: não entra em nenhum cálculo. Sai com exagero vertical maior que 1×.')+ck('Muros e portões',v.muros,o('muros'),'Muros das divisas e da frente dos lotes, com os portões.')+ck('Árvores e palmeiras do cenário',v.arvc,o('arvc'),'Árvores dos quintais e do campo.')+ck('Grama 3D (tufos com vento)',v.grama,o('grama'),'Os tufos de grama em volta das ruas. O terreno verde é o “Entorno / terreno lateral”.')+ck('Árvores que você locou',v.objArv,o('objArv'),'As de 🌳 Árvores e postes, sempre na cota do chão debaixo delas.')+ck('Postes que você locou',v.objPoste,o('objPoste'),'Os de 🌳 Árvores e postes, sempre na cota do chão debaixo deles.')+
-    '<div style="display:flex;gap:6px;margin-top:4px"><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plCenarioTodos(1)">Mostrar todo o cenário</button><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plCenarioTodos(0)">Ocultar todo o cenário</button></div>'+
-    '<div style="font-size:11px;color:var(--fg2);margin-top:2px">Sem “Entorno / terreno lateral” ligado, o terreno não aparece, mas o que está ligado continua na cota dele.</div>';
   h+=tit('Posição das ruas')+ruas.map((r,i)=>{
     if(i===0) return '<div style="font-size:11px;color:var(--fg2);margin-bottom:4px"><b>'+esc(nomeRua(0))+'</b>: eixo de referência (reta, estacas crescendo para a direita).</div>';
     const g=plGeo(i), lay=plLayout()[i], cruza=lay&&!lay.paralela;
@@ -3557,7 +3562,7 @@ function plSvg(vb,Wpx){
   const X=p=>(p[0]-vb.x)*sc, Y=p=>(-p[1]-vb.y)*sc, pt=p=>X(p).toFixed(1)+','+Y(p).toFixed(1);
   const ang=dd=>{ let a=-Math.atan2(dd[1],dd[0])*180/Math.PI; if(a>90) a-=180; if(a<=-90) a+=180; return a; };
   const F='font-family="Arial,Helvetica,sans-serif"';
-  const T=(x,y,t,o)=>{ o=o||{}; return '<text x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" font-size="'+(o.fs||10)+'" fill="'+(o.c||'#111')+'" text-anchor="'+(o.a||'start')+'"'+(o.b?' font-weight="700"':'')+(o.r!=null?' transform="rotate('+o.r.toFixed(1)+' '+x.toFixed(1)+' '+y.toFixed(1)+')"':'')+(o.h===0?'':' paint-order="stroke" stroke="'+(o.hc||'#fff')+'" stroke-width="'+(o.hw||3)+'" stroke-linejoin="round"')+'>'+esc(t)+'</text>'; };
+  const T=(x,y,t,o)=>{ o=o||{}; let fsz=o.fs||10, tl=''; if(o.mw){ const est=String(t).length*fsz*0.56; if(est>o.mw){ fsz=Math.max(6.5,fsz*o.mw/est); if(String(t).length*fsz*0.56>o.mw) tl=' textLength="'+o.mw.toFixed(1)+'" lengthAdjust="spacingAndGlyphs"'; } } o.fs=fsz; return '<text x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" font-size="'+fsz.toFixed(1)+'" fill="'+(o.c||'#111')+'" text-anchor="'+(o.a||'start')+'"'+tl+(o.b?' font-weight="700"':'')+(o.r!=null?' transform="rotate('+o.r.toFixed(1)+' '+x.toFixed(1)+' '+y.toFixed(1)+')"':'')+(o.h===0?'':' paint-order="stroke" stroke="'+(o.hc||'#fff')+'" stroke-width="'+(o.hw||3)+'" stroke-linejoin="round"')+'>'+esc(t)+'</text>'; };
   const ocup=[]; const livre=(x,y,w,h)=>{ for(const r of ocup) if(x<r[0]+r[2]&&x+w>r[0]&&y<r[1]+r[3]&&y+h>r[1]) return false; ocup.push([x,y,w,h]); return true; };
   let defs='', s='', top='';
   const A=D.map(d=>plAmostras(d,1));
@@ -3660,7 +3665,7 @@ function plSvg(vb,Wpx){
     const cw=[34,250,60,72,80], tw=cw.reduce((a,b)=>a+b,0), rh=14, x0=356, y0=H+8;
     ov+='<rect x="'+x0+'" y="'+y0+'" width="'+tw+'" height="'+(rh*(rows.length+1)+4)+'" fill="#fff" stroke="#111" stroke-width="1"/>'+T(x0+6,y0+12,'QUADRO DE CAMADAS DO PAVIMENTO — NÍVEIS ACESOS',{fs:10,b:1,h:0});
     rows.forEach((r,i2)=>{ let cx=x0; const yy=y0+rh*(i2+1)+12; if(i2===0||i2===1) ov+='<line x1="'+x0+'" y1="'+(yy-11)+'" x2="'+(x0+tw)+'" y2="'+(yy-11)+'" stroke="#111" stroke-width="0.6"/>';
-      r.forEach((t,c2)=>{ const n=N.find(q=>q.cod===r[0]); ov+=T(c2>=2?cx+cw[c2]-4:cx+4,yy,t,{fs:9,b:i2===0||c2===0,a:c2>=2?'end':'start',c:(c2===0&&n)?n.txt:'#111',h:0}); cx+=cw[c2]; }); });
+      r.forEach((t,c2)=>{ const n=N.find(q=>q.cod===r[0]); ov+=T(c2>=2?cx+cw[c2]-4:cx+4,yy,t,{fs:9,b:i2===0||c2===0,a:c2>=2?'end':'start',c:(c2===0&&n)?n.txt:'#111',h:0,mw:cw[c2]-8}); cx+=cw[c2]; }); });
     if(!cams.length) ov+=T(x0+6,y0+rh*2+12,'(acenda um nível de camada para ver espessura e volume)',{fs:9,c:'#666',h:0});
   }
   // 8) legenda
@@ -3683,15 +3688,15 @@ function plSvg(vb,Wpx){
       else if(k==='opos') ov+='<line x1="'+(sx+8)+'" y1="'+yy+'" x2="'+(sx+18)+'" y2="'+yy+'" stroke="#374151" stroke-width="1.2"/><circle cx="'+(sx+18)+'" cy="'+yy+'" r="2.6" fill="#fde68a" stroke="#374151" stroke-width="0.6"/><circle cx="'+(sx+8)+'" cy="'+yy+'" r="3" fill="#6b7280" stroke="#111" stroke-width="0.6"/>';
       else if(k.indexOf('niv:')===0){ const n=N.find(z=>z.k===k.slice(4)); ov+='<rect x="'+sx+'" y="'+(yy-4)+'" width="22" height="9" fill="'+n.cor+'" stroke="#666" stroke-width="0.6"/>'+T(sx+11,yy+3.5,n.cod,{fs:8,b:1,a:'middle',c:'#111',h:0}); }
       else { const cc={c1:'rgba(220,60,40,.45)',c2:'rgba(40,110,220,.45)',c3:'rgba(240,160,30,.5)'}[k]; ov+='<rect x="'+sx+'" y="'+(yy-4)+'" width="22" height="9" fill="'+cc+'"/>'; }
-      ov+=T(sx+28,yy+3.5,q[1],{fs:it.length>11?7.6:9,h:0}); });
+      ov+=T(sx+28,yy+3.5,q[1],{fs:it.length>11?7.6:9,h:0,mw:cwid-40}); });
   }
   // 9) carimbo + escala + norte
   const bar=plNiceLen(vb.w/5);
   if(BH>0&&v.carimbo){
     const w=W-356-(v.quadro?514:0)-24, h=BH-16, x0=W-w-12, y0=H+8, ob=(document.getElementById('logradouro-inp')||{}).value||'—', rp=(document.getElementById('resp-inp')||{}).value||'—', dt=new Date().toLocaleDateString('pt-BR');
     ov+='<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+h+'" fill="#fff" stroke="#111" stroke-width="1.2"/><line x1="'+x0+'" y1="'+(y0+22)+'" x2="'+(x0+w)+'" y2="'+(y0+22)+'" stroke="#111"/><line x1="'+x0+'" y1="'+(y0+66)+'" x2="'+(x0+w)+'" y2="'+(y0+66)+'" stroke="#111"/>'+
-      T(x0+8,y0+15,'PLANTA BAIXA — PAVIMENTO INTERTRAVADO',{fs:11,b:1,h:0})+T(x0+8,y0+36,'Obra: '+ob,{fs:9.5,h:0})+T(x0+8,y0+50,'Resp. técnico: '+rp,{fs:9.5,h:0})+T(x0+8,y0+62,'Dimensionamento: IP-06/2004 · Data: '+dt,{fs:9,h:0,c:'#333'})+
-      T(x0+8,y0+84,'ESCALA GRÁFICA',{fs:8,b:1,h:0})+T(x0+8,y0+h-8,'Cotas em metros · espessuras em cm · eixos esquemáticos (retos)',{fs:8,h:0,c:'#333'})+T(x0+w-8,y0+84,'TOTAL CIVIL',{fs:11,b:1,a:'end',h:0,c:'#0f3d73'});
+      T(x0+8,y0+15,'PLANTA BAIXA — PAVIMENTO INTERTRAVADO',{fs:11,b:1,h:0,mw:w-16})+T(x0+8,y0+36,'Obra: '+ob,{fs:9.5,h:0,mw:w-16})+T(x0+8,y0+50,'Resp. técnico: '+rp,{fs:9.5,h:0,mw:w-16})+T(x0+8,y0+62,'Dimensionamento: IP-06/2004 · Data: '+dt,{fs:9,h:0,c:'#333',mw:w-16})+
+      T(x0+8,y0+84,'ESCALA GRÁFICA',{fs:8,b:1,h:0,mw:w*0.5})+T(x0+8,y0+h-8,'Cotas em metros · espessuras em cm · eixos esquemáticos (retos)',{fs:8,h:0,c:'#333',mw:w-16})+T(x0+w-8,y0+84,'TOTAL CIVIL',{fs:11,b:1,a:'end',h:0,c:'#0f3d73',mw:w*0.4});
     const bx=x0+8, by=y0+100, bw=Math.min(bar*sc,w-24); for(let q=0;q<4;q++) ov+='<rect x="'+(bx+bw/4*q).toFixed(1)+'" y="'+by+'" width="'+(bw/4).toFixed(1)+'" height="4" fill="'+(q%2?'#fff':'#111')+'" stroke="#111" stroke-width="0.6"/>';
     ov+=T(bx,by+13,'0',{fs:8,h:0})+T(bx+bw/2,by+13,fmt(bar/2,0),{fs:8,h:0,a:'middle'})+T(bx+bw,by+13,bar+' m',{fs:8,h:0,a:'middle'});
   }
@@ -3720,6 +3725,9 @@ function plDesenhar(enquadrar){
     if(mob&&(v.quadro||v.legenda||v.carimbo)){ const H=_pl.vb.h/_pl.vb.w*1200; bd.style.display='';
       bd.innerHTML='<div style="font-size:11px;color:var(--fg2);margin:4px 0">Legenda, quadro de camadas e carimbo (arraste para o lado):</div><div style="width:1100px">'+plSvg(_pl.vb,1200).replace(/viewBox="[^"]*"/,'viewBox="0 '+H.toFixed(1)+' 1200 '+PL_BANDA+'"').replace('width="100%" height="100%"','width="1100" height="'+Math.round(PL_BANDA*1100/1200)+'"')+'</div>';
     }else{ bd.style.display='none'; bd.innerHTML=''; } }
+  if(bd&&!bd.dataset.ev){ bd.dataset.ev='1';   /* faixa de legenda/quadro/carimbo (celular): a roda também aproxima o desenho */
+    bd.addEventListener('wheel',e=>{ e.preventDefault(); const r=bd.getBoundingClientRect(), f=e.deltaY<0?0.8:1.25, vb=_pl.vb, nw=vb.w*f, nh=vb.h*f;
+      _pl.vb={x:vb.x+(vb.w-nw)*0.5,y:vb.y+(vb.h-nh)*0.5,w:nw,h:nh}; plDesenhar(); },{passive:false}); }
   if(!el.dataset.ev){ el.dataset.ev='1';
     el.addEventListener('wheel',e=>{ e.preventDefault(); const r=el.getBoundingClientRect(), hd=r.height*(1-plBanda()/1200*r.width/r.height), fx=(e.clientX-r.left)/r.width, fy=Math.min(1,(e.clientY-r.top)/hd), f=e.deltaY<0?0.8:1.25, vb=_pl.vb;
       const nw=vb.w*f, nh=vb.h*f; _pl.vb={x:vb.x+(vb.w-nw)*fx,y:vb.y+(vb.h-nh)*fy,w:nw,h:nh}; plDesenhar(); },{passive:false});
