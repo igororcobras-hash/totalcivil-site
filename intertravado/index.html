@@ -463,6 +463,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
   <div class="tb-sep"></div>
   <button class="tb-btn tb-btn-save" onclick="salvarProjeto()">💾 Salvar</button>
   <button class="tb-btn" onclick="abrirProjetoClick()" title="Abre um projeto salvo (.json) ou exportado como projeto completo (.json ou .html)">📂 Abrir</button>
+  <button class="tb-btn" onclick="recAbrirPainel()" title="Lista dos projetos recentes (guardados sozinhos neste navegador). Ao abrir o programa, o último editado é reaberto.">🕘 Recentes</button>
   <input type="file" id="imp" accept=".json,.html,.htm" style="display:none" onchange="importarArquivo(event)">
   <div class="tb-sep"></div>
   <span class="tb-label">Exportar memória:</span>
@@ -779,13 +780,14 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
     <div id="greide-resumo" style="font-size:11px;color:var(--fg2);margin-bottom:8px"></div>
     <div id="calcada-resumo" style="font-size:11px;color:var(--fg2);margin-bottom:8px"></div>
     <div id="topo-totals" class="topo-totals"></div>
-    <div class="tw">
+    <div id="topo-todas" style="display:none"></div>
+    <div class="tw" id="topo-uma">
       <table id="tbl-topo">
         <thead><tr>
           <th class="c1">#</th><th class="c2">Estaca (m)</th>
           <th class="c3">Terreno esq. (m)</th><th class="c4">Terreno eixo (m)</th><th class="c5">Terreno dir. (m)</th>
           <th class="c6">Greide eixo (m)</th><th class="c7">Greide esq. (m)</th><th class="c8">Greide dir. (m)</th><th class="c17">Cota muro esq. (m)</th><th class="c18">Cota muro dir. (m)</th><th class="c9">Declive long. até a próxima (%)</th><th class="c10">Largura (m)</th>
-          <th class="c11">Situação</th><th class="c12">Corte (m²)</th><th class="c13">Aterro (m²)</th><th class="c14">Vol. corte até a próxima (m³)</th><th class="c15">Vol. aterro até a próxima (m³)</th><th class="c16">Cruzamento (rua · estaca)</th><th class="c19" title="Lado (E/D), distância do eixo (m) e, se não for na estaca, + metros depois dela. Ex.: E 4,50; D 4,20 +7,50">Árvores (lado · m do eixo · +m)</th><th class="c20" title="Lado (E/D), distância do eixo (m) e, se não for na estaca, + metros depois dela. Ex.: E 4,80 +12,00">Postes (lado · m do eixo · +m)</th>
+          <th class="c11">Situação</th><th class="c12">Corte (m²)</th><th class="c13">Aterro (m²)</th><th class="c14">Vol. corte até a próxima (m³)</th><th class="c15">Vol. aterro até a próxima (m³)</th><th class="c16">Cruzamento (rua · estaca)</th><th class="c19" title="Lado (E/D), distância do eixo (m) e, se não for na estaca, + metros depois dela. Ex.: E 4,50; D 4,20 +7,50">Árvores (lado · m do eixo · +m)</th><th class="c20" title="Lado (E/D), distância do eixo (m) e, se não for na estaca, + metros depois dela. Ex.: E 4,80 +12,00">Postes (lado · m do eixo · +m)</th><th class="c21" title="Coordenada do EIXO nesta estaca (GPS, Google Maps/Earth). Lat/Lon em graus decimais ou UTM N, conforme o sistema escolhido em 🛰 Georreferenciar. Pode colar “lat, lon” juntos aqui.">Coord. Lat / N</th><th class="c22" title="Coordenada do EIXO nesta estaca: Longitude (graus) ou UTM E">Coord. Lon / E</th>
         </tr></thead>
         <tbody id="topo-tbody"></tbody>
       </table>
@@ -816,6 +818,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
       <button type="button" class="tb-btn tb-btn-save" id="pl-b-planta" onclick="plModo('planta')">🗺 Planta baixa</button>
       <button type="button" class="tb-btn" id="pl-b-3d" onclick="plModo('3d')">🧊 Ver em 3D</button>
+      <button type="button" class="tb-btn" id="pl-b-geo" onclick="geoAbrir()" title="Posiciona o desenho sobre a imagem de satélite da rua real (coordenadas ou pesquisa no mapa; mover, girar e ajustar)">🛰 Georreferenciar</button>
       <button type="button" class="tb-btn" onclick="_pl.modo==='planta'?plDesenhar(true):pl3DEnquadrar()">⤢ Enquadrar</button>
       <button type="button" class="tb-btn" onclick="plZoom(0.7)" title="Aproximar">＋</button><button type="button" class="tb-btn" onclick="plZoom(1.43)" title="Afastar">－</button>
       <button type="button" class="tb-btn" id="pl-b-obj" onclick="objBotao()" title="Incluir árvores e postes: clique e marque no desenho (planta ou 3D), arraste para mudar de lugar; os valores ficam na Topografia">🌳 Árvores e postes</button>
@@ -1591,31 +1594,32 @@ function addEstaca(){
   renderTopoTable();calcTopo();
 }
 function remEstaca(){if(topoRows.length>0){topoRows.pop();renderTopoTable();calcTopo();}}
-function renderTopoTable(){
-  ruasSinc();
-  const tbody=document.getElementById('topo-tbody');
-  tbody.innerHTML=topoRows.map((r,i)=>`<tr>
+function topoRowHtml(rows,i,ri,pre){ const r=rows[i]; return `<tr>
     <td class="c1">${i+1}${r.ponto?` <span title="${esc(r.obs||'Ponto inserido com +Ponto')}" style="font-size:9px;font-weight:700;color:var(--accent2,#2563eb)">P</span> <button type="button" title="Excluir este ponto" onclick="remPonto(${i})" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:13px;padding:0 2px">×</button>`:''}</td>
     <td class="ti c2"><input type="number" step="0.5" value="${r.est}" onchange="topoVal(${i},'est',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c3"><input type="number" step="0.01" value="${r.tEsq}" onchange="topoVal(${i},'tEsq',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c4"><input type="number" step="0.01" value="${r.tEixo}" onchange="topoVal(${i},'tEixo',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c5"><input type="number" step="0.01" value="${r.tDir}" onchange="topoVal(${i},'tDir',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c6"><input type="number" step="0.01" value="${r.greide}" onchange="topoVal(${i},'greide',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="ti c7" id="tge-${i}"><input type="number" step="0.001" value="${r.gEsq==null?'':r.gEsq}" placeholder="auto" title="Vazio = calculado pelo caimento transversal; digite a cota do projeto para fixar" onchange="topoVal(${i},'gEsq',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="ti c8" id="tgd-${i}"><input type="number" step="0.001" value="${r.gDir==null?'':r.gDir}" placeholder="auto" title="Vazio = calculado pelo caimento transversal; digite a cota do projeto para fixar" onchange="topoVal(${i},'gDir',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="ti c17"><input type="number" step="0.001" value="${r.muEsq==null?'':r.muEsq}" placeholder="—" title="Cota do muro / alinhamento do lote, lado esquerdo (opcional). Com a calçada ligada, a largura da calçada sai desta cota." onchange="topoVal(${i},'muEsq',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"><div class="mu-w" id="tmwE-${i}" style="font-size:9px;color:var(--fg3);white-space:nowrap"></div></td>
-    <td class="ti c18"><input type="number" step="0.001" value="${r.muDir==null?'':r.muDir}" placeholder="—" title="Cota do muro / alinhamento do lote, lado direito (opcional). Com a calçada ligada, a largura da calçada sai desta cota." onchange="topoVal(${i},'muDir',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"><div class="mu-w" id="tmwD-${i}" style="font-size:9px;color:var(--fg3);white-space:nowrap"></div></td>
-    <td class="to c9" id="tdl-${i}">—</td>
+    <td class="ti c7" id="${pre}tge-${i}"><input type="number" step="0.001" value="${r.gEsq==null?'':r.gEsq}" placeholder="auto" title="Vazio = calculado pelo caimento transversal; digite a cota do projeto para fixar" onchange="topoVal(${i},'gEsq',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="ti c8" id="${pre}tgd-${i}"><input type="number" step="0.001" value="${r.gDir==null?'':r.gDir}" placeholder="auto" title="Vazio = calculado pelo caimento transversal; digite a cota do projeto para fixar" onchange="topoVal(${i},'gDir',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="ti c17"><input type="number" step="0.001" value="${r.muEsq==null?'':r.muEsq}" placeholder="—" title="Cota do muro / alinhamento do lote, lado esquerdo (opcional). Com a calçada ligada, a largura da calçada sai desta cota." onchange="topoVal(${i},'muEsq',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"><div class="mu-w" id="${pre}tmwE-${i}" style="font-size:9px;color:var(--fg3);white-space:nowrap"></div></td>
+    <td class="ti c18"><input type="number" step="0.001" value="${r.muDir==null?'':r.muDir}" placeholder="—" title="Cota do muro / alinhamento do lote, lado direito (opcional). Com a calçada ligada, a largura da calçada sai desta cota." onchange="topoVal(${i},'muDir',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"><div class="mu-w" id="${pre}tmwD-${i}" style="font-size:9px;color:var(--fg3);white-space:nowrap"></div></td>
+    <td class="to c9" id="${pre}tdl-${i}">—</td>
     <td class="ti c10"><input type="number" step="0.5" value="${r.larg}" onchange="topoVal(${i},'larg',this.value)" style="width:50px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="to c11" id="tsit-${i}">—</td>
-    <td class="to c12" id="tac-${i}">—</td>
-    <td class="to c13" id="taa-${i}">—</td>
-    <td class="to c14" id="tco-${i}">—</td>
-    <td class="to c15" id="tat-${i}">—</td>
-    <td class="to c16" id="tcz-${i}" style="white-space:nowrap">—</td>
-    <td class="ti c19"><input type="text" value="${esc(objTxtLinha(ruas[ruaAtiva],topoRows,i,'arv'))}" placeholder="—" title="Árvores entre esta linha e a seguinte. Ex.: E 4,50 (lado esquerdo, 4,50 m do eixo, na estaca) ; D 4,20 +7,50 (direito, 7,50 m depois da estaca). Vários: separe com ;" onchange="objCelula(${i},'arv',this.value)" style="width:120px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="ti c20"><input type="text" value="${esc(objTxtLinha(ruas[ruaAtiva],topoRows,i,'poste'))}" placeholder="—" title="Postes entre esta linha e a seguinte. Ex.: E 4,80 (lado esquerdo, 4,80 m do eixo, na estaca) ; D 4,80 +17,50. Vários: separe com ;" onchange="objCelula(${i},'poste',this.value)" style="width:120px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-  </tr>`).join('');
+    <td class="to c11" id="${pre}tsit-${i}">—</td>
+    <td class="to c12" id="${pre}tac-${i}">—</td>
+    <td class="to c13" id="${pre}taa-${i}">—</td>
+    <td class="to c14" id="${pre}tco-${i}">—</td>
+    <td class="to c15" id="${pre}tat-${i}">—</td>
+    <td class="to c16" id="${pre}tcz-${i}" style="white-space:nowrap">—</td>
+    <td class="ti c19"><input type="text" value="${esc(objTxtLinha(ruas[ri],rows,i,'arv'))}" placeholder="—" title="Árvores entre esta linha e a seguinte. Ex.: E 4,50 (lado esquerdo, 4,50 m do eixo, na estaca) ; D 4,20 +7,50 (direito, 7,50 m depois da estaca). Vários: separe com ;" onchange="objCelula(${i},'arv',this.value)" style="width:120px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="ti c20"><input type="text" value="${esc(objTxtLinha(ruas[ri],rows,i,'poste'))}" placeholder="—" title="Postes entre esta linha e a seguinte. Ex.: E 4,80 (lado esquerdo, 4,80 m do eixo, na estaca) ; D 4,80 +17,50. Vários: separe com ;" onchange="objCelula(${i},'poste',this.value)" style="width:120px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+  </tr>`; }
+function renderTopoTable(){
+  ruasSinc();
+  const tbody=document.getElementById('topo-tbody');
+  tbody.innerHTML=topoRows.map((r,i)=>topoRowHtml(topoRows,i,ruaAtiva,'')).join('');
   aplicarColunasTopo(); renderRuasBar();
 }
 function topoVal(i,k,val){
@@ -1778,9 +1782,8 @@ function topoOrdemAtual(){
   return o;
 }
 function aplicarOrdemTopo(){
-  const tb=document.getElementById('tbl-topo'); if(!tb) return;
   const ord=topoOrdemAtual();
-  tb.querySelectorAll('tr').forEach(tr=>{
+  document.querySelectorAll('#tbl-topo tr, .tbl-topo-r tr').forEach(tr=>{
     const m={}; Array.prototype.forEach.call(tr.children,c=>{ const k=/\bc(\d+)\b/.exec(c.className); if(k) m[+k[1]]=c; });
     if(!m[1]) return;
     let ant=m[1];
@@ -1802,7 +1805,10 @@ function atualizarOrdemBtn(){
   const b=document.getElementById('btn-ordem-topo'); if(b) b.style.display=topoOrdemAtual().join()==='2,3,4,5,6,7,8,17,18,9,10,11,12,13,14,15,16,19,20'?'none':'';
 }
 function topoArrastar(){
-  const tr=document.querySelector('#tbl-topo thead tr'); if(!tr||tr.dataset.dnd) return; tr.dataset.dnd='1';
+  document.querySelectorAll('#tbl-topo thead tr, .tbl-topo-r thead tr').forEach(topoArrastar1);
+}
+function topoArrastar1(tr){
+  if(!tr||tr.dataset.dnd) return; tr.dataset.dnd='1';
   let arr=null;
   const num=th=>{ const k=th&&/\bc(\d+)\b/.exec(th.className); return k?+k[1]:0; };
   Array.prototype.forEach.call(tr.children,th=>{
@@ -1827,7 +1833,7 @@ function aplicarColunasTopo(){
   aplicarOrdemTopo(); topoArrastar();
   let st=document.getElementById('topo-colcss');
   if(!st){ st=document.createElement('style'); st.id='topo-colcss'; document.head.appendChild(st); }
-  st.textContent=topoOcultas.map(c=>'#tbl-topo .c'+c).join(',')+(topoOcultas.length?'{display:none}':'');
+  st.textContent=topoOcultas.map(c=>'#tbl-topo .c'+c+', .tbl-topo-r .c'+c).join(',')+(topoOcultas.length?'{display:none}':'');
   const btn=document.getElementById('btn-colunas');
   if(btn) btn.textContent='👁 Colunas'+(topoOcultas.length?' ('+topoOcultas.length+' oculta'+(topoOcultas.length>1?'s':'')+')':'');
   document.querySelectorAll('#topo-cols input[data-col]').forEach(i=>{ i.checked=topoOcultas.indexOf(+i.dataset.col)<0; });
@@ -1850,7 +1856,9 @@ function colunasTopoGrupo(g){
 function toggleColunasTopo(){ montarColunasTopo(); document.getElementById('topo-cols').classList.toggle('open'); aplicarColunasTopo(); }
 /* Shift+Enter (ou Enter) na tabela da topografia: vai para a mesma coluna da linha de baixo */
 function topoTeclado(){
-  const tb=document.getElementById('topo-tbody'); if(!tb||tb.dataset.kb) return; tb.dataset.kb='1';
+  ['topo-tbody','topo-todas'].forEach(id=>{ const tb=document.getElementById(id); if(!tb||tb.dataset.kb) return; tb.dataset.kb='1'; topoTeclado1(tb); });
+}
+function topoTeclado1(tb){
   tb.addEventListener('keydown',function(e){
     if(e.key!=='Enter'||e.isComposing) return;
     const inp=e.target; if(!inp||inp.tagName!=='INPUT') return;
@@ -1942,19 +1950,87 @@ function renderRuasBar(){
   if(ruas.length<2){ el.innerHTML=''; el.style.display='none'; return; }
   el.style.display='flex';
   el.innerHTML='<span style="font-size:12px;font-weight:700;color:var(--fg2)" title="Gerar greide, + Ponto, + Estaca e Importar Excel agem só na rua selecionada">Ruas (a rua selecionada recebe as alterações e a importação):</span>'+ruas.map((r,i)=>{
-    const on=i===ruaAtiva, par=r.paralela&&ruaIdx(r.paralela)>=0?' · paralela à '+nomeRua(ruaIdx(r.paralela)):'';
+    const on=i===ruaAtiva&&!topoTodas, par=r.paralela&&ruaIdx(r.paralela)>=0?' · paralela à '+nomeRua(ruaIdx(r.paralela)):'';
     return '<span style="display:inline-flex;align-items:center;gap:4px;border:1px solid '+(on?'var(--accent2,#2563eb)':'var(--border,#ccc)')+';background:'+(on?'var(--accent2,#2563eb)':'transparent')+';color:'+(on?'#fff':'var(--fg)')+';border-radius:14px;padding:2px 8px;font-size:12px">'+
       '<a href="#" onclick="trocarRua('+i+');return false" style="color:inherit;text-decoration:none;font-weight:'+(on?700:500)+'" title="'+esc(nomeRua(i)+par)+'">'+esc(nomeRua(i))+(par?' <small>∥</small>':'')+'</a>'+
       '<a href="#" onclick="renomearRua('+i+');return false" title="Renomear" style="color:inherit;text-decoration:none;opacity:.8">✎</a>'+
       '<a href="#" onclick="removerRua('+i+');return false" title="Remover esta rua" style="color:inherit;text-decoration:none;opacity:.8">✕</a></span>';
-  }).join('');
+  }).join('')+'<span style="display:inline-flex;align-items:center;border:1px solid var(--accent2,#2563eb);background:'+(topoTodas?'var(--accent2,#2563eb)':'transparent')+';color:'+(topoTodas?'#fff':'var(--accent2,#2563eb)')+';border-radius:14px;padding:2px 10px;font-size:12px"><a href="#" onclick="topoTodasLiga('+(topoTodas?'false':'true')+');return false" style="color:inherit;text-decoration:none;font-weight:700" title="Mostra a tabela de cada rua, uma abaixo da outra">☰ Todas as ruas</a></span>';
 }
 function trocarRua(i){
+  if(topoTodas) topoTodasLiga(false,true);
   if(!ruas[i]) return; ruasSinc(); ruaAtiva=i; topoRows=ruas[i].rows||(ruas[i].rows=[]);
   _greideAnterior=null; _greideLatAnt=null;
   const bd=document.getElementById('btn-desfazer-greide'); if(bd) bd.style.display='none';
   const gr=document.getElementById('greide-resumo'); if(gr) gr.textContent='';
   renderTopoTable(); calcTopo();
+}
+/* PI-14b · TODAS AS RUAS: uma tabela de cada rua, uma abaixo da outra (editáveis).
+   A rua em que o usuário clica/digita vira a rua ativa (os botões + Estaca, + Ponto, Gerar greide e Importar agem nela). */
+let topoTodas=false;
+const _renderTopoTable0=renderTopoTable, _calcTopo0=calcTopo;
+renderTopoTable=function(){ _renderTopoTable0(); if(topoTodas) renderTodasRuas(); };
+calcTopo=function(){ _calcTopo0(); if(topoTodas) calcTodasRuas(); };
+function topoTodasLiga(on,semRender){
+  topoTodas=!!on&&ruas.length>1;
+  const a=document.getElementById('topo-todas'), u=document.getElementById('topo-uma');
+  if(a) a.style.display=topoTodas?'':'none'; if(u) u.style.display=topoTodas?'none':'';
+  try{ sessionStorage.setItem('pint_topo_todas',topoTodas?'1':'0'); }catch(e){}
+  if(semRender){ renderRuasBar(); return; }
+  if(topoTodas){ ruasSinc(); renderTodasRuas(); calcTodasRuas(); }
+  renderRuasBar();
+}
+function renderTodasRuas(){
+  const box=document.getElementById('topo-todas'); if(!box) return;
+  if(ruas.length<2){ topoTodasLiga(false,true); return; }
+  ruasSinc();
+  const th=document.querySelector('#tbl-topo thead').innerHTML;
+  box.innerHTML='<p style="font-size:11px;color:var(--fg2);margin:4px 0 8px">Todas as ruas, uma abaixo da outra. Digite em qualquer tabela: a rua em que você mexeu fica marcada em azul e é nela que agem <b>+ Estaca</b>, <b>+ Ponto</b>, <b>Gerar greide</b> e <b>Importar Excel</b>.</p>'+
+    ruas.map((ru,ri)=>{ const rows=ru.rows||(ru.rows=[]);
+      return '<div class="topo-rua" data-ri="'+ri+'" style="margin:0 0 18px;border:2px solid transparent;border-radius:8px;padding:4px">'+
+        '<div class="topo-rua-t" style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin:0 0 4px"><b style="font-size:13px">'+esc(nomeRua(ri))+'</b><span id="rt-'+ri+'" style="font-size:11px;color:var(--fg2)"></span></div>'+
+        '<div class="tw"><table class="tbl-topo-r" data-ri="'+ri+'"><thead>'+th+'</thead><tbody>'+rows.map((r,i)=>topoRowHtml(rows,i,ri,'r'+ri+'-')).join('')+'</tbody></table></div></div>';
+    }).join('');
+  aplicarColunasTopo(); topoTeclado(); marcaRuaAtivaTodas();
+  if(!box.dataset.ev){ box.dataset.ev='1';
+    const ativa=e=>{ const d=e.target.closest&&e.target.closest('.topo-rua'); if(d) topoAtivaSilenciosa(+d.dataset.ri); };
+    box.addEventListener('pointerdown',ativa,true); box.addEventListener('focusin',ativa,true);
+  }
+}
+function marcaRuaAtivaTodas(){
+  document.querySelectorAll('#topo-todas .topo-rua').forEach(d=>{ const on=+d.dataset.ri===ruaAtiva; d.style.borderColor=on?'var(--accent2,#2563eb)':'transparent'; });
+}
+function topoAtivaSilenciosa(ri){
+  if(!ruas[ri]||ri===ruaAtiva) return;
+  ruasSinc(); ruaAtiva=ri; topoRows=ruas[ri].rows||(ruas[ri].rows=[]);
+  _greideAnterior=null; _greideLatAnt=null;
+  const bd=document.getElementById('btn-desfazer-greide'); if(bd) bd.style.display='none';
+  const gr=document.getElementById('greide-resumo'); if(gr) gr.textContent='';
+  _renderTopoTable0(); marcaRuaAtivaTodas();   /* só a tabela escondida, para o cálculo achar seus campos */
+}
+function calcTodasRuas(){
+  ruasSinc(); const sv=topoRows;
+  ruas.forEach((ru,ri)=>{
+    const rows=ru.rows||[], pre='r'+ri+'-', linhas=topoLinhas(rows); topoRows=rows;
+    const T=(id,t)=>{ const e=document.getElementById(pre+id); if(e) e.textContent=t; };
+    let tc=0,ta=0;
+    linhas.forEach(L=>{
+      const nx=linhas[L.i+1], d=nx?nx.est-L.est:0;
+      T('tsit-'+L.i,L.sit); T('tac-'+L.i,L.sit==='—'?'—':fmt(L.ac,2)); T('taa-'+L.i,L.sit==='—'?'—':fmt(L.aa,2));
+      if(nx&&d>0){ const c=(L.ac+nx.ac)/2*d, a=(L.aa+nx.aa)/2*d; tc+=c; ta+=a; T('tco-'+L.i,fmt(c,2)); T('tat-'+L.i,fmt(a,2)); } else { T('tco-'+L.i,'—'); T('tat-'+L.i,'—'); }
+      T('tdl-'+L.i,(nx&&d>0&&L.gr!=null&&nx.gr!=null)?fmt((nx.gr-L.gr)/d*100,2):'—');
+      [['tge-','gEsq',L.gE,L.gEusr],['tgd-','gDir',L.gD,L.gDusr]].forEach(([p,k,val,usr])=>{
+        const td=document.getElementById(pre+p+L.i), inp=td&&td.querySelector('input'); if(!inp) return;
+        inp.placeholder=val==null?'auto':fmt(val,3); inp.style.opacity=usr?'1':'.6'; });
+      const cz=document.getElementById(pre+'tcz-'+L.i); if(cz) cz.innerHTML=cruzHtml(L);
+      ['E','D'].forEach(sd=>{ const el=document.getElementById(pre+'tmw'+sd+'-'+L.i); if(!el) return; const w=L['cal'+sd], av=L['calAv'+sd];
+        if(!_cal.ativo||!(w>0)){ el.textContent=''; el.title=''; return; }
+        el.textContent='calç. '+fmt(w,2)+' m'+(L['calM'+sd]?'':' (média)')+(av?' ⚠':''); el.style.color=av?'#b91c1c':'var(--fg3)'; });
+    });
+    const t=totaisRows(rows), e=document.getElementById('rt-'+ri);
+    if(e) e.textContent=rows.length+' linhas · '+fmt(t.ext,2)+' m · área '+fmt(t.area,2)+' m² · corte '+fmt(tc,2)+' m³ · aterro '+fmt(ta,2)+' m³';
+  });
+  topoRows=sv;
 }
 function renomearRua(i){
   const n=prompt('Nome da rua:',nomeRua(i)); if(n==null) return;
@@ -2705,14 +2781,28 @@ function secaoSelecionadas(){
 function secaoCabecalho(){
   return ['Estaca (m)','Situação','Largura (m)','Greide (m)','Formação (m)','Terreno Esq. (m)','Terreno Eixo (m)','Terreno Dir. (m)',
     'Altura Esq. (m)','Altura Eixo (m)','Altura Dir. (m)','Área Corte (m²)','Área Aterro (m²)','Área Reaterro (m²)',
+    'Vol. Corte até a próxima (m³)','Vol. Aterro até a próxima (m³)','Vol. Reaterro até a próxima (m³)',
     'Talude Esq. (H:V)','Distância Talude Esq. (m)','Talude Dir. (H:V)','Distância Talude Dir. (m)'];
 }
 function secaoTabela(){
   const n=(x,d)=>x===null||x===undefined||isNaN(x)?'':Number(Number(x).toFixed(d===undefined?3:d));
-  return secaoSelecionadas().filter(o=>o.G).map(o=>{
-    const L=o.L,G=o.G, tal=Ld=>(Ld.tal<=0?'vertical':n(Ld.tal,2)+':1')+(Ld.semInt?' (sem encontro)':'');
-    return [n(L.est),L.sit,n(L.larg,2),n(L.gr),n(G.form),n(G.tE0!=null?G.tE0:G.tE),n(G.tC),n(G.tD0!=null?G.tD0:G.tD),n(G.E.h),n(G.hC),n(G.D.h),n(L.ac,2),n(L.aa,2),n(L.ar,2),tal(G.E),n(G.E.d,2),tal(G.D),n(G.D.d,2)];
+  const g=secaoSelecionadas().filter(o=>o.G);
+  return g.map((o,i)=>{
+    const L=o.L,G=o.G, tal=Ld=>(Ld.tal<=0?'vertical':String(n(Ld.tal,2)).replace('.',',')+':1')+(Ld.semInt?' (sem encontro)':'');
+    const nx=g[i+1]&&g[i+1].L, d=nx?nx.est-L.est:0, vol=k=>(nx&&d>0)?n(((L[k]||0)+(nx[k]||0))/2*d,2):'';
+    return [n(L.est),L.sit,n(L.larg,2),n(L.gr),n(G.form),n(G.tE0!=null?G.tE0:G.tE),n(G.tC),n(G.tD0!=null?G.tD0:G.tD),n(G.E.h),n(G.hC),n(G.D.h),n(L.ac,2),n(L.aa,2),n(L.ar,2),vol('ac'),vol('aa'),vol('ar'),tal(G.E),n(G.E.d,2),tal(G.D),n(G.D.d,2)];
   });
+}
+function secaoTotais(){
+  const g=secaoSelecionadas().filter(o=>o.G); const T={aC:0,aA:0,aR:0,vC:0,vA:0,vR:0,n:g.length};
+  g.forEach((o,i)=>{ T.aC+=o.L.ac||0; T.aA+=o.L.aa||0; T.aR+=o.L.ar||0;
+    if(i>0){ const a=g[i-1].L,b=o.L,d=b.est-a.est; if(d>0){ T.vC+=((a.ac||0)+(b.ac||0))/2*d; T.vA+=((a.aa||0)+(b.aa||0))/2*d; T.vR+=((a.ar||0)+(b.ar||0))/2*d; } } });
+  return T;
+}
+function secaoLinhasTotais(){
+  const T=secaoTotais(), n=x=>Number(x.toFixed(2)), l=new Array(21).fill('');
+  l[0]='Total (áreas em m² · volumes em m³)'; [T.aC,T.aA,T.aR,T.vC,T.vA,T.vR].forEach((x,k)=>{ l[11+k]=n(x); });
+  return [l];
 }
 function secaoFaixaTexto(){
   const sel=secaoSelecionadas(); if(!sel.length) return 'nenhuma estaca';
@@ -2756,9 +2846,12 @@ function updateCorte(){
   box.innerHTML=html;
   if(info) info.textContent='Mostrando '+secaoFaixaTexto()+(semDados?' · '+semDados+' sem dados completos':'')+'.';
   if(resumo){
-    const cab=secaoCabecalho(),lin=secaoTabela();
+    const cab0=secaoCabecalho(),lin0=secaoTabela(), temR=lin0.some(r=>(+r[13]||0)>0||(+r[16]||0)>0), mostra=i=>temR||i!==16;
+    const cab=cab0.filter((c,i)=>mostra(i)), idx=cab0.map((c,i)=>i).filter(mostra), lin=lin0.map(r=>r.filter((c,i)=>mostra(i)));
     resumo.innerHTML='<div class="tw"><table><thead><tr>'+cab.map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
-      lin.map(r=>'<tr>'+r.map((c,i)=>'<td'+(i>1?' style="text-align:right"':'')+'>'+(typeof c!=='number'?c:i===0?String(c).replace('.',','):fmt(c,[2,11,12,13,15,17].indexOf(i)>=0?2:3))+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
+      lin.map(r=>'<tr>'+r.map((c,j)=>{ const i=idx[j]; return '<td'+(i>1?' style="text-align:right"':'')+'>'+(typeof c!=='number'?c:i===0?String(c).replace('.',','):fmt(c,[2,11,12,13,14,15,16,18,20].indexOf(i)>=0?2:3))+'</td>'; }).join('')+'</tr>').join('')+'</tbody>'+
+      '<tfoot>'+secaoLinhasTotais().map(r=>'<tr style="font-weight:700;background:var(--bg2,#eef2f7);border-top:2px solid var(--fg3,#889)"><td colspan="11">'+r[0]+'</td>'+[11,12,13,14,15,16].filter(mostra).map(i=>'<td style="text-align:right">'+fmt(r[i],2)+'</td>').join('')+'<td colspan="4"></td></tr>').join('')+'</tfoot></table></div>'+
+      '<p style="font-size:11px;color:var(--fg3);margin:6px 2px 0">Áreas de corte, aterro e reaterro de cada seção = diferença entre o terreno natural e o greide/formação projetados. Volume de cada linha = média das áreas desta seção e da seguinte × distância entre elas (mesma conta das tabelas da Topografia; a última linha não tem seção seguinte). Total = soma das áreas e soma dos volumes.</p>';
   }
 }
 function svgParaPng(svg,W,H){
@@ -3124,8 +3217,8 @@ function itensSecoes(){
   M.push({h:'Quadro resumo das seções'});
   M.push({kv:['Trecho:',secaoFaixaTexto()]});
   const c=x=>typeof x==='number'?String(x).replace('.',','):x;
-  M.push({tab:{cab:['Estaca','Situação','Largura (m)','Greide (m)','Formação (m)','Terreno eixo (m)','Corte (m²)','Aterro (m²)','Reaterro (m²)'],
-    lin:secaoTabela().map(l=>[l[0],l[1],l[2],l[3],l[4],l[6],l[11],l[12],l[13]].map(c))}});
+  M.push({tab:{cab:['Estaca','Situação','Largura (m)','Greide (m)','Formação (m)','Terreno eixo (m)','Corte (m²)','Aterro (m²)','Reaterro (m²)','Vol. corte (m³)','Vol. aterro (m³)','Vol. reaterro (m³)'],
+    lin:secaoTabela().concat(secaoLinhasTotais()).map(l=>[l[0],l[1],l[2],l[3],l[4],l[6],l[11],l[12],l[13],l[14],l[15],l[16]].map(c))}});
   const el=document.getElementById('exp_perfis');
   if(!el||el.checked){
     M.push({h:'Seções transversais por estaca'});
@@ -3178,7 +3271,7 @@ function exportarTabExcel(tab){
     sheet='Secoes Transversais';fname='intertravado_secoes_'+carimbo()+'.xlsx';
     rows=[['SEÇÕES TRANSVERSAIS POR ESTACA'],['Trecho:',secaoFaixaTexto()],[''],
       ['Camada','Espessura adotada (cm)','Material'],...camadasLista(),[''],
-      secaoCabecalho(),...secaoTabela()];
+      secaoCabecalho(),...secaoTabela(),...secaoLinhasTotais()];
     const P=secaoParams(); rows.push([''],['Berma Tb, fora do meio-fio (m):',P.berma],['Meio-fio:',P.mf?mfTextoCurto(P.mf):'sem meio-fio']);
   }else if(tab==='topo'){
     sheet='Topografia';fname='intertravado_topografia_'+carimbo()+'.xlsx';
@@ -3340,11 +3433,13 @@ function toggleTheme(){const root=document.documentElement,cur=root.getAttribute
    Acender/apagar um nível mostra/oculta as cotas e o quadro na planta e a camada no 3D.
 ══════════════════════════════════════════════════════ */
 let _pl={modo:'planta',vis:null,vb:null,drag:null,t3:null};
-function plVisPadrao(){ return {ruas:{},entorno:1,pista:1,paginacao:1,eixo:1,mf:1,estacas:1,numeros:1,larguras:1,decl:1,cruz:1,corte:0,quadro:1,legenda:1,carimbo:1,sombras:1,rot3d:1,calcada:1,cenario:1,casas:1,veg:1,objs:1,lamina:0,niv:{terreno:1},passo:1}; }
+function plVisPadrao(){ return {ruas:{},entorno:1,pista:1,paginacao:1,eixo:1,mf:1,estacas:1,numeros:1,larguras:1,decl:1,cruz:1,corte:0,quadro:1,legenda:1,carimbo:1,sombras:1,rot3d:1,calcada:1,cenario:1,casas:1,muros:1,arvc:1,grama:1,objArv:1,objPoste:1,lamina:0,niv:{terreno:1},passo:1}; }
 function plVis(){
   if(_pl.vis) return _pl.vis;
   let v=plVisPadrao();
-  try{ const t=JSON.parse(localStorage.getItem('pint_planta_vis2')||'null'); if(t&&typeof t==='object'){ v=Object.assign(v,t,{niv:Object.assign(v.niv,t.niv||{}),ruas:t.ruas||{}}); if(t.casas===undefined&&t.cenario===0){ v.casas=0; v.veg=0; } } }catch(e){}
+  try{ const t=JSON.parse(localStorage.getItem('pint_planta_vis2')||'null'); if(t&&typeof t==='object'){ v=Object.assign(v,t,{niv:Object.assign(v.niv,t.niv||{}),ruas:t.ruas||{}}); if(t.casas===undefined&&t.cenario===0){ v.casas=0; v.veg=0; }
+      /* PI-14: níveis separados — quem já tinha casas/vegetação/objetos desligados mantém */
+      if(t.muros===undefined&&t.casas!==undefined) v.muros=t.casas; if(t.arvc===undefined&&t.veg!==undefined){ v.arvc=t.veg; v.grama=t.veg; } if(t.objArv===undefined&&t.objs!==undefined){ v.objArv=t.objs; v.objPoste=t.objs; } } }catch(e){}
   return _pl.vis=v;
 }
 function plSalvarVis(){ try{ localStorage.setItem('pint_planta_vis2',JSON.stringify(plVis())); }catch(e){} }
@@ -3435,13 +3530,14 @@ function plPainel(){
   let h=tit('Ruas')+ruas.map((r,i)=>ck('<b>'+esc(nomeRua(i))+'</b>',v.ruas[r.id]!==0,"plSet('ruas','"+r.id+"',this.checked)")).join('');
   h+=tit('Níveis — cotas, espessuras e camadas')+N.map(n=>ck('<span style="display:inline-block;width:12px;height:12px;background:'+n.cor+';border:1px solid #666;border-radius:2px"></span><b style="color:'+n.txt+';min-width:18px">'+n.cod+'</b>'+esc(n.nome)+(n.esp?' <span style="color:var(--fg2)">· '+fmt(n.esp*100,1)+' cm</span>':''),plOn(v,n.k),"plSet('niv','"+n.k+"',this.checked)",'Planta: cotas e linha no quadro de camadas. 3D: superfície/camada.')).join('')+
     '<div style="display:flex;gap:6px;margin-top:4px"><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plTodosNiveis(1)">Acender todos</button><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plTodosNiveis(0)">Apagar todos</button></div>';
+  h+=tit('Níveis do cenário 3D (assentam no terreno do entorno)')+ck('Casas',v.casas,o('casas'),'Casas dos quintais. Só ilustração: não entra em nenhum cálculo. Sai com exagero vertical maior que 1×.')+ck('Muros e portões',v.muros,o('muros'),'Muros das divisas e da frente dos lotes, com os portões.')+ck('Árvores e palmeiras do cenário',v.arvc,o('arvc'),'Árvores dos quintais e do campo.')+ck('Grama 3D (tufos com vento)',v.grama,o('grama'),'Os tufos de grama em volta das ruas. O terreno verde é o “Entorno / terreno lateral”.')+ck('Árvores que você locou',v.objArv,o('objArv'),'As de 🌳 Árvores e postes, sempre na cota do chão debaixo delas.')+ck('Postes que você locou',v.objPoste,o('objPoste'),'Os de 🌳 Árvores e postes, sempre na cota do chão debaixo deles.')+
+    '<div style="display:flex;gap:6px;margin-top:4px"><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plCenarioTodos(1)">Mostrar todo o cenário</button><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plCenarioTodos(0)">Ocultar todo o cenário</button></div>'+
+    '<div style="font-size:11px;color:var(--fg2);margin-top:2px">Sem “Entorno / terreno lateral” ligado, o terreno não aparece, mas o que está ligado continua na cota dele.</div>';
   h+=tit('Planta e 3D — elementos')+ck('Entorno / terreno lateral',v.entorno,o('entorno'))+ck('Calçada (ligar em Topografia › 🚶 Calçada…)',v.calcada,o('calcada'))+ck('Pavimento (pista)',v.pista,o('pista'))+ck('Meio-fio e sarjeta',v.mf,o('mf'))+ck('Eixo',v.eixo,o('eixo'))+ck('Números das estacas',v.numeros,o('numeros'))+ck('Cruzamentos (conferência do greide)',v.cruz,o('cruz'));
   h+=tit('Só na planta')+ck('Paginação dos blocos',v.paginacao,o('paginacao'))+ck('Marcas das estacas',v.estacas,o('estacas'))+ck('Cotas de largura da pista',v.larguras,o('larguras'))+ck('Setas de declividade (greide)',v.decl,o('decl'))+ck('Cores de corte / aterro',v.corte,o('corte'))+
     ck('Quadro de camadas (esp., área, volume)',v.quadro,o('quadro'))+ck('Legenda',v.legenda,o('legenda'))+ck('Carimbo',v.carimbo,o('carimbo'))+
     '<div style="margin-top:4px;font-size:12px">Rótulos a cada <select onchange="plSet(\'passo\',0,+this.value)" style="font-size:12px">'+[1,2,5,10].map(x=>'<option value="'+x+'"'+(v.passo==x?' selected':'')+'>'+(x==1?'estaca':x+' estacas')+'</option>').join('')+'</select></div>';
   h+=tit('Só no 3D')+ck('Sombras',v.sombras,o('sombras'))+ck('Rótulos e medidas das camadas',v.rot3d,o('rot3d'))+ck('Lâmina do terreno natural sobre a pista (corte/aterro)',v.lamina,o('lamina'),'Película marrom translúcida na cota do terreno natural. Desligada deixa a cor do pavimento uniforme.');
-  h+=tit('Níveis do cenário 3D (assentam no terreno do entorno)')+ck('Casas, muros e portões',v.casas,o('casas'),'Só ilustração: não entra em nenhum cálculo. Sai com exagero vertical maior que 1×.')+ck('Árvores, palmeiras e grama do cenário',v.veg,o('veg'),'Só ilustração. Sai com exagero vertical maior que 1×.')+ck('Árvores e postes locados por você',v.objs,o('objs'),'Os de 🌳 Árvores e postes: sempre na cota do chão debaixo deles.')+
-    '<div style="font-size:11px;color:var(--fg2);margin-top:2px">Sem “Entorno / terreno lateral” ligado, o terreno não aparece, mas as casas e árvores continuam na cota dele.</div>';
   h+=tit('Posição das ruas')+ruas.map((r,i)=>{
     if(i===0) return '<div style="font-size:11px;color:var(--fg2);margin-bottom:4px"><b>'+esc(nomeRua(0))+'</b>: eixo de referência (reta, estacas crescendo para a direita).</div>';
     const g=plGeo(i), lay=plLayout()[i], cruza=lay&&!lay.paralela;
@@ -3453,6 +3549,7 @@ function plPainel(){
 }
 function plRedesenhar(){ if(_pl.modo==='planta') plDesenhar(); else pl3D(true); }
 function plSet(grupo,k,val){ const v=plVis(); if(grupo==='ruas') v.ruas[k]=val?1:0; else if(grupo==='niv') v.niv[k]=val?1:0; else v[grupo]=(grupo==='passo')?val:(val?1:0); plSalvarVis(); plRedesenhar(); }
+function plCenarioTodos(on){ const v=plVis(); ['casas','muros','arvc','grama','objArv','objPoste'].forEach(k=>v[k]=on?1:0); plSalvarVis(); plPainel(); plRedesenhar(); }
 function plTodosNiveis(on){ const v=plVis(); plNiveis().forEach(n=>v.niv[n.k]=on?1:0); plSalvarVis(); plPainel(); plRedesenhar(); }
 function plGeoSet(i,k,val){ const g=plGeo(i); g[k]=(k==='lado')?val:(parseFloat(val)||g[k]); plPainel(); if(_pl.modo==='planta') plDesenhar(true); else { if(_pl.t3) _pl.t3.pronto=false; pl3D(); } }
 function plNiceLen(x){ const e=Math.pow(10,Math.floor(Math.log10(x))); const m=x/e; return (m>=5?5:m>=2?2:1)*e; }
@@ -3466,7 +3563,7 @@ function plSvg(vb,Wpx){
   const X=p=>(p[0]-vb.x)*sc, Y=p=>(-p[1]-vb.y)*sc, pt=p=>X(p).toFixed(1)+','+Y(p).toFixed(1);
   const ang=dd=>{ let a=-Math.atan2(dd[1],dd[0])*180/Math.PI; if(a>90) a-=180; if(a<=-90) a+=180; return a; };
   const F='font-family="Arial,Helvetica,sans-serif"';
-  const T=(x,y,t,o)=>{ o=o||{}; return '<text x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" font-size="'+(o.fs||10)+'" fill="'+(o.c||'#111')+'" text-anchor="'+(o.a||'start')+'"'+(o.b?' font-weight="700"':'')+(o.r!=null?' transform="rotate('+o.r.toFixed(1)+' '+x.toFixed(1)+' '+y.toFixed(1)+')"':'')+(o.h===0?'':' paint-order="stroke" stroke="'+(o.hc||'#fff')+'" stroke-width="'+(o.hw||3)+'" stroke-linejoin="round"')+'>'+esc(t)+'</text>'; };
+  const T=(x,y,t,o)=>{ o=o||{}; let fsz=o.fs||10, tl=''; if(o.mw){ const est=String(t).length*fsz*0.56; if(est>o.mw){ fsz=Math.max(6.5,fsz*o.mw/est); if(String(t).length*fsz*0.56>o.mw) tl=' textLength="'+o.mw.toFixed(1)+'" lengthAdjust="spacingAndGlyphs"'; } } o.fs=fsz; return '<text x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" font-size="'+fsz.toFixed(1)+'" fill="'+(o.c||'#111')+'" text-anchor="'+(o.a||'start')+'"'+tl+(o.b?' font-weight="700"':'')+(o.r!=null?' transform="rotate('+o.r.toFixed(1)+' '+x.toFixed(1)+' '+y.toFixed(1)+')"':'')+(o.h===0?'':' paint-order="stroke" stroke="'+(o.hc||'#fff')+'" stroke-width="'+(o.hw||3)+'" stroke-linejoin="round"')+'>'+esc(t)+'</text>'; };
   const ocup=[]; const livre=(x,y,w,h)=>{ for(const r of ocup) if(x<r[0]+r[2]&&x+w>r[0]&&y<r[1]+r[3]&&y+h>r[1]) return false; ocup.push([x,y,w,h]); return true; };
   let defs='', s='', top='';
   const A=D.map(d=>plAmostras(d,1));
@@ -3569,7 +3666,7 @@ function plSvg(vb,Wpx){
     const cw=[34,250,60,72,80], tw=cw.reduce((a,b)=>a+b,0), rh=14, x0=356, y0=H+8;
     ov+='<rect x="'+x0+'" y="'+y0+'" width="'+tw+'" height="'+(rh*(rows.length+1)+4)+'" fill="#fff" stroke="#111" stroke-width="1"/>'+T(x0+6,y0+12,'QUADRO DE CAMADAS DO PAVIMENTO — NÍVEIS ACESOS',{fs:10,b:1,h:0});
     rows.forEach((r,i2)=>{ let cx=x0; const yy=y0+rh*(i2+1)+12; if(i2===0||i2===1) ov+='<line x1="'+x0+'" y1="'+(yy-11)+'" x2="'+(x0+tw)+'" y2="'+(yy-11)+'" stroke="#111" stroke-width="0.6"/>';
-      r.forEach((t,c2)=>{ const n=N.find(q=>q.cod===r[0]); ov+=T(c2>=2?cx+cw[c2]-4:cx+4,yy,t,{fs:9,b:i2===0||c2===0,a:c2>=2?'end':'start',c:(c2===0&&n)?n.txt:'#111',h:0}); cx+=cw[c2]; }); });
+      r.forEach((t,c2)=>{ const n=N.find(q=>q.cod===r[0]); ov+=T(c2>=2?cx+cw[c2]-4:cx+4,yy,t,{fs:9,b:i2===0||c2===0,a:c2>=2?'end':'start',c:(c2===0&&n)?n.txt:'#111',h:0,mw:cw[c2]-8}); cx+=cw[c2]; }); });
     if(!cams.length) ov+=T(x0+6,y0+rh*2+12,'(acenda um nível de camada para ver espessura e volume)',{fs:9,c:'#666',h:0});
   }
   // 8) legenda
@@ -3592,15 +3689,15 @@ function plSvg(vb,Wpx){
       else if(k==='opos') ov+='<line x1="'+(sx+8)+'" y1="'+yy+'" x2="'+(sx+18)+'" y2="'+yy+'" stroke="#374151" stroke-width="1.2"/><circle cx="'+(sx+18)+'" cy="'+yy+'" r="2.6" fill="#fde68a" stroke="#374151" stroke-width="0.6"/><circle cx="'+(sx+8)+'" cy="'+yy+'" r="3" fill="#6b7280" stroke="#111" stroke-width="0.6"/>';
       else if(k.indexOf('niv:')===0){ const n=N.find(z=>z.k===k.slice(4)); ov+='<rect x="'+sx+'" y="'+(yy-4)+'" width="22" height="9" fill="'+n.cor+'" stroke="#666" stroke-width="0.6"/>'+T(sx+11,yy+3.5,n.cod,{fs:8,b:1,a:'middle',c:'#111',h:0}); }
       else { const cc={c1:'rgba(220,60,40,.45)',c2:'rgba(40,110,220,.45)',c3:'rgba(240,160,30,.5)'}[k]; ov+='<rect x="'+sx+'" y="'+(yy-4)+'" width="22" height="9" fill="'+cc+'"/>'; }
-      ov+=T(sx+28,yy+3.5,q[1],{fs:it.length>11?7.6:9,h:0}); });
+      ov+=T(sx+28,yy+3.5,q[1],{fs:it.length>11?7.6:9,h:0,mw:cwid-40}); });
   }
   // 9) carimbo + escala + norte
   const bar=plNiceLen(vb.w/5);
   if(BH>0&&v.carimbo){
     const w=W-356-(v.quadro?514:0)-24, h=BH-16, x0=W-w-12, y0=H+8, ob=(document.getElementById('logradouro-inp')||{}).value||'—', rp=(document.getElementById('resp-inp')||{}).value||'—', dt=new Date().toLocaleDateString('pt-BR');
     ov+='<rect x="'+x0+'" y="'+y0+'" width="'+w+'" height="'+h+'" fill="#fff" stroke="#111" stroke-width="1.2"/><line x1="'+x0+'" y1="'+(y0+22)+'" x2="'+(x0+w)+'" y2="'+(y0+22)+'" stroke="#111"/><line x1="'+x0+'" y1="'+(y0+66)+'" x2="'+(x0+w)+'" y2="'+(y0+66)+'" stroke="#111"/>'+
-      T(x0+8,y0+15,'PLANTA BAIXA — PAVIMENTO INTERTRAVADO',{fs:11,b:1,h:0})+T(x0+8,y0+36,'Obra: '+ob,{fs:9.5,h:0})+T(x0+8,y0+50,'Resp. técnico: '+rp,{fs:9.5,h:0})+T(x0+8,y0+62,'Dimensionamento: IP-06/2004 · Data: '+dt,{fs:9,h:0,c:'#333'})+
-      T(x0+8,y0+84,'ESCALA GRÁFICA',{fs:8,b:1,h:0})+T(x0+8,y0+h-8,'Cotas em metros · espessuras em cm · eixos esquemáticos (retos)',{fs:8,h:0,c:'#333'})+T(x0+w-8,y0+84,'TOTAL CIVIL',{fs:11,b:1,a:'end',h:0,c:'#0f3d73'});
+      T(x0+8,y0+15,'PLANTA BAIXA — PAVIMENTO INTERTRAVADO',{fs:11,b:1,h:0,mw:w-16})+T(x0+8,y0+36,'Obra: '+ob,{fs:9.5,h:0,mw:w-16})+T(x0+8,y0+50,'Resp. técnico: '+rp,{fs:9.5,h:0,mw:w-16})+T(x0+8,y0+62,'Dimensionamento: IP-06/2004 · Data: '+dt,{fs:9,h:0,c:'#333',mw:w-16})+
+      T(x0+8,y0+84,'ESCALA GRÁFICA',{fs:8,b:1,h:0,mw:w*0.5})+T(x0+8,y0+h-8,'Cotas em metros · espessuras em cm · eixos esquemáticos (retos)',{fs:8,h:0,c:'#333',mw:w-16})+T(x0+w-8,y0+84,'TOTAL CIVIL',{fs:11,b:1,a:'end',h:0,c:'#0f3d73',mw:w*0.4});
     const bx=x0+8, by=y0+100, bw=Math.min(bar*sc,w-24); for(let q=0;q<4;q++) ov+='<rect x="'+(bx+bw/4*q).toFixed(1)+'" y="'+by+'" width="'+(bw/4).toFixed(1)+'" height="4" fill="'+(q%2?'#fff':'#111')+'" stroke="#111" stroke-width="0.6"/>';
     ov+=T(bx,by+13,'0',{fs:8,h:0})+T(bx+bw/2,by+13,fmt(bar/2,0),{fs:8,h:0,a:'middle'})+T(bx+bw,by+13,bar+' m',{fs:8,h:0,a:'middle'});
   }
@@ -3629,6 +3726,9 @@ function plDesenhar(enquadrar){
     if(mob&&(v.quadro||v.legenda||v.carimbo)){ const H=_pl.vb.h/_pl.vb.w*1200; bd.style.display='';
       bd.innerHTML='<div style="font-size:11px;color:var(--fg2);margin:4px 0">Legenda, quadro de camadas e carimbo (arraste para o lado):</div><div style="width:1100px">'+plSvg(_pl.vb,1200).replace(/viewBox="[^"]*"/,'viewBox="0 '+H.toFixed(1)+' 1200 '+PL_BANDA+'"').replace('width="100%" height="100%"','width="1100" height="'+Math.round(PL_BANDA*1100/1200)+'"')+'</div>';
     }else{ bd.style.display='none'; bd.innerHTML=''; } }
+  if(bd&&!bd.dataset.ev){ bd.dataset.ev='1';   /* faixa de legenda/quadro/carimbo (celular): a roda também aproxima o desenho */
+    bd.addEventListener('wheel',e=>{ e.preventDefault(); const r=bd.getBoundingClientRect(), f=e.deltaY<0?0.8:1.25, vb=_pl.vb, nw=vb.w*f, nh=vb.h*f;
+      _pl.vb={x:vb.x+(vb.w-nw)*0.5,y:vb.y+(vb.h-nh)*0.5,w:nw,h:nh}; plDesenhar(); },{passive:false}); }
   if(!el.dataset.ev){ el.dataset.ev='1';
     el.addEventListener('wheel',e=>{ e.preventDefault(); const r=el.getBoundingClientRect(), hd=r.height*(1-plBanda()/1200*r.width/r.height), fx=(e.clientX-r.left)/r.width, fy=Math.min(1,(e.clientY-r.top)/hd), f=e.deltaY<0?0.8:1.25, vb=_pl.vb;
       const nw=vb.w*f, nh=vb.h*f; _pl.vb={x:vb.x+(vb.w-nw)*fx,y:vb.y+(vb.h-nh)*fy,w:nw,h:nh}; plDesenhar(); },{passive:false});
@@ -4155,7 +4255,7 @@ function plCenario(ctx){
   const dSeg=(p,a,b)=>{ const ex=b[0]-a[0], ey=b[1]-a[1], l2=ex*ex+ey*ey||1e-9; let u=((p[0]-a[0])*ex+(p[1]-a[1])*ey)/l2; u=Math.max(0,Math.min(1,u)); return Math.hypot(a[0]+u*ex-p[0],a[1]+u*ey-p[1]); };
   const temMuro=(a,b)=>{ const m=[(a[0]+b[0])/2,(a[1]+b[1])/2]; return muros.some(s2=>dSeg(m,s2[0],s2[1])<0.7||dSeg(s2[0],a,b)<0.35&&dSeg(s2[1],a,b)<0.35); };
   const hole=D.map((d,j)=>plPoligonoCal(d,A[j],wmf+0.6,calOn));
-  const B={par:plBuild(),tel:plBuild(),laj:plBuild(),vid:plBuild(),cx:plBuild(),por:plBuild(),pto:plBuild()};
+  const B={par:plBuild(),mur:plBuild(),tel:plBuild(),laj:plBuild(),vid:plBuild(),cx:plBuild(),por:plBuild(),pto:plBuild()};
   const branco=new T.Color(1,1,1);
   const CORES=['#f1ece2','#e9dcc2','#f3e4b8','#e8c9a8','#dfe6e1','#f0d9c9','#d9e1ea','#efe8d0','#e4d4b4','#c9d6c2','#f5f1ea','#e6c8b0'].map(c=>new T.Color(c).convertSRGBToLinear());
   const CMURO=['#e6e1d6','#d8cfbf','#cfc6b4','#e9e4da','#c7c0b2','#ddd2bd'].map(c=>new T.Color(c).convertSRGBToLinear());
@@ -4186,17 +4286,17 @@ function plCenario(ctx){
           muros.push([P2(ea,la.u),P2(eb,lb.u)]); const ua=la.u, ub=lb.u, a0=V3(ea,ua,za-0.3), a1=V3(ea,ua,za+hm), b0=V3(eb,ub,zb-0.3), b1=V3(eb,ub,zb+hm), c0=V3(ea,ua+esp,za-0.3), c1=V3(ea,ua+esp,za+hm), d0=V3(eb,ub+esp,zb-0.3), d1=V3(eb,ub+esp,zb+hm);
           const naPorta=(ea+eb)/2>portaoE0&&(ea+eb)/2<portaoE1;
           if(naPorta){ B.pto.quad(V3(ea,ua-0.01,za+0.02),V3(eb,ub-0.01,zb+0.02),V3(eb,ub-0.01,zb+hm-0.1),V3(ea,ua-0.01,za+hm-0.1),out.clone().negate(),(eb-ea)/1.2,(hm-0.1)/1.2,branco);
-            B.par.quad(V3(ea,ua,za+hm-0.1),V3(eb,ub,zb+hm-0.1),b1,a1,out.clone().negate(),1,0.1,cm); }
-          else B.par.quad(a0,b0,b1,a1,out.clone().negate(),(eb-ea)/2,(hm+0.3)/2,cm);
-          B.par.quad(c0,d0,d1,c1,out,(eb-ea)/2,(hm+0.3)/2,cm); B.par.quad(a1,b1,d1,c1,new T.Vector3(0,1,0),(eb-ea)/2,0.1,cm);
-          if(k===0) B.par.quad(a0,a1,c1,c0,along.clone().negate(),0.1,1,cm); if(k===nS-1) B.par.quad(b0,b1,d1,d0,along,0.1,1,cm); }
+            B.mur.quad(V3(ea,ua,za+hm-0.1),V3(eb,ub,zb+hm-0.1),b1,a1,out.clone().negate(),1,0.1,cm); }
+          else B.mur.quad(a0,b0,b1,a1,out.clone().negate(),(eb-ea)/2,(hm+0.3)/2,cm);
+          B.mur.quad(c0,d0,d1,c1,out,(eb-ea)/2,(hm+0.3)/2,cm); B.mur.quad(a1,b1,d1,c1,new T.Vector3(0,1,0),(eb-ea)/2,0.1,cm);
+          if(k===0) B.mur.quad(a0,a1,c1,c0,along.clone().negate(),0.1,1,cm); if(k===nS-1) B.mur.quad(b0,b1,d1,d0,along,0.1,1,cm); }
         /* muros laterais (divisas) */
         [e,e1].forEach((ee,ii)=>{ const n2=6; for(let k=0;k<n2;k++){ const ua=lin(ee).u+esp+prof*k/n2, ub=lin(ee).u+esp+prof*(k+1)/n2, pa2=P2(ee,ua), pb2=P2(ee,ub), za=chao(pa2), zb=chao(pb2); if(za==null||zb==null) continue;
           if(temMuro(pa2,pb2)) continue; muros.push([pa2,pb2]); /* PI-12: UM muro só na divisa (centrado, 20 cm) */
           const o=ii===0?along.clone().negate():along.clone(), x0=ee-0.1, x1=ee+0.1;
-          B.par.quad(V3(x0,ua,za-0.3),V3(x0,ub,zb-0.3),V3(x0,ub,zb+hm-0.1),V3(x0,ua,za+hm-0.1),o.clone().negate(),prof/n2/2,hm/2,cm);
-          B.par.quad(V3(x1,ua,za-0.3),V3(x1,ub,zb-0.3),V3(x1,ub,zb+hm-0.1),V3(x1,ua,za+hm-0.1),o,prof/n2/2,hm/2,cm);
-          B.par.quad(V3(x0,ua,za+hm-0.1),V3(x0,ub,zb+hm-0.1),V3(x1,ub,zb+hm-0.1),V3(x1,ua,za+hm-0.1),new T.Vector3(0,1,0),0.1,1,cm); } });
+          B.mur.quad(V3(x0,ua,za-0.3),V3(x0,ub,zb-0.3),V3(x0,ub,zb+hm-0.1),V3(x0,ua,za+hm-0.1),o.clone().negate(),prof/n2/2,hm/2,cm);
+          B.mur.quad(V3(x1,ua,za-0.3),V3(x1,ub,zb-0.3),V3(x1,ub,zb+hm-0.1),V3(x1,ua,za+hm-0.1),o,prof/n2/2,hm/2,cm);
+          B.mur.quad(V3(x0,ua,za+hm-0.1),V3(x0,ub,zb+hm-0.1),V3(x1,ub,zb+hm-0.1),V3(x1,ua,za+hm-0.1),new T.Vector3(0,1,0),0.1,1,cm); } });
         /* casa */
         if(rnd()<0.88){
           const larg=Math.min(e1-e-2.6,7+rnd()*3), eA=e+(e1-e-larg)/2+(rnd()-0.5)*0.8, eB=eA+larg, rec=3+rnd()*2.5, u0=Math.max(L0.u,L1.u)+esp+rec, pr=8+rnd()*4, u1=u0+pr;
@@ -4248,9 +4348,11 @@ function plCenario(ctx){
   });
   const mk=(b,mk2,cast)=>{ if(!b.P.length) return; const me=new T.Mesh(b.geo(),plMat11(mk2)); me.castShadow=cast!==false; me.receiveShadow=true; grp.add(me); return me; };
   t.muros=muros;
-  if(ctx.casas){ mk(B.par,'parede'); mk(B.tel,'telha'); mk(B.laj,'laje'); mk(B.vid,'vidro',false); mk(B.cx,'caixilho',false); mk(B.por,'porta',false); mk(B.pto,'portao'); }
-  if(!ctx.veg) return;
+  if(ctx.casas){ mk(B.par,'parede'); mk(B.tel,'telha'); mk(B.laj,'laje'); mk(B.vid,'vidro',false); mk(B.cx,'caixilho',false); mk(B.por,'porta',false); }
+  if(ctx.muros){ mk(B.mur,'parede'); mk(B.pto,'portao'); }
+  if(!ctx.arvc&&!ctx.grama) return;
   /* árvores dos quintais e árvores soltas no campo (instanciadas) */
+  if(ctx.arvc){
   const nCampo=Math.round(70*q.arvq); for(let k=0;k<nCampo*4&&arvPos.length<nCampo*1.6+ocup.length;k++){ const j=(rnd()*D.length)|0, Aj=A[j], s=Aj[(rnd()*Aj.length)|0], sg=rnd()<0.5?1:-1, u=s.b+wmf+30+rnd()*70, p=plOff(D[j],s,sg*u);
     if(dentroRua(p)||ocup.some(o=>plDentro(p,o))) continue; const y=chao(p); if(y==null) continue; if(plChaoTerra(t,p)>0.4) continue; arvPos.push([p,y,rnd()]); }
   const inst=(geo,mat,lista,esc,cast)=>{ if(!lista.length) return; const im=new T.InstancedMesh(geo,mat,lista.length), m=new T.Matrix4(), qq=new T.Quaternion();
@@ -4258,8 +4360,9 @@ function plCenario(ctx){
     im.castShadow=cast!==false; im.receiveShadow=true; im.frustumCulled=false; if(mat.alphaTest>0) im.customDepthMaterial=plSombraFolha(mat===plMat11('palma')?'palma':'folhas'); grp.add(im); return im; };
   [0,1,2].forEach(v=>{ const L=arvPos.filter(x=>((x[2]*3)|0)===v); inst(MOD.arv[v].tr,plMat11('casca'),L,r=>0.8+r*0.5); inst(MOD.arv[v].co,plMat11('folhas'),L,r=>0.8+r*0.5); });
   inst(MOD.palma.tr,plMat11('casca'),palPos,r=>0.85+r*0.3); inst(MOD.palma.co,plMat11('palma'),palPos,r=>0.85+r*0.3);
+  }
   /* grama 3D com vento, perto da rua */
-  if(q.grama>0){ const pos=[]; let tent=0; const lenT=A.map(a=>a[a.length-1].est-a[0].est), tot=lenT.reduce((a,b)=>a+b,0)||1;
+  if(ctx.grama&&q.grama>0){ const pos=[]; let tent=0; const lenT=A.map(a=>a[a.length-1].est-a[0].est), tot=lenT.reduce((a,b)=>a+b,0)||1;
     while(pos.length<q.grama&&tent++<q.grama*4){ let r0=rnd()*tot, j=0; while(j<lenT.length-1&&r0>lenT[j]){ r0-=lenT[j]; j++; } const Aj=A[j], s=Aj[Math.min(Aj.length-1,Math.floor(r0/(lenT[j]||1)*(Aj.length-1)))], sg=rnd()<0.5?1:-1, cw=calOn?(sg>0?s.calE:s.calD):0;
       const u=s.b+wmf+(cw>0.01?cw:0)+0.12+Math.pow(rnd(),1.7)*34, p=plOff(D[j],{c:D[j].lay.pos(s.est+(rnd()-0.5)*1.0)},sg*u);
       if(dentroRua(p)) continue; if(ocup.some((o,k)=>k%1===0&&plDentro(p,o)&&o.length===4&&false)) continue; const y=chao(p); if(y==null) continue; if(plChaoTerra(t,p)>0.45) continue; pos.push([p,y,rnd()]); }
@@ -4292,9 +4395,9 @@ function plHorizonte(ctx){
 function plObj3D(){
   const T=window.THREE, t=_pl.t3; if(!t||!t.grp||!t.W3) return; const MOD=plModelos();
   if(t.objGrp){ t.grp.remove(t.objGrp); t.objGrp.traverse(o=>{ if(o.geometry&&o.userData.proprio) o.geometry.dispose(); }); }
-  const G=new T.Group(); t.objGrp=G; t.grp.add(G); if(!plVis().objs){ t.precisaSombra=true; return; }
-  const D=plDados(), W3=t.W3;
-  objTodos().forEach(x=>{ const d=D.find(q=>q.id===x.r.id); if(!d) return; const p=objMundo(x.o,d), w=W3(p,0); let y=plChaoRaio(t,w.x,w.z); if(y==null){ const yy=plChaoY(t,p); y=yy!=null?yy:W3(p,d.L[0].gr).y; }
+  const G=new T.Group(); t.objGrp=G; t.grp.add(G); 
+  const D=plDados(), W3=t.W3, vv=plVis();
+  objTodos().forEach(x=>{ if(x.o.t==='arv'?!vv.objArv:!vv.objPoste) return; const d=D.find(q=>q.id===x.r.id); if(!d) return; const p=objMundo(x.o,d), w=W3(p,0); let y=plChaoRaio(t,w.x,w.z); if(y==null){ const yy=plChaoY(t,p); y=yy!=null?yy:W3(p,d.L[0].gr).y; }
     const g=new T.Group(); g.position.set(w.x,y,w.z); g.userData.obj=x.o.id;
     if(x.o.t==='arv'){ const m=MOD.arv[0]; const a=new T.Mesh(m.tr,plMat11('casca')), b=new T.Mesh(m.co,plMat11('folhas')); [a,b].forEach(q=>{ q.castShadow=true; q.receiveShadow=true; q.userData.obj=x.o.id; g.add(q); }); b.customDepthMaterial=plSombraFolha('folhas'); g.rotation.y=(x.o.id.charCodeAt(3)||0)*0.7;
       { const cant=new T.Mesh(new T.BoxGeometry(1.0,0.06,1.0),plMat11('canteiro')); cant.position.y=-0.025; cant.receiveShadow=true; cant.userData.proprio=1; cant.userData.obj=x.o.id; g.add(cant); } }
@@ -4454,7 +4557,7 @@ function pl3Dmontar(manter){
     const pin=new T.Mesh(new T.CylinderGeometry(0.06,0.06,1.4*ev>1.4?1.4:1.4,8),new T.MeshStandardMaterial({color:ruim?0xb91c1c:0x15803d})); pin.position.copy(W3(d.lay.pos(r.est),Math.max(g1,g2)+0.7)); grp.add(pin); }));
   // ── terreno contínuo: malha que segue o terreno natural e desce/sobe em talude até o meio-fio
   let bb=new T.Box3().setFromObject(grp); if(bb.isEmpty()) return;
-  if(v.entorno||v.casas||v.veg||v.objs){
+  if(v.entorno||v.casas||v.muros||v.arvc||v.grama||v.objArv||v.objPoste){
     const esp=P.mf?((+P.mf.esp||15)/100):0, mg=140;
     let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; A.forEach(Aj=>Aj.forEach(q=>{ x0=Math.min(x0,q.c[0]);x1=Math.max(x1,q.c[0]);y0=Math.min(y0,q.c[1]);y1=Math.max(y1,q.c[1]); })); x0-=mg;x1+=mg;y0-=mg;y1+=mg;
     const cel=Math.max(1,Math.max(x1-x0,y1-y0)/260), nx=Math.ceil((x1-x0)/cel), ny=Math.ceil((y1-y0)/cel);
@@ -4494,7 +4597,7 @@ function pl3Dmontar(manter){
   t.sc.fog=v.entorno?new T.Fog(t.ceuMat.uniforms.uHor.value.clone(),R*1.6,R*9):null;
   // PI-11: horizonte, cenário ilustrativo, árvores e postes; o sol e a sombra acompanham o ponto que se olha (plTick)
   t.Rcena=R; t.precisaSombra=true; t.W3=W3; t.bbRua=bbR.clone();
-  if(v.entorno){ const ctx={D,A,W3,grp,wmf,calOn,R,zmin,ev}; try{ plHorizonte(ctx); }catch(e){ console.warn('horizonte',e); } } if((v.casas||v.veg)&&ev<=1&&t.terr){ const ctx={D,A,W3,grp,wmf,calOn,R,zmin,ev,casas:!!v.casas,veg:!!v.veg}; try{ plCenario(ctx); }catch(e){ console.warn('cenário',e); } }
+  if(v.entorno){ const ctx={D,A,W3,grp,wmf,calOn,R,zmin,ev}; try{ plHorizonte(ctx); }catch(e){ console.warn('horizonte',e); } } if((v.casas||v.muros||v.arvc||v.grama)&&ev<=1&&t.terr){ const ctx={D,A,W3,grp,wmf,calOn,R,zmin,ev,casas:!!v.casas,muros:!!v.muros,arvc:!!v.arvc,grama:!!v.grama}; try{ plCenario(ctx); }catch(e){ console.warn('cenário',e); } }
   plObj3D(); plObj3DEventos();
   let alvo=cen.clone(); const cz=D.length?D[0].rows.find(r=>r.cruz):null; if(cz){ const l=D[0].L.find(x=>Math.abs(x.est-cz.est)<0.01)||D[0].L[0]; alvo=W3(D[0].lay.pos(cz.est),l.gr); }
   if(!manter||!t.pronto){ const Rv=Math.min(R,90); t.cam.position.set(alvo.x+Rv*0.42,alvo.y+Rv*0.30,alvo.z+Rv*0.55); t.ctl.target.copy(alvo); t.cam.far=R*30; t.cam.near=Math.max(0.05,R/2000); t.cam.updateProjectionMatrix(); t.pronto=true; }
@@ -4535,6 +4638,77 @@ document.querySelectorAll('.tab').forEach(t=>{
   iniciarAjuda();
   atualizarFig61();
 })();
+
+/* ══════════════════════════════════════════════════════
+   PI-14 · RECENTES — lista de projetos recentes (neste navegador) e reabertura do último
+   O projeto é guardado sozinho (IndexedDB do navegador) 2,5 s depois de cada alteração; 🕘 Recentes lista os
+   últimos 12; ao abrir o programa, reabre o último editado (dá para desligar no painel).
+══════════════════════════════════════════════════════ */
+const REC={db:null,id:null,base:null,abrindo:false,ativo:false,timer:null,max:12};
+function recDB(){ return new Promise((ok,err)=>{ if(REC.db) return ok(REC.db); let r; try{ r=indexedDB.open('pint_recentes',1); }catch(e){ return err(e); }
+  r.onupgradeneeded=()=>{ r.result.createObjectStore('proj',{keyPath:'id'}); }; r.onsuccess=()=>{ REC.db=r.result; ok(REC.db); }; r.onerror=()=>err(r.error); }); }
+function recTx(modo,fn){ return recDB().then(db=>new Promise((ok,err)=>{ const tx=db.transaction('proj',modo), st=tx.objectStore('proj'); let res; const rq=fn(st); if(rq) rq.onsuccess=()=>{ res=rq.result; }; tx.oncomplete=()=>ok(res); tx.onerror=tx.onabort=()=>err(tx.error); })); }
+function recLista(){ return recTx('readonly',st=>st.getAll()).then(a=>(a||[]).sort((x,y)=>y.em-x.em)); }
+function recNovoId(){ return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function recSalvar(forca){
+  if(REC.abrindo) return Promise.resolve();
+  let p,txt; try{ p=projetoParaJSON(); txt=JSON.stringify(p); }catch(e){ return Promise.resolve(); }
+  if(!forca&&txt===REC.base) return Promise.resolve();
+  if(!REC.id) REC.id=recNovoId(); REC.base=txt;
+  const rs=(p.topo&&p.topo.ruas)||[], est=rs.reduce((a,r)=>a+((r.rows||[]).length),0);
+  const e={id:REC.id,nome:(p.ident&&p.ident.logradouro||'').trim()||'Projeto sem nome',resp:(p.ident&&p.ident.responsavel||'').trim(),ruas:rs.length,estacas:est,em:Date.now(),dados:txt};
+  return recTx('readwrite',st=>st.put(e)).then(()=>recLista()).then(l=>{ if(l.length>REC.max) return recTx('readwrite',st=>{ l.slice(REC.max).forEach(x=>st.delete(x.id)); }); }).catch(()=>{});
+}
+function recAgendar(){ if(!REC.ativo||REC.abrindo) return; clearTimeout(REC.timer); REC.timer=setTimeout(()=>{ recSalvar(false); },2500); }
+['input','change','click','keyup'].forEach(ev=>document.addEventListener(ev,recAgendar,true));
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden'&&REC.ativo) recSalvar(false); });
+window.addEventListener('pagehide',()=>{ if(REC.ativo) recSalvar(false); });
+/* projeto aberto por outro caminho (📂 Abrir, ☁ Nuvem) passa a ser um recente novo */
+(function(){ const orig=aplicarProjeto; aplicarProjeto=function(p){ const r=orig.apply(this,arguments); if(!REC.abrindo){ REC.id=null; REC.base=null; if(REC.ativo) setTimeout(()=>recSalvar(true),600); } return r; }; })();
+function recFmt(t){ const d=new Date(t), z=n=>String(n).padStart(2,'0'), h=new Date(); const hoje=d.toDateString()===h.toDateString(); return (hoje?'hoje':z(d.getDate())+'/'+z(d.getMonth()+1)+'/'+d.getFullYear())+' '+z(d.getHours())+':'+z(d.getMinutes()); }
+function recFechar(){ const e=document.getElementById('rec-painel'); if(e) e.remove(); }
+function recAbrirPainel(){
+  recSalvar(false).then(()=>recLista()).then(l=>{
+    recFechar();
+    const auto=(()=>{ try{ return localStorage.getItem('pint_rec_auto')!=='0'; }catch(e){ return true; } })();
+    const d=document.createElement('div'); d.id='rec-painel'; d.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px';
+    d.onclick=ev=>{ if(ev.target===d) recFechar(); };
+    const itens=l.length?l.map(x=>'<div style="display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;'+(x.id===REC.id?'background:var(--out);':'')+'">'+
+      '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.nome)+(x.id===REC.id?' <span style="font-size:10px;color:var(--accent2)">· aberto agora</span>':'')+'</div>'+
+      '<div style="font-size:11px;color:var(--fg3)">'+esc(recFmt(x.em))+' · '+x.ruas+' rua'+(x.ruas>1?'s':'')+' · '+x.estacas+' linhas de topografia'+(x.resp?' · '+esc(x.resp):'')+'</div></div>'+
+      '<button type="button" class="tb-btn tb-btn-save" onclick="recAbrir(\''+x.id+'\')">Abrir</button>'+
+      '<button type="button" class="tb-btn" title="Tirar da lista" onclick="recRemover(\''+x.id+'\')">🗑</button></div>').join(''):
+      '<div style="font-size:12.5px;color:var(--fg2);padding:10px 2px">Ainda não há projetos recentes. Eles entram aqui sozinhos assim que você começa a preencher.</div>';
+    d.innerHTML='<div style="background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:12px;max-width:560px;width:100%;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.35)">'+
+      '<div style="padding:14px 16px 8px;display:flex;align-items:center;gap:8px"><div style="font-size:16px;font-weight:800;flex:1">🕘 Projetos recentes</div><button type="button" class="tb-btn" onclick="recFechar()">✕</button></div>'+
+      '<div style="padding:0 16px;font-size:11.5px;color:var(--fg3);margin-bottom:8px">Guardados neste navegador, sozinhos, a cada alteração (últimos '+REC.max+'). Para levar a outro computador use 💾 Salvar, o projeto completo ou ☁ Nuvem.</div>'+
+      '<div style="padding:0 16px;overflow:auto;flex:1">'+itens+'</div>'+
+      '<div style="padding:10px 16px 14px;border-top:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap"><label style="font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer;flex:1"><input type="checkbox" '+(auto?'checked ':'')+'onchange="try{localStorage.setItem(\'pint_rec_auto\',this.checked?\'1\':\'0\')}catch(e){}"> Ao abrir o programa, abrir o último projeto editado</label>'+
+      '<button type="button" class="tb-btn" onclick="recNovo()">＋ Projeto novo em branco</button></div></div>';
+    document.body.appendChild(d);
+  }).catch(()=>toast('Não foi possível ler a lista de recentes neste navegador.',true));
+}
+function recAbrir(id){
+  recSalvar(false).then(()=>recTx('readonly',st=>st.get(id))).then(x=>{
+    if(!x){ toast('Esse projeto não está mais na lista.',true); return; }
+    REC.abrindo=true; try{ aplicarProjeto(JSON.parse(x.dados)); REC.id=x.id; if(typeof projNuvem!=='undefined') projNuvem=null; }catch(e){ toast('Erro ao abrir: '+e.message,true); }
+    REC.abrindo=false; setTimeout(()=>{ REC.base=recSnap2(); REC.id&&recSalvar(true); },900); recFechar(); toast('Aberto: '+x.nome);
+  }).catch(()=>toast('Não foi possível abrir.',true));
+}
+function recSnap2(){ try{ return JSON.stringify(projetoParaJSON()); }catch(e){ return null; } }
+function recRemover(id){ if(!confirm('Tirar este projeto da lista de recentes? (o arquivo .json que você baixou não é afetado)')) return;
+  recTx('readwrite',st=>st.delete(id)).then(()=>{ if(REC.id===id){ REC.id=null; REC.base=recSnap2(); } recAbrirPainel(); }); }
+function recNovo(){ if(!confirm('Começar um projeto novo em branco? O atual continua guardado em Recentes.')) return; recSalvar(false).then(()=>{ try{ sessionStorage.setItem('pint_rec_novo','1'); }catch(e){} location.reload(); }); }
+/* ao abrir o programa: reabre o último projeto editado */
+setTimeout(()=>{
+  let novo=false; try{ novo=sessionStorage.getItem('pint_rec_novo')==='1'; sessionStorage.removeItem('pint_rec_novo'); }catch(e){} if(/[#?&]novo\b/.test(location.href)) novo=true;
+  let auto=true; try{ auto=localStorage.getItem('pint_rec_auto')!=='0'; }catch(e){}
+  const pronto=()=>{ setTimeout(()=>{ REC.base=recSnap2(); REC.ativo=true; },900); };
+  if(novo||!auto){ pronto(); return; }
+  recLista().then(l=>{ if(!l.length){ pronto(); return; } const u=l[0]; REC.abrindo=true;
+    try{ aplicarProjeto(JSON.parse(u.dados)); REC.id=u.id; toast('Reaberto o último projeto: '+u.nome+'  (🕘 Recentes mostra os outros)'); }catch(e){ REC.id=null; }
+    REC.abrindo=false; pronto(); }).catch(()=>pronto());
+},700);
 </script>
 
 </div><!-- /#app-content -->
@@ -5643,4 +5817,220 @@ function renderAdmin(lista){
     dSave('intertravado_secoes.dxf',dBuild(layers,e));
   };
 })();
+</script>
+<script>
+/* PATCH PI-16 (12/11/2026) · GEORREFERENCIAR: posiciona a planta sobre o satélite (Leaflet + Esri World Imagery, o mesmo do programa Imagens GoogleEarth).
+   Só desenho/posição: nenhum cálculo muda. Estado em _geo (salvo no projeto em `georef`). */
+let _geo={lat:null,lng:null,rot:0,esc:100,opD:70,opS:100,base:'sat',modo:'dec'};
+const GEO_L='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.';
+const GEO_M=111320;
+(function(){
+  try{ const g=JSON.parse(localStorage.getItem('pint_georef')||'null'); if(g&&typeof g==='object') Object.assign(_geo,g); }catch(e){}
+  const pj=projetoParaJSON; projetoParaJSON=function(){ const o=pj.apply(this,arguments); if(_geo.lat!=null) o.georef=Object.assign({},_geo); return o; };
+  const ap=aplicarProjeto; aplicarProjeto=function(p){ if(p&&p.georef&&typeof p.georef==='object'){ _geo=Object.assign({lat:null,lng:null,rot:0,esc:100,opD:70,opS:100,base:'sat',modo:'dec'},p.georef); geoSalvaLocal(); } return ap.apply(this,arguments); };
+})();
+function geoSalvaLocal(){ try{ localStorage.setItem('pint_georef',JSON.stringify(_geo)); }catch(e){} }
+let _gm=null; /* mapa, camadas e pontos locais */
+function geoPontos(){
+  const D=plDados(), P=secaoParams(), w=plMfLarg(P), pistas=[], mfs=[], eixos=[]; let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  D.forEach(d=>{ const A=plAmostras(d,2); if(A.length<2) return;
+    const pi=plPoligono(d,A,0), mf=plPoligono(d,A,w); pistas.push(pi); if(w>0) mfs.push(mf); eixos.push(A.map(s=>s.c));
+    mf.forEach(q=>{ x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1]); }); });
+  if(x0>x1) return null; return {pistas,mfs,eixos,cx:(x0+x1)/2,cy:(y0+y1)/2,raio:Math.hypot(x1-x0,y1-y0)/2};
+}
+function geoLL(pt){ const g=_geo, G=_gm.pts, k=g.esc/100, th=g.rot*Math.PI/180, dx=(pt[0]-G.cx)*k, dy=(pt[1]-G.cy)*k;
+  const e=dx*Math.cos(th)-dy*Math.sin(th), n=dx*Math.sin(th)+dy*Math.cos(th); return [g.lat+n/GEO_M, g.lng+e/(GEO_M*Math.cos(g.lat*Math.PI/180))]; }
+function geoDesenha(){
+  const m=_gm; if(!m||_geo.lat==null) return; const L=window.L, G=m.pts;
+  const set=(arr,lst)=>{ lst.forEach((pl,i)=>pl.setLatLngs(arr[i].map(geoLL))); };
+  set(G.pistas,m.lp); set(G.mfs,m.lm); set(G.eixos,m.le);
+  m.lp.concat(m.lm,m.le).forEach(x=>x.setStyle({opacity:_geo.opD/100,fillOpacity:Math.min(.85,_geo.opD/100)}));
+  const c=[_geo.lat,_geo.lng]; m.mk.setLatLng(c);
+  const R=G.raio*_geo.esc/100*1.15+8, th=_geo.rot*Math.PI/180; m.mr.setLatLng([c[0]+R*Math.cos(th)/GEO_M, c[1]+R*Math.sin(th)/(GEO_M*Math.cos(c[0]*Math.PI/180))]);
+  m.lh.setLatLngs([c,m.mr.getLatLng()]);
+  geoCampos();
+}
+function geoCampos(){
+  const g=_geo, q=id=>document.getElementById(id); if(!q('geo-lat')) return;
+  if(g.modo==='utm'&&g.lat!=null){ const u=geoParaUTM(g.lat,g.lng); q('geo-lat').value=u.e.toFixed(2); q('geo-lng').value=u.n.toFixed(2); q('geo-zona').value=u.z; }
+  else { q('geo-lat').value=g.lat==null?'':g.lat.toFixed(6); q('geo-lng').value=g.lng==null?'':g.lng.toFixed(6); }
+  q('geo-rot').value=g.rot; q('geo-rot-n').value=(+g.rot).toFixed(1); q('geo-esc').value=g.esc; q('geo-od').value=g.opD; q('geo-os').value=g.opS;
+}
+/* UTM (SIRGAS 2000 ≈ WGS84), hemisfério sul */
+function geoParaUTM(lat,lng,zona){ const a=6378137,f=1/298.257222101,k0=.9996,e2=f*(2-f),ep2=e2/(1-e2); const z=zona||Math.floor((lng+180)/6)+1, l0=((z-1)*6-180+3)*Math.PI/180, ph=lat*Math.PI/180, l=lng*Math.PI/180;
+  const N=a/Math.sqrt(1-e2*Math.sin(ph)**2), T=Math.tan(ph)**2, C=ep2*Math.cos(ph)**2, A=Math.cos(ph)*(l-l0);
+  const M=a*((1-e2/4-3*e2*e2/64-5*e2**3/256)*ph-(3*e2/8+3*e2*e2/32+45*e2**3/1024)*Math.sin(2*ph)+(15*e2*e2/256+45*e2**3/1024)*Math.sin(4*ph)-(35*e2**3/3072)*Math.sin(6*ph));
+  const E=500000+k0*N*(A+(1-T+C)*A**3/6+(5-18*T+T*T+72*C-58*ep2)*A**5/120), Nn=k0*(M+N*Math.tan(ph)*(A*A/2+(5-T+9*C+4*C*C)*A**4/24+(61-58*T+T*T+600*C-330*ep2)*A**6/720))+(lat<0?1e7:0);
+  return {e:E,n:Nn,z}; }
+function geoDeUTM(E,Nn,z,sul){ const a=6378137,f=1/298.257222101,k0=.9996,e2=f*(2-f),ep2=e2/(1-e2), e1=(1-Math.sqrt(1-e2))/(1+Math.sqrt(1-e2));
+  const x=E-500000, y=sul?Nn-1e7:Nn, M=y/k0, mu=M/(a*(1-e2/4-3*e2*e2/64-5*e2**3/256));
+  const p1=mu+(3*e1/2-27*e1**3/32)*Math.sin(2*mu)+(21*e1*e1/16-55*e1**4/32)*Math.sin(4*mu)+(151*e1**3/96)*Math.sin(6*mu)+(1097*e1**4/512)*Math.sin(8*mu);
+  const C1=ep2*Math.cos(p1)**2, T1=Math.tan(p1)**2, N1=a/Math.sqrt(1-e2*Math.sin(p1)**2), R1=a*(1-e2)/Math.pow(1-e2*Math.sin(p1)**2,1.5), D=x/(N1*k0);
+  const lat=p1-(N1*Math.tan(p1)/R1)*(D*D/2-(5+3*T1+10*C1-4*C1*C1-9*ep2)*D**4/24+(61+90*T1+298*C1+45*T1*T1-252*ep2-3*C1*C1)*D**6/720);
+  const lon=((z-1)*6-180+3)*Math.PI/180+(D-(1+2*T1+C1)*D**3/6+(5-2*C1+28*T1-3*C1*C1+8*ep2+24*T1*T1)*D**5/120)/Math.cos(p1);
+  return [lat*180/Math.PI,lon*180/Math.PI]; }
+function geoNums(t){ return (String(t).match(/-?\d+(?:[.,]\d+)?/g)||[]).map(v=>parseFloat(v.replace(',','.'))); }
+function geoAbrir(){
+  if(document.getElementById('geo-modal')){ return; }
+  let pts; try{ pts=geoPontos(); }catch(e){ pts=null; }
+  if(!pts){ toast('Preencha a Topografia (ruas com greide e largura) para ter um desenho a posicionar.'); return; }
+  const ov=document.createElement('div'); ov.id='geo-modal'; ov.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:8px';
+  ov.innerHTML='<div style="background:var(--bg,#fff);color:var(--fg,#111);border-radius:8px;width:min(1250px,100%);height:min(900px,100%);display:flex;flex-direction:column;overflow:hidden;font-size:13px">'
+  +'<div style="padding:8px 10px;border-bottom:1px solid #ccc;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>🛰 Georreferenciar</b>'
+  +'<input id="geo-q" placeholder="Pesquisar rua, bairro, cidade…" style="flex:1;min-width:180px;padding:5px" onkeydown="if(event.key===\'Enter\')geoBusca()"><button class="tb-btn" onclick="geoBusca()">🔍 Pesquisar</button>'
+  +'<span id="geo-res" style="position:relative"></span><button class="tb-btn" style="margin-left:auto" onclick="geoFechar()">✕ Fechar</button></div>'
+  +'<div style="padding:6px 10px;border-bottom:1px solid #ddd;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
+  +'<select id="geo-modo" onchange="geoModo(this.value)"><option value="dec">Lat / Lon (graus)</option><option value="utm">UTM (E / N)</option></select>'
+  +'<label><span id="geo-l1">Latitude</span> <input id="geo-lat" style="width:110px" onchange="geoCoord()"></label>'
+  +'<label><span id="geo-l2">Longitude</span> <input id="geo-lng" style="width:110px" onchange="geoCoord()"></label>'
+  +'<label id="geo-zl" style="display:none">Zona <input id="geo-zona" type="number" value="24" style="width:50px" onchange="geoCoord()"> S</label>'
+  +'<button class="tb-btn" onclick="geoCentro()" title="Coloca o desenho no centro do mapa que você está vendo">📍 Posicionar no centro do mapa</button>'
+  +'<button class="tb-btn" onclick="geoColar()" title="Cole coordenadas copiadas do Google Maps/Earth (ex.: -22.5266, -41.9456)">📋 Colar coordenadas</button></div>'
+  +'<div style="padding:6px 10px;border-bottom:1px solid #ddd;display:flex;gap:12px;align-items:center;flex-wrap:wrap">'
+  +'<label>Giro <input id="geo-rot" type="range" min="-180" max="180" step="0.5" style="vertical-align:middle;width:150px" oninput="geoSet(\'rot\',this.value)"> <input id="geo-rot-n" type="number" step="0.5" style="width:62px" onchange="geoSet(\'rot\',this.value)">°</label>'
+  +'<label>Escala <input id="geo-esc" type="range" min="50" max="150" step="0.5" style="vertical-align:middle;width:100px" oninput="geoSet(\'esc\',this.value)">%</label>'
+  +'<label>Desenho <input id="geo-od" type="range" min="10" max="100" style="vertical-align:middle;width:90px" oninput="geoSet(\'opD\',this.value)"></label>'
+  +'<label>Imagem <input id="geo-os" type="range" min="20" max="100" style="vertical-align:middle;width:90px" oninput="geoSet(\'opS\',this.value)"></label>'
+  +'<select id="geo-base" onchange="geoBase(this.value)"><option value="sat">Satélite</option><option value="hib">Satélite + nomes</option><option value="rua">Mapa de ruas</option></select>'
+  +'<button class="tb-btn" onclick="geoKml()" title="Baixa um KML do desenho para abrir no Google Earth">⬇ KML (Google Earth)</button>'
+  +'<a class="tb-btn" id="geo-gm" target="_blank" rel="noopener" style="text-decoration:none">↗ Abrir no Google Maps</a>'
+  +'<button class="tb-btn tb-btn-save" onclick="geoFechar(true)">✔ Salvar posição</button></div>'
+  +'<div style="font-size:11.5px;color:#666;padding:3px 10px">Arraste o desenho (ou o ponto central ●) para mover · arraste o ponto ◎ para girar · Shift + roda do mouse gira · roda sem Shift dá zoom no mapa.</div>'
+  +'<div id="geo-map" style="flex:1;min-height:300px"></div></div>';
+  document.body.appendChild(ov);
+  if(!document.getElementById('geo-css')){ const l=document.createElement('link'); l.id='geo-css'; l.rel='stylesheet'; l.href=GEO_L+'css'; document.head.appendChild(l); }
+  plCarregar(GEO_L+'js').then(()=>geoIniciar(pts)).catch(()=>{ document.getElementById('geo-map').innerHTML='<div style="padding:30px">Sem conexão para carregar o mapa. Verifique a internet e tente de novo.</div>'; });
+}
+function geoIniciar(pts){
+  const L=window.L, el=document.getElementById('geo-map'); if(!el) return;
+  const novo=_geo.lat==null, c0=novo?[-22.527,-41.945]:[_geo.lat,_geo.lng];
+  const map=L.map(el,{maxZoom:21,scrollWheelZoom:true}).setView(c0,novo?13:19);
+  const sat=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{maxZoom:21,maxNativeZoom:19,attribution:'Imagens © Esri'});
+  const nom=L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',{maxZoom:21,maxNativeZoom:19});
+  const rua=L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:21,maxNativeZoom:19,attribution:'© OpenStreetMap'});
+  const est=(c,o)=>Object.assign({weight:1,interactive:true,bubblingMouseEvents:false},o,{color:c});
+  const lp=pts.pistas.map(()=>L.polygon([[0,0]],est('#ffffff',{fillColor:'#555',weight:1.5}))), lm=pts.mfs.map(()=>L.polygon([[0,0]],est('#ffd24a',{fill:false,weight:1,dashArray:'4 3'}))), le=pts.eixos.map(()=>L.polyline([[0,0]],{color:'#ff3b30',weight:1.5,dashArray:'8 5',interactive:false}));
+  const mk=L.marker(c0,{draggable:true,icon:L.divIcon({className:'',html:'<div style="width:16px;height:16px;border-radius:50%;background:#ff3b30;border:2px solid #fff;box-shadow:0 0 4px #000;margin:-8px 0 0 -8px"></div>'})});
+  const mr=L.marker(c0,{draggable:true,icon:L.divIcon({className:'',html:'<div title="Arraste para girar" style="width:20px;height:20px;border-radius:50%;background:#2d7ff9;border:3px solid #fff;box-shadow:0 0 4px #000;margin:-10px 0 0 -10px;cursor:grab"></div>'})});
+  const lh=L.polyline([c0,c0],{color:'#2d7ff9',weight:2,interactive:false});
+  _gm={map,pts,sat,nom,rua,lp,lm,le,mk,mr,lh};
+  lp.concat(lm,le,[lh,mk,mr]).forEach(x=>x.addTo(map));
+  geoBase(_geo.base||'sat'); document.getElementById('geo-base').value=_geo.base||'sat'; document.getElementById('geo-modo').value=_geo.modo||'dec'; geoModo(_geo.modo||'dec',true);
+  if(novo){ _geo.lat=c0[0]; _geo.lng=c0[1]; _gm.novo=true; }
+  mk.on('drag',()=>{ const p=mk.getLatLng(); _geo.lat=p.lat; _geo.lng=p.lng; geoDesenha(); });
+  mr.on('drag',()=>{ const p=mr.getLatLng(), dn=(p.lat-_geo.lat)*GEO_M, de=(p.lng-_geo.lng)*GEO_M*Math.cos(_geo.lat*Math.PI/180); let r=Math.atan2(dn,de)*180/Math.PI; if(r>180) r-=360; _geo.rot=Math.round(r*10)/10; const R=Math.hypot(dn,de)/(pts.raio*_geo.esc/100*1.15+8); geoDesenha(); });
+  mr.on('dragend',()=>{ geoDesenha(); });
+  /* arrastar o desenho inteiro */
+  let dr=null;
+  lp.forEach(pl=>pl.on('mousedown',e=>{ dr={la:e.latlng.lat,ln:e.latlng.lng,lat:_geo.lat,lng:_geo.lng}; map.dragging.disable(); L.DomEvent.stop(e); }));
+  map.on('mousemove',e=>{ if(!dr) return; _geo.lat=dr.lat+(e.latlng.lat-dr.la); _geo.lng=dr.lng+(e.latlng.lng-dr.ln); geoDesenha(); });
+  const fim=()=>{ if(dr){ dr=null; map.dragging.enable(); } }; map.on('mouseup',fim); document.addEventListener('mouseup',fim);
+  el.addEventListener('wheel',e=>{ if(!e.shiftKey) return; e.preventDefault(); e.stopPropagation(); _geo.rot=Math.max(-180,Math.min(180,Math.round((_geo.rot+(e.deltaY<0?1:-1)*(e.ctrlKey?0.2:1))*10)/10)); geoDesenha(); },{capture:true,passive:false});
+  map.on('moveend',()=>geoLinks());
+  geoDesenha(); geoAplicaOp(); geoLinks();
+  if(!novo) map.fitBounds(L.latLngBounds(lp.flatMap(p=>p.getLatLngs()[0])).pad(.3));
+}
+function geoAplicaOp(){ const m=_gm; if(!m) return; [m.sat,m.nom,m.rua].forEach(t=>t.setOpacity(_geo.opS/100)); }
+function geoBase(v){ const m=_gm; if(!m) return; _geo.base=v; [m.sat,m.nom,m.rua].forEach(t=>{ if(m.map.hasLayer(t)) m.map.removeLayer(t); });
+  if(v==='rua') m.rua.addTo(m.map); else { m.sat.addTo(m.map); if(v==='hib') m.nom.addTo(m.map); } [m.sat,m.nom,m.rua].forEach(t=>{ if(t.bringToBack) t.bringToBack(); }); geoAplicaOp(); }
+function geoSet(k,v){ _geo[k]=parseFloat(v)||0; if(k==='rot'&&_geo.rot>180) _geo.rot-=360; if(k==='opS') geoAplicaOp(); geoDesenha(); }
+function geoModo(v,sem){ _geo.modo=v; const u=v==='utm'; document.getElementById('geo-l1').textContent=u?'E (m)':'Latitude'; document.getElementById('geo-l2').textContent=u?'N (m)':'Longitude'; document.getElementById('geo-zl').style.display=u?'':'none'; geoCampos(); }
+function geoCoord(){ const q=id=>document.getElementById(id); let lat,lng;
+  if(_geo.modo==='utm'){ const E=geoNums(q('geo-lat').value)[0], N=geoNums(q('geo-lng').value)[0], z=parseInt(q('geo-zona').value)||24; if(!isFinite(E)||!isFinite(N)){ toast('Informe E e N.'); return; } [lat,lng]=geoDeUTM(E,N,z,true); }
+  else { let a=geoNums(q('geo-lat').value), b=geoNums(q('geo-lng').value); if(a.length>=2&&!b.length) b=[a[1]]; lat=a[0]; lng=b[0]; }
+  if(!isFinite(lat)||!isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180){ toast('Coordenadas inválidas.'); geoCampos(); return; }
+  geoVai(lat,lng); }
+function geoColar(){ const t=prompt('Cole as coordenadas (Lat, Lon em graus decimais, ex.: -22.5266, -41.9456):'); if(!t) return; const n=geoNums(t); if(n.length<2){ toast('Não achei duas coordenadas.'); return; }
+  geoModo('dec'); document.getElementById('geo-modo').value='dec'; geoVai(n[0],n[1]); }
+function geoVai(lat,lng,zoom){ _geo.lat=lat; _geo.lng=lng; if(_gm){ _gm.map.setView([lat,lng],zoom||Math.max(_gm.map.getZoom(),19)); geoDesenha(); } }
+function geoCentro(){ if(!_gm) return; const c=_gm.map.getCenter(); _geo.lat=c.lat; _geo.lng=c.lng; geoDesenha(); }
+function geoLinks(){ const a=document.getElementById('geo-gm'); if(a&&_geo.lat!=null) a.href='https://www.google.com/maps/@'+_geo.lat.toFixed(6)+','+_geo.lng.toFixed(6)+',19z/data=!3m1!1e3'; }
+async function geoBusca(){ const q=(document.getElementById('geo-q').value||'').trim(), box=document.getElementById('geo-res'); if(!q) return;
+  const n=geoNums(q); if(n.length===2&&/^[\s\-\d.,;]+$/.test(q)){ geoVai(n[0],n[1]); return; }
+  box.innerHTML='<i>buscando…</i>';
+  try{ const r=await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=6&countrycodes=br&accept-language=pt-BR&q='+encodeURIComponent(q)); const j=await r.json();
+    if(!j.length){ box.innerHTML='<i>nada encontrado — tente cidade + rua</i>'; return; }
+    box.innerHTML='<div style="position:absolute;z-index:10000;top:24px;right:0;width:360px;background:#fff;color:#111;border:1px solid #888;border-radius:6px;box-shadow:0 4px 14px rgba(0,0,0,.3)">'+j.map((x,i)=>'<div style="padding:6px 8px;cursor:pointer;border-bottom:1px solid #eee" onclick="geoEscolhe('+(+x.lat)+','+(+x.lon)+')">'+String(x.display_name).replace(/</g,'&lt;')+'</div>').join('')+'</div>';
+  }catch(e){ box.innerHTML='<i>falha na pesquisa (sem internet?)</i>'; } }
+function geoEscolhe(lat,lng){ document.getElementById('geo-res').innerHTML=''; geoVai(lat,lng,18); }
+function geoKml(){ if(!_gm||_geo.lat==null) return; const f=pt=>{ const c=geoLL(pt); return c[1].toFixed(8)+','+c[0].toFixed(8)+',0'; };
+  const pm=(n,ring,est)=>'<Placemark><name>'+n+'</name><styleUrl>#'+est+'</styleUrl><Polygon><tessellate>1</tessellate><outerBoundaryIs><LinearRing><coordinates>'+ring.concat([ring[0]]).map(f).join(' ')+'</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>';
+  const ln=(n,l)=>'<Placemark><name>'+n+'</name><styleUrl>#eixo</styleUrl><LineString><tessellate>1</tessellate><coordinates>'+l.map(f).join(' ')+'</coordinates></LineString></Placemark>';
+  const G=_gm.pts, kml='<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Pavimento intertravado</name>'
+   +'<Style id="pista"><LineStyle><color>ffffffff</color><width>2</width></LineStyle><PolyStyle><color>88555555</color></PolyStyle></Style><Style id="mf"><LineStyle><color>ff4ad2ff</color></LineStyle><PolyStyle><fill>0</fill></PolyStyle></Style><Style id="eixo"><LineStyle><color>ff343bff</color><width>2</width></LineStyle></Style>'
+   +G.pistas.map((r,i)=>pm('Pista '+(i+1),r,'pista')).join('')+G.mfs.map((r,i)=>pm('Meio-fio '+(i+1),r,'mf')).join('')+G.eixos.map((l,i)=>ln('Eixo '+(i+1),l)).join('')+'</Document></kml>';
+  triggerDownload(new Blob([kml],{type:'application/vnd.google-earth.kml+xml'}),'intertravado_georef_'+carimbo()+'.kml'); }
+function geoFechar(salvar){ geoSalvaLocal(); const ov=document.getElementById('geo-modal'); if(_gm){ try{ _gm.map.remove(); }catch(e){} _gm=null; } if(ov) ov.remove(); if(salvar) toast('Posição salva no projeto (use “Salvar projeto” para gravar no arquivo).'); }
+</script>
+
+<script>
+/* PATCH PI-16b (12/11/2026) · colunas de coordenadas na Topografia (row.lat/row.lng em graus, eixo da estaca).
+   Com 2 ou mais estacas com coordenada, o Georreferenciar loca o desenho sozinho (ajuste de rotação + translação, mínimos quadrados);
+   o usuário ainda pode mover/girar para corrigir o erro do GPS. O ajuste manual é mantido até as coordenadas mudarem. */
+TOPO_COLS.push([21,'Coord. Lat / N'],[22,'Coord. Lon / E']);
+function topoOrdemAtual(){
+  const base=[2,3,4,5,6,7,8,17,18,9,10,11,12,13,14,15,16,19,20,21,22];
+  const o=topoOrdem.filter(c=>base.indexOf(c)>=0).filter((c,i,a)=>a.indexOf(c)===i);
+  base.forEach(c=>{ if(o.indexOf(c)<0) o.push(c); }); return o;
+}
+function atualizarOrdemBtn(){ const b=document.getElementById('btn-ordem-topo'); if(b) b.style.display=topoOrdemAtual().join()==='2,3,4,5,6,7,8,17,18,9,10,11,12,13,14,15,16,19,20,21,22'?'none':''; }
+function geoTxtCel(r,k){ if(r.lat==null||r.lng==null) return '';
+  if(_geo.modo==='utm'){ const u=geoParaUTM(r.lat,r.lng,_geo.zona||24); return (k==='lat'?u.n:u.e).toFixed(3); }
+  return (k==='lat'?r.lat:r.lng).toFixed(7); }
+(function(){ const o=topoRowHtml; topoRowHtml=function(rows,i,ri,pre){ const r=rows[i], h=o.apply(this,arguments), st='width:96px;background:transparent;border:none;font-size:11px;color:var(--fg)';
+  const td=k=>'<td class="ti c'+(k==='lat'?21:22)+'"><input type="text" value="'+geoTxtCel(r,k)+'" placeholder="—" title="'+(k==='lat'?'Latitude (graus) ou UTM N · pode colar “lat, lon”':'Longitude (graus) ou UTM E')+'" onchange="geoCelula('+ri+','+i+',\''+k+'\',this.value)" style="'+st+'"></td>';
+  return h.replace(/<\/tr>\s*$/,td('lat')+td('lng')+'</tr>'); }; })();
+function geoCelula(ri,i,k,val){
+  const rows=(ruas[ri]&&ruas[ri].rows)||topoRows, r=rows[i]; if(!r) return; const n=geoNums(val);
+  if(!String(val).trim()||!n.length){ delete r.lat; delete r.lng; delete r._la; delete r._ln; }
+  else if(_geo.modo==='utm'){ const z=_geo.zona||24;
+    if(k==='lat'&&n.length>=2){ r._uN=n[0]; r._uE=n[1]; } else if(k==='lat') r._uN=n[0]; else r._uE=n[0];
+    if(r._uN==null&&r.lat!=null) r._uN=geoParaUTM(r.lat,r.lng,z).n; if(r._uE==null&&r.lat!=null) r._uE=geoParaUTM(r.lat,r.lng,z).e;
+    if(r._uN!=null&&r._uE!=null){ const ll=geoDeUTM(r._uE,r._uN,z,true); r.lat=+ll[0].toFixed(8); r.lng=+ll[1].toFixed(8); delete r._uN; delete r._uE; }
+  } else {
+    if(k==='lat'&&n.length>=2){ r._la=n[0]; r._ln=n[1]; } else if(k==='lat') r._la=n[0]; else r._ln=n[0];
+    if(r._la==null&&r.lat!=null) r._la=r.lat; if(r._ln==null&&r.lng!=null) r._ln=r.lng;
+    if(r._la!=null&&r._ln!=null){ if(Math.abs(r._la)>90||Math.abs(r._ln)>180){ toast('Coordenada fora do limite (lat ±90, lon ±180).',true); } else { r.lat=r._la; r.lng=r._ln; } delete r._la; delete r._ln; }
+  }
+  if(topoTodas) renderTodasRuas(); else renderTopoTable(); calcTopo();
+  const q=geoPontosGPS(); if(q.length>=2) toast(q.length+' estacas com coordenada: o 🛰 Georreferenciar já loca o desenho sozinho.');
+}
+/* pontos com coordenada: posição na planta (eixo) + lat/lng */
+function geoPontosGPS(){ let lay; try{ lay=plLayout(); }catch(e){ return []; } const out=[];
+  ruas.forEach((ru,ri)=>(ru.rows||[]).forEach(r=>{ if(r.lat!=null&&r.lng!=null&&lay[ri]) out.push({ri,est:+r.est,p:lay[ri].pos(+r.est),lat:+r.lat,lng:+r.lng,nome:nomeRua(ri)}); }));
+  return out; }
+function geoAssin(Q){ return Q.map(q=>q.ri+':'+q.est+':'+q.lat+':'+q.lng).join('|'); }
+/* ajuste: plano → terreno (rotação + translação; escala = 100%) */
+function geoAjustar(pts,Q){
+  if(!Q.length) return null; const la0=Q.reduce((a,q)=>a+q.lat,0)/Q.length, ln0=Q.reduce((a,q)=>a+q.lng,0)/Q.length, kx=GEO_M*Math.cos(la0*Math.PI/180);
+  const E=Q.map(q=>[(q.lng-ln0)*kx,(q.lat-la0)*GEO_M]), pm=[0,0]; Q.forEach(q=>{ pm[0]+=q.p[0]/Q.length; pm[1]+=q.p[1]/Q.length; });
+  let th=_geo.rot*Math.PI/180;
+  if(Q.length>=2){ let a=0,b=0; Q.forEach((q,i)=>{ const px=q.p[0]-pm[0], py=q.p[1]-pm[1], qx=E[i][0], qy=E[i][1]; a+=px*qy-py*qx; b+=px*qx+py*qy; }); th=Math.atan2(a,b); }
+  const R=v=>[v[0]*Math.cos(th)-v[1]*Math.sin(th), v[0]*Math.sin(th)+v[1]*Math.cos(th)];
+  const c=R([pts.cx-pm[0],pts.cy-pm[1]]); /* centro da planta no terreno (ENU em torno da média dos GPS) */
+  const res=Q.map((q,i)=>{ const w=R([q.p[0]-pm[0],q.p[1]-pm[1]]); return Math.hypot(w[0]-E[i][0],w[1]-E[i][1]); });
+  let rot=th*180/Math.PI; rot=Math.round(rot*100)/100;
+  return {lat:la0+c[1]/GEO_M,lng:ln0+c[0]/kx,rot,rms:Math.sqrt(res.reduce((a,x)=>a+x*x,0)/res.length),max:Math.max.apply(null,res),n:Q.length};
+}
+function geoAuto(pts,forcar){ const Q=geoPontosGPS(); if(Q.length<2) return null; const sg=geoAssin(Q); if(!forcar&&_geo.assin===sg&&_geo.lat!=null) return null;
+  const a=geoAjustar(pts,Q); if(!a) return null; Object.assign(_geo,{lat:a.lat,lng:a.lng,rot:a.rot,esc:100,assin:sg}); geoSalvaLocal(); return a; }
+(function(){
+  const ab=geoAbrir; geoAbrir=function(){ if(!document.getElementById('geo-modal')){ let pts=null; try{ pts=geoPontos(); }catch(e){} if(pts){ const a=geoAuto(pts); _geo._aviso=a?a:null; } } return ab.apply(this,arguments); };
+  const ini=geoIniciar; geoIniciar=function(pts){ ini.apply(this,arguments); const m=_gm; if(!m) return; const L=window.L;
+    m.gps=L.layerGroup().addTo(m.map);
+    const Q=geoPontosGPS(); Q.forEach(q=>L.circleMarker([q.lat,q.lng],{radius:5,color:'#fff',weight:2,fillColor:'#00c853',fillOpacity:1}).bindTooltip('GPS · '+q.nome+' · est. '+q.est,{direction:'top'}).addTo(m.gps));
+    const bar=document.getElementById('geo-map').previousElementSibling;
+    const info=document.createElement('div'); info.id='geo-info'; info.style.cssText='font-size:12px;padding:3px 10px;background:#eef6ff;color:#123';
+    bar.after(info); geoInfo();
+    if(Q.length>=2&&_geo.lat!=null) m.map.fitBounds(L.latLngBounds(m.lp.flatMap(p=>p.getLatLngs()[0])).pad(.3));
+  };
+})();
+function geoInfo(){ const el=document.getElementById('geo-info'); if(!el) return; const Q=geoPontosGPS();
+  if(Q.length<2){ el.innerHTML='Coordenadas na Topografia: '+Q.length+' estaca(s). Com 2 ou mais (colunas “Coord. Lat / N” e “Coord. Lon / E”), o desenho é locado sozinho. Sem elas, pesquise o local e posicione com o mouse.'; return; }
+  const a=geoAjustar(_gm.pts,Q);
+  el.innerHTML='📍 Locado pelas coordenadas de <b>'+Q.length+'</b> estacas (pontos verdes) · erro médio <b>'+a.rms.toFixed(2)+' m</b>, maior <b>'+a.max.toFixed(2)+' m</b>'+(a.max>5?' <span style="color:#b91c1c">(confira as coordenadas ou as estacas)</span>':'')+'. Ajuste com o mouse se o GPS errou. <button class="tb-btn" onclick="geoRelocar()">↺ Relocar pelas coordenadas</button>'; }
+function geoRelocar(){ if(!_gm) return; geoAuto(_gm.pts,true); geoDesenha(); geoInfo(); }
+/* sistema de coordenadas também muda o que a tabela mostra; zona UTM guardada */
+(function(){ const md=geoModo; geoModo=function(v,sem){ md.apply(this,arguments); if(!sem){ if(topoTodas) renderTodasRuas(); else renderTopoTable(); calcTopo(); } };
+  const cc=geoCoord; geoCoord=function(){ const z=parseInt((document.getElementById('geo-zona')||{}).value); if(z) _geo.zona=z; return cc.apply(this,arguments); }; })();
 </script>
