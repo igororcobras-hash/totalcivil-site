@@ -483,7 +483,8 @@ const PROGRAMAS = [
    desc:'Microdrenagem completa: chuva IDF, bacias, sarjetas, bocas-de-lobo, ramais, PVs, rede tronco, linha piezométrica e memorial.',
    ico:'<path d="M23 5C23 5 11 19 11 28a12 12 0 0 0 24 0C35 19 23 5 23 5Z"/><path d="M17 29a6 6 0 0 0 6 6"/>'},
   {key:'drenagem2',    campo:'drenagem2Ativo',    solic:'drenagem2Solicitado',    nome:'Drenagem Pluvial 2',          url:'/drenagem2/',    disp:true,
-   desc:'Nova versão da Drenagem Pluvial: gera a rede pela topografia em 3 opções sem erros, galeria de aduelas automática até o deságue, PVs no tamanho da base (EMOP, SINAPI, SCO), correção de erros e alertas em um clique, bacia de dissipação, 3D e orçamento.',
+   video:'/videos/drenagem-apresentacao.mp4',
+   desc:'Nova versão da Drenagem Pluvial: gera a rede pela topografia em 3 opções, PVs no tamanho da base (EMOP, SINAPI, SCO), correção de erros e alertas em um clique, bacia de dissipação, 3D e orçamentos (EMOP, SINAPI, SCO).',
    ico:'<path d="M23 5C23 5 11 19 11 28a12 12 0 0 0 24 0C35 19 23 5 23 5Z"/><path d="M17 29a6 6 0 0 0 6 6"/><path d="M38 6h6M41 3v6"/>'},
   {key:'estrutura',    campo:'estruturaAtivo',    solic:'estruturaSolicitado',    nome:'Estrutura em Concreto Armado', url:'/concreto/', disp:true,
    video:'/videos/concreto-apresentacao.mp4',
@@ -500,6 +501,17 @@ const PROGRAMAS = [
    ico:'<circle cx="23" cy="23" r="17"/><path d="M6 23h34M23 6c-6 6-6 28 0 34M23 6c6 6 6 28 0 34"/>'}
 ];
 const porKey = k => PROGRAMAS.find(p => p.key === k);
+/* Combos de cobrança: quem tem os dois programas do par paga só por um (o outro sai grátis).
+   Cada programa continua com o código, a página e os dados 100% separados — isto só mexe no PREÇO. */
+const COMBOS_GRATIS = [['drenagem', 'drenagem2']];
+/* Dado um conjunto de chaves de programas ativos/marcados, devolve quantos DEVEM SER COBRADOS
+   (já descontando o grátis de cada combo completo). */
+function contarCobrados(chaves){
+  const set = new Set(chaves);
+  let descontar = 0;
+  COMBOS_GRATIS.forEach(par => { if(par.every(k => set.has(k))) descontar++; });
+  return Math.max(0, set.size - descontar);
+}
 
 /* ---------- utilidades ---------- */
 const $ = id => document.getElementById(id);
@@ -609,7 +621,8 @@ function abrirVideo(k){
 }
 document.addEventListener('click', e => { const b = e.target.closest('[data-video]'); if(b){ e.preventDefault(); abrirVideo(b.dataset.video); } });
 function valores(chaves){
-  const disp = chaves.filter(k => porKey(k) && porKey(k).disp).length;
+  const chavesDisp = chaves.filter(k => porKey(k) && porKey(k).disp);
+  const disp = contarCobrados(chavesDisp);
   const breve = chaves.filter(k => porKey(k) && !porKey(k).disp).length;
   return {disp, breve, mensal: disp * PRECO};
 }
@@ -683,11 +696,20 @@ function marcadosCadastro(){ return [...$('cad-programas').querySelectorAll('inp
 const planoCadastro = () => (document.querySelector('input[name="cd-plano"]:checked') || {}).value || 'mensal';
 function resumoCadastro(){
   const ks = marcadosCadastro();
+  const kset = new Set(ks);
   const v = valores(ks), pl = planoCadastro();
+  /* combo "compra 1, ganha o outro": mostra o 2º programa do par como grátis na própria lista */
+  const comboAtivo = COMBOS_GRATIS.find(par => par.every(k => kset.has(k)));
+  $('cad-programas').querySelectorAll('label.opcao').forEach(lb => {
+    const cb = lb.querySelector('input'); const vl = lb.querySelector('.vl'); const p = porKey(cb.value);
+    if(!p || !p.disp || lb.querySelector('input').disabled) return;
+    vl.textContent = (comboAtivo && comboAtivo[1] === cb.value) ? 'grátis (combo com ' + esc(porKey(comboAtivo[0]).nome) + ')' : brl(PRECO) + '/mês';
+  });
   $('vl-mensal').textContent = brl(valorPlano(v.disp, 'mensal')) + '/mês';
   $('vl-anual').textContent = brl(valorPlano(v.disp, 'anual')) + '/ano';
   $('cad-resumo').innerHTML =
     '<div class="lin"><span>Programas disponíveis</span><span>' + v.disp + ' × ' + brl(PRECO) + '/mês</span></div>' +
+    (comboAtivo ? '<div class="lin"><span>Combo ' + esc(porKey(comboAtivo[0]).nome) + ' + ' + esc(porKey(comboAtivo[1]).nome) + '</span><span>compra 1, ganha o outro</span></div>' : '') +
     (v.breve ? '<div class="lin"><span>Lançamentos reservados</span><span>' + v.breve + ' (sem cobrança agora)</span></div>' : '') +
     (pl === 'anual' ? '<div class="lin"><span>Plano anual: 12 meses com 10% de desconto</span><span>−' + brl(v.disp * PRECO * 12 * DESC_ANUAL) + '</span></div>' : '') +
     '<div class="lin"><span>1º e 2º mês</span><span>grátis</span></div>' +
@@ -916,9 +938,9 @@ $('bt-conta').onclick = () => {
     return '<div class="lin" style="align-items:center"><span>' + esc(p.nome) + (p.disp ? '' : ' <span class="tag breve">em breve</span>') + '</span><span style="display:flex;gap:8px;align-items:center">' + st +
       (lib && p.url ? ' <a class="bt peq" href="' + p.url + '">Abrir</a>' : '') + '</span></div>';
   }).join('');
-  const nLib = PROGRAMAS.filter(p => p.disp && liberado(eu, p) && !eu.admin).length;
-  const nPed = PROGRAMAS.filter(p => p.disp && (liberado(eu, p) || pedidos.includes(p.key) || (p.solic && eu[p.solic]))).length;
-  const nCob = nLib || nPed;
+  const kLib = PROGRAMAS.filter(p => p.disp && liberado(eu, p) && !eu.admin).map(p => p.key);
+  const kPed = PROGRAMAS.filter(p => p.disp && (liberado(eu, p) || pedidos.includes(p.key) || (p.solic && eu[p.solic]))).map(p => p.key);
+  const nCob = contarCobrados(kLib.length ? kLib : kPed);
   const plano = eu.plano === 'anual' ? 'anual' : 'mensal';
   const valor = valorPlano(nCob, plano);
   $('conta-corpo').innerHTML =
@@ -1076,7 +1098,7 @@ async function renderUsuarios(){
       }).join('') + '</div>';
     }
     const plano = u.plano === 'anual' ? 'anual' : 'mensal';
-    const nCob = PROGRAMAS.filter(p => p.disp && (u[p.campo] || (e === 'pen' && pediu(u, p)))).length;
+    const nCob = contarCobrados(PROGRAMAS.filter(p => p.disp && (u[p.campo] || (e === 'pen' && pediu(u, p)))).map(p => p.key));
     const nInd = indicacoes[codigoDe(u.uid)] || 0;
     const bonusPend = Math.max(0, nInd - (u.indicacoesUsadas || 0));
     const pedidoInfo = e === 'adm' ? '' :
@@ -1124,7 +1146,7 @@ async function renderUsuarios(){
     PROGRAMAS.forEach((p, k) => { const cb = corpo.querySelector('input[data-i="' + i + '"][data-prog="' + k + '"]'); if(cb) marcados[p.campo] = cb.checked; });
     const algumMarcado = Object.values(marcados).some(Boolean);
     const plano = u.plano === 'anual' ? 'anual' : 'mensal';
-    const nDisp = PROGRAMAS.filter(p => p.disp && marcados[p.campo]).length;
+    const nDisp = contarCobrados(PROGRAMAS.filter(p => p.disp && marcados[p.campo]).map(p => p.key));
     const hoje = new Date();
     const fimDia = d => new Date(dataISO(d) + 'T23:59:59');
     const somaDias = (base, n) => { const x = new Date(base); x.setDate(x.getDate() + n); return x; };
@@ -1195,8 +1217,9 @@ async function registrarLancamento(u, l){
 function formPagamento(u, indicacoes){
   const corpo = $('us-corpo');
   const plano = u.plano === 'anual' ? 'anual' : 'mensal';
-  const nProg = PROGRAMAS.filter(p => p.disp && u[p.campo]).length;
-  const valor = valorPlano(nProg, plano);
+  const progsAtivos = PROGRAMAS.filter(p => p.disp && u[p.campo]);
+  const nProg = progsAtivos.length;
+  const valor = valorPlano(contarCobrados(progsAtivos.map(p => p.key)), plano);
   const nInd = indicacoes[codigoDe(u.uid)] || 0, pend = Math.max(0, nInd - (u.indicacoesUsadas || 0));
   const bonus = pend * DIAS_INDICACAO[plano];
   const dias = plano === 'anual' ? 365 : 30;
