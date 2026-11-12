@@ -1,7 +1,15 @@
 rules_version = '2';
 
-// Regras de segurança do Firestore — Total Civil (todos os programas)
-// Cole este conteúdo em: Firebase › Firestore Database › Regras › Publicar.
+// ════════════════════════════════════════════════════════════════════════
+// REGRAS DE SEGURANÇA DO FIRESTORE — TOTAL CIVIL (TODOS OS PROGRAMAS)
+// Arquivo ÚNICO e COMPLETO. Versão de 12/11/2026.
+//
+// Como publicar (escolha um):
+//   • GitHub › Actions › “Publicar regras do Firestore” › Run workflow (ramo main); ou
+//   • Firebase › Firestore Database › Regras: apague tudo, cole este arquivo e clique em Publicar.
+// NUNCA cole este texto dentro de .github/workflows/publicar-regras.yml.
+// Publicar um arquivo SEM o bloco de algum programa tira o acesso desse programa à nuvem
+// (aconteceu com o Intertravado em 12/11/2026). Programa novo = acrescente aqui o bloco dele.
 //
 // O que estas regras garantem, no servidor (não dá para burlar pelo navegador):
 //   1. Um único cadastro por pessoa para todos os programas.
@@ -10,9 +18,35 @@ rules_version = '2';
 //   4. O próprio usuário só pode fazer pedidos (programas, forma de pagamento, aviso de pagamento).
 //   5. Pedidos de programa personalizado: qualquer visitante envia; só o administrador lê.
 //   6. Pagamentos recebidos: só os administradores registram e consultam.
+//   7. O código de cada programa só é entregue a quem tem o programa liberado.
+//   8. Os projetos na nuvem de cada programa só são lidos e gravados pelo dono (e pelo administrador).
+//
+// ÍNDICE — coleção · quem usa
+//   usuarios ................ cadastro único (página principal, carregador, todos os programas)
+//   apelidos ................ login com apelido (Orçamento)
+//   solicitacoes ............ pedidos de programa personalizado (página principal)
+//   pagamentos .............. pagamentos recebidos (painel do administrador)
+//   programas / partes ...... código dos programas (carregador.js; gravado pela publicação automática)
+//   projetos ................ Pavimento Flexível — projetos na nuvem
+//   projetosDrenagem ........ Drenagem Pluvial — projetos na nuvem
+//   projetosDrenagem2 ....... Drenagem Pluvial 2 — projetos na nuvem
+//   projetosIntertravado .... Pavimento Intertravado — projetos na nuvem com compartilhamento
+//   diretorioIntertravado ... Pavimento Intertravado — lista de usuários para compartilhar
+//   obrasServicos ........... Serviços Públicos — obras na nuvem
+//   fotosServicos ........... Serviços Públicos — fotos das obras
+//   (Visitas Técnicas, Estrutura em Concreto e Imagens GoogleEarth não usam o Firestore para dados;
+//    config/avisos é gravado só pela rotina do GitHub com conta de serviço, que não passa por estas regras.)
+// Campos de liberação no cadastro: ativo (Pavimento Flexível), orcamentoAtivo, intertravadoAtivo,
+// drenagemAtivo, drenagem2Ativo, estruturaAtivo, visitasAtivo, manutencaoAtivo, googleearthAtivo
+// (os mesmos de PROGRAMAS no index.html e de scripts/publicar/montar-site.js).
+// ════════════════════════════════════════════════════════════════════════
 
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // ════════════════════════════════════════════════════════════════
+    // 1. FUNÇÕES
+    // ════════════════════════════════════════════════════════════════
 
     function logado() {
       return request.auth != null;
@@ -63,6 +97,35 @@ service cloud.firestore {
     function falsoOuAusente(d, campo) {
       return !(campo in d) || d[campo] == false;
     }
+
+    // Código dos programas (gravado só pela publicação automática, com conta de serviço).
+    // Entregue apenas a quem tem o programa liberado: mesmo campo, recusa e validade
+    // do painel Usuários. A lista abaixo precisa ser igual à de scripts/publicar/montar-site.js.
+    function campoDoPrograma(prog) {
+      return {
+        'pavimento': 'ativo',
+        'orcamento': 'orcamentoAtivo',
+        'intertravado': 'intertravadoAtivo',
+        'drenagem': 'drenagemAtivo',
+        'drenagem2': 'drenagem2Ativo',
+        'concreto': 'estruturaAtivo',
+        'visitas': 'visitasAtivo',
+        'manutencao': 'manutencaoAtivo',
+        'googleearth': 'googleearthAtivo'
+      }.get(prog, '');
+    }
+    function podeUsar(prog) {
+      return admin() || (
+        logado() && temPerfil() && campoDoPrograma(prog) != '' &&
+        perfil().get(campoDoPrograma(prog), false) == true &&
+        perfil().get('recusado', false) != true &&
+        (perfil().get('validade', null) == null || perfil().validade > request.time)
+      );
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // 2. CADASTRO E SITE
+    // ════════════════════════════════════════════════════════════════
 
     match /usuarios/{uid} {
       // Cada um lê o próprio cadastro; o administrador lê todos.
@@ -127,51 +190,6 @@ service cloud.firestore {
       allow update, delete: if admin();
     }
 
-    // Projetos salvos na nuvem (Pavimento Flexível).
-    match /projetos/{projetoId} {
-      allow read: if liberado()
-                  && (resource.data.uid == request.auth.uid || admin());
-      allow create: if liberado()
-                    && request.resource.data.uid == request.auth.uid;
-      allow update: if liberado()
-                    && resource.data.uid == request.auth.uid
-                    && request.resource.data.uid == request.auth.uid;
-      allow delete: if liberado()
-                    && (resource.data.uid == request.auth.uid || admin());
-    }
-
-    // Obras do programa Serviços Públicos salvas na nuvem (sem as fotos).
-    // Cada obra é do dono (quem a criou) e do administrador; os demais só entram se o
-    // administrador liberar a obra no cadastro da pessoa (campo manutencaoObras: {idDoDocumento: perfil}).
-    match /obrasServicos/{docId} {
-      allow read: if liberadoPrograma('manutencaoAtivo')
-                  && (resource.data.uid == request.auth.uid || admin() || membroObra(docId));
-      allow create: if liberadoPrograma('manutencaoAtivo')
-                    && request.resource.data.uid == request.auth.uid
-                    && docId == request.auth.uid + '_' + request.resource.data.obraId;
-      allow update: if liberadoPrograma('manutencaoAtivo')
-                    && (resource.data.uid == request.auth.uid || admin() || membroObra(docId))
-                    && request.resource.data.uid == resource.data.uid
-                    && request.resource.data.obraId == resource.data.obraId;
-      allow delete: if liberadoPrograma('manutencaoAtivo')
-                    && (resource.data.uid == request.auth.uid || admin());
-    }
-
-    // Fotos das obras de Serviços Públicos (JPEG reduzido, ≈100–150 KB cada): mesmas pessoas da obra.
-    // O documento guarda obraDoc = idDoDono_idDaObra, que decide quem pode ler.
-    match /fotosServicos/{fotoId} {
-      allow read: if liberadoPrograma('manutencaoAtivo')
-                  && (resource.data.uid == request.auth.uid || admin() || membroObra(resource.data.obraDoc));
-      allow create: if liberadoPrograma('manutencaoAtivo')
-                    && request.resource.data.obraDoc == request.resource.data.uid + '_' + request.resource.data.obraId
-                    && request.resource.data.dados is string
-                    && request.resource.data.dados.size() < 900000
-                    && (request.resource.data.uid == request.auth.uid || admin() || membroObra(request.resource.data.obraDoc));
-      allow update: if false;
-      allow delete: if liberadoPrograma('manutencaoAtivo')
-                    && (resource.data.uid == request.auth.uid || admin() || membroObra(resource.data.obraDoc));
-    }
-
     // Pedidos de programa personalizado (quadro da página principal).
     match /solicitacoes/{id} {
       allow create: if request.resource.data.keys().hasOnly(['nome','contato','email','descricao','uid','criadoEm'])
@@ -195,30 +213,10 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // Código dos programas (gravado só pela publicação automática, com conta de serviço).
-    // Entregue apenas a quem tem o programa liberado: mesmo campo, recusa e validade
-    // do painel Usuários. A lista abaixo precisa ser igual à de scripts/publicar/montar-site.js.
-    function campoDoPrograma(prog) {
-      return {
-        'pavimento': 'ativo',
-        'orcamento': 'orcamentoAtivo',
-        'intertravado': 'intertravadoAtivo',
-        'drenagem': 'drenagemAtivo',
-        'drenagem2': 'drenagem2Ativo',
-        'concreto': 'estruturaAtivo',
-        'visitas': 'visitasAtivo',
-        'manutencao': 'manutencaoAtivo',
-        'googleearth': 'googleearthAtivo'
-      }.get(prog, '');
-    }
-    function podeUsar(prog) {
-      return admin() || (
-        logado() && temPerfil() && campoDoPrograma(prog) != '' &&
-        perfil().get(campoDoPrograma(prog), false) == true &&
-        perfil().get('recusado', false) != true &&
-        (perfil().get('validade', null) == null || perfil().validade > request.time)
-      );
-    }
+    // ════════════════════════════════════════════════════════════════
+    // 3. CÓDIGO DOS PROGRAMAS (carregador.js)
+    // ════════════════════════════════════════════════════════════════
+
     match /programas/{prog} {
       allow get: if podeUsar(prog);
       allow list, write: if false;
@@ -228,8 +226,45 @@ service cloud.firestore {
       }
     }
 
+    // ════════════════════════════════════════════════════════════════
+    // 4. PAVIMENTO FLEXÍVEL
+    // ════════════════════════════════════════════════════════════════
+
+    // Projetos salvos na nuvem (Pavimento Flexível).
+    match /projetos/{projetoId} {
+      allow read: if liberado()
+                  && (resource.data.uid == request.auth.uid || admin());
+      allow create: if liberado()
+                    && request.resource.data.uid == request.auth.uid;
+      allow update: if liberado()
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == request.auth.uid;
+      allow delete: if liberado()
+                    && (resource.data.uid == request.auth.uid || admin());
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // 5. DRENAGEM PLUVIAL
+    // ════════════════════════════════════════════════════════════════
+
     // Projetos da Drenagem Pluvial salvos na nuvem: só o dono (com a Drenagem liberada) lê e grava; o administrador lê e exclui.
     // A lista é feita só por uid (sem índice composto); o tamanho de cada projeto é limitado a ~1 MB pelo próprio Firestore.
+    match /projetosDrenagem/{projetoId} {
+      allow read: if podeUsar('drenagem')
+                  && (resource.data.uid == request.auth.uid || admin());
+      allow create: if podeUsar('drenagem')
+                    && request.resource.data.uid == request.auth.uid;
+      allow update: if podeUsar('drenagem')
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == request.auth.uid;
+      allow delete: if podeUsar('drenagem')
+                    && (resource.data.uid == request.auth.uid || admin());
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // 6. DRENAGEM PLUVIAL 2
+    // ════════════════════════════════════════════════════════════════
+
     // Projetos da Drenagem Pluvial 2 (coleção própria; não se mistura com a Drenagem Pluvial 1).
     match /projetosDrenagem2/{projetoId} {
       allow read: if podeUsar('drenagem2')
@@ -242,17 +277,10 @@ service cloud.firestore {
       allow delete: if podeUsar('drenagem2')
                     && (resource.data.uid == request.auth.uid || admin());
     }
-    match /projetosDrenagem/{projetoId} {
-      allow read: if podeUsar('drenagem')
-                  && (resource.data.uid == request.auth.uid || admin());
-      allow create: if podeUsar('drenagem')
-                    && request.resource.data.uid == request.auth.uid;
-      allow update: if podeUsar('drenagem')
-                    && resource.data.uid == request.auth.uid
-                    && request.resource.data.uid == request.auth.uid;
-      allow delete: if podeUsar('drenagem')
-                    && (resource.data.uid == request.auth.uid || admin());
-    }
+
+    // ════════════════════════════════════════════════════════════════
+    // 7. PAVIMENTO INTERTRAVADO
+    // ════════════════════════════════════════════════════════════════
 
     // ── Pavimento Intertravado: projetos na nuvem com compartilhamento (PI-02) ──
     // O dono (quem criou) lê, grava, compartilha e exclui. Quem recebe acesso entra nos campos
@@ -288,7 +316,46 @@ service cloud.firestore {
       allow delete: if admin();
     }
 
-    // Qualquer outro caminho fica bloqueado.
+    // ════════════════════════════════════════════════════════════════
+    // 8. SERVIÇOS PÚBLICOS
+    // ════════════════════════════════════════════════════════════════
+
+    // Obras do programa Serviços Públicos salvas na nuvem (sem as fotos).
+    // Cada obra é do dono (quem a criou) e do administrador; os demais só entram se o
+    // administrador liberar a obra no cadastro da pessoa (campo manutencaoObras: {idDoDocumento: perfil}).
+    match /obrasServicos/{docId} {
+      allow read: if liberadoPrograma('manutencaoAtivo')
+                  && (resource.data.uid == request.auth.uid || admin() || membroObra(docId));
+      allow create: if liberadoPrograma('manutencaoAtivo')
+                    && request.resource.data.uid == request.auth.uid
+                    && docId == request.auth.uid + '_' + request.resource.data.obraId;
+      allow update: if liberadoPrograma('manutencaoAtivo')
+                    && (resource.data.uid == request.auth.uid || admin() || membroObra(docId))
+                    && request.resource.data.uid == resource.data.uid
+                    && request.resource.data.obraId == resource.data.obraId;
+      allow delete: if liberadoPrograma('manutencaoAtivo')
+                    && (resource.data.uid == request.auth.uid || admin());
+    }
+
+    // Fotos das obras de Serviços Públicos (JPEG reduzido, ≈100–150 KB cada): mesmas pessoas da obra.
+    // O documento guarda obraDoc = idDoDono_idDaObra, que decide quem pode ler.
+    match /fotosServicos/{fotoId} {
+      allow read: if liberadoPrograma('manutencaoAtivo')
+                  && (resource.data.uid == request.auth.uid || admin() || membroObra(resource.data.obraDoc));
+      allow create: if liberadoPrograma('manutencaoAtivo')
+                    && request.resource.data.obraDoc == request.resource.data.uid + '_' + request.resource.data.obraId
+                    && request.resource.data.dados is string
+                    && request.resource.data.dados.size() < 900000
+                    && (request.resource.data.uid == request.auth.uid || admin() || membroObra(request.resource.data.obraDoc));
+      allow update: if false;
+      allow delete: if liberadoPrograma('manutencaoAtivo')
+                    && (resource.data.uid == request.auth.uid || admin() || membroObra(resource.data.obraDoc));
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // 9. TODO O RESTO: BLOQUEADO
+    // ════════════════════════════════════════════════════════════════
+
     match /{documento=**} {
       allow read, write: if false;
     }
