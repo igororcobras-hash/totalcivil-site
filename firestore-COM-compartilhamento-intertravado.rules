@@ -1,6 +1,5 @@
-// ARQUIVO PARA COLAR NO FIREBASE (Firestore Database › Regras › Publicar).
-// É o firestore.rules atual + dois blocos novos (projetosIntertravado e diretorioIntertravado)
-// para o compartilhamento de projetos do Pavimento Intertravado. Nada do que já existia foi alterado.
+// ATENÇÃO (12/11/2026): este arquivo agora é IGUAL ao firestore.rules (que já tem os blocos do Intertravado e do Drenagem 2).
+// Publique sempre o firestore.rules (Actions › Publicar regras do Firestore › Run workflow) ou cole-o no console.
 rules_version = '2';
 
 // Regras de segurança do Firestore — Total Civil (todos os programas)
@@ -78,7 +77,7 @@ service cloud.firestore {
                          'usuario','email','nome','empresa','whatsapp',
                          'ativo','admin','recusado','validade','criadoEm',
                          'orcamentoSolicitado','orcamentoAtivo','intertravadoSolicitado','intertravadoAtivo',
-                         'drenagemSolicitado','drenagemAtivo','estruturaAtivo','visitasSolicitado','visitasAtivo','manutencaoSolicitado','manutencaoAtivo',
+                         'drenagemSolicitado','drenagemAtivo','drenagem2Solicitado','drenagem2Ativo','estruturaAtivo','visitasSolicitado','visitasAtivo','manutencaoSolicitado','manutencaoAtivo',
                          'googleearthSolicitado','googleearthAtivo',
                          'programasPedidos','formaPagamento','plano','tipoPedido','pedidoEm','indicadoPor'])
                     && request.resource.data.ativo == false
@@ -88,6 +87,7 @@ service cloud.firestore {
                     && falsoOuAusente(request.resource.data, 'orcamentoAtivo')
                     && falsoOuAusente(request.resource.data, 'intertravadoAtivo')
                     && falsoOuAusente(request.resource.data, 'drenagemAtivo')
+                    && falsoOuAusente(request.resource.data, 'drenagem2Ativo')
                     && falsoOuAusente(request.resource.data, 'estruturaAtivo')
                     && falsoOuAusente(request.resource.data, 'visitasAtivo')
                     && falsoOuAusente(request.resource.data, 'manutencaoAtivo')
@@ -99,7 +99,7 @@ service cloud.firestore {
       allow update: if admin()
                     || (logado() && uid == request.auth.uid
                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                             'orcamentoSolicitado','intertravadoSolicitado','drenagemSolicitado','visitasSolicitado','manutencaoSolicitado','googleearthSolicitado',
+                             'orcamentoSolicitado','intertravadoSolicitado','drenagemSolicitado','drenagem2Solicitado','visitasSolicitado','manutencaoSolicitado','googleearthSolicitado',
                              'programasPedidos','formaPagamento','plano','tipoPedido','pedidoEm','indicadoPor','pagamentoAvisadoEm'])
                         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['orcamentoSolicitado'])
                             || request.resource.data.orcamentoSolicitado == true)
@@ -107,6 +107,8 @@ service cloud.firestore {
                             || request.resource.data.intertravadoSolicitado == true)
                         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['drenagemSolicitado'])
                             || request.resource.data.drenagemSolicitado == true)
+                        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['drenagem2Solicitado'])
+                            || request.resource.data.drenagem2Solicitado == true)
                         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['visitasSolicitado'])
                             || request.resource.data.visitasSolicitado == true)
                         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['manutencaoSolicitado'])
@@ -204,6 +206,7 @@ service cloud.firestore {
         'orcamento': 'orcamentoAtivo',
         'intertravado': 'intertravadoAtivo',
         'drenagem': 'drenagemAtivo',
+        'drenagem2': 'drenagem2Ativo',
         'concreto': 'estruturaAtivo',
         'visitas': 'visitasAtivo',
         'manutencao': 'manutencaoAtivo',
@@ -229,6 +232,18 @@ service cloud.firestore {
 
     // Projetos da Drenagem Pluvial salvos na nuvem: só o dono (com a Drenagem liberada) lê e grava; o administrador lê e exclui.
     // A lista é feita só por uid (sem índice composto); o tamanho de cada projeto é limitado a ~1 MB pelo próprio Firestore.
+    // Projetos da Drenagem Pluvial 2 (coleção própria; não se mistura com a Drenagem Pluvial 1).
+    match /projetosDrenagem2/{projetoId} {
+      allow read: if podeUsar('drenagem2')
+                  && (resource.data.uid == request.auth.uid || admin());
+      allow create: if podeUsar('drenagem2')
+                    && request.resource.data.uid == request.auth.uid;
+      allow update: if podeUsar('drenagem2')
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == request.auth.uid;
+      allow delete: if podeUsar('drenagem2')
+                    && (resource.data.uid == request.auth.uid || admin());
+    }
     match /projetosDrenagem/{projetoId} {
       allow read: if podeUsar('drenagem')
                   && (resource.data.uid == request.auth.uid || admin());

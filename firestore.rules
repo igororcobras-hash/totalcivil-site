@@ -254,6 +254,40 @@ service cloud.firestore {
                     && (resource.data.uid == request.auth.uid || admin());
     }
 
+    // ── Pavimento Intertravado: projetos na nuvem com compartilhamento (PI-02) ──
+    // O dono (quem criou) lê, grava, compartilha e exclui. Quem recebe acesso entra nos campos
+    // `membros` (todos com acesso) e `editores` (só os que podem editar); `compartilhado` guarda o
+    // papel e o nome de cada um só para exibir. Editor só troca o conteúdo (dados, nome, data, autor):
+    // não consegue mudar dono nem a lista de compartilhamento. Exige o Intertravado liberado.
+    match /projetosIntertravado/{projetoId} {
+      allow read: if podeUsar('intertravado')
+                  && (resource.data.uid == request.auth.uid
+                      || admin()
+                      || request.auth.uid in resource.data.membros);
+      allow create: if podeUsar('intertravado')
+                    && request.resource.data.uid == request.auth.uid;
+      allow update: if podeUsar('intertravado')
+                    && request.resource.data.uid == resource.data.uid
+                    && (resource.data.uid == request.auth.uid
+                        || (request.auth.uid in resource.data.editores
+                            && request.resource.data.diff(resource.data).affectedKeys()
+                                 .hasOnly(['dados','nome','atualizadoEm','editadoPor'])));
+      allow delete: if podeUsar('intertravado')
+                    && (resource.data.uid == request.auth.uid || admin());
+    }
+
+    // Lista de usuários do Intertravado para escolher com quem compartilhar: cada pessoa grava
+    // só o próprio registro (nome, empresa, usuário) ao abrir o programa; quem tem o Intertravado
+    // liberado lê a lista. Não contém e-mail, senha nem dados de pagamento.
+    match /diretorioIntertravado/{uid} {
+      allow read: if podeUsar('intertravado');
+      allow create, update: if podeUsar('intertravado')
+                            && uid == request.auth.uid
+                            && request.resource.data.uid == request.auth.uid
+                            && request.resource.data.keys().hasOnly(['uid','nome','empresa','usuario','atualizadoEm']);
+      allow delete: if admin();
+    }
+
     // Qualquer outro caminho fica bloqueado.
     match /{documento=**} {
       allow read, write: if false;
