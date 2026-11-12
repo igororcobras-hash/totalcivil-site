@@ -710,8 +710,8 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
         <select id="c_talaterro" onchange="calcTopo()">
           <option value="1">1:1</option><option value="1.5" selected>1,5:1</option><option value="2">2:1</option>
         </select></div>
-      <div class="f"><label for="c_berma">Largura da berma / passeio (m)</label><input type="number" id="c_berma" value="0" min="0" step="0.1" oninput="calcTopo()">
-        <span style="font-size:10px;color:var(--fg3)">Cada lado, dentro da largura da estaca. 0 = sem berma.</span></div>
+      <div class="f"><label for="c_berma">Largura da berma Tb (m)</label><input type="number" id="c_berma" value="0" min="0" step="0.1" oninput="calcTopo()">
+        <span style="font-size:10px;color:var(--fg3)">Cada lado, FORA do meio-fio (do meio-fio para a calçada), somada à largura da estaca. Serve para parada de emergência e circulação de pedestres e ciclistas onde não há passeio. 0 = sem berma. Com calçada (Topografia › 🚶 Calçada…) não se usa berma.</span></div>
       <div class="f"><label>Meio-fio e calçada</label>
         <span class="mf-resumo" style="font-size:10.5px;color:var(--fg2)"></span>
         <span class="cal-resumo" style="font-size:10.5px;color:var(--fg2)"></span>
@@ -2407,11 +2407,11 @@ let _secUid=0;
 function secaoParams(){
   const r=resultado||{}, cm=x=>(x||0)/100;
   const tc=parseFloat((document.getElementById('c_talcorte')||{}).value);
-  const be=v('c_berma');
+  const be=v('c_berma'), semCal=!(typeof _cal!=='undefined'&&_cal&&_cal.ativo), bd=isNaN(be)||be<0?0:be; /* PI-13: com calçada não há berma */
   return {
     talC:isNaN(tc)?0:tc, talA:v('c_talaterro')||1.5,
     hMF:_mf.tipo!=='nenhum'?cm(_mf.esp):0,
-    berma:isNaN(be)||be<0?0:be,
+    berma:semCal?bd:0, bermaDig:bd,
     cEsq:(v('cai-esq')||0)/100, cDir:(v('cai-dir')||0)/100,
     camadas:[['Blocos de concreto',cm(r.bloco_teo),'#9c8f7c'],['Areia de assentamento',cm(r.areia),'#f0dc8c'],
       [r.base_nome||'Base',cm(r.h_base_adot),r.base_tipo==='cim'?'#aab8bd':'#a8c8a0'],
@@ -2470,8 +2470,9 @@ function secaoAreas(L, G, P) {
 
 function secaoGeom(L, P) {
   if (L.gr === null || L.tc === null || !(L.larg > 0)) return null;
-  const b = L.larg / 2,form = L.gr - P.eTot,tC = L.tc;
-  const tE = L.te === null ? tC : L.te,tD = L.td === null ? tC : L.td;
+  const b0 = L.larg / 2,bm = P.berma > 0 ? P.berma : 0,b = b0 + bm,form = L.gr - P.eTot,tC = L.tc; /* PI-13: berma Tb fora do meio-fio; a plataforma cresce bm de cada lado */
+  const tE0 = L.te === null ? tC : L.te,tD0 = L.td === null ? tC : L.td;
+  const tE = tC + (tE0 - tC) * b / b0,tD = tC + (tD0 - tC) * b / b0; /* terreno no limite externo da berma (mesma inclinação) */
   const lado = (tB, cai) => {
     const yS = L.gr - b * cai,yF = form - b * cai;
     const k = (tB - tC) / b; // inclinação do terreno, por metro para fora
@@ -2503,7 +2504,7 @@ function secaoGeom(L, P) {
     return { tB: tB, yS: yS, yF: yF, k: k, h: h, corte: corte, y0: y0, tal: tal, s: s, d: d, semInt: semInt,
       yInt: yInt, tInt: tB + k * d, re: re };
   };
-  return { b: b, form: form, tE: tE, tC: tC, tD: tD, E: lado(tE, L.cE != null ? L.cE : P.cEsq), D: lado(tD, L.cD != null ? L.cD : P.cDir),
+  return { b: b, b0: b0, bm: bm, tE0: tE0, tD0: tD0, form: form, tE: tE, tC: tC, tD: tD, E: lado(tE, L.cE != null ? L.cE : P.cEsq), D: lado(tD, L.cD != null ? L.cD : P.cDir),
     hC: tC - form };
 }
 
@@ -2511,7 +2512,7 @@ function secaoSVG(L, G, P, papel) {
   const C = papel ? { fg: '#1f2937', fg2: '#4b5563', fg3: '#6b7280', bg: '#ffffff', acc: '#1d4ed8' } :
   { fg: 'var(--fg)', fg2: 'var(--fg2)', fg3: 'var(--fg3)', bg: 'var(--bg2)', acc: 'var(--accent2)' };
   const uid = 'sc' + ++_secUid;
-  const b = G.b,xl = -(b + G.E.d),xr = b + G.D.d;
+  const b = G.b,b0 = G.b0 || G.b,xl = -(b + G.E.d),xr = b + G.D.d;
   const ptsY = [G.tE, G.tC, G.tD, L.gr, G.E.yInt, G.D.yInt, G.E.tInt, G.D.tInt];
   const ymax = Math.max.apply(null, ptsY) + 0.45;
   let ymin = Math.min.apply(null, ptsY.concat([G.form - 0.8])) - 0.15;
@@ -2523,7 +2524,7 @@ function secaoSVG(L, G, P, papel) {
   // legenda (cores do desenho)
   const leg = [];
   P.camadas.forEach((c) => leg.push([c[2], c[0], 'q']));
-  if (P.berma > 0 && P.berma < b) leg.push(['#8c8c8c', 'Berma', 'l']);
+  if (G.bm > 0) leg.push(['#8c8c8c', 'Berma Tb (fora do meio-fio)', 'l']);
   if (P.mf) {leg.push(['#b8bcc4', P.mf.tipo === 'conjugado' ? 'Meio-fio' : 'Meio-fio simples', 'q']);if (P.mf.tipo === 'conjugado') leg.push(['#d5d8de', 'Sarjeta', 'q']);}
   const temRe = !!(G.E.re || G.D.re);
   if (temRe) leg.push(['#7fbf6a', 'Reaterro lateral', 'q']);
@@ -2533,13 +2534,13 @@ function secaoSVG(L, G, P, papel) {
   leg.forEach((it) => {const w = 30 + it[1].length * 5.3 + 12;if (lx + w > W - 8 && lx > 8) {lx = 8;lrow++;}legPos.push([lx, lrow]);lx += w;});
   // cotas horizontais (da menor, junto ao desenho, até a plataforma total)
   const cotas = [];
-  const bermaVis = P.berma > 0 && P.berma < b;
+  const bermaVis = G.bm > 0;
   const mfInt = P.mf ? (P.mf.tipo === 'conjugado' ? (P.mf.larg || 0) + (P.mf.sbase || 0) : P.mf.base || 0) / 100 : 0;
-  const mfVis = !!P.mf && mfInt > 0 && mfInt < b;
+  const mfVis = !!P.mf && mfInt > 0 && mfInt < b0;
   const rotMf = P.mf && P.mf.tipo === 'conjugado' ? 'sarjeta a sarjeta' : 'meio-fio a meio-fio';
-  if (bermaVis) cotas.push({ h: b - P.berma, txt: 'Pista de rolamento ' + fmt(L.larg - 2 * P.berma, 2) + ' m' });
-  if (mfVis) cotas.push({ h: b - mfInt, txt: (bermaVis ? 'Entre ' + (P.mf.tipo === 'conjugado' ? 'sarjetas' : 'meios-fios') : 'Pista de rolamento (' + rotMf + ')') + ' ' + fmt(L.larg - 2 * mfInt, 2) + ' m' });
-  cotas.push({ h: b, txt: 'Plataforma ' + fmt(L.larg, 2) + ' m', bold: true });
+  if (mfVis) cotas.push({ h: b0 - mfInt, txt: 'Pista de rolamento (' + rotMf + ') ' + fmt(L.larg - 2 * mfInt, 2) + ' m' });
+  cotas.push({ h: b0, txt: 'Plataforma ' + fmt(L.larg, 2) + ' m', bold: !bermaVis });
+  if (bermaVis) cotas.push({ h: b, txt: 'Com 2 bermas Tb de ' + fmt(G.bm, 2) + ' m (fora do meio-fio) ' + fmt(L.larg + 2 * G.bm, 2) + ' m', bold: true });
   const extraCotas = (cotas.length - 1) * 26;
   const nota = temRe ? P.mf ? 'Reaterro lateral até o topo do meio-fio (' + fmt(P.hMF * 100, 0) + ' cm acima da superfície).' : 'Reaterro lateral até o topo do pavimento. Meio-fio não definido na Topografia.' : '';
   const legH = (lrow + 1) * 17 + 8;
@@ -2555,7 +2556,8 @@ function secaoSVG(L, G, P, papel) {
   const sg = (x) => (x > 0 ? '+' : '') + fmt(x, 2);
   const halo = `paint-order="stroke" stroke="${C.bg}" stroke-width="3" stroke-linejoin="round"`;
   const cE = L.cE != null ? L.cE : P.cEsq,cD = L.cD != null ? L.cD : P.cDir;
-  const ysE = L.gr - b * cE,ysD = L.gr - b * cD;
+  const ysE = L.gr - b0 * cE,ysD = L.gr - b0 * cD; /* superfície na borda do pavimento (meio-fio); a berma segue além */
+  const ybE = L.gr - b * cE,ybD = L.gr - b * cD;
   // rótulos com anti-sobreposição: cada texto procura a posição livre mais próxima
   const rots = [];
   const rot = (prio, txt, x, y, size, anchor, fill, bold, dir) => rots.push({ prio, txt, x, y, size, anchor, fill, bold, dir });
@@ -2611,13 +2613,15 @@ function secaoSVG(L, G, P, papel) {
   // camadas do pavimento
   let t = 0;
   P.camadas.forEach(([nome, e, cor]) => {
-    s += `<polygon points="${pts([[-b, ysE - t], [0, L.gr - t], [b, ysD - t], [b, ysD - t - e], [0, L.gr - t - e], [-b, ysE - t - e]])}" fill="${cor}" stroke="${C.bg}" stroke-opacity=".6" stroke-width=".8"/>`;
+    s += `<polygon points="${pts([[-b0, ysE - t], [0, L.gr - t], [b0, ysD - t], [b0, ysD - t - e], [0, L.gr - t - e], [-b0, ysE - t - e]])}" fill="${cor}" stroke="${C.bg}" stroke-opacity=".6" stroke-width=".8"/>`;
     t += e;
   });
   // bermas
-  if (P.berma > 0 && P.berma < b) {
-    s += `<polyline points="${pts([[-b, ysE], [-b + P.berma, L.gr - (b - P.berma) * cE]])}" fill="none" stroke="#8c8c8c" stroke-width="4"/>` +
-    `<polyline points="${pts([[b - P.berma, L.gr - (b - P.berma) * cD], [b, ysD]])}" fill="none" stroke="#8c8c8c" stroke-width="4"/>`;
+  if (G.bm > 0) { /* PI-13: berma Tb do meio-fio para fora (lado da calçada) */
+    s += `<polyline points="${pts([[-b0, ysE], [-b, ybE]])}" fill="none" stroke="#8c8c8c" stroke-width="4"/>` +
+    `<polyline points="${pts([[b0, ysD], [b, ybD]])}" fill="none" stroke="#8c8c8c" stroke-width="4"/>`;
+    rot(5, 'Tb ' + f2(G.bm), X((-b0 - b) / 2), Y((ysE + ybE) / 2) - 8, 10, 'middle', '#555', false, -1);
+    rot(5, 'Tb ' + f2(G.bm), X((b0 + b) / 2), Y((ysD + ybD) / 2) - 8, 10, 'middle', '#555', false, -1);
   }
   // meio-fio e sarjeta
   if (P.mf) {
@@ -2626,7 +2630,7 @@ function secaoSVG(L, G, P, papel) {
       const R_ = (xa, xb, ya, yb2, cor) => {// retângulo em coordenadas de projeto
         s += `<polygon points="${pts([[xa, ya], [xb, ya], [xb, yb2], [xa, yb2]])}" fill="${cor}" stroke="#6b7280" stroke-width=".8"/>`;
       };
-      const ext = sn * b;
+      const ext = sn * b0;
       if (m.tipo === 'simples') {
         const w = cm(m.base),h = cm(m.alt),e = Math.min(cm(m.esp), h);
         R_(ext - sn * w, ext, yS + e, yS + e - h, '#b8bcc4');
@@ -2647,7 +2651,7 @@ function secaoSVG(L, G, P, papel) {
   });
   // terreno natural
   s += `<polyline points="${pts(terreno)}" fill="none" stroke="#6b4a1e" stroke-width="2.2" stroke-linejoin="round"/>`;
-  [[-b, G.tE, 'Esq.'], [0, G.tC, 'Eixo'], [b, G.tD, 'Dir.']].forEach(([x, y, nome]) => {
+  [[-b0, G.tE0 != null ? G.tE0 : G.tE, 'Esq.'], [0, G.tC, 'Eixo'], [b0, G.tD0 != null ? G.tD0 : G.tD, 'Dir.']].forEach(([x, y, nome]) => {
     s += `<circle cx="${X(x)}" cy="${Y(y)}" r="3" fill="#6b4a1e"/>`;
     rot(x === 0 ? 3 : 2, nome + ' ' + f3(y), X(x) + (x < 0 ? -9 : x > 0 ? 9 : 0), Y(y) + (x === 0 && y < L.gr ? 16 : -8), 10.5, x < 0 ? 'end' : x > 0 ? 'start' : 'middle', C.fg, false, x === 0 && y < L.gr ? 1 : -1);
   });
@@ -2670,9 +2674,9 @@ function secaoSVG(L, G, P, papel) {
     `<line x1="${X(-c.h)}" y1="${yk - 4}" x2="${X(-c.h)}" y2="${yk + 4}" stroke="${C.fg2}"/><line x1="${X(c.h)}" y1="${yk - 4}" x2="${X(c.h)}" y2="${yk + 4}" stroke="${C.fg2}"/>` +
     `<text x="${X(0)}" y="${yk + 15}" font-size="${c.bold ? 11.5 : 10.5}" font-weight="700" text-anchor="middle" fill="${c.bold ? C.fg : C.fg2}">${c.txt}</text>`;
   });
-  const pista = L.larg - 2 * P.berma;
+  const pista = L.larg;
   const mfTxt = P.mf ? ' · ' + mfTextoCurto(P.mf) : '';
-  const geo = P.berma > 0 && pista > 0 ? `pista ${f2(pista)} m + 2 bermas de ${f2(P.berma)} m · ` : '';
+  const geo = G.bm > 0 ? `plataforma ${f2(pista)} m + 2 bermas Tb de ${f2(G.bm)} m · ` : '';
   const camTxt = P.camadas.map((c) => c[0].split(' (')[0] + ' ' + fmt(c[1] * 100, 1)).join(' · ');
   if (naFora) s += `<text x="${W / 2}" y="${yb + extraCotas + 58 + (nota ? 14 : 0)}" font-size="10" text-anchor="middle" fill="#2f7fd1">N.A. na cota ${f3(L.na)} (abaixo do quadro)</text>`;
   if (nota) s += `<text x="${W / 2}" y="${yb + extraCotas + 58}" font-size="10" font-weight="700" text-anchor="middle" fill="#3f7a2e">${nota}</text>`;
@@ -2707,7 +2711,7 @@ function secaoTabela(){
   const n=(x,d)=>x===null||x===undefined||isNaN(x)?'':Number(Number(x).toFixed(d===undefined?3:d));
   return secaoSelecionadas().filter(o=>o.G).map(o=>{
     const L=o.L,G=o.G, tal=Ld=>(Ld.tal<=0?'vertical':n(Ld.tal,2)+':1')+(Ld.semInt?' (sem encontro)':'');
-    return [n(L.est),L.sit,n(L.larg,2),n(L.gr),n(G.form),n(G.tE),n(G.tC),n(G.tD),n(G.E.h),n(G.hC),n(G.D.h),n(L.ac,2),n(L.aa,2),n(L.ar,2),tal(G.E),n(G.E.d,2),tal(G.D),n(G.D.d,2)];
+    return [n(L.est),L.sit,n(L.larg,2),n(L.gr),n(G.form),n(G.tE0!=null?G.tE0:G.tE),n(G.tC),n(G.tD0!=null?G.tD0:G.tD),n(G.E.h),n(G.hC),n(G.D.h),n(L.ac,2),n(L.aa,2),n(L.ar,2),tal(G.E),n(G.E.d,2),tal(G.D),n(G.D.d,2)];
   });
 }
 function secaoFaixaTexto(){
@@ -3101,7 +3105,7 @@ function itensPadroesSecao(M){
   const P=secaoParams(), tt=x=>x<=0?'vertical':fmt(x,1)+':1';
   M.push({kv:['Caimento transversal esq. / dir.:',fmt(P.cEsq*100,1)+' % / '+fmt(P.cDir*100,1)+' %']});
   M.push({kv:['Talude de corte / aterro (H:V):',tt(P.talC)+' / '+tt(P.talA)]});
-  M.push({kv:['Berma (cada lado):',P.berma>0?fmt(P.berma,2)+' m':'sem berma']});
+  M.push({kv:['Berma Tb (cada lado, fora do meio-fio):',P.berma>0?fmt(P.berma,2)+' m':(P.bermaDig>0?'desconsiderada (há calçada)':'sem berma')]});
   M.push({kv:['Meio-fio:',P.mf?mfTextoCurto(P.mf)+' · nos dois lados':'sem meio-fio']});
 }
 function linhasTopoVolumes(rows){
@@ -3175,7 +3179,7 @@ function exportarTabExcel(tab){
     rows=[['SEÇÕES TRANSVERSAIS POR ESTACA'],['Trecho:',secaoFaixaTexto()],[''],
       ['Camada','Espessura adotada (cm)','Material'],...camadasLista(),[''],
       secaoCabecalho(),...secaoTabela()];
-    const P=secaoParams(); rows.push([''],['Berma (m):',P.berma],['Meio-fio:',P.mf?mfTextoCurto(P.mf):'sem meio-fio']);
+    const P=secaoParams(); rows.push([''],['Berma Tb, fora do meio-fio (m):',P.berma],['Meio-fio:',P.mf?mfTextoCurto(P.mf):'sem meio-fio']);
   }else if(tab==='topo'){
     sheet='Topografia';fname='intertravado_topografia_'+carimbo()+'.xlsx';
     const n=(x,d)=>x==null?'':+x.toFixed(d); ruasSinc();
@@ -3336,11 +3340,11 @@ function toggleTheme(){const root=document.documentElement,cur=root.getAttribute
    Acender/apagar um nível mostra/oculta as cotas e o quadro na planta e a camada no 3D.
 ══════════════════════════════════════════════════════ */
 let _pl={modo:'planta',vis:null,vb:null,drag:null,t3:null};
-function plVisPadrao(){ return {ruas:{},entorno:1,pista:1,paginacao:1,eixo:1,mf:1,estacas:1,numeros:1,larguras:1,decl:1,cruz:1,corte:0,quadro:1,legenda:1,carimbo:1,sombras:1,rot3d:1,calcada:1,cenario:1,niv:{terreno:1},passo:1}; }
+function plVisPadrao(){ return {ruas:{},entorno:1,pista:1,paginacao:1,eixo:1,mf:1,estacas:1,numeros:1,larguras:1,decl:1,cruz:1,corte:0,quadro:1,legenda:1,carimbo:1,sombras:1,rot3d:1,calcada:1,cenario:1,casas:1,veg:1,objs:1,lamina:0,niv:{terreno:1},passo:1}; }
 function plVis(){
   if(_pl.vis) return _pl.vis;
   let v=plVisPadrao();
-  try{ const t=JSON.parse(localStorage.getItem('pint_planta_vis2')||'null'); if(t&&typeof t==='object') v=Object.assign(v,t,{niv:Object.assign(v.niv,t.niv||{}),ruas:t.ruas||{}}); }catch(e){}
+  try{ const t=JSON.parse(localStorage.getItem('pint_planta_vis2')||'null'); if(t&&typeof t==='object'){ v=Object.assign(v,t,{niv:Object.assign(v.niv,t.niv||{}),ruas:t.ruas||{}}); if(t.casas===undefined&&t.cenario===0){ v.casas=0; v.veg=0; } } }catch(e){}
   return _pl.vis=v;
 }
 function plSalvarVis(){ try{ localStorage.setItem('pint_planta_vis2',JSON.stringify(plVis())); }catch(e){} }
@@ -3435,7 +3439,9 @@ function plPainel(){
   h+=tit('Só na planta')+ck('Paginação dos blocos',v.paginacao,o('paginacao'))+ck('Marcas das estacas',v.estacas,o('estacas'))+ck('Cotas de largura da pista',v.larguras,o('larguras'))+ck('Setas de declividade (greide)',v.decl,o('decl'))+ck('Cores de corte / aterro',v.corte,o('corte'))+
     ck('Quadro de camadas (esp., área, volume)',v.quadro,o('quadro'))+ck('Legenda',v.legenda,o('legenda'))+ck('Carimbo',v.carimbo,o('carimbo'))+
     '<div style="margin-top:4px;font-size:12px">Rótulos a cada <select onchange="plSet(\'passo\',0,+this.value)" style="font-size:12px">'+[1,2,5,10].map(x=>'<option value="'+x+'"'+(v.passo==x?' selected':'')+'>'+(x==1?'estaca':x+' estacas')+'</option>').join('')+'</select></div>';
-  h+=tit('Só no 3D')+ck('Sombras',v.sombras,o('sombras'))+ck('Rótulos e medidas das camadas',v.rot3d,o('rot3d'))+ck('Cenário ilustrativo (casas, muros, quintais, vegetação)',v.cenario,o('cenario'),'Só ilustração: não entra em nenhum cálculo. Sai com exagero vertical maior que 1×.');
+  h+=tit('Só no 3D')+ck('Sombras',v.sombras,o('sombras'))+ck('Rótulos e medidas das camadas',v.rot3d,o('rot3d'))+ck('Lâmina do terreno natural sobre a pista (corte/aterro)',v.lamina,o('lamina'),'Película marrom translúcida na cota do terreno natural. Desligada deixa a cor do pavimento uniforme.');
+  h+=tit('Níveis do cenário 3D (assentam no terreno do entorno)')+ck('Casas, muros e portões',v.casas,o('casas'),'Só ilustração: não entra em nenhum cálculo. Sai com exagero vertical maior que 1×.')+ck('Árvores, palmeiras e grama do cenário',v.veg,o('veg'),'Só ilustração. Sai com exagero vertical maior que 1×.')+ck('Árvores e postes locados por você',v.objs,o('objs'),'Os de 🌳 Árvores e postes: sempre na cota do chão debaixo deles.')+
+    '<div style="font-size:11px;color:var(--fg2);margin-top:2px">Sem “Entorno / terreno lateral” ligado, o terreno não aparece, mas as casas e árvores continuam na cota dele.</div>';
   h+=tit('Posição das ruas')+ruas.map((r,i)=>{
     if(i===0) return '<div style="font-size:11px;color:var(--fg2);margin-bottom:4px"><b>'+esc(nomeRua(0))+'</b>: eixo de referência (reta, estacas crescendo para a direita).</div>';
     const g=plGeo(i), lay=plLayout()[i], cruza=lay&&!lay.paralela;
@@ -4057,7 +4063,7 @@ function plMat11(k){
   const T=window.THREE, c=_pl.mat11||(_pl.mat11={}); if(c[k]) return c[k];
   const S=(o)=>{ const m=new T.MeshStandardMaterial(Object.assign({color:0xffffff,roughness:0.9,metalness:0},o)); m.userData.keep=1; return m; };
   let m;
-  if(k==='pav'||k==='pavCal'){ const t=plTex2(k); m=plShader(S({map:t.map,normalMap:t.normalMap,roughnessMap:t.roughnessMap,roughness:1,envMapIntensity:0.7,normalScale:new T.Vector2(1.1,1.1)}),{macro:22,macA:0.16}); }
+  if(k==='pav'||k==='pavCal'){ const t=plTex2(k); m=plShader(S({map:t.map,normalMap:t.normalMap,roughnessMap:t.roughnessMap,roughness:1,envMapIntensity:0.7,normalScale:new T.Vector2(1.1,1.1),polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}),{macro:22,macA:0.03}); }
   else if(k==='concreto'||k==='sarjeta'||k==='calcConc'){ const t=plTex2(k); m=plShader(S({map:t.map,normalMap:t.normalMap,roughness:0.88,envMapIntensity:0.6,normalScale:new T.Vector2(0.6,0.6)}),{macro:18,macA:0.14}); }
   else if(k==='terreno'){ const t=plTex2('grama'); m=plShader(S({map:t.map,normalMap:t.normalMap,vertexColors:true,roughness:1,envMapIntensity:0.45,normalScale:new T.Vector2(0.8,0.8)}),{macro:35,macA:0.32,terra:true}); }
   else if(k==='terrenoLonge'){ const t=plTex2('grama'); m=plShader(S({map:t.map,roughness:1,envMapIntensity:0.4}),{macro:60,macA:0.35}); }
@@ -4136,15 +4142,18 @@ function plModelos(){
 }
 /* altura do chão (malha do terreno, bilinear) */
 function plChaoY(t,p){ const m=t.terr; if(!m) return null; const fx=(p[0]-m.x0)/m.cel, fy=(p[1]-m.y0)/m.cel; if(fx<0||fy<0||fx>m.nx||fy>m.ny) return null;
-  const ix=Math.min(m.nx-1,Math.floor(fx)), iy=Math.min(m.ny-1,Math.floor(fy)), tx=fx-ix, ty=fy-iy, w=m.nx+1, h=m.h;
-  return (h[iy*w+ix]*(1-tx)+h[iy*w+ix+1]*tx)*(1-ty)+(h[(iy+1)*w+ix]*(1-tx)+h[(iy+1)*w+ix+1]*tx)*ty; }
+  const ix=Math.min(m.nx-1,Math.floor(fx)), iy=Math.min(m.ny-1,Math.floor(fy)), tx=fx-ix, ty=fy-iy, w=m.nx+1, h=m.h, a=h[iy*w+ix], b=h[iy*w+ix+1], c=h[(iy+1)*w+ix], d=h[(iy+1)*w+ix+1];
+  /* PI-12: mesma divisão em triângulos da malha desenhada (a,b,c / b,d,c): o que assenta aqui encosta na malha */
+  return (tx+ty<=1)?(a+(b-a)*tx+(c-a)*ty):(d+(c-d)*(1-tx)+(b-d)*(1-ty)); }
 function plChaoTerra(t,p){ const m=t.terr; if(!m||!m.c) return 0; const ix=Math.round((p[0]-m.x0)/m.cel), iy=Math.round((p[1]-m.y0)/m.cel); if(ix<0||iy<0||ix>m.nx||iy>m.ny) return 0; return m.c[iy*(m.nx+1)+ix]; }
 /* altura exata do que está embaixo (pista, calçada, meio-fio ou terreno): raio vertical */
 function plChaoRaio(t,x,z){ const T=window.THREE, rc=t.rc||(t.rc=new T.Raycaster()); rc.set(new T.Vector3(x,1e5,z),new T.Vector3(0,-1,0)); const h=rc.intersectObjects(t.chao||[],false); return h.length?h[0].point.y:null; }
 /* ── cenário ilustrativo: muros, casas, quintais, árvores, grama 3D, horizonte ── */
 function plCenario(ctx){
   const T=window.THREE, t=_pl.t3, q=PL_QUAL[plQualK()], {D,A,W3,grp,wmf,calOn,R,zmin,ev}=ctx, MOD=plModelos();
-  const rnd=plRnd(9173), ocup=[], arvPos=[], palPos=[];
+  const rnd=plRnd(9173), ocup=[], arvPos=[], palPos=[], muros=[]; /* PI-12: muros já feitos (planta), para não duplicar a divisa entre casas */
+  const dSeg=(p,a,b)=>{ const ex=b[0]-a[0], ey=b[1]-a[1], l2=ex*ex+ey*ey||1e-9; let u=((p[0]-a[0])*ex+(p[1]-a[1])*ey)/l2; u=Math.max(0,Math.min(1,u)); return Math.hypot(a[0]+u*ex-p[0],a[1]+u*ey-p[1]); };
+  const temMuro=(a,b)=>{ const m=[(a[0]+b[0])/2,(a[1]+b[1])/2]; return muros.some(s2=>dSeg(m,s2[0],s2[1])<0.7||dSeg(s2[0],a,b)<0.35&&dSeg(s2[1],a,b)<0.35); };
   const hole=D.map((d,j)=>plPoligonoCal(d,A[j],wmf+0.6,calOn));
   const B={par:plBuild(),tel:plBuild(),laj:plBuild(),vid:plBuild(),cx:plBuild(),por:plBuild(),pto:plBuild()};
   const branco=new T.Color(1,1,1);
@@ -4167,13 +4176,14 @@ function plCenario(ctx){
         const L0=lin(e), L1=lin(e1), Lm=lin((e+e1)/2), prof=24, uL=Math.min(L0.u,L1.u);
         const lote=[P2(e,uL),P2(e1,uL),P2(e1,uL+prof),P2(e,uL+prof)];
         const pts=[0.02,0.5,0.98].flatMap(f=>[0.3,8,16,prof-0.5].map(du=>P2(e+(e1-e)*f,Math.max(L0.u,L1.u)+du)));
-        if(pts.some(p=>dentroRua(p,j)||chao(p)==null)||sobrepoe(lote)){ e+=3; continue; }
+        const lc=lote.reduce((a2,p)=>[a2[0]+p[0]/4,a2[1]+p[1]/4],[0,0]), loteT=lote.map(p=>[lc[0]+(p[0]-lc[0])*0.97,lc[1]+(p[1]-lc[1])*0.97]); /* lote vizinho encostado não conta como sobreposição */
+        if(pts.some(p=>dentroRua(p,j)||chao(p)==null)||sobrepoe(loteT)){ e+=1.5; continue; }
         ocup.push(lote);
         /* muro da frente (acompanha a cota do muro da topografia quando há calçada) */
         const cm=CMURO[(rnd()*CMURO.length)|0], hm=1.9+rnd()*0.4, esp=0.15, nS=Math.max(2,Math.ceil((e1-e)/1.5));
         const portaoE0=e+(e1-e)*(rnd()<0.5?0.12:0.62), portaoE1=portaoE0+(e1-e)*0.26;
         for(let k=0;k<nS;k++){ const ea=e+(e1-e)*k/nS, eb=e+(e1-e)*(k+1)/nS, la=lin(ea), lb=lin(eb), za=la.z!=null?la.z:chao(P2(ea,la.u)), zb=lb.z!=null?lb.z:chao(P2(eb,lb.u)); if(za==null||zb==null) continue;
-          const ua=la.u, ub=lb.u, a0=V3(ea,ua,za-0.3), a1=V3(ea,ua,za+hm), b0=V3(eb,ub,zb-0.3), b1=V3(eb,ub,zb+hm), c0=V3(ea,ua+esp,za-0.3), c1=V3(ea,ua+esp,za+hm), d0=V3(eb,ub+esp,zb-0.3), d1=V3(eb,ub+esp,zb+hm);
+          muros.push([P2(ea,la.u),P2(eb,lb.u)]); const ua=la.u, ub=lb.u, a0=V3(ea,ua,za-0.3), a1=V3(ea,ua,za+hm), b0=V3(eb,ub,zb-0.3), b1=V3(eb,ub,zb+hm), c0=V3(ea,ua+esp,za-0.3), c1=V3(ea,ua+esp,za+hm), d0=V3(eb,ub+esp,zb-0.3), d1=V3(eb,ub+esp,zb+hm);
           const naPorta=(ea+eb)/2>portaoE0&&(ea+eb)/2<portaoE1;
           if(naPorta){ B.pto.quad(V3(ea,ua-0.01,za+0.02),V3(eb,ub-0.01,zb+0.02),V3(eb,ub-0.01,zb+hm-0.1),V3(ea,ua-0.01,za+hm-0.1),out.clone().negate(),(eb-ea)/1.2,(hm-0.1)/1.2,branco);
             B.par.quad(V3(ea,ua,za+hm-0.1),V3(eb,ub,zb+hm-0.1),b1,a1,out.clone().negate(),1,0.1,cm); }
@@ -4181,16 +4191,17 @@ function plCenario(ctx){
           B.par.quad(c0,d0,d1,c1,out,(eb-ea)/2,(hm+0.3)/2,cm); B.par.quad(a1,b1,d1,c1,new T.Vector3(0,1,0),(eb-ea)/2,0.1,cm);
           if(k===0) B.par.quad(a0,a1,c1,c0,along.clone().negate(),0.1,1,cm); if(k===nS-1) B.par.quad(b0,b1,d1,d0,along,0.1,1,cm); }
         /* muros laterais (divisas) */
-        [e,e1].forEach((ee,ii)=>{ if(ii===0&&e>s0+3&&rnd()<0.0) return; const n2=6; for(let k=0;k<n2;k++){ const ua=lin(ee).u+esp+prof*k/n2, ub=lin(ee).u+esp+prof*(k+1)/n2, za=chao(P2(ee,ua)), zb=chao(P2(ee,ub)); if(za==null||zb==null) continue;
-          const o=ii===0?along.clone().negate():along.clone(), x0=ee+(ii===0?0:-0.12), x1=ee+(ii===0?0.12:0);
+        [e,e1].forEach((ee,ii)=>{ const n2=6; for(let k=0;k<n2;k++){ const ua=lin(ee).u+esp+prof*k/n2, ub=lin(ee).u+esp+prof*(k+1)/n2, pa2=P2(ee,ua), pb2=P2(ee,ub), za=chao(pa2), zb=chao(pb2); if(za==null||zb==null) continue;
+          if(temMuro(pa2,pb2)) continue; muros.push([pa2,pb2]); /* PI-12: UM muro só na divisa (centrado, 20 cm) */
+          const o=ii===0?along.clone().negate():along.clone(), x0=ee-0.1, x1=ee+0.1;
           B.par.quad(V3(x0,ua,za-0.3),V3(x0,ub,zb-0.3),V3(x0,ub,zb+hm-0.1),V3(x0,ua,za+hm-0.1),o.clone().negate(),prof/n2/2,hm/2,cm);
           B.par.quad(V3(x1,ua,za-0.3),V3(x1,ub,zb-0.3),V3(x1,ub,zb+hm-0.1),V3(x1,ua,za+hm-0.1),o,prof/n2/2,hm/2,cm);
           B.par.quad(V3(x0,ua,za+hm-0.1),V3(x0,ub,zb+hm-0.1),V3(x1,ub,zb+hm-0.1),V3(x1,ua,za+hm-0.1),new T.Vector3(0,1,0),0.1,1,cm); } });
         /* casa */
         if(rnd()<0.88){
           const larg=Math.min(e1-e-2.6,7+rnd()*3), eA=e+(e1-e-larg)/2+(rnd()-0.5)*0.8, eB=eA+larg, rec=3+rnd()*2.5, u0=Math.max(L0.u,L1.u)+esp+rec, pr=8+rnd()*4, u1=u0+pr;
-          const cnt=[[eA,u0],[eB,u0],[eB,u1],[eA,u1]].map(x=>chao(P2(x[0],x[1]))); if(cnt.every(z=>z!=null)){
-            const zb=Math.max(...cnt)+0.18, zf=Math.min(...cnt)-0.4, and=rnd()<0.25?2:1, hp=2.9, zt=zb+hp*and, cor=CORES[(rnd()*CORES.length)|0], tipo=rnd(), ov=0.55;
+          const cnt=[0,0.5,1].flatMap(fa=>[0,0.5,1].map(fb=>chao(P2(eA+(eB-eA)*fa,u0+(u1-u0)*fb)))); if(cnt.every(z=>z!=null)){
+            const zb=Math.max(...cnt)+0.12, zf=Math.min(...cnt)-0.4, and=rnd()<0.25?2:1, hp=2.9, zt=zb+hp*and, cor=CORES[(rnd()*CORES.length)|0], tipo=rnd(), ov=0.55;
             const pfr=out.clone().negate(), pfu=out.clone(), pa=along.clone().negate(), pb=along.clone(), up=new T.Vector3(0,1,0);
             const parede=(zTop)=>{ B.par.quad(V3(eA,u0,zf),V3(eB,u0,zf),V3(eB,u0,zTop),V3(eA,u0,zTop),pfr,larg/2,(zTop-zf)/2,cor); B.par.quad(V3(eA,u1,zf),V3(eB,u1,zf),V3(eB,u1,zTop),V3(eA,u1,zTop),pfu,larg/2,(zTop-zf)/2,cor);
               B.par.quad(V3(eA,u0,zf),V3(eA,u1,zf),V3(eA,u1,zTop),V3(eA,u0,zTop),pa,pr/2,(zTop-zf)/2,cor); B.par.quad(V3(eB,u0,zf),V3(eB,u1,zf),V3(eB,u1,zTop),V3(eB,u0,zTop),pb,pr/2,(zTop-zf)/2,cor); };
@@ -4236,7 +4247,9 @@ function plCenario(ctx){
     });
   });
   const mk=(b,mk2,cast)=>{ if(!b.P.length) return; const me=new T.Mesh(b.geo(),plMat11(mk2)); me.castShadow=cast!==false; me.receiveShadow=true; grp.add(me); return me; };
-  mk(B.par,'parede'); mk(B.tel,'telha'); mk(B.laj,'laje'); mk(B.vid,'vidro',false); mk(B.cx,'caixilho',false); mk(B.por,'porta',false); mk(B.pto,'portao');
+  t.muros=muros;
+  if(ctx.casas){ mk(B.par,'parede'); mk(B.tel,'telha'); mk(B.laj,'laje'); mk(B.vid,'vidro',false); mk(B.cx,'caixilho',false); mk(B.por,'porta',false); mk(B.pto,'portao'); }
+  if(!ctx.veg) return;
   /* árvores dos quintais e árvores soltas no campo (instanciadas) */
   const nCampo=Math.round(70*q.arvq); for(let k=0;k<nCampo*4&&arvPos.length<nCampo*1.6+ocup.length;k++){ const j=(rnd()*D.length)|0, Aj=A[j], s=Aj[(rnd()*Aj.length)|0], sg=rnd()<0.5?1:-1, u=s.b+wmf+30+rnd()*70, p=plOff(D[j],s,sg*u);
     if(dentroRua(p)||ocup.some(o=>plDentro(p,o))) continue; const y=chao(p); if(y==null) continue; if(plChaoTerra(t,p)>0.4) continue; arvPos.push([p,y,rnd()]); }
@@ -4279,7 +4292,7 @@ function plHorizonte(ctx){
 function plObj3D(){
   const T=window.THREE, t=_pl.t3; if(!t||!t.grp||!t.W3) return; const MOD=plModelos();
   if(t.objGrp){ t.grp.remove(t.objGrp); t.objGrp.traverse(o=>{ if(o.geometry&&o.userData.proprio) o.geometry.dispose(); }); }
-  const G=new T.Group(); t.objGrp=G; t.grp.add(G);
+  const G=new T.Group(); t.objGrp=G; t.grp.add(G); if(!plVis().objs){ t.precisaSombra=true; return; }
   const D=plDados(), W3=t.W3;
   objTodos().forEach(x=>{ const d=D.find(q=>q.id===x.r.id); if(!d) return; const p=objMundo(x.o,d), w=W3(p,0); let y=plChaoRaio(t,w.x,w.z); if(y==null){ const yy=plChaoY(t,p); y=yy!=null?yy:W3(p,d.L[0].gr).y; }
     const g=new T.Group(); g.position.set(w.x,y,w.z); g.userData.obj=x.o.id;
@@ -4391,7 +4404,7 @@ function pl3Dmontar(manter){
       });
     });
     // ── terreno natural (lâmina transparente sobre a pista: mostra corte e aterro)
-    if(plOn(v,'terreno')){
+    if(plOn(v,'terreno')&&v.lamina){
       const secs=Aj.map(s=>[s.b,0,-s.b].map(u=>W3(plOff(d,s,u),plZT(s,u))));
       const me=fita(secs,null,M('terr','#7b5a34',null,null,{transparent:true,opacity:0.38,depthWrite:false,roughness:1}),false); me.castShadow=false; me.renderOrder=5;
     }
@@ -4441,7 +4454,7 @@ function pl3Dmontar(manter){
     const pin=new T.Mesh(new T.CylinderGeometry(0.06,0.06,1.4*ev>1.4?1.4:1.4,8),new T.MeshStandardMaterial({color:ruim?0xb91c1c:0x15803d})); pin.position.copy(W3(d.lay.pos(r.est),Math.max(g1,g2)+0.7)); grp.add(pin); }));
   // ── terreno contínuo: malha que segue o terreno natural e desce/sobe em talude até o meio-fio
   let bb=new T.Box3().setFromObject(grp); if(bb.isEmpty()) return;
-  if(v.entorno){
+  if(v.entorno||v.casas||v.veg||v.objs){
     const esp=P.mf?((+P.mf.esp||15)/100):0, mg=140;
     let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; A.forEach(Aj=>Aj.forEach(q=>{ x0=Math.min(x0,q.c[0]);x1=Math.max(x1,q.c[0]);y0=Math.min(y0,q.c[1]);y1=Math.max(y1,q.c[1]); })); x0-=mg;x1+=mg;y0-=mg;y1+=mg;
     const cel=Math.max(1,Math.max(x1-x0,y1-y0)/260), nx=Math.ceil((x1-x0)/cel), ny=Math.ceil((y1-y0)/cel);
@@ -4473,7 +4486,7 @@ function pl3Dmontar(manter){
       if(!(dentro[a]&&dentro[b2]&&dentro[c2])) idx.push(a,b2,c2);
       if(!(dentro[b2]&&dentro[d2]&&dentro[c2])) idx.push(b2,d2,c2); }
     const g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(pos,3)); g.setAttribute('color',new T.Float32BufferAttribute(col,3)); g.setAttribute('uv',new T.Float32BufferAttribute(uv,2)); g.setAttribute('aTerra',new T.Float32BufferAttribute(terra,1)); g.setIndex(idx); g.computeVertexNormals();
-    const me=new T.Mesh(g,plMat11('terreno')); me.receiveShadow=true; grp.add(me); t.chao.push(me);
+    if(v.entorno){ const me=new T.Mesh(g,plMat11('terreno')); me.receiveShadow=true; grp.add(me); t.chao.push(me); }
     { const hh=new Float32Array((nx+1)*(ny+1)); for(let i=0;i<hh.length;i++) hh[i]=pos[i*3+1]; t.terr={x0,y0,cel,nx,ny,h:hh,c:Float32Array.from(terra)}; }
     bb=new T.Box3().setFromObject(grp);
   }
@@ -4481,7 +4494,7 @@ function pl3Dmontar(manter){
   t.sc.fog=v.entorno?new T.Fog(t.ceuMat.uniforms.uHor.value.clone(),R*1.6,R*9):null;
   // PI-11: horizonte, cenário ilustrativo, árvores e postes; o sol e a sombra acompanham o ponto que se olha (plTick)
   t.Rcena=R; t.precisaSombra=true; t.W3=W3; t.bbRua=bbR.clone();
-  if(v.entorno){ const ctx={D,A,W3,grp,wmf,calOn,R,zmin,ev}; try{ plHorizonte(ctx); }catch(e){ console.warn('horizonte',e); } if(v.cenario&&ev<=1){ try{ plCenario(ctx); }catch(e){ console.warn('cenário',e); } } }
+  if(v.entorno){ const ctx={D,A,W3,grp,wmf,calOn,R,zmin,ev}; try{ plHorizonte(ctx); }catch(e){ console.warn('horizonte',e); } } if((v.casas||v.veg)&&ev<=1&&t.terr){ const ctx={D,A,W3,grp,wmf,calOn,R,zmin,ev,casas:!!v.casas,veg:!!v.veg}; try{ plCenario(ctx); }catch(e){ console.warn('cenário',e); } }
   plObj3D(); plObj3DEventos();
   let alvo=cen.clone(); const cz=D.length?D[0].rows.find(r=>r.cruz):null; if(cz){ const l=D[0].L.find(x=>Math.abs(x.est-cz.est)<0.01)||D[0].L[0]; alvo=W3(D[0].lay.pos(cz.est),l.gr); }
   if(!manter||!t.pronto){ const Rv=Math.min(R,90); t.cam.position.set(alvo.x+Rv*0.42,alvo.y+Rv*0.30,alvo.z+Rv*0.55); t.ctl.target.copy(alvo); t.cam.far=R*30; t.cam.near=Math.max(0.05,R/2000); t.cam.updateProjectionMatrix(); t.pronto=true; }
@@ -5424,9 +5437,9 @@ function renderAdmin(lista){
           dica: 'Inclinação do talude de aterro. O valor padrão 1,5:1 (H:V) é conservador e adequado para solos compactados comuns. Em solos coesivos: 1:1. Em solos arenosos ou aterros com saturação prevista: 2:1 ou mais.',
           norma: 'ABCP IP-06/2004 — inclinação típica 1,5:1; verificar estabilidade em aterros altos.' },
         { sel: '#c_berma',
-          titulo: '3 / 6 — Largura da Berma / Passeio (m)',
-          dica: 'Faixa lateral revestida ao lado da pista pavimentada, dentro da largura da estaca. Nas vias com calçada integrada, use a largura real do passeio. Mínimo 1,2 m para acessibilidade (NBR 9050). Vias de carga: 0 se não há passeio.',
-          norma: 'NBR 9050 — calçadas mínimo 1,2 m livres. ABCP IP-06/2004 — berma dentro da plataforma.' },
+          titulo: '3 / 6 — Largura da Berma Tb (m)',
+          dica: 'Faixa adjacente à pista de rolamento, do lado de FORA do meio-fio (do meio-fio para a calçada), somada à largura da estaca. Serve para parada de emergência ou circulação de pedestres e ciclistas quando não há passeio. Quando houver calçada não precisa de berma (o programa a desconsidera).',
+          norma: 'Berma = faixa lateral fora do meio-fio; NBR 9050 — se for usada por pedestres, mínimo 1,2 m livres.' },
         { sel: '#c_de',
           titulo: '4 / 6 — Filtro: Da estaca…',
           dica: 'Selecione a estaca inicial do trecho que deseja visualizar nas seções transversais. Por padrão, todas as estacas da Topografia são exibidas.',
@@ -5598,27 +5611,28 @@ function renderAdmin(lista){
     if(!sels.length){alert('Nenhuma seção transversal calculada.');return;}
     var P=secaoParams();
     var camLayers=P.camadas.map(function(c){return [lnm(c[0]),4];});
-    var layers=[['TERRENO',3]].concat(camLayers).concat([['FORMACAO',2],['TALUDE-CORTE',1],['TALUDE-ATERRO',5],['MEIO-FIO',6],['EIXO',7],['TEXTO',7]]);
+    var layers=[['TERRENO',3]].concat(camLayers).concat([['FORMACAO',2],['TALUDE-CORTE',1],['TALUDE-ATERRO',5],['MEIO-FIO',6],['BERMA',8],['EIXO',7],['TEXTO',7]]);
     var e='',ox=0;
     sels.forEach(function(o){
       var L=o.L,G=o.G;
-      var b=G.b,xl=-(b+G.E.d),xr=b+G.D.d;
+      var b=G.b,b0=G.b0||G.b,xl=-(b+G.E.d),xr=b+G.D.d;
       e+=dPl('TERRENO',[[xl+ox,G.E.tInt],[-b+ox,G.tE],[ox,G.tC],[b+ox,G.tD],[xr+ox,G.D.tInt]],false);
       var yB=G.form;
       for(var i=P.camadas.length-1;i>=0;i--){
         var cam=P.camadas[i],esp=cam[1],lay=lnm(cam[0]);
         if(!(esp>0))continue;
         var yT=yB+esp;
-        e+=dPl(lay,[[-b+ox,yB],[b+ox,yB],[b+ox,yT],[-b+ox,yT]],true);
-        e+=dTx('TEXTO',-b+ox+0.05,(yB+yT)/2,0.07,cam[0]+' '+esp.toFixed(3)+'m');
+        e+=dPl(lay,[[-b0+ox,yB],[b0+ox,yB],[b0+ox,yT],[-b0+ox,yT]],true);
+        e+=dTx('TEXTO',-b0+ox+0.05,(yB+yT)/2,0.07,cam[0]+' '+esp.toFixed(3)+'m');
         yB=yT;
       }
       e+=dPl('FORMACAO',[[-b+ox,G.form],[b+ox,G.form]],false);
+      if(G.bm>0){ e+=dPl('BERMA',[[-b+ox,G.tE],[-b0+ox,G.tE0]],false); e+=dPl('BERMA',[[b0+ox,G.tD0],[b+ox,G.tD]],false); }
       if(G.E.d>0)e+=dPl(G.E.corte?'TALUDE-CORTE':'TALUDE-ATERRO',[[xl+ox,G.E.tInt],[-b+ox,G.tE]],false);
       if(G.D.d>0)e+=dPl(G.D.corte?'TALUDE-CORTE':'TALUDE-ATERRO',[[b+ox,G.tD],[xr+ox,G.D.tInt]],false);
       if(P.hMF>0){
-        e+=dLn('MEIO-FIO',-b+ox,G.tE,-b+ox,G.tE+P.hMF);
-        e+=dLn('MEIO-FIO',b+ox,G.tD,b+ox,G.tD+P.hMF);
+        e+=dLn('MEIO-FIO',-b0+ox,G.tE0,-b0+ox,G.tE0+P.hMF);
+        e+=dLn('MEIO-FIO',b0+ox,G.tD0,b0+ox,G.tD0+P.hMF);
       }
       e+=dLn('EIXO',ox,G.form-0.2,ox,G.tC+0.3);
       var yLab=Math.min(G.E.tInt,G.tE,G.tC,G.tD,G.D.tInt,G.form)-0.8;
