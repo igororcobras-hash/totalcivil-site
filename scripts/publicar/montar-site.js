@@ -20,6 +20,7 @@ const PROGRAMAS = [
   {prog: 'orcamento',    campo: 'orcamentoAtivo',    pedido: 'orcamentoSolicitado',    nome: 'Orçamento de Obras'},
   {prog: 'intertravado', campo: 'intertravadoAtivo', pedido: 'intertravadoSolicitado', nome: 'Pavimento Intertravado'},
   {prog: 'drenagem',     campo: 'drenagemAtivo',     pedido: 'drenagemSolicitado',     nome: 'Drenagem Pluvial'},
+  {prog: 'drenagem2',    campo: 'drenagem2Ativo',    pedido: 'drenagem2Solicitado',    nome: 'Drenagem Pluvial 2'},
   {prog: 'concreto',     campo: 'estruturaAtivo',    pedido: '',                       nome: 'Estrutura em Concreto Armado'},
   {prog: 'visitas',      campo: 'visitasAtivo',      pedido: 'visitasSolicitado',      nome: 'Visitas Técnicas'},
   {prog: 'manutencao',   campo: 'manutencaoAtivo',   pedido: 'manutencaoSolicitado',   nome: 'Serviços Públicos'},
