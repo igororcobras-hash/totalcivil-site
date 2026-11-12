@@ -463,6 +463,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
   <div class="tb-sep"></div>
   <button class="tb-btn tb-btn-save" onclick="salvarProjeto()">💾 Salvar</button>
   <button class="tb-btn" onclick="abrirProjetoClick()" title="Abre um projeto salvo (.json) ou exportado como projeto completo (.json ou .html)">📂 Abrir</button>
+  <button class="tb-btn" onclick="recAbrirPainel()" title="Lista dos projetos recentes (guardados sozinhos neste navegador). Ao abrir o programa, o último editado é reaberto.">🕘 Recentes</button>
   <input type="file" id="imp" accept=".json,.html,.htm" style="display:none" onchange="importarArquivo(event)">
   <div class="tb-sep"></div>
   <span class="tb-label">Exportar memória:</span>
@@ -779,7 +780,8 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
     <div id="greide-resumo" style="font-size:11px;color:var(--fg2);margin-bottom:8px"></div>
     <div id="calcada-resumo" style="font-size:11px;color:var(--fg2);margin-bottom:8px"></div>
     <div id="topo-totals" class="topo-totals"></div>
-    <div class="tw">
+    <div id="topo-todas" style="display:none"></div>
+    <div class="tw" id="topo-uma">
       <table id="tbl-topo">
         <thead><tr>
           <th class="c1">#</th><th class="c2">Estaca (m)</th>
@@ -1591,31 +1593,32 @@ function addEstaca(){
   renderTopoTable();calcTopo();
 }
 function remEstaca(){if(topoRows.length>0){topoRows.pop();renderTopoTable();calcTopo();}}
-function renderTopoTable(){
-  ruasSinc();
-  const tbody=document.getElementById('topo-tbody');
-  tbody.innerHTML=topoRows.map((r,i)=>`<tr>
+function topoRowHtml(rows,i,ri,pre){ const r=rows[i]; return `<tr>
     <td class="c1">${i+1}${r.ponto?` <span title="${esc(r.obs||'Ponto inserido com +Ponto')}" style="font-size:9px;font-weight:700;color:var(--accent2,#2563eb)">P</span> <button type="button" title="Excluir este ponto" onclick="remPonto(${i})" style="border:none;background:none;color:#b91c1c;cursor:pointer;font-size:13px;padding:0 2px">×</button>`:''}</td>
     <td class="ti c2"><input type="number" step="0.5" value="${r.est}" onchange="topoVal(${i},'est',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c3"><input type="number" step="0.01" value="${r.tEsq}" onchange="topoVal(${i},'tEsq',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c4"><input type="number" step="0.01" value="${r.tEixo}" onchange="topoVal(${i},'tEixo',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c5"><input type="number" step="0.01" value="${r.tDir}" onchange="topoVal(${i},'tDir',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
     <td class="ti c6"><input type="number" step="0.01" value="${r.greide}" onchange="topoVal(${i},'greide',this.value)" style="width:60px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="ti c7" id="tge-${i}"><input type="number" step="0.001" value="${r.gEsq==null?'':r.gEsq}" placeholder="auto" title="Vazio = calculado pelo caimento transversal; digite a cota do projeto para fixar" onchange="topoVal(${i},'gEsq',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="ti c8" id="tgd-${i}"><input type="number" step="0.001" value="${r.gDir==null?'':r.gDir}" placeholder="auto" title="Vazio = calculado pelo caimento transversal; digite a cota do projeto para fixar" onchange="topoVal(${i},'gDir',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="ti c17"><input type="number" step="0.001" value="${r.muEsq==null?'':r.muEsq}" placeholder="—" title="Cota do muro / alinhamento do lote, lado esquerdo (opcional). Com a calçada ligada, a largura da calçada sai desta cota." onchange="topoVal(${i},'muEsq',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"><div class="mu-w" id="tmwE-${i}" style="font-size:9px;color:var(--fg3);white-space:nowrap"></div></td>
-    <td class="ti c18"><input type="number" step="0.001" value="${r.muDir==null?'':r.muDir}" placeholder="—" title="Cota do muro / alinhamento do lote, lado direito (opcional). Com a calçada ligada, a largura da calçada sai desta cota." onchange="topoVal(${i},'muDir',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"><div class="mu-w" id="tmwD-${i}" style="font-size:9px;color:var(--fg3);white-space:nowrap"></div></td>
-    <td class="to c9" id="tdl-${i}">—</td>
+    <td class="ti c7" id="${pre}tge-${i}"><input type="number" step="0.001" value="${r.gEsq==null?'':r.gEsq}" placeholder="auto" title="Vazio = calculado pelo caimento transversal; digite a cota do projeto para fixar" onchange="topoVal(${i},'gEsq',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="ti c8" id="${pre}tgd-${i}"><input type="number" step="0.001" value="${r.gDir==null?'':r.gDir}" placeholder="auto" title="Vazio = calculado pelo caimento transversal; digite a cota do projeto para fixar" onchange="topoVal(${i},'gDir',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="ti c17"><input type="number" step="0.001" value="${r.muEsq==null?'':r.muEsq}" placeholder="—" title="Cota do muro / alinhamento do lote, lado esquerdo (opcional). Com a calçada ligada, a largura da calçada sai desta cota." onchange="topoVal(${i},'muEsq',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"><div class="mu-w" id="${pre}tmwE-${i}" style="font-size:9px;color:var(--fg3);white-space:nowrap"></div></td>
+    <td class="ti c18"><input type="number" step="0.001" value="${r.muDir==null?'':r.muDir}" placeholder="—" title="Cota do muro / alinhamento do lote, lado direito (opcional). Com a calçada ligada, a largura da calçada sai desta cota." onchange="topoVal(${i},'muDir',this.value)" style="width:64px;background:transparent;border:none;font-size:11px;color:var(--fg)"><div class="mu-w" id="${pre}tmwD-${i}" style="font-size:9px;color:var(--fg3);white-space:nowrap"></div></td>
+    <td class="to c9" id="${pre}tdl-${i}">—</td>
     <td class="ti c10"><input type="number" step="0.5" value="${r.larg}" onchange="topoVal(${i},'larg',this.value)" style="width:50px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="to c11" id="tsit-${i}">—</td>
-    <td class="to c12" id="tac-${i}">—</td>
-    <td class="to c13" id="taa-${i}">—</td>
-    <td class="to c14" id="tco-${i}">—</td>
-    <td class="to c15" id="tat-${i}">—</td>
-    <td class="to c16" id="tcz-${i}" style="white-space:nowrap">—</td>
-    <td class="ti c19"><input type="text" value="${esc(objTxtLinha(ruas[ruaAtiva],topoRows,i,'arv'))}" placeholder="—" title="Árvores entre esta linha e a seguinte. Ex.: E 4,50 (lado esquerdo, 4,50 m do eixo, na estaca) ; D 4,20 +7,50 (direito, 7,50 m depois da estaca). Vários: separe com ;" onchange="objCelula(${i},'arv',this.value)" style="width:120px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-    <td class="ti c20"><input type="text" value="${esc(objTxtLinha(ruas[ruaAtiva],topoRows,i,'poste'))}" placeholder="—" title="Postes entre esta linha e a seguinte. Ex.: E 4,80 (lado esquerdo, 4,80 m do eixo, na estaca) ; D 4,80 +17,50. Vários: separe com ;" onchange="objCelula(${i},'poste',this.value)" style="width:120px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
-  </tr>`).join('');
+    <td class="to c11" id="${pre}tsit-${i}">—</td>
+    <td class="to c12" id="${pre}tac-${i}">—</td>
+    <td class="to c13" id="${pre}taa-${i}">—</td>
+    <td class="to c14" id="${pre}tco-${i}">—</td>
+    <td class="to c15" id="${pre}tat-${i}">—</td>
+    <td class="to c16" id="${pre}tcz-${i}" style="white-space:nowrap">—</td>
+    <td class="ti c19"><input type="text" value="${esc(objTxtLinha(ruas[ri],rows,i,'arv'))}" placeholder="—" title="Árvores entre esta linha e a seguinte. Ex.: E 4,50 (lado esquerdo, 4,50 m do eixo, na estaca) ; D 4,20 +7,50 (direito, 7,50 m depois da estaca). Vários: separe com ;" onchange="objCelula(${i},'arv',this.value)" style="width:120px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+    <td class="ti c20"><input type="text" value="${esc(objTxtLinha(ruas[ri],rows,i,'poste'))}" placeholder="—" title="Postes entre esta linha e a seguinte. Ex.: E 4,80 (lado esquerdo, 4,80 m do eixo, na estaca) ; D 4,80 +17,50. Vários: separe com ;" onchange="objCelula(${i},'poste',this.value)" style="width:120px;background:transparent;border:none;font-size:11px;color:var(--fg)"></td>
+  </tr>`; }
+function renderTopoTable(){
+  ruasSinc();
+  const tbody=document.getElementById('topo-tbody');
+  tbody.innerHTML=topoRows.map((r,i)=>topoRowHtml(topoRows,i,ruaAtiva,'')).join('');
   aplicarColunasTopo(); renderRuasBar();
 }
 function topoVal(i,k,val){
@@ -1778,9 +1781,8 @@ function topoOrdemAtual(){
   return o;
 }
 function aplicarOrdemTopo(){
-  const tb=document.getElementById('tbl-topo'); if(!tb) return;
   const ord=topoOrdemAtual();
-  tb.querySelectorAll('tr').forEach(tr=>{
+  document.querySelectorAll('#tbl-topo tr, .tbl-topo-r tr').forEach(tr=>{
     const m={}; Array.prototype.forEach.call(tr.children,c=>{ const k=/\bc(\d+)\b/.exec(c.className); if(k) m[+k[1]]=c; });
     if(!m[1]) return;
     let ant=m[1];
@@ -1802,7 +1804,10 @@ function atualizarOrdemBtn(){
   const b=document.getElementById('btn-ordem-topo'); if(b) b.style.display=topoOrdemAtual().join()==='2,3,4,5,6,7,8,17,18,9,10,11,12,13,14,15,16,19,20'?'none':'';
 }
 function topoArrastar(){
-  const tr=document.querySelector('#tbl-topo thead tr'); if(!tr||tr.dataset.dnd) return; tr.dataset.dnd='1';
+  document.querySelectorAll('#tbl-topo thead tr, .tbl-topo-r thead tr').forEach(topoArrastar1);
+}
+function topoArrastar1(tr){
+  if(!tr||tr.dataset.dnd) return; tr.dataset.dnd='1';
   let arr=null;
   const num=th=>{ const k=th&&/\bc(\d+)\b/.exec(th.className); return k?+k[1]:0; };
   Array.prototype.forEach.call(tr.children,th=>{
@@ -1827,7 +1832,7 @@ function aplicarColunasTopo(){
   aplicarOrdemTopo(); topoArrastar();
   let st=document.getElementById('topo-colcss');
   if(!st){ st=document.createElement('style'); st.id='topo-colcss'; document.head.appendChild(st); }
-  st.textContent=topoOcultas.map(c=>'#tbl-topo .c'+c).join(',')+(topoOcultas.length?'{display:none}':'');
+  st.textContent=topoOcultas.map(c=>'#tbl-topo .c'+c+', .tbl-topo-r .c'+c).join(',')+(topoOcultas.length?'{display:none}':'');
   const btn=document.getElementById('btn-colunas');
   if(btn) btn.textContent='👁 Colunas'+(topoOcultas.length?' ('+topoOcultas.length+' oculta'+(topoOcultas.length>1?'s':'')+')':'');
   document.querySelectorAll('#topo-cols input[data-col]').forEach(i=>{ i.checked=topoOcultas.indexOf(+i.dataset.col)<0; });
@@ -1850,7 +1855,9 @@ function colunasTopoGrupo(g){
 function toggleColunasTopo(){ montarColunasTopo(); document.getElementById('topo-cols').classList.toggle('open'); aplicarColunasTopo(); }
 /* Shift+Enter (ou Enter) na tabela da topografia: vai para a mesma coluna da linha de baixo */
 function topoTeclado(){
-  const tb=document.getElementById('topo-tbody'); if(!tb||tb.dataset.kb) return; tb.dataset.kb='1';
+  ['topo-tbody','topo-todas'].forEach(id=>{ const tb=document.getElementById(id); if(!tb||tb.dataset.kb) return; tb.dataset.kb='1'; topoTeclado1(tb); });
+}
+function topoTeclado1(tb){
   tb.addEventListener('keydown',function(e){
     if(e.key!=='Enter'||e.isComposing) return;
     const inp=e.target; if(!inp||inp.tagName!=='INPUT') return;
@@ -1942,19 +1949,87 @@ function renderRuasBar(){
   if(ruas.length<2){ el.innerHTML=''; el.style.display='none'; return; }
   el.style.display='flex';
   el.innerHTML='<span style="font-size:12px;font-weight:700;color:var(--fg2)" title="Gerar greide, + Ponto, + Estaca e Importar Excel agem só na rua selecionada">Ruas (a rua selecionada recebe as alterações e a importação):</span>'+ruas.map((r,i)=>{
-    const on=i===ruaAtiva, par=r.paralela&&ruaIdx(r.paralela)>=0?' · paralela à '+nomeRua(ruaIdx(r.paralela)):'';
+    const on=i===ruaAtiva&&!topoTodas, par=r.paralela&&ruaIdx(r.paralela)>=0?' · paralela à '+nomeRua(ruaIdx(r.paralela)):'';
     return '<span style="display:inline-flex;align-items:center;gap:4px;border:1px solid '+(on?'var(--accent2,#2563eb)':'var(--border,#ccc)')+';background:'+(on?'var(--accent2,#2563eb)':'transparent')+';color:'+(on?'#fff':'var(--fg)')+';border-radius:14px;padding:2px 8px;font-size:12px">'+
       '<a href="#" onclick="trocarRua('+i+');return false" style="color:inherit;text-decoration:none;font-weight:'+(on?700:500)+'" title="'+esc(nomeRua(i)+par)+'">'+esc(nomeRua(i))+(par?' <small>∥</small>':'')+'</a>'+
       '<a href="#" onclick="renomearRua('+i+');return false" title="Renomear" style="color:inherit;text-decoration:none;opacity:.8">✎</a>'+
       '<a href="#" onclick="removerRua('+i+');return false" title="Remover esta rua" style="color:inherit;text-decoration:none;opacity:.8">✕</a></span>';
-  }).join('');
+  }).join('')+'<span style="display:inline-flex;align-items:center;border:1px solid var(--accent2,#2563eb);background:'+(topoTodas?'var(--accent2,#2563eb)':'transparent')+';color:'+(topoTodas?'#fff':'var(--accent2,#2563eb)')+';border-radius:14px;padding:2px 10px;font-size:12px"><a href="#" onclick="topoTodasLiga('+(topoTodas?'false':'true')+');return false" style="color:inherit;text-decoration:none;font-weight:700" title="Mostra a tabela de cada rua, uma abaixo da outra">☰ Todas as ruas</a></span>';
 }
 function trocarRua(i){
+  if(topoTodas) topoTodasLiga(false,true);
   if(!ruas[i]) return; ruasSinc(); ruaAtiva=i; topoRows=ruas[i].rows||(ruas[i].rows=[]);
   _greideAnterior=null; _greideLatAnt=null;
   const bd=document.getElementById('btn-desfazer-greide'); if(bd) bd.style.display='none';
   const gr=document.getElementById('greide-resumo'); if(gr) gr.textContent='';
   renderTopoTable(); calcTopo();
+}
+/* PI-14b · TODAS AS RUAS: uma tabela de cada rua, uma abaixo da outra (editáveis).
+   A rua em que o usuário clica/digita vira a rua ativa (os botões + Estaca, + Ponto, Gerar greide e Importar agem nela). */
+let topoTodas=false;
+const _renderTopoTable0=renderTopoTable, _calcTopo0=calcTopo;
+renderTopoTable=function(){ _renderTopoTable0(); if(topoTodas) renderTodasRuas(); };
+calcTopo=function(){ _calcTopo0(); if(topoTodas) calcTodasRuas(); };
+function topoTodasLiga(on,semRender){
+  topoTodas=!!on&&ruas.length>1;
+  const a=document.getElementById('topo-todas'), u=document.getElementById('topo-uma');
+  if(a) a.style.display=topoTodas?'':'none'; if(u) u.style.display=topoTodas?'none':'';
+  try{ sessionStorage.setItem('pint_topo_todas',topoTodas?'1':'0'); }catch(e){}
+  if(semRender){ renderRuasBar(); return; }
+  if(topoTodas){ ruasSinc(); renderTodasRuas(); calcTodasRuas(); }
+  renderRuasBar();
+}
+function renderTodasRuas(){
+  const box=document.getElementById('topo-todas'); if(!box) return;
+  if(ruas.length<2){ topoTodasLiga(false,true); return; }
+  ruasSinc();
+  const th=document.querySelector('#tbl-topo thead').innerHTML;
+  box.innerHTML='<p style="font-size:11px;color:var(--fg2);margin:4px 0 8px">Todas as ruas, uma abaixo da outra. Digite em qualquer tabela: a rua em que você mexeu fica marcada em azul e é nela que agem <b>+ Estaca</b>, <b>+ Ponto</b>, <b>Gerar greide</b> e <b>Importar Excel</b>.</p>'+
+    ruas.map((ru,ri)=>{ const rows=ru.rows||(ru.rows=[]);
+      return '<div class="topo-rua" data-ri="'+ri+'" style="margin:0 0 18px;border:2px solid transparent;border-radius:8px;padding:4px">'+
+        '<div class="topo-rua-t" style="display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin:0 0 4px"><b style="font-size:13px">'+esc(nomeRua(ri))+'</b><span id="rt-'+ri+'" style="font-size:11px;color:var(--fg2)"></span></div>'+
+        '<div class="tw"><table class="tbl-topo-r" data-ri="'+ri+'"><thead>'+th+'</thead><tbody>'+rows.map((r,i)=>topoRowHtml(rows,i,ri,'r'+ri+'-')).join('')+'</tbody></table></div></div>';
+    }).join('');
+  aplicarColunasTopo(); topoTeclado(); marcaRuaAtivaTodas();
+  if(!box.dataset.ev){ box.dataset.ev='1';
+    const ativa=e=>{ const d=e.target.closest&&e.target.closest('.topo-rua'); if(d) topoAtivaSilenciosa(+d.dataset.ri); };
+    box.addEventListener('pointerdown',ativa,true); box.addEventListener('focusin',ativa,true);
+  }
+}
+function marcaRuaAtivaTodas(){
+  document.querySelectorAll('#topo-todas .topo-rua').forEach(d=>{ const on=+d.dataset.ri===ruaAtiva; d.style.borderColor=on?'var(--accent2,#2563eb)':'transparent'; });
+}
+function topoAtivaSilenciosa(ri){
+  if(!ruas[ri]||ri===ruaAtiva) return;
+  ruasSinc(); ruaAtiva=ri; topoRows=ruas[ri].rows||(ruas[ri].rows=[]);
+  _greideAnterior=null; _greideLatAnt=null;
+  const bd=document.getElementById('btn-desfazer-greide'); if(bd) bd.style.display='none';
+  const gr=document.getElementById('greide-resumo'); if(gr) gr.textContent='';
+  _renderTopoTable0(); marcaRuaAtivaTodas();   /* só a tabela escondida, para o cálculo achar seus campos */
+}
+function calcTodasRuas(){
+  ruasSinc(); const sv=topoRows;
+  ruas.forEach((ru,ri)=>{
+    const rows=ru.rows||[], pre='r'+ri+'-', linhas=topoLinhas(rows); topoRows=rows;
+    const T=(id,t)=>{ const e=document.getElementById(pre+id); if(e) e.textContent=t; };
+    let tc=0,ta=0;
+    linhas.forEach(L=>{
+      const nx=linhas[L.i+1], d=nx?nx.est-L.est:0;
+      T('tsit-'+L.i,L.sit); T('tac-'+L.i,L.sit==='—'?'—':fmt(L.ac,2)); T('taa-'+L.i,L.sit==='—'?'—':fmt(L.aa,2));
+      if(nx&&d>0){ const c=(L.ac+nx.ac)/2*d, a=(L.aa+nx.aa)/2*d; tc+=c; ta+=a; T('tco-'+L.i,fmt(c,2)); T('tat-'+L.i,fmt(a,2)); } else { T('tco-'+L.i,'—'); T('tat-'+L.i,'—'); }
+      T('tdl-'+L.i,(nx&&d>0&&L.gr!=null&&nx.gr!=null)?fmt((nx.gr-L.gr)/d*100,2):'—');
+      [['tge-','gEsq',L.gE,L.gEusr],['tgd-','gDir',L.gD,L.gDusr]].forEach(([p,k,val,usr])=>{
+        const td=document.getElementById(pre+p+L.i), inp=td&&td.querySelector('input'); if(!inp) return;
+        inp.placeholder=val==null?'auto':fmt(val,3); inp.style.opacity=usr?'1':'.6'; });
+      const cz=document.getElementById(pre+'tcz-'+L.i); if(cz) cz.innerHTML=cruzHtml(L);
+      ['E','D'].forEach(sd=>{ const el=document.getElementById(pre+'tmw'+sd+'-'+L.i); if(!el) return; const w=L['cal'+sd], av=L['calAv'+sd];
+        if(!_cal.ativo||!(w>0)){ el.textContent=''; el.title=''; return; }
+        el.textContent='calç. '+fmt(w,2)+' m'+(L['calM'+sd]?'':' (média)')+(av?' ⚠':''); el.style.color=av?'#b91c1c':'var(--fg3)'; });
+    });
+    const t=totaisRows(rows), e=document.getElementById('rt-'+ri);
+    if(e) e.textContent=rows.length+' linhas · '+fmt(t.ext,2)+' m · área '+fmt(t.area,2)+' m² · corte '+fmt(tc,2)+' m³ · aterro '+fmt(ta,2)+' m³';
+  });
+  topoRows=sv;
 }
 function renomearRua(i){
   const n=prompt('Nome da rua:',nomeRua(i)); if(n==null) return;
@@ -2714,6 +2789,16 @@ function secaoTabela(){
     return [n(L.est),L.sit,n(L.larg,2),n(L.gr),n(G.form),n(G.tE0!=null?G.tE0:G.tE),n(G.tC),n(G.tD0!=null?G.tD0:G.tD),n(G.E.h),n(G.hC),n(G.D.h),n(L.ac,2),n(L.aa,2),n(L.ar,2),tal(G.E),n(G.E.d,2),tal(G.D),n(G.D.d,2)];
   });
 }
+function secaoTotais(){
+  const g=secaoSelecionadas().filter(o=>o.G); const T={aC:0,aA:0,aR:0,vC:0,vA:0,vR:0,n:g.length};
+  g.forEach((o,i)=>{ T.aC+=o.L.ac||0; T.aA+=o.L.aa||0; T.aR+=o.L.ar||0;
+    if(i>0){ const a=g[i-1].L,b=o.L,d=b.est-a.est; if(d>0){ T.vC+=((a.ac||0)+(b.ac||0))/2*d; T.vA+=((a.aa||0)+(b.aa||0))/2*d; T.vR+=((a.ar||0)+(b.ar||0))/2*d; } } });
+  return T;
+}
+function secaoLinhasTotais(){
+  const T=secaoTotais(), n=x=>Number(x.toFixed(2)), v=(r,c)=>{ const l=new Array(18).fill(''); l[0]=r; l[11]=n(c[0]); l[12]=n(c[1]); l[13]=n(c[2]); return l; };
+  return [v('Total das áreas (m²)',[T.aC,T.aA,T.aR]), v('Total dos volumes (m³)',[T.vC,T.vA,T.vR])];
+}
 function secaoFaixaTexto(){
   const sel=secaoSelecionadas(); if(!sel.length) return 'nenhuma estaca';
   const e=x=>String(x).replace('.',',');
@@ -2758,7 +2843,9 @@ function updateCorte(){
   if(resumo){
     const cab=secaoCabecalho(),lin=secaoTabela();
     resumo.innerHTML='<div class="tw"><table><thead><tr>'+cab.map(c=>'<th>'+c+'</th>').join('')+'</tr></thead><tbody>'+
-      lin.map(r=>'<tr>'+r.map((c,i)=>'<td'+(i>1?' style="text-align:right"':'')+'>'+(typeof c!=='number'?c:i===0?String(c).replace('.',','):fmt(c,[2,11,12,13,15,17].indexOf(i)>=0?2:3))+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>';
+      lin.map(r=>'<tr>'+r.map((c,i)=>'<td'+(i>1?' style="text-align:right"':'')+'>'+(typeof c!=='number'?c:i===0?String(c).replace('.',','):fmt(c,[2,11,12,13,15,17].indexOf(i)>=0?2:3))+'</td>').join('')+'</tr>').join('')+'</tbody>'+
+      '<tfoot>'+secaoLinhasTotais().map(r=>'<tr style="font-weight:700;background:var(--bg2,#eef2f7);border-top:2px solid var(--fg3,#889)"><td colspan="11">'+r[0]+'</td>'+[11,12,13].map(i=>'<td style="text-align:right">'+fmt(r[i],2)+'</td>').join('')+'<td colspan="4"></td></tr>').join('')+'</tfoot></table></div>'+
+      '<p style="font-size:11px;color:var(--fg3);margin:6px 2px 0">Total das áreas = soma das áreas de cada seção listada. Total dos volumes = média das áreas de duas seções seguidas × distância entre elas (só entre seções com dados completos).</p>';
   }
 }
 function svgParaPng(svg,W,H){
@@ -3125,7 +3212,7 @@ function itensSecoes(){
   M.push({kv:['Trecho:',secaoFaixaTexto()]});
   const c=x=>typeof x==='number'?String(x).replace('.',','):x;
   M.push({tab:{cab:['Estaca','Situação','Largura (m)','Greide (m)','Formação (m)','Terreno eixo (m)','Corte (m²)','Aterro (m²)','Reaterro (m²)'],
-    lin:secaoTabela().map(l=>[l[0],l[1],l[2],l[3],l[4],l[6],l[11],l[12],l[13]].map(c))}});
+    lin:secaoTabela().concat(secaoLinhasTotais()).map(l=>[l[0],l[1],l[2],l[3],l[4],l[6],l[11],l[12],l[13]].map(c))}});
   const el=document.getElementById('exp_perfis');
   if(!el||el.checked){
     M.push({h:'Seções transversais por estaca'});
@@ -3178,7 +3265,7 @@ function exportarTabExcel(tab){
     sheet='Secoes Transversais';fname='intertravado_secoes_'+carimbo()+'.xlsx';
     rows=[['SEÇÕES TRANSVERSAIS POR ESTACA'],['Trecho:',secaoFaixaTexto()],[''],
       ['Camada','Espessura adotada (cm)','Material'],...camadasLista(),[''],
-      secaoCabecalho(),...secaoTabela()];
+      secaoCabecalho(),...secaoTabela(),...secaoLinhasTotais()];
     const P=secaoParams(); rows.push([''],['Berma Tb, fora do meio-fio (m):',P.berma],['Meio-fio:',P.mf?mfTextoCurto(P.mf):'sem meio-fio']);
   }else if(tab==='topo'){
     sheet='Topografia';fname='intertravado_topografia_'+carimbo()+'.xlsx';
@@ -3340,11 +3427,13 @@ function toggleTheme(){const root=document.documentElement,cur=root.getAttribute
    Acender/apagar um nível mostra/oculta as cotas e o quadro na planta e a camada no 3D.
 ══════════════════════════════════════════════════════ */
 let _pl={modo:'planta',vis:null,vb:null,drag:null,t3:null};
-function plVisPadrao(){ return {ruas:{},entorno:1,pista:1,paginacao:1,eixo:1,mf:1,estacas:1,numeros:1,larguras:1,decl:1,cruz:1,corte:0,quadro:1,legenda:1,carimbo:1,sombras:1,rot3d:1,calcada:1,cenario:1,casas:1,veg:1,objs:1,lamina:0,niv:{terreno:1},passo:1}; }
+function plVisPadrao(){ return {ruas:{},entorno:1,pista:1,paginacao:1,eixo:1,mf:1,estacas:1,numeros:1,larguras:1,decl:1,cruz:1,corte:0,quadro:1,legenda:1,carimbo:1,sombras:1,rot3d:1,calcada:1,cenario:1,casas:1,muros:1,arvc:1,grama:1,objArv:1,objPoste:1,lamina:0,niv:{terreno:1},passo:1}; }
 function plVis(){
   if(_pl.vis) return _pl.vis;
   let v=plVisPadrao();
-  try{ const t=JSON.parse(localStorage.getItem('pint_planta_vis2')||'null'); if(t&&typeof t==='object'){ v=Object.assign(v,t,{niv:Object.assign(v.niv,t.niv||{}),ruas:t.ruas||{}}); if(t.casas===undefined&&t.cenario===0){ v.casas=0; v.veg=0; } } }catch(e){}
+  try{ const t=JSON.parse(localStorage.getItem('pint_planta_vis2')||'null'); if(t&&typeof t==='object'){ v=Object.assign(v,t,{niv:Object.assign(v.niv,t.niv||{}),ruas:t.ruas||{}}); if(t.casas===undefined&&t.cenario===0){ v.casas=0; v.veg=0; }
+      /* PI-14: níveis separados — quem já tinha casas/vegetação/objetos desligados mantém */
+      if(t.muros===undefined&&t.casas!==undefined) v.muros=t.casas; if(t.arvc===undefined&&t.veg!==undefined){ v.arvc=t.veg; v.grama=t.veg; } if(t.objArv===undefined&&t.objs!==undefined){ v.objArv=t.objs; v.objPoste=t.objs; } } }catch(e){}
   return _pl.vis=v;
 }
 function plSalvarVis(){ try{ localStorage.setItem('pint_planta_vis2',JSON.stringify(plVis())); }catch(e){} }
@@ -3440,8 +3529,9 @@ function plPainel(){
     ck('Quadro de camadas (esp., área, volume)',v.quadro,o('quadro'))+ck('Legenda',v.legenda,o('legenda'))+ck('Carimbo',v.carimbo,o('carimbo'))+
     '<div style="margin-top:4px;font-size:12px">Rótulos a cada <select onchange="plSet(\'passo\',0,+this.value)" style="font-size:12px">'+[1,2,5,10].map(x=>'<option value="'+x+'"'+(v.passo==x?' selected':'')+'>'+(x==1?'estaca':x+' estacas')+'</option>').join('')+'</select></div>';
   h+=tit('Só no 3D')+ck('Sombras',v.sombras,o('sombras'))+ck('Rótulos e medidas das camadas',v.rot3d,o('rot3d'))+ck('Lâmina do terreno natural sobre a pista (corte/aterro)',v.lamina,o('lamina'),'Película marrom translúcida na cota do terreno natural. Desligada deixa a cor do pavimento uniforme.');
-  h+=tit('Níveis do cenário 3D (assentam no terreno do entorno)')+ck('Casas, muros e portões',v.casas,o('casas'),'Só ilustração: não entra em nenhum cálculo. Sai com exagero vertical maior que 1×.')+ck('Árvores, palmeiras e grama do cenário',v.veg,o('veg'),'Só ilustração. Sai com exagero vertical maior que 1×.')+ck('Árvores e postes locados por você',v.objs,o('objs'),'Os de 🌳 Árvores e postes: sempre na cota do chão debaixo deles.')+
-    '<div style="font-size:11px;color:var(--fg2);margin-top:2px">Sem “Entorno / terreno lateral” ligado, o terreno não aparece, mas as casas e árvores continuam na cota dele.</div>';
+  h+=tit('Níveis do cenário 3D (assentam no terreno do entorno)')+ck('Casas',v.casas,o('casas'),'Casas dos quintais. Só ilustração: não entra em nenhum cálculo. Sai com exagero vertical maior que 1×.')+ck('Muros e portões',v.muros,o('muros'),'Muros das divisas e da frente dos lotes, com os portões.')+ck('Árvores e palmeiras do cenário',v.arvc,o('arvc'),'Árvores dos quintais e do campo.')+ck('Grama 3D (tufos com vento)',v.grama,o('grama'),'Os tufos de grama em volta das ruas. O terreno verde é o “Entorno / terreno lateral”.')+ck('Árvores que você locou',v.objArv,o('objArv'),'As de 🌳 Árvores e postes, sempre na cota do chão debaixo delas.')+ck('Postes que você locou',v.objPoste,o('objPoste'),'Os de 🌳 Árvores e postes, sempre na cota do chão debaixo deles.')+
+    '<div style="display:flex;gap:6px;margin-top:4px"><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plCenarioTodos(1)">Mostrar todo o cenário</button><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plCenarioTodos(0)">Ocultar todo o cenário</button></div>'+
+    '<div style="font-size:11px;color:var(--fg2);margin-top:2px">Sem “Entorno / terreno lateral” ligado, o terreno não aparece, mas o que está ligado continua na cota dele.</div>';
   h+=tit('Posição das ruas')+ruas.map((r,i)=>{
     if(i===0) return '<div style="font-size:11px;color:var(--fg2);margin-bottom:4px"><b>'+esc(nomeRua(0))+'</b>: eixo de referência (reta, estacas crescendo para a direita).</div>';
     const g=plGeo(i), lay=plLayout()[i], cruza=lay&&!lay.paralela;
@@ -3453,6 +3543,7 @@ function plPainel(){
 }
 function plRedesenhar(){ if(_pl.modo==='planta') plDesenhar(); else pl3D(true); }
 function plSet(grupo,k,val){ const v=plVis(); if(grupo==='ruas') v.ruas[k]=val?1:0; else if(grupo==='niv') v.niv[k]=val?1:0; else v[grupo]=(grupo==='passo')?val:(val?1:0); plSalvarVis(); plRedesenhar(); }
+function plCenarioTodos(on){ const v=plVis(); ['casas','muros','arvc','grama','objArv','objPoste'].forEach(k=>v[k]=on?1:0); plSalvarVis(); plPainel(); plRedesenhar(); }
 function plTodosNiveis(on){ const v=plVis(); plNiveis().forEach(n=>v.niv[n.k]=on?1:0); plSalvarVis(); plPainel(); plRedesenhar(); }
 function plGeoSet(i,k,val){ const g=plGeo(i); g[k]=(k==='lado')?val:(parseFloat(val)||g[k]); plPainel(); if(_pl.modo==='planta') plDesenhar(true); else { if(_pl.t3) _pl.t3.pronto=false; pl3D(); } }
 function plNiceLen(x){ const e=Math.pow(10,Math.floor(Math.log10(x))); const m=x/e; return (m>=5?5:m>=2?2:1)*e; }
@@ -4155,7 +4246,7 @@ function plCenario(ctx){
   const dSeg=(p,a,b)=>{ const ex=b[0]-a[0], ey=b[1]-a[1], l2=ex*ex+ey*ey||1e-9; let u=((p[0]-a[0])*ex+(p[1]-a[1])*ey)/l2; u=Math.max(0,Math.min(1,u)); return Math.hypot(a[0]+u*ex-p[0],a[1]+u*ey-p[1]); };
   const temMuro=(a,b)=>{ const m=[(a[0]+b[0])/2,(a[1]+b[1])/2]; return muros.some(s2=>dSeg(m,s2[0],s2[1])<0.7||dSeg(s2[0],a,b)<0.35&&dSeg(s2[1],a,b)<0.35); };
   const hole=D.map((d,j)=>plPoligonoCal(d,A[j],wmf+0.6,calOn));
-  const B={par:plBuild(),tel:plBuild(),laj:plBuild(),vid:plBuild(),cx:plBuild(),por:plBuild(),pto:plBuild()};
+  const B={par:plBuild(),mur:plBuild(),tel:plBuild(),laj:plBuild(),vid:plBuild(),cx:plBuild(),por:plBuild(),pto:plBuild()};
   const branco=new T.Color(1,1,1);
   const CORES=['#f1ece2','#e9dcc2','#f3e4b8','#e8c9a8','#dfe6e1','#f0d9c9','#d9e1ea','#efe8d0','#e4d4b4','#c9d6c2','#f5f1ea','#e6c8b0'].map(c=>new T.Color(c).convertSRGBToLinear());
   const CMURO=['#e6e1d6','#d8cfbf','#cfc6b4','#e9e4da','#c7c0b2','#ddd2bd'].map(c=>new T.Color(c).convertSRGBToLinear());
@@ -4186,17 +4277,17 @@ function plCenario(ctx){
           muros.push([P2(ea,la.u),P2(eb,lb.u)]); const ua=la.u, ub=lb.u, a0=V3(ea,ua,za-0.3), a1=V3(ea,ua,za+hm), b0=V3(eb,ub,zb-0.3), b1=V3(eb,ub,zb+hm), c0=V3(ea,ua+esp,za-0.3), c1=V3(ea,ua+esp,za+hm), d0=V3(eb,ub+esp,zb-0.3), d1=V3(eb,ub+esp,zb+hm);
           const naPorta=(ea+eb)/2>portaoE0&&(ea+eb)/2<portaoE1;
           if(naPorta){ B.pto.quad(V3(ea,ua-0.01,za+0.02),V3(eb,ub-0.01,zb+0.02),V3(eb,ub-0.01,zb+hm-0.1),V3(ea,ua-0.01,za+hm-0.1),out.clone().negate(),(eb-ea)/1.2,(hm-0.1)/1.2,branco);
-            B.par.quad(V3(ea,ua,za+hm-0.1),V3(eb,ub,zb+hm-0.1),b1,a1,out.clone().negate(),1,0.1,cm); }
-          else B.par.quad(a0,b0,b1,a1,out.clone().negate(),(eb-ea)/2,(hm+0.3)/2,cm);
-          B.par.quad(c0,d0,d1,c1,out,(eb-ea)/2,(hm+0.3)/2,cm); B.par.quad(a1,b1,d1,c1,new T.Vector3(0,1,0),(eb-ea)/2,0.1,cm);
-          if(k===0) B.par.quad(a0,a1,c1,c0,along.clone().negate(),0.1,1,cm); if(k===nS-1) B.par.quad(b0,b1,d1,d0,along,0.1,1,cm); }
+            B.mur.quad(V3(ea,ua,za+hm-0.1),V3(eb,ub,zb+hm-0.1),b1,a1,out.clone().negate(),1,0.1,cm); }
+          else B.mur.quad(a0,b0,b1,a1,out.clone().negate(),(eb-ea)/2,(hm+0.3)/2,cm);
+          B.mur.quad(c0,d0,d1,c1,out,(eb-ea)/2,(hm+0.3)/2,cm); B.mur.quad(a1,b1,d1,c1,new T.Vector3(0,1,0),(eb-ea)/2,0.1,cm);
+          if(k===0) B.mur.quad(a0,a1,c1,c0,along.clone().negate(),0.1,1,cm); if(k===nS-1) B.mur.quad(b0,b1,d1,d0,along,0.1,1,cm); }
         /* muros laterais (divisas) */
         [e,e1].forEach((ee,ii)=>{ const n2=6; for(let k=0;k<n2;k++){ const ua=lin(ee).u+esp+prof*k/n2, ub=lin(ee).u+esp+prof*(k+1)/n2, pa2=P2(ee,ua), pb2=P2(ee,ub), za=chao(pa2), zb=chao(pb2); if(za==null||zb==null) continue;
           if(temMuro(pa2,pb2)) continue; muros.push([pa2,pb2]); /* PI-12: UM muro só na divisa (centrado, 20 cm) */
           const o=ii===0?along.clone().negate():along.clone(), x0=ee-0.1, x1=ee+0.1;
-          B.par.quad(V3(x0,ua,za-0.3),V3(x0,ub,zb-0.3),V3(x0,ub,zb+hm-0.1),V3(x0,ua,za+hm-0.1),o.clone().negate(),prof/n2/2,hm/2,cm);
-          B.par.quad(V3(x1,ua,za-0.3),V3(x1,ub,zb-0.3),V3(x1,ub,zb+hm-0.1),V3(x1,ua,za+hm-0.1),o,prof/n2/2,hm/2,cm);
-          B.par.quad(V3(x0,ua,za+hm-0.1),V3(x0,ub,zb+hm-0.1),V3(x1,ub,zb+hm-0.1),V3(x1,ua,za+hm-0.1),new T.Vector3(0,1,0),0.1,1,cm); } });
+          B.mur.quad(V3(x0,ua,za-0.3),V3(x0,ub,zb-0.3),V3(x0,ub,zb+hm-0.1),V3(x0,ua,za+hm-0.1),o.clone().negate(),prof/n2/2,hm/2,cm);
+          B.mur.quad(V3(x1,ua,za-0.3),V3(x1,ub,zb-0.3),V3(x1,ub,zb+hm-0.1),V3(x1,ua,za+hm-0.1),o,prof/n2/2,hm/2,cm);
+          B.mur.quad(V3(x0,ua,za+hm-0.1),V3(x0,ub,zb+hm-0.1),V3(x1,ub,zb+hm-0.1),V3(x1,ua,za+hm-0.1),new T.Vector3(0,1,0),0.1,1,cm); } });
         /* casa */
         if(rnd()<0.88){
           const larg=Math.min(e1-e-2.6,7+rnd()*3), eA=e+(e1-e-larg)/2+(rnd()-0.5)*0.8, eB=eA+larg, rec=3+rnd()*2.5, u0=Math.max(L0.u,L1.u)+esp+rec, pr=8+rnd()*4, u1=u0+pr;
@@ -4248,9 +4339,11 @@ function plCenario(ctx){
   });
   const mk=(b,mk2,cast)=>{ if(!b.P.length) return; const me=new T.Mesh(b.geo(),plMat11(mk2)); me.castShadow=cast!==false; me.receiveShadow=true; grp.add(me); return me; };
   t.muros=muros;
-  if(ctx.casas){ mk(B.par,'parede'); mk(B.tel,'telha'); mk(B.laj,'laje'); mk(B.vid,'vidro',false); mk(B.cx,'caixilho',false); mk(B.por,'porta',false); mk(B.pto,'portao'); }
-  if(!ctx.veg) return;
+  if(ctx.casas){ mk(B.par,'parede'); mk(B.tel,'telha'); mk(B.laj,'laje'); mk(B.vid,'vidro',false); mk(B.cx,'caixilho',false); mk(B.por,'porta',false); }
+  if(ctx.muros){ mk(B.mur,'parede'); mk(B.pto,'portao'); }
+  if(!ctx.arvc&&!ctx.grama) return;
   /* árvores dos quintais e árvores soltas no campo (instanciadas) */
+  if(ctx.arvc){
   const nCampo=Math.round(70*q.arvq); for(let k=0;k<nCampo*4&&arvPos.length<nCampo*1.6+ocup.length;k++){ const j=(rnd()*D.length)|0, Aj=A[j], s=Aj[(rnd()*Aj.length)|0], sg=rnd()<0.5?1:-1, u=s.b+wmf+30+rnd()*70, p=plOff(D[j],s,sg*u);
     if(dentroRua(p)||ocup.some(o=>plDentro(p,o))) continue; const y=chao(p); if(y==null) continue; if(plChaoTerra(t,p)>0.4) continue; arvPos.push([p,y,rnd()]); }
   const inst=(geo,mat,lista,esc,cast)=>{ if(!lista.length) return; const im=new T.InstancedMesh(geo,mat,lista.length), m=new T.Matrix4(), qq=new T.Quaternion();
@@ -4258,8 +4351,9 @@ function plCenario(ctx){
     im.castShadow=cast!==false; im.receiveShadow=true; im.frustumCulled=false; if(mat.alphaTest>0) im.customDepthMaterial=plSombraFolha(mat===plMat11('palma')?'palma':'folhas'); grp.add(im); return im; };
   [0,1,2].forEach(v=>{ const L=arvPos.filter(x=>((x[2]*3)|0)===v); inst(MOD.arv[v].tr,plMat11('casca'),L,r=>0.8+r*0.5); inst(MOD.arv[v].co,plMat11('folhas'),L,r=>0.8+r*0.5); });
   inst(MOD.palma.tr,plMat11('casca'),palPos,r=>0.85+r*0.3); inst(MOD.palma.co,plMat11('palma'),palPos,r=>0.85+r*0.3);
+  }
   /* grama 3D com vento, perto da rua */
-  if(q.grama>0){ const pos=[]; let tent=0; const lenT=A.map(a=>a[a.length-1].est-a[0].est), tot=lenT.reduce((a,b)=>a+b,0)||1;
+  if(ctx.grama&&q.grama>0){ const pos=[]; let tent=0; const lenT=A.map(a=>a[a.length-1].est-a[0].est), tot=lenT.reduce((a,b)=>a+b,0)||1;
     while(pos.length<q.grama&&tent++<q.grama*4){ let r0=rnd()*tot, j=0; while(j<lenT.length-1&&r0>lenT[j]){ r0-=lenT[j]; j++; } const Aj=A[j], s=Aj[Math.min(Aj.length-1,Math.floor(r0/(lenT[j]||1)*(Aj.length-1)))], sg=rnd()<0.5?1:-1, cw=calOn?(sg>0?s.calE:s.calD):0;
       const u=s.b+wmf+(cw>0.01?cw:0)+0.12+Math.pow(rnd(),1.7)*34, p=plOff(D[j],{c:D[j].lay.pos(s.est+(rnd()-0.5)*1.0)},sg*u);
       if(dentroRua(p)) continue; if(ocup.some((o,k)=>k%1===0&&plDentro(p,o)&&o.length===4&&false)) continue; const y=chao(p); if(y==null) continue; if(plChaoTerra(t,p)>0.45) continue; pos.push([p,y,rnd()]); }
@@ -4292,9 +4386,9 @@ function plHorizonte(ctx){
 function plObj3D(){
   const T=window.THREE, t=_pl.t3; if(!t||!t.grp||!t.W3) return; const MOD=plModelos();
   if(t.objGrp){ t.grp.remove(t.objGrp); t.objGrp.traverse(o=>{ if(o.geometry&&o.userData.proprio) o.geometry.dispose(); }); }
-  const G=new T.Group(); t.objGrp=G; t.grp.add(G); if(!plVis().objs){ t.precisaSombra=true; return; }
-  const D=plDados(), W3=t.W3;
-  objTodos().forEach(x=>{ const d=D.find(q=>q.id===x.r.id); if(!d) return; const p=objMundo(x.o,d), w=W3(p,0); let y=plChaoRaio(t,w.x,w.z); if(y==null){ const yy=plChaoY(t,p); y=yy!=null?yy:W3(p,d.L[0].gr).y; }
+  const G=new T.Group(); t.objGrp=G; t.grp.add(G); 
+  const D=plDados(), W3=t.W3, vv=plVis();
+  objTodos().forEach(x=>{ if(x.o.t==='arv'?!vv.objArv:!vv.objPoste) return; const d=D.find(q=>q.id===x.r.id); if(!d) return; const p=objMundo(x.o,d), w=W3(p,0); let y=plChaoRaio(t,w.x,w.z); if(y==null){ const yy=plChaoY(t,p); y=yy!=null?yy:W3(p,d.L[0].gr).y; }
     const g=new T.Group(); g.position.set(w.x,y,w.z); g.userData.obj=x.o.id;
     if(x.o.t==='arv'){ const m=MOD.arv[0]; const a=new T.Mesh(m.tr,plMat11('casca')), b=new T.Mesh(m.co,plMat11('folhas')); [a,b].forEach(q=>{ q.castShadow=true; q.receiveShadow=true; q.userData.obj=x.o.id; g.add(q); }); b.customDepthMaterial=plSombraFolha('folhas'); g.rotation.y=(x.o.id.charCodeAt(3)||0)*0.7;
       { const cant=new T.Mesh(new T.BoxGeometry(1.0,0.06,1.0),plMat11('canteiro')); cant.position.y=-0.025; cant.receiveShadow=true; cant.userData.proprio=1; cant.userData.obj=x.o.id; g.add(cant); } }
@@ -4454,7 +4548,7 @@ function pl3Dmontar(manter){
     const pin=new T.Mesh(new T.CylinderGeometry(0.06,0.06,1.4*ev>1.4?1.4:1.4,8),new T.MeshStandardMaterial({color:ruim?0xb91c1c:0x15803d})); pin.position.copy(W3(d.lay.pos(r.est),Math.max(g1,g2)+0.7)); grp.add(pin); }));
   // ── terreno contínuo: malha que segue o terreno natural e desce/sobe em talude até o meio-fio
   let bb=new T.Box3().setFromObject(grp); if(bb.isEmpty()) return;
-  if(v.entorno||v.casas||v.veg||v.objs){
+  if(v.entorno||v.casas||v.muros||v.arvc||v.grama||v.objArv||v.objPoste){
     const esp=P.mf?((+P.mf.esp||15)/100):0, mg=140;
     let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; A.forEach(Aj=>Aj.forEach(q=>{ x0=Math.min(x0,q.c[0]);x1=Math.max(x1,q.c[0]);y0=Math.min(y0,q.c[1]);y1=Math.max(y1,q.c[1]); })); x0-=mg;x1+=mg;y0-=mg;y1+=mg;
     const cel=Math.max(1,Math.max(x1-x0,y1-y0)/260), nx=Math.ceil((x1-x0)/cel), ny=Math.ceil((y1-y0)/cel);
@@ -4494,7 +4588,7 @@ function pl3Dmontar(manter){
   t.sc.fog=v.entorno?new T.Fog(t.ceuMat.uniforms.uHor.value.clone(),R*1.6,R*9):null;
   // PI-11: horizonte, cenário ilustrativo, árvores e postes; o sol e a sombra acompanham o ponto que se olha (plTick)
   t.Rcena=R; t.precisaSombra=true; t.W3=W3; t.bbRua=bbR.clone();
-  if(v.entorno){ const ctx={D,A,W3,grp,wmf,calOn,R,zmin,ev}; try{ plHorizonte(ctx); }catch(e){ console.warn('horizonte',e); } } if((v.casas||v.veg)&&ev<=1&&t.terr){ const ctx={D,A,W3,grp,wmf,calOn,R,zmin,ev,casas:!!v.casas,veg:!!v.veg}; try{ plCenario(ctx); }catch(e){ console.warn('cenário',e); } }
+  if(v.entorno){ const ctx={D,A,W3,grp,wmf,calOn,R,zmin,ev}; try{ plHorizonte(ctx); }catch(e){ console.warn('horizonte',e); } } if((v.casas||v.muros||v.arvc||v.grama)&&ev<=1&&t.terr){ const ctx={D,A,W3,grp,wmf,calOn,R,zmin,ev,casas:!!v.casas,muros:!!v.muros,arvc:!!v.arvc,grama:!!v.grama}; try{ plCenario(ctx); }catch(e){ console.warn('cenário',e); } }
   plObj3D(); plObj3DEventos();
   let alvo=cen.clone(); const cz=D.length?D[0].rows.find(r=>r.cruz):null; if(cz){ const l=D[0].L.find(x=>Math.abs(x.est-cz.est)<0.01)||D[0].L[0]; alvo=W3(D[0].lay.pos(cz.est),l.gr); }
   if(!manter||!t.pronto){ const Rv=Math.min(R,90); t.cam.position.set(alvo.x+Rv*0.42,alvo.y+Rv*0.30,alvo.z+Rv*0.55); t.ctl.target.copy(alvo); t.cam.far=R*30; t.cam.near=Math.max(0.05,R/2000); t.cam.updateProjectionMatrix(); t.pronto=true; }
@@ -4535,6 +4629,77 @@ document.querySelectorAll('.tab').forEach(t=>{
   iniciarAjuda();
   atualizarFig61();
 })();
+
+/* ══════════════════════════════════════════════════════
+   PI-14 · RECENTES — lista de projetos recentes (neste navegador) e reabertura do último
+   O projeto é guardado sozinho (IndexedDB do navegador) 2,5 s depois de cada alteração; 🕘 Recentes lista os
+   últimos 12; ao abrir o programa, reabre o último editado (dá para desligar no painel).
+══════════════════════════════════════════════════════ */
+const REC={db:null,id:null,base:null,abrindo:false,ativo:false,timer:null,max:12};
+function recDB(){ return new Promise((ok,err)=>{ if(REC.db) return ok(REC.db); let r; try{ r=indexedDB.open('pint_recentes',1); }catch(e){ return err(e); }
+  r.onupgradeneeded=()=>{ r.result.createObjectStore('proj',{keyPath:'id'}); }; r.onsuccess=()=>{ REC.db=r.result; ok(REC.db); }; r.onerror=()=>err(r.error); }); }
+function recTx(modo,fn){ return recDB().then(db=>new Promise((ok,err)=>{ const tx=db.transaction('proj',modo), st=tx.objectStore('proj'); let res; const rq=fn(st); if(rq) rq.onsuccess=()=>{ res=rq.result; }; tx.oncomplete=()=>ok(res); tx.onerror=tx.onabort=()=>err(tx.error); })); }
+function recLista(){ return recTx('readonly',st=>st.getAll()).then(a=>(a||[]).sort((x,y)=>y.em-x.em)); }
+function recNovoId(){ return 'p'+Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+function recSalvar(forca){
+  if(REC.abrindo) return Promise.resolve();
+  let p,txt; try{ p=projetoParaJSON(); txt=JSON.stringify(p); }catch(e){ return Promise.resolve(); }
+  if(!forca&&txt===REC.base) return Promise.resolve();
+  if(!REC.id) REC.id=recNovoId(); REC.base=txt;
+  const rs=(p.topo&&p.topo.ruas)||[], est=rs.reduce((a,r)=>a+((r.rows||[]).length),0);
+  const e={id:REC.id,nome:(p.ident&&p.ident.logradouro||'').trim()||'Projeto sem nome',resp:(p.ident&&p.ident.responsavel||'').trim(),ruas:rs.length,estacas:est,em:Date.now(),dados:txt};
+  return recTx('readwrite',st=>st.put(e)).then(()=>recLista()).then(l=>{ if(l.length>REC.max) return recTx('readwrite',st=>{ l.slice(REC.max).forEach(x=>st.delete(x.id)); }); }).catch(()=>{});
+}
+function recAgendar(){ if(!REC.ativo||REC.abrindo) return; clearTimeout(REC.timer); REC.timer=setTimeout(()=>{ recSalvar(false); },2500); }
+['input','change','click','keyup'].forEach(ev=>document.addEventListener(ev,recAgendar,true));
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden'&&REC.ativo) recSalvar(false); });
+window.addEventListener('pagehide',()=>{ if(REC.ativo) recSalvar(false); });
+/* projeto aberto por outro caminho (📂 Abrir, ☁ Nuvem) passa a ser um recente novo */
+(function(){ const orig=aplicarProjeto; aplicarProjeto=function(p){ const r=orig.apply(this,arguments); if(!REC.abrindo){ REC.id=null; REC.base=null; if(REC.ativo) setTimeout(()=>recSalvar(true),600); } return r; }; })();
+function recFmt(t){ const d=new Date(t), z=n=>String(n).padStart(2,'0'), h=new Date(); const hoje=d.toDateString()===h.toDateString(); return (hoje?'hoje':z(d.getDate())+'/'+z(d.getMonth()+1)+'/'+d.getFullYear())+' '+z(d.getHours())+':'+z(d.getMinutes()); }
+function recFechar(){ const e=document.getElementById('rec-painel'); if(e) e.remove(); }
+function recAbrirPainel(){
+  recSalvar(false).then(()=>recLista()).then(l=>{
+    recFechar();
+    const auto=(()=>{ try{ return localStorage.getItem('pint_rec_auto')!=='0'; }catch(e){ return true; } })();
+    const d=document.createElement('div'); d.id='rec-painel'; d.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:12px';
+    d.onclick=ev=>{ if(ev.target===d) recFechar(); };
+    const itens=l.length?l.map(x=>'<div style="display:flex;gap:8px;align-items:center;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;'+(x.id===REC.id?'background:var(--out);':'')+'">'+
+      '<div style="flex:1;min-width:0"><div style="font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(x.nome)+(x.id===REC.id?' <span style="font-size:10px;color:var(--accent2)">· aberto agora</span>':'')+'</div>'+
+      '<div style="font-size:11px;color:var(--fg3)">'+esc(recFmt(x.em))+' · '+x.ruas+' rua'+(x.ruas>1?'s':'')+' · '+x.estacas+' linhas de topografia'+(x.resp?' · '+esc(x.resp):'')+'</div></div>'+
+      '<button type="button" class="tb-btn tb-btn-save" onclick="recAbrir(\''+x.id+'\')">Abrir</button>'+
+      '<button type="button" class="tb-btn" title="Tirar da lista" onclick="recRemover(\''+x.id+'\')">🗑</button></div>').join(''):
+      '<div style="font-size:12.5px;color:var(--fg2);padding:10px 2px">Ainda não há projetos recentes. Eles entram aqui sozinhos assim que você começa a preencher.</div>';
+    d.innerHTML='<div style="background:var(--bg);color:var(--fg);border:1px solid var(--border);border-radius:12px;max-width:560px;width:100%;max-height:86vh;display:flex;flex-direction:column;box-shadow:0 10px 40px rgba(0,0,0,.35)">'+
+      '<div style="padding:14px 16px 8px;display:flex;align-items:center;gap:8px"><div style="font-size:16px;font-weight:800;flex:1">🕘 Projetos recentes</div><button type="button" class="tb-btn" onclick="recFechar()">✕</button></div>'+
+      '<div style="padding:0 16px;font-size:11.5px;color:var(--fg3);margin-bottom:8px">Guardados neste navegador, sozinhos, a cada alteração (últimos '+REC.max+'). Para levar a outro computador use 💾 Salvar, o projeto completo ou ☁ Nuvem.</div>'+
+      '<div style="padding:0 16px;overflow:auto;flex:1">'+itens+'</div>'+
+      '<div style="padding:10px 16px 14px;border-top:1px solid var(--border);display:flex;gap:10px;align-items:center;flex-wrap:wrap"><label style="font-size:12px;display:flex;gap:6px;align-items:center;cursor:pointer;flex:1"><input type="checkbox" '+(auto?'checked ':'')+'onchange="try{localStorage.setItem(\'pint_rec_auto\',this.checked?\'1\':\'0\')}catch(e){}"> Ao abrir o programa, abrir o último projeto editado</label>'+
+      '<button type="button" class="tb-btn" onclick="recNovo()">＋ Projeto novo em branco</button></div></div>';
+    document.body.appendChild(d);
+  }).catch(()=>toast('Não foi possível ler a lista de recentes neste navegador.',true));
+}
+function recAbrir(id){
+  recSalvar(false).then(()=>recTx('readonly',st=>st.get(id))).then(x=>{
+    if(!x){ toast('Esse projeto não está mais na lista.',true); return; }
+    REC.abrindo=true; try{ aplicarProjeto(JSON.parse(x.dados)); REC.id=x.id; if(typeof projNuvem!=='undefined') projNuvem=null; }catch(e){ toast('Erro ao abrir: '+e.message,true); }
+    REC.abrindo=false; setTimeout(()=>{ REC.base=recSnap2(); REC.id&&recSalvar(true); },900); recFechar(); toast('Aberto: '+x.nome);
+  }).catch(()=>toast('Não foi possível abrir.',true));
+}
+function recSnap2(){ try{ return JSON.stringify(projetoParaJSON()); }catch(e){ return null; } }
+function recRemover(id){ if(!confirm('Tirar este projeto da lista de recentes? (o arquivo .json que você baixou não é afetado)')) return;
+  recTx('readwrite',st=>st.delete(id)).then(()=>{ if(REC.id===id){ REC.id=null; REC.base=recSnap2(); } recAbrirPainel(); }); }
+function recNovo(){ if(!confirm('Começar um projeto novo em branco? O atual continua guardado em Recentes.')) return; recSalvar(false).then(()=>{ try{ sessionStorage.setItem('pint_rec_novo','1'); }catch(e){} location.reload(); }); }
+/* ao abrir o programa: reabre o último projeto editado */
+setTimeout(()=>{
+  let novo=false; try{ novo=sessionStorage.getItem('pint_rec_novo')==='1'; sessionStorage.removeItem('pint_rec_novo'); }catch(e){} if(/[#?&]novo\b/.test(location.href)) novo=true;
+  let auto=true; try{ auto=localStorage.getItem('pint_rec_auto')!=='0'; }catch(e){}
+  const pronto=()=>{ setTimeout(()=>{ REC.base=recSnap2(); REC.ativo=true; },900); };
+  if(novo||!auto){ pronto(); return; }
+  recLista().then(l=>{ if(!l.length){ pronto(); return; } const u=l[0]; REC.abrindo=true;
+    try{ aplicarProjeto(JSON.parse(u.dados)); REC.id=u.id; toast('Reaberto o último projeto: '+u.nome+'  (🕘 Recentes mostra os outros)'); }catch(e){ REC.id=null; }
+    REC.abrindo=false; pronto(); }).catch(()=>pronto());
+},700);
 </script>
 
 </div><!-- /#app-content -->
