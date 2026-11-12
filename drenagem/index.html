@@ -12142,4 +12142,96 @@ function revisa20() {
   autoCorrigir = function () { const r = ac20.apply(this, arguments); if (!window.__ac20) { window.__ac20 = true; try { revisa20(); } catch (e) { console.error('DR-20 revisão', e); } finally { window.__ac20 = false; } } return r; };
 })();
 </script>
+<script>
+/* =====================================================================
+   PATCH DR-21 (12/11/2026) — aba 13 Verificação: botões "🛠 Corrigir erros" e "🛠 Corrigir alertas".
+   Toda correção refaz a REDE INTEIRA até o deságue (autoCotas de montante a jusante, diâmetro que nunca
+   diminui para jusante, remanso/linha piezométrica, saída afogada) e cada passo é testado: se criar erro
+   (ou, nos alertas, não reduzir os alertas) o passo é desfeito e o motivo aparece no relatório.
+   ===================================================================== */
+let UND21 = null, REL21 = null, BUSY21 = false;
+function cnt21() { calc(); return {e: R.checks.filter(c => c.st === 'err').length, w: R.checks.filter(c => c.st === 'warn').length}; }
+/* um passo: volta ao estado anterior se criar erro (ou, com `menos`, se não reduzir os alertas) */
+function passo21(nome, fn, menos) {
+  const snap = JSON.stringify(P), a = cnt21(); let txt = '';
+  try { txt = fn() || ''; } catch (e) { console.error('DR-21 ' + nome, e); P = migrate(JSON.parse(snap)); calc(); return {nome, ok: false, a, b: a, txt: 'não foi possível (' + e.message + ')'}; }
+  const b = cnt21(), mudou = JSON.stringify(P) !== snap;
+  if (b.e > a.e || (menos && b.e >= a.e && !(b.w < a.w))) {
+    P = migrate(JSON.parse(snap)); calc();
+    return {nome, ok: false, a, b: a, txt: mudou ? 'desfeito: ' + (b.e > a.e ? 'criaria ' + (b.e - a.e) + ' erro(s)' : 'não reduziu os alertas (' + a.w + ' → ' + b.w + ')') : 'nada a mudar'};
+  }
+  return {nome, ok: mudou, a, b, txt: mudou ? txt : 'nada a mudar'};
+}
+/* rede inteira coerente até o deságue: cotas, Ø não diminui a jusante, remanso e saída */
+function propaga21() {
+  autoCotas(true); calc(); autoCotas(true); calc();
+  try { T3diamPrimeiro(); } catch (e) { console.error('DR-21 Ø', e); }
+  for (let k = 0; k < 6; k++) { let m = 0; (R.ordem || []).forEach(t0 => { const t = P.trechos.find(x => x.id === t0.id), j = P.trechos.find(x => x.m === t.j); if (t && j && !galOf(t) && !galOf(j) && (+j.D || 0) < (+t.D || 0)) { j.D = t.D; normSec(j); m++; } }); if (!m) break; autoCotas(true); calc(); }
+  if (R.checks.some(c => c.st === 'err' && /Linha piezométrica|Saída/.test(c.par))) { try { gerRemanso16(); } catch (e) { console.error('DR-21 remanso', e); } }
+  if (typeof gerSaidaAfogada16 === 'function' && gerSaidaAfogada16() && R.checks.some(c => c.st === 'err' && /Saída/.test(c.par))) { try { gerLevanta16(); autoCotas(true); calc(); } catch (e) { console.error('DR-21 saída', e); } }
+  calc();
+}
+function geral21() {   // sarjetas, caixas, ramais, diâmetros e velocidades
+  autoCotas(true); calc(); autoDimensionar(); calc(); autoCorrigir();
+  try { T3diamPrimeiro(); T3sarjCorrige(); autoCorrigir(); T3diamPrimeiro(); } catch (e) { console.error('DR-21 geral', e); }
+  try { revisa20(); } catch (e) { console.error('DR-21 revisa', e); }
+  propaga21(); return 'cotas, diâmetros, caixas e ramais refeitos em toda a rede até o deságue';
+}
+function raso21() { P.crit.pvProfAuto = true; autoCotas(true); calc(); autoCotas(true); calc(); propaga21(); return 'rede aprofundada para caber a câmara mínima + laje + pescoço em cada PV (e o que está a jusante acompanha)'; }
+function fundo21() { const sg = T3sugGalerias(); sg.forEach(g => { const t = P.trechos.find(y => y.id === g.id); if (!t) return; t.sec = 'gal'; t.galN = g.N; t.galB = g.B; t.galH = g.H; t.galE = ''; normSec(t); });
+  if (!sg.length) return ''; autoCotas(true); calc(); autoCotas(true); calc(); autoCorrigir(); propaga21(); return sg.length + ' trecho(s) fundo(s) trocado(s) por galeria de aduelas mais baixa'; }
+function ladoPV21() { const m = pvPadrao18(); if (!m.length) return ''; propaga21(); return m.length + ' PV(s) maior(es) que a tabela da base dividido(s) com PV ao lado'; }
+function corr21(modo) {
+  if (BUSY21) return; BUSY21 = true;
+  const el = document.getElementById('v21-msg'); if (el) el.innerHTML = '<div class="msg info">⏳ <span>Corrigindo ' + (modo === 'err' ? 'os erros' : 'os alertas') + ' em toda a rede, até o deságue… pode levar de 20 a 90 segundos. Não feche a página.</span></div>';
+  ['v21-be', 'v21-bw'].forEach(i => { const b = document.getElementById(i); if (b) b.disabled = true; });
+  setTimeout(() => {
+    const antes = JSON.stringify(P), c0 = cnt21(), passos = [], t0 = Date.now();
+    const calc0 = calc, auto0 = window.__semMemo18; let ck = null;
+    try {
+      gerSemUI(() => {
+        if (modo === 'err') {
+          for (let k = 0; k < 3; k++) { const c = cnt21(); if (!c.e) break; const r = passo21('Erros — rodada ' + (k + 1) + ': ' + 'rede inteira até o deságue', geral21); passos.push(r); if (!r.ok) break; }
+        } else {
+          passos.push(passo21('Sarjetas, caixas, ramais, diâmetros e velocidades', geral21, true));
+          for (let k = 0; k < 2; k++) {
+            const r1 = passo21('PVs rasos — aprofundar a rede', raso21, true); passos.push(r1);
+            const r2 = passo21('PVs fundos (> 4 m) — galeria de aduelas mais baixa', fundo21, true); passos.push(r2);
+            const r3 = passo21('PV maior que a tabela da base — PV ao lado', ladoPV21, true); passos.push(r3);
+            if (!r1.ok && !r2.ok && !r3.ok) break;
+          }
+          passos.push(passo21('Conferência final da rede até o deságue', () => { propaga21(); return 'cotas, Ø e remanso conferidos'; }, false));
+        }
+      });
+    } catch (e) { console.error('DR-21', e); P = migrate(JSON.parse(antes)); }
+    sincGeo(true); const c1 = cnt21();
+    if (c1.e > c0.e) { P = migrate(JSON.parse(antes)); calc(); toast('Correção não aplicada: criaria erro(s).'); BUSY21 = false; renderTab(); return; }
+    UND21 = JSON.stringify(P) !== antes ? antes : null;
+    const pend = {}; R.checks.filter(c => c.st !== 'ok').forEach(c => { const k = c.st + '|' + c.par.replace(/ em \d+ PV\(s\)/, ''); (pend[k] = pend[k] || {st: c.st, par: c.par, n: 0, el: [], c}).n++; pend[k].el.push(c.el); });
+    REL21 = {modo, c0, c1, passos, seg: Math.round((Date.now() - t0) / 1000), pend: Object.values(pend).sort((a, b) => (a.st === 'err' ? 0 : 1) - (b.st === 'err' ? 0 : 1) || b.n - a.n)};
+    BUSY21 = false; save(); calc(); renderTab();
+    toast((modo === 'err' ? 'Erros' : 'Alertas') + ': ' + (modo === 'err' ? c0.e + ' → ' + c1.e : c0.w + ' → ' + c1.w) + '. Use ↶ Desfazer se não gostar.');
+  }, 60);
+}
+function desfaz21() { if (!UND21) return; P = migrate(JSON.parse(UND21)); UND21 = null; REL21 = null; save(); calc(); renderTab(); toast('Correção desfeita.'); }
+(function () {
+  const v21 = vVerif;
+  vVerif = function () {
+    let h = v21.apply(this, arguments);
+    try {
+      const e = R.checks.filter(c => c.st === 'err').length, w = R.checks.filter(c => c.st === 'warn').length, r = REL21;
+      const bt = `<div class="card" style="display:flex;gap:.7rem;align-items:center;flex-wrap:wrap;border-left:4px solid var(--agua)">
+        <button id="v21-be" class="btn btn-primary" ${e ? '' : 'disabled'} onclick="corr21('err')" title="Refaz cotas, diâmetros, caixas, ramais, remanso e saída em TODA a rede até o deságue; passo que criar erro é desfeito">🛠 Corrigir erros (${e})</button>
+        <button id="v21-bw" class="btn btn-primary" ${w ? '' : 'disabled'} onclick="corr21('warn')" title="Aprofunda PVs rasos, troca PVs fundos por galeria, divide PV grande em PV ao lado, ajusta sarjetas e ramais — sempre refazendo a rede até o deságue; passo que não reduz alertas é desfeito">🛠 Corrigir alertas (${w})</button>
+        ${UND21 ? '<button class="btn btn-secondary" onclick="desfaz21()">↶ Desfazer a última correção</button>' : ''}
+        <span style="font-size:.78rem;color:var(--muted);flex:1;min-width:240px">Cada correção é aplicada na rede inteira, do PV mais a montante até o deságue (cotas, diâmetros, remanso). O que ficar pendente aparece abaixo com o motivo. Pode demorar até 90 s.</span></div>
+        <div id="v21-msg">${r ? `<div class="card"><b>Resultado da correção de ${r.modo === 'err' ? 'erros' : 'alertas'}</b> (${r.seg} s): erros ${r.c0.e} → <b>${r.c1.e}</b> · alertas ${r.c0.w} → <b>${r.c1.w}</b>
+          <div style="margin:.4rem 0">${r.passos.map(p => `<div style="font-size:.78rem;margin:.15rem 0">${p.ok ? '✔' : '↩'} <b>${esc(p.nome)}</b> — ${esc(p.txt)}${p.ok ? ' (erros ' + p.a.e + ' → ' + p.b.e + ', alertas ' + p.a.w + ' → ' + p.b.w + ')' : ''}</div>`).join('')}</div>
+          ${r.pend.length ? '<div class="section-title" style="margin-top:.4rem">Continua pendente (decisão do projetista)</div>' + r.pend.map(o => { const sg = (typeof SUG16 !== 'undefined' && SUG16.find(x => x[0].test(o.par))) || null; return `<div style="font-size:.76rem;margin:.25rem 0;padding:.25rem .4rem;border-left:3px solid ${o.st === 'err' ? 'var(--err,#c62828)' : 'var(--warn,#d97706)'}"><b>${o.st === 'err' ? '✕' : '⚠'} ${esc(o.par.slice(0, 90))}</b> — ${o.n} (${esc(o.el.slice(0, 6).join(', '))}${o.el.length > 6 ? '…' : ''})<br><span style="color:var(--muted)">${esc(sg ? sg[1] : (o.c.nota || ''))}</span></div>`; }).join('') : '<div class="msg ok">✓ <span>Nada pendente.</span></div>'}</div>` : ''}</div>`;
+      h = h.replace(/(<div class="sumbar">[\s\S]*?<\/div>)/, '$1' + bt);
+    } catch (err) { console.error('DR-21 tela', err); }
+    return h;
+  };
+})();
+</script>
 </body></html>
