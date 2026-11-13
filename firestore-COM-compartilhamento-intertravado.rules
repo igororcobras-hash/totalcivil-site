@@ -246,6 +246,31 @@ service cloud.firestore {
     }
 
     // ════════════════════════════════════════════════════════════════
+    // 4b. ORÇAMENTO — cópia dos orçamentos salvos (PATCH ORC-NUVEM-01, 13/11/2026)
+    // ════════════════════════════════════════════════════════════════
+
+    // Cada usuário com o Orçamento liberado grava só os PRÓPRIOS orçamentos (id = uid + '__' + id do orçamento).
+    // Ninguém apaga (o usuário que apaga só marca apagadoEm).
+    // Ler os orçamentos dos OUTROS: SOMENTE o Igor (e-mail fixo abaixo). Decisão do dono: o outro administrador
+    // (wfajardoeng@gmail.com) NÃO lê esta coleção, embora seja administrador do restante do site.
+    match /orcamentosNuvem/{docId} {
+      allow read: if logado()
+                  && (resource.data.uid == request.auth.uid
+                      || request.auth.token.email == 'igororcobras@gmail.com');
+      allow create: if podeUsar('orcamento')
+                    && request.resource.data.uid == request.auth.uid
+                    && docId.matches(request.auth.uid + '__.*')
+                    && request.resource.data.keys().hasOnly([
+                         'uid','email','usuario','nome','orcId','orcNome','local','dataBase',
+                         'total','qtdItens','bdi','criadoEm','atualizadoEm','formato','dados',
+                         'enviadoEm','apagadoEm']);
+      allow update: if podeUsar('orcamento')
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == request.auth.uid;
+      allow delete: if false;
+    }
+
+    // ════════════════════════════════════════════════════════════════
     // 5. DRENAGEM PLUVIAL
     // ════════════════════════════════════════════════════════════════
 

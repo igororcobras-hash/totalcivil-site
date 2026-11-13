@@ -11122,6 +11122,7 @@ async function aoMudarSessao(u){
 }
 
 function liberar(){
+  try{ window.__tcNuvem = { get fb(){ return fb; }, get eu(){ return eu; } }; document.dispatchEvent(new Event('tc-orc-pronto')); }catch(e){}  /* ORC-NUVEM-01 */
   if(window.mostrarSelecaoAmbiente) window.mostrarSelecaoAmbiente();
   const sessao = {username: eu.apelido, nome: eu.nome || eu.apelido, role: eu.admin ? 'ADMIN' : 'USER', uid: eu.uid, email: eu.email || '', loginEm: new Date().toISOString()};
   try{ localStorage.setItem(KEY, JSON.stringify(sessao)); }catch(e){}
@@ -14884,6 +14885,286 @@ setInterval(function(){ try{ garantirBtnInstr(); }catch(e){} }, 1200);
 })();
 </script>
 <!-- FIM PATCH V1-02-57 -->
+<!-- PATCH ORC-NUVEM-01 (13/11/2026): cópia dos orçamentos salvos na nuvem (coleção orcamentosNuvem)
+     + botão "Orçamentos de Usuários na Nuvem" em "Meus Orçamentos Salvos", SÓ para igororcobras@gmail.com.
+     O servidor (firestore.rules) também só deixa o Igor ler os orçamentos dos outros: o botão escondido não é a única trava. -->
+<script>
+(function(){
+  'use strict';
+  var IGOR = 'igororcobras@gmail.com';
+  var SYNC = 'tc_orcnuvem_sync_v1';       // por usuário: {idDoOrcamento: atualizadoEm já enviado}
+  var MAXB64 = 900000;                    // limite de segurança (o documento do Firestore aceita ~1 MB)
+  var timer = null, rodando = false, pendente = false;
+
+  function ctx(){ var c = window.__tcNuvem; return (c && c.fb && c.eu) ? c : null; }
+  function souIgor(){ var c = ctx(); return !!(c && String(c.eu.email || '').toLowerCase() === IGOR); }
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(m){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]; }); }
+  function brl(n){ return (Number(n) || 0).toLocaleString('pt-BR', {style:'currency', currency:'BRL'}); }
+  function numSimples(v){ return parseFloat(String(v == null ? '' : v).replace(',', '.')) || 0; }
+  function fmtD(s){ try{ var d = new Date(s); return isNaN(d) ? '—' : d.toLocaleString('pt-BR'); }catch(e){ return '—'; } }
+  function norm(s){ return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
+
+  /* ---------- compactar / descompactar (gzip + base64) ---------- */
+  function paraB64(buf){
+    var b = new Uint8Array(buf), s = '', i, N = 0x8000;
+    for(i = 0; i < b.length; i += N) s += String.fromCharCode.apply(null, b.subarray(i, i + N));
+    return btoa(s);
+  }
+  function deB64(t){ var s = atob(t), a = new Uint8Array(s.length), i; for(i = 0; i < s.length; i++) a[i] = s.charCodeAt(i); return a; }
+  async function empacotar(obj){
+    var txt = JSON.stringify(obj);
+    if(typeof CompressionStream === 'function'){
+      var cs = new Blob([txt]).stream().pipeThrough(new CompressionStream('gzip'));
+      return {formato: 'gz64', dados: paraB64(await new Response(cs).arrayBuffer())};
+    }
+    return {formato: 'json', dados: txt};
+  }
+  async function desempacotar(doc){
+    if(!doc || !doc.dados) return null;
+    if(doc.formato === 'gz64'){
+      var ds = new Blob([deB64(doc.dados)]).stream().pipeThrough(new DecompressionStream('gzip'));
+      return JSON.parse(await new Response(ds).text());
+    }
+    return JSON.parse(doc.dados);
+  }
+
+  /* ---------- envio: toda alteração na lista local sobe para a nuvem ---------- */
+  function lerMapa(){ try{ return JSON.parse(localStorage.getItem(SYNC) || '{}'); }catch(e){ return {}; } }
+  function gravaMapa(m){ try{ localStorage.setItem(SYNC, JSON.stringify(m)); }catch(e){} }
+
+  async function sincronizar(){
+    var c = ctx();
+    if(!c || typeof getOrcamentosSalvos !== 'function') return;
+    if(rodando){ pendente = true; return; }
+    rodando = true;
+    try{
+      var fs = c.fb.fs, d = c.fb.d, uid = c.eu.uid;
+      var lista = getOrcamentosSalvos();
+      var mapa = lerMapa(), meu = mapa[uid] || (mapa[uid] = {});
+      var existentes = {}, i, o, pk, grande;
+      for(i = 0; i < lista.length; i++){
+        o = lista[i];
+        if(o.semNuvem) continue;                              // cópia que o Igor trouxe da nuvem para a própria lista
+        existentes[o.id] = 1;
+        if(meu[o.id] === o.atualizadoEm) continue;            // já enviado desta versão
+        pk = await empacotar({orc: o.orc || [], bdi: o.bdi || 0});
+        grande = pk.dados.length > MAXB64;
+        await fs.setDoc(fs.doc(d, 'orcamentosNuvem', uid + '__' + o.id), {
+          uid: uid, email: c.eu.email || '', usuario: c.eu.apelido || '', nome: c.eu.nome || '',
+          orcId: o.id, orcNome: o.nome || '', local: o.local || '', dataBase: o.dataBase || '',
+          total: Number(o.total) || 0, qtdItens: Number(o.qtdItens) || 0, bdi: Number(o.bdi) || 0,
+          criadoEm: o.criadoEm || '', atualizadoEm: o.atualizadoEm || '',
+          formato: grande ? 'omitido' : pk.formato, dados: grande ? '' : pk.dados,
+          enviadoEm: fs.serverTimestamp(), apagadoEm: null
+        });
+        meu[o.id] = o.atualizadoEm; gravaMapa(mapa);
+      }
+      // orçamento que o usuário apagou: a cópia na nuvem fica, marcada como apagada
+      var ids = Object.keys(meu);
+      for(i = 0; i < ids.length; i++){
+        if(existentes[ids[i]]) continue;
+        await fs.setDoc(fs.doc(d, 'orcamentosNuvem', uid + '__' + ids[i]), {uid: uid, apagadoEm: new Date().toISOString()}, {merge: true});
+        delete meu[ids[i]]; gravaMapa(mapa);
+      }
+      window.__orcNuvemErro = '';
+    }catch(e){
+      window.__orcNuvemErro = String((e && (e.code || e.message)) || e);
+      try{ console.warn('[orcamento-nuvem] não enviou:', window.__orcNuvemErro); }catch(_){}
+    }finally{
+      rodando = false;
+      if(pendente){ pendente = false; agendar(1500); }
+    }
+  }
+  function agendar(ms){ clearTimeout(timer); timer = setTimeout(sincronizar, ms || 2000); }
+
+  var _set = window.setOrcamentosSalvos;
+  if(typeof _set === 'function'){
+    window.setOrcamentosSalvos = function(){ var r = _set.apply(this, arguments); agendar(2500); return r; };
+  }
+  document.addEventListener('tc-orc-pronto', function(){ agendar(4000); });
+  if(ctx()) agendar(4000);
+
+  /* ---------- botão em "Meus Orçamentos Salvos" (só Igor) ---------- */
+  function garantirBotao(){
+    var ant = document.getElementById('btnOrcNuvem');
+    if(!souIgor()){ if(ant) ant.parentNode.removeChild(ant); return; }
+    if(ant) return;
+    var busca = document.getElementById('buscaOrc'); if(!busca) return;
+    var linha = busca.parentNode;
+    linha.style.flexWrap = 'wrap';
+    var b = document.createElement('button');
+    b.id = 'btnOrcNuvem'; b.className = 'btn btn-dark'; b.style.cssText = 'font-size:9px;white-space:nowrap';
+    b.textContent = 'Orçamentos de Usuários na Nuvem';
+    b.onclick = abrirNuvem;
+    linha.appendChild(b);
+  }
+  var _abrir = window.abrirModalOrcamentos;
+  if(typeof _abrir === 'function'){
+    window.abrirModalOrcamentos = function(){ var r = _abrir.apply(this, arguments); try{ garantirBotao(); }catch(e){} return r; };
+  }
+
+  /* ---------- janela do Igor: todos os orçamentos de todos os usuários ---------- */
+  var cache = [];
+  var TH = 'padding:6px 8px;text-align:left;font-size:10px;background:#0f172a;color:#fff;position:sticky;top:0;white-space:nowrap';
+  var TD = 'padding:6px 8px;font-size:11px;border-bottom:1px solid #f1f5f9;vertical-align:top';
+
+  function criarModal(id, largura){
+    var m = document.getElementById(id);
+    if(m) return m;
+    m = document.createElement('div');
+    m.id = id; m.className = 'orc-modal'; m.style.zIndex = id === 'modalOrcNuvemVer' ? 11200 : 11100;
+    m.onclick = function(e){ if(e.target === m) m.style.display = 'none'; };
+    m.innerHTML = '<div class="orc-modal-box" style="max-width:' + largura + 'px;max-height:90vh"></div>';
+    document.body.appendChild(m);
+    return m;
+  }
+
+  async function abrirNuvem(){
+    if(!souIgor()) return;                                   // o servidor também barra quem não é o Igor
+    var m = criarModal('modalOrcNuvem', 1150);
+    var box = m.firstChild;
+    box.innerHTML =
+      '<div style="padding:12px 14px;background:#0f172a;color:#fff;display:flex;justify-content:space-between;align-items:center">' +
+        '<div><div style="font-weight:800;font-size:13px">Orçamentos de Usuários na Nuvem</div>' +
+        '<div id="onResumo" style="font-size:10px;opacity:.8">Carregando…</div></div>' +
+        '<button class="btn btn-dark" id="onFechar">Fechar</button></div>' +
+      '<div style="padding:8px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;gap:6px;flex-wrap:wrap;align-items:center">' +
+        '<input id="onBusca" placeholder="Buscar por usuário, orçamento ou local…" style="flex:1;min-width:180px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px">' +
+        '<select id="onUser" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;font-size:11px;max-width:230px"></select>' +
+        '<label style="font-size:10px;color:#475569;white-space:nowrap"><input type="checkbox" id="onApag"> mostrar apagados</label>' +
+        '<button class="btn btn-primary" id="onAtualiza" style="font-size:10px">Atualizar</button></div>' +
+      '<div id="onLista" style="flex:1;overflow:auto"></div>' +
+      '<div style="padding:8px;background:#fef3c7;border-top:1px solid #fde68a;font-size:9px;color:#92400e">Mostra os 200 orçamentos mais recentemente atualizados. A cópia é enviada ao salvar; orçamento só salvo antes deste recurso sobe quando o usuário abrir o programa de novo. Visível apenas para esta conta.</div>';
+    m.style.display = 'flex';
+    document.getElementById('onFechar').onclick = function(){ m.style.display = 'none'; };
+    document.getElementById('onBusca').oninput = desenhar;
+    document.getElementById('onUser').onchange = desenhar;
+    document.getElementById('onApag').onchange = desenhar;
+    document.getElementById('onAtualiza').onclick = carregar;
+    document.getElementById('onLista').onclick = function(ev){
+      var b = ev.target.closest ? ev.target.closest('button[data-acao]') : null; if(!b) return;
+      if(b.getAttribute('data-acao') === 'ver') verItens(b.getAttribute('data-id'));
+      else copiar(b.getAttribute('data-id'));
+    };
+    await carregar();
+  }
+
+  async function carregar(){
+    var c = ctx(), lista = document.getElementById('onLista');
+    if(!c || !lista) return;
+    lista.innerHTML = '<div style="padding:30px;text-align:center;font-size:12px;color:#475569">Carregando…</div>';
+    try{
+      var fs = c.fb.fs;
+      var snap = await fs.getDocs(fs.query(fs.collection(c.fb.d, 'orcamentosNuvem'), fs.orderBy('atualizadoEm', 'desc'), fs.limit(200)));
+      cache = snap.docs.map(function(x){ var v = x.data() || {}; v._id = x.id; return v; });
+      var sel = document.getElementById('onUser'), vistos = {}, opts = '<option value="">Todos os usuários</option>';
+      cache.forEach(function(v){
+        var k = String(v.email || v.uid || '').toLowerCase(); if(!k || vistos[k]) return; vistos[k] = 1;
+        opts += '<option value="' + esc(k) + '">' + esc((v.nome || v.usuario || k) + ' — ' + (v.email || '')) + '</option>';
+      });
+      sel.innerHTML = opts;
+      desenhar();
+    }catch(e){
+      var t = String((e && (e.code || e.message)) || e);
+      lista.innerHTML = '<div style="padding:24px;font-size:12px;color:#b91c1c">' +
+        (/permission|insufficient/i.test(t)
+          ? 'O servidor negou a leitura. As regras novas do Firestore (coleção <b>orcamentosNuvem</b>) ainda não foram publicadas, ou esta não é a conta de administrador autorizada.'
+          : 'Não foi possível carregar: ' + esc(t)) + '</div>';
+      var r = document.getElementById('onResumo'); if(r) r.textContent = 'Erro ao carregar';
+    }
+  }
+
+  function desenhar(){
+    var lista = document.getElementById('onLista'); if(!lista) return;
+    var q = norm((document.getElementById('onBusca') || {}).value);
+    var u = (document.getElementById('onUser') || {}).value || '';
+    var ap = !!(document.getElementById('onApag') || {}).checked;
+    var f = cache.filter(function(v){
+      if(v.apagadoEm && !ap) return false;
+      if(u && String(v.email || v.uid || '').toLowerCase() !== u) return false;
+      if(q && norm([v.nome, v.usuario, v.email, v.orcNome, v.local].join(' ')).indexOf(q) < 0) return false;
+      return true;
+    });
+    var us = {}; f.forEach(function(v){ us[v.uid || v.email] = 1; });
+    var r = document.getElementById('onResumo');
+    if(r) r.textContent = f.length + ' orçamento(s) de ' + Object.keys(us).length + ' usuário(s)';
+    if(!f.length){
+      lista.innerHTML = '<div style="padding:30px;text-align:center;font-size:12px;color:#64748b">Nenhum orçamento encontrado.<br><span style="font-size:10px">Os orçamentos aparecem aqui depois que cada usuário salva (ou abre o programa) com a versão nova no ar.</span></div>';
+      return;
+    }
+    lista.innerHTML = '<table style="width:100%;border-collapse:collapse"><thead><tr>' +
+      ['Usuário', 'Orçamento', 'Itens', 'Total', 'Base', 'Local', 'Atualizado', ''].map(function(h){ return '<th style="' + TH + '">' + h + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + f.map(function(v){
+        var sem = v.formato === 'omitido' || !v.dados;
+        return '<tr' + (v.apagadoEm ? ' style="opacity:.55"' : '') + '>' +
+          '<td style="' + TD + '"><b>' + esc(v.nome || v.usuario || '—') + '</b><br><span style="font-size:9px;color:#64748b">' + esc(v.email || '') + '</span></td>' +
+          '<td style="' + TD + '">' + esc(v.orcNome || '—') + (v.apagadoEm ? '<br><span style="font-size:9px;color:#dc2626">apagado pelo usuário em ' + esc(fmtD(v.apagadoEm)) + '</span>' : '') + '</td>' +
+          '<td style="' + TD + ';text-align:right">' + (v.qtdItens || 0) + '</td>' +
+          '<td style="' + TD + ';text-align:right;white-space:nowrap">' + brl(v.total) + '</td>' +
+          '<td style="' + TD + '">' + esc(v.dataBase || 'N/D') + '</td>' +
+          '<td style="' + TD + '">' + esc(v.local || 'N/D') + '</td>' +
+          '<td style="' + TD + ';white-space:nowrap">' + esc(fmtD(v.atualizadoEm)) + '</td>' +
+          '<td style="' + TD + ';white-space:nowrap">' + (sem
+              ? '<span style="font-size:9px;color:#94a3b8">itens grandes demais</span>'
+              : '<button class="btn btn-primary" style="padding:4px 8px;font-size:9px" data-acao="ver" data-id="' + esc(v._id) + '">Ver itens</button> ' +
+                '<button class="btn btn-dark" style="padding:4px 8px;font-size:9px" data-acao="copiar" data-id="' + esc(v._id) + '">Copiar p/ minha lista</button>') + '</td></tr>';
+      }).join('') + '</tbody></table>';
+  }
+
+  function achar(id){ for(var i = 0; i < cache.length; i++) if(cache[i]._id === id) return cache[i]; return null; }
+
+  async function verItens(id){
+    var v = achar(id); if(!v) return;
+    var m = criarModal('modalOrcNuvemVer', 1100), box = m.firstChild;
+    box.innerHTML = '<div style="padding:20px;font-size:12px">Abrindo…</div>';
+    m.style.display = 'flex';
+    var cont;
+    try{ cont = await desempacotar(v); }catch(e){ cont = null; }
+    if(!cont){ box.innerHTML = '<div style="padding:20px;font-size:12px;color:#b91c1c">Não foi possível ler os itens deste orçamento.</div>'; return; }
+    var orc = cont.orc || [], total = 0, totalSem = 0, n = 0, linhas = '';
+    orc.forEach(function(l){
+      if(l.tipo === 'ITEM'){
+        var q = numSimples(l.qtd), cu = numSimples(l.custo), b = numSimples(l.bdi), t = q * cu * (1 + b / 100);
+        total += t; totalSem += q * cu; n++;
+        linhas += '<tr><td style="' + TD + '">' + esc(l.codigo || '') + '</td><td style="' + TD + '">' + esc(l.descr || '') + '</td>' +
+          '<td style="' + TD + '">' + esc(l.unid || '') + '</td><td style="' + TD + ';text-align:right">' + esc(l.qtd) + '</td>' +
+          '<td style="' + TD + ';text-align:right;white-space:nowrap">' + brl(cu) + '</td><td style="' + TD + ';text-align:right">' + esc(l.bdi) + '</td>' +
+          '<td style="' + TD + ';text-align:right;white-space:nowrap">' + brl(t) + '</td><td style="' + TD + ';font-size:9px;color:#64748b">' + esc(l.data_base || '') + '</td></tr>';
+      }else{
+        linhas += '<tr><td colspan="8" style="' + TD + ';background:#f1f5f9;font-weight:800">' + esc(l.titulo || l.descr || '') + '</td></tr>';
+      }
+    });
+    box.innerHTML =
+      '<div style="padding:12px 14px;background:#0f172a;color:#fff;display:flex;justify-content:space-between;align-items:center;gap:8px">' +
+        '<div><div style="font-weight:800;font-size:13px">' + esc(v.orcNome || 'Orçamento') + '</div>' +
+        '<div style="font-size:10px;opacity:.8">' + esc((v.nome || v.usuario || '') + ' — ' + (v.email || '')) + ' · Base ' + esc(v.dataBase || 'N/D') + ' · Local ' + esc(v.local || 'N/D') + ' · Atualizado ' + esc(fmtD(v.atualizadoEm)) + '</div></div>' +
+        '<button class="btn btn-dark" id="ovFechar">Fechar</button></div>' +
+      '<div style="flex:1;overflow:auto"><table style="width:100%;border-collapse:collapse"><thead><tr>' +
+        ['Código', 'Descrição', 'Un.', 'Qtd.', 'Custo unit.', 'BDI %', 'Total c/ BDI', 'Data-base'].map(function(h){ return '<th style="' + TH + '">' + h + '</th>'; }).join('') +
+      '</tr></thead><tbody>' + linhas + '</tbody></table></div>' +
+      '<div style="padding:8px 12px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:11px"><b>' + n + ' itens</b> · Sem BDI: <b>' + brl(totalSem) + '</b> · Com BDI: <b>' + brl(total) + '</b></div>';
+    document.getElementById('ovFechar').onclick = function(){ m.style.display = 'none'; };
+  }
+
+  async function copiar(id){
+    var v = achar(id); if(!v) return;
+    var cont = null; try{ cont = await desempacotar(v); }catch(e){}
+    if(!cont){ alert('Não foi possível ler os itens deste orçamento.'); return; }
+    var lista = getOrcamentosSalvos(), agora = new Date().toISOString();
+    lista.push({
+      id: 'orc_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+      nome: '[' + (v.nome || v.usuario || v.email || 'usuário') + '] ' + (v.orcNome || 'Orçamento'),
+      dataBase: v.dataBase || '', local: v.local || '', criadoEm: agora, atualizadoEm: agora,
+      orc: cont.orc || [], bdi: cont.bdi || 0, total: v.total || 0, qtdItens: v.qtdItens || 0,
+      semNuvem: true                                          // não volta para a nuvem como se fosse seu
+    });
+    setOrcamentosSalvos(lista);
+    if(typeof renderListaOrcamentos === 'function') renderListaOrcamentos();
+    alert('Copiado para a sua lista "Meus Orçamentos Salvos" com o nome "[' + (v.nome || v.usuario || v.email || 'usuário') + '] ' + (v.orcNome || 'Orçamento') + '". Feche esta janela e use "Abrir" para ver no programa.');
+  }
+})();
+</script>
+<!-- FIM PATCH ORC-NUVEM-01 -->
 <script src="/estado-pagina.js"></script>
 </body>
 </html>
