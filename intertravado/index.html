@@ -6297,3 +6297,169 @@ function geoKmz(){ if(!_gm||_geo.lat==null){ toast('Posicione o desenho no mapa 
   const ap=aplicarProjeto; aplicarProjeto=function(){ const r=ap.apply(this,arguments); if(_pl.modo==='geo'&&_gm){ geoDestruir(); geoMontar(); } return r; };
 })();
 </script>
+
+<script>
+/* PATCH PI-19 (13/11/2026) · Georreferenciar: (A) satélite sem "Map data not yet available" (zoom nativo detectado, imagem ampliada) + fonte Mapbox opcional (chave do próprio usuário);
+   (B) 🎥 Vista inclinada: o desenho georreferenciado em volume sobre o satélite, com inclinar/girar como no Google Earth até o nível do pavimento e 🚶 Andar na rua (MapLibre GL). Só desenho/visualização: nenhum cálculo muda. */
+(function(){
+  const GL_V='4.7.1', GL_JS='https://cdn.jsdelivr.net/npm/maplibre-gl@'+GL_V+'/dist/maplibre-gl.js', GL_CSS='https://cdn.jsdelivr.net/npm/maplibre-gl@'+GL_V+'/dist/maplibre-gl.css';
+  const ESRI='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', OSM='https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+  const ls=(k,v)=>{ try{ if(v===undefined) return localStorage.getItem(k); localStorage.setItem(k,v); }catch(e){} return null; };
+  const q=id=>document.getElementById(id);
+  const G3=window._g3={on:false,map:null,W:null,keys:{},nz:19};
+  const mbxKey=()=>ls('pint_geo_mbx')||'';
+  const fonte=()=>(ls('pint_geo_fonte')==='mbx'&&mbxKey())?'mbx':'esri';
+  const MBX=k=>'https://api.mapbox.com/styles/v1/mapbox/satellite-v9/tiles/512/{z}/{x}/{y}?access_token='+encodeURIComponent(k);
+
+  /* ───────── A. zoom nativo do satélite ───────── */
+  function ehVazio(img){ try{ const c=document.createElement('canvas'); c.width=c.height=24; const x=c.getContext('2d'); x.drawImage(img,0,0,24,24); const d=x.getImageData(0,0,24,24).data, h={}; let mx=0,mk=0;
+      for(let i=0;i<d.length;i+=4){ if(Math.abs(d[i]-d[i+1])>5||Math.abs(d[i+1]-d[i+2])>5) continue; const v=d[i]; h[v]=(h[v]||0)+1; }
+      for(const k in h){ let s=0; for(let j=-3;j<=3;j++) s+=h[+k+j]||0; if(s>mx){ mx=s; mk=+k; } }
+      return mk>=185&&mk<=225&&mx/576>0.8; }catch(e){ return null; } }
+  function tileXY(lat,lng,z){ const n=Math.pow(2,z), r=lat*Math.PI/180; return [Math.floor((lng+180)/360*n), Math.floor((1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n)]; }
+  function carrega(u){ return new Promise(ok=>{ const i=new Image(); i.crossOrigin='anonymous'; i.onload=()=>ok(i); i.onerror=()=>ok(null); i.src=u; }); }
+  const cacheNz={}; let tmNz=null;
+  async function geoNativo(){
+    const m=_gm; if(!m||fonte()==='mbx'||_geo.base==='rua') return; const c=m.map.getCenter(), z0=m.map.getZoom(); if(z0<17) return;
+    const k15=tileXY(c.lat,c.lng,15).join('/'); let nz=cacheNz[k15];
+    if(nz===undefined){ nz=null;
+      for(let z=21;z>=15;z--){ const [x,y]=tileXY(c.lat,c.lng,z), im=await carrega(ESRI.replace('{z}',z).replace('{y}',y).replace('{x}',x)); if(!im) break; const v=ehVazio(im); if(v===null) break; if(!v){ nz=z; break; } }
+      if(nz!==null) cacheNz[k15]=nz; }
+    if(nz===null||!_gm) return;
+    G3.nz=nz; if(m.sat.options.maxNativeZoom!==nz){ m.sat.options.maxNativeZoom=nz; m.sat.redraw(); }
+    const t=q('geo-nz'); if(t) t.textContent='Satélite (Esri) com foto até o zoom '+nz+' nesta área; acima disso a imagem é ampliada.';
+    if(G3.on&&G3.map) g3Estilo();
+  }
+  geoNativo.agenda=function(){ clearTimeout(tmNz); tmNz=setTimeout(geoNativo,600); };
+  window.geoNativo=geoNativo;
+
+  /* fonte do satélite (Esri × Mapbox com chave do usuário) */
+  window.geoFonte=function(f){
+    if(f==='mbx'&&!mbxKey()){ geoChave(); if(!mbxKey()){ const s=q('geo-fonte'); if(s) s.value='esri'; return; } }
+    ls('pint_geo_fonte',f); const m=_gm; if(m){ const mb=f==='mbx'&&mbxKey();
+      m.sat.options.tileSize=mb?512:256; m.sat.options.zoomOffset=mb?-1:0; m.sat.options.maxNativeZoom=mb?21:G3.nz;
+      m.sat.setUrl(mb?MBX(mbxKey()):ESRI); if(mb) m.map.attributionControl.addAttribution('© Mapbox © Maxar'); else m.map.attributionControl.removeAttribution('© Mapbox © Maxar');
+      const t=q('geo-nz'); if(t) t.textContent=mb?'Satélite Mapbox (com a sua chave).':''; if(!mb) geoNativo.agenda(); }
+    if(G3.on&&G3.map) g3Estilo(); };
+  window.geoChave=function(){ const k=prompt('Cole a sua chave (token público) do Mapbox, criada grátis em https://account.mapbox.com/access-tokens/ — ela fica só neste navegador. Deixe vazio para apagar.',mbxKey()); if(k===null) return;
+    ls('pint_geo_mbx',k.trim()); if(!k.trim()) ls('pint_geo_fonte','esri'); const s=q('geo-fonte'); if(s) s.value=fonte(); if(k.trim()){ ls('pint_geo_fonte','mbx'); if(s) s.value='mbx'; geoFonte('mbx'); } };
+
+  /* ───────── B. barra e contêiner da vista inclinada ───────── */
+  function injeta(){
+    const map=q('geo-map'); if(!map||q('geo-3dbar')) return;
+    const bar=document.createElement('div'); bar.id='geo-3dbar'; bar.style.cssText='padding:6px 10px;border-bottom:1px solid #d9c8f0;background:#f6f0ff;color:#2a1b3a;display:flex;gap:10px;align-items:center;flex-wrap:wrap';
+    bar.innerHTML='<b>Satélite</b><select id="geo-fonte" onchange="geoFonte(this.value)" title="Esri é grátis e já vem pronto. Mapbox costuma ter imagem mais nova em alguns lugares e usa uma chave sua."><option value="esri">Esri (padrão)</option><option value="mbx">Mapbox (com a sua chave)</option></select>'
+      +'<button type="button" class="tb-btn" onclick="geoChave()" title="Informar ou apagar a chave do Mapbox">🔑</button><span id="geo-nz" style="font-size:11.5px;color:#555"></span>'
+      +'<button type="button" class="tb-btn" id="geo-b-3d" onclick="geo3D(!_g3.on)" title="Mostra o desenho em volume sobre o satélite e permite inclinar, girar e andar na rua">🎥 Vista inclinada / andar na rua</button>'
+      +'<span id="geo-3dc" style="display:none;gap:10px;align-items:center;flex-wrap:wrap">'
+      +'<label>Inclinação <input id="geo-3d-p" type="range" min="0" max="85" value="60" style="vertical-align:middle;width:110px" oninput="geo3Dcam()"> <span id="geo-3d-pn">60</span>°</label>'
+      +'<label>Rotação <input id="geo-3d-r" type="range" min="-180" max="180" value="0" style="vertical-align:middle;width:110px" oninput="geo3Dcam()"> <span id="geo-3d-rn">0</span>°</label>'
+      +'<button type="button" class="tb-btn" onclick="geo3Dprev(\'topo\')">⬆ Topo</button><button type="button" class="tb-btn" onclick="geo3Dprev(\'obl\')">◢ 60°</button>'
+      +'<button type="button" class="tb-btn" id="geo-b-andar" onclick="geo3Dandar(!_g3.W)" title="Coloca você em pé no meio da rua (olhos a 1,70 m) para andar por ela">🚶 Andar na rua</button>'
+      +'<label>Passo <select id="geo-3d-v"><option value="1.4">Andando 1,4 m/s</option><option value="5">Correndo 5 m/s</option><option value="14">Veículo 14 m/s</option></select></label></span>';
+    map.parentNode.insertBefore(bar,map);
+    const gl=document.createElement('div'); gl.id='geo-gl'; gl.style.cssText='flex:1;min-height:300px;position:relative;display:none;background:#889'; map.parentNode.insertBefore(gl,map.nextSibling);
+    const s=q('geo-fonte'); if(s) s.value=fonte();
+    if(_gm){ const mb=fonte()==='mbx'; if(mb) geoFonte('mbx'); }
+  }
+  const gM=geoMontar; geoMontar=function(){ const r=gM.apply(this,arguments); injeta(); return r; };
+  const gI=geoIniciar; geoIniciar=function(){ const r=gI.apply(this,arguments); if(_gm){ _gm.map.on('moveend',geoNativo.agenda); geoNativo.agenda(); if(fonte()==='mbx') geoFonte('mbx'); } return r; };
+  const gD=geoDestruir; geoDestruir=function(){ const re=G3.on; G3.cam=G3.map?{c:G3.map.getCenter(),z:G3.map.getZoom(),p:G3.map.getPitch(),b:G3.map.getBearing()}:G3.cam; g3Limpa(); G3.on=false; G3.reabrir=re; const r=gD.apply(this,arguments); return r; };
+  const gM2=geoMontar; geoMontar=function(){ const r=gM2.apply(this,arguments); if(G3.reabrir){ G3.reabrir=false; let n=0; const t=setInterval(()=>{ if(_gm&&q('geo-gl')){ clearInterval(t); geo3D(true,true); } else if(++n>40) clearInterval(t); },250); } return r; };
+
+  /* ───────── geometria para o GL ───────── */
+  function anel(r){ const a=r.map(p=>{ const c=geoLL(p); return [c[1],c[0]]; }); a.push(a[0]); return a; }
+  function tracos(l){ const out=[], DASH=3, GAP=3, W2=0.075; let rest=0, on=true;
+    for(let i=0;i<l.length-1;i++){ const a=l[i], b=l[i+1], dx=b[0]-a[0], dy=b[1]-a[1], L=Math.hypot(dx,dy); if(L<1e-6) continue; const ux=dx/L, uy=dy/L; let s=0;
+      while(s<L){ const need=(on?DASH:GAP)-rest, take=Math.min(need,L-s);
+        if(on&&take>0.02){ const p0=[a[0]+ux*s,a[1]+uy*s], p1=[a[0]+ux*(s+take),a[1]+uy*(s+take)], nx=-uy*W2, ny=ux*W2;
+          out.push([[p0[0]+nx,p0[1]+ny],[p1[0]+nx,p1[1]+ny],[p1[0]-nx,p1[1]-ny],[p0[0]-nx,p0[1]-ny]]); }
+        s+=take; rest+=take; if(rest>=(on?DASH:GAP)-1e-9){ on=!on; rest=0; } } }
+    return out; }
+  function dados(){
+    const m=_gm, G=m.pts, real=(_geo.vis||'real')==='real', v=plVis(), F=[], add=(ring,cor,h,k)=>F.push({type:'Feature',properties:{c:cor,h:h,k:k},geometry:{type:'Polygon',coordinates:[anel(ring)]}});
+    if(real){ const cc=geoCor(_cal.tipo==='intertravado'?'#d8c3a2':'#d6d4cd');
+      (G.cals||[]).forEach(r=>add(r,cc,0.12,'cal'));
+      (G.mfr||[]).forEach(r=>add(r.p,geoCor(r.s?'#c9ccd1':'#b4b8bf'),r.s?0.03:0.15,r.s?'sj':'mf'));
+      if(v.pista!==0) G.pistas.forEach(r=>add(r,geoCor('#a9a59b'),0.03,'pista'));
+      if(v.eixo!==0) G.eixos.forEach(l=>tracos(l).forEach(q4=>add(q4,'#f5d442',0.04,'eixo')));
+    } else {
+      if(v.pista!==0) G.pistas.forEach(r=>add(r,'#555555',0.03,'pista'));
+      if(v.eixo!==0) G.eixos.forEach(l=>tracos(l).forEach(q4=>add(q4,'#ff3b30',0.04,'eixo')));
+    }
+    return {type:'FeatureCollection',features:F}; }
+  const QP={baixa:0.75,media:1,alta:1.5,ultra:2};
+  function luz(){ const H=PL_HORAS[plHoraK()]; return {anchor:'map',color:H.sol,intensity:(plHoraK()==='por'?0.4:0.55),position:[1.5,H.az,Math.max(5,90-H.el)]}; }
+  function g3Estilo(){ const mp=G3.map; if(!mp) return; const rua=_geo.base==='rua', mb=!rua&&fonte()==='mbx';
+    const src=rua?{type:'raster',tiles:[OSM],tileSize:256,maxzoom:19,attribution:'© OpenStreetMap'}:mb?{type:'raster',tiles:[MBX(mbxKey())],tileSize:512,maxzoom:21,attribution:'© Mapbox © Maxar'}:{type:'raster',tiles:[ESRI],tileSize:256,maxzoom:G3.nz||19,attribution:'Imagens © Esri'};
+    mp.setStyle({version:8,sources:{base:src,draw:{type:'geojson',data:dados()}},layers:[{id:'bg',type:'background',paint:{'background-color':'#8d97a0'}},{id:'base',type:'raster',source:'base',paint:{'raster-opacity':(_geo.opS||100)/100}},
+      {id:'ext',type:'fill-extrusion',source:'draw',paint:{'fill-extrusion-color':['get','c'],'fill-extrusion-height':['get','h'],'fill-extrusion-base':0,'fill-extrusion-opacity':Math.max(.2,(_geo.opD||70)/100),'fill-extrusion-vertical-gradient':true}}],light:luz()}); }
+  function g3Dados(){ const mp=G3.map; if(!mp||!G3.on||!_gm) return; const s=mp.getSource&&mp.getSource('draw'); if(s&&s.setData){ s.setData(dados()); try{ mp.setPaintProperty('ext','fill-extrusion-opacity',Math.max(.2,(_geo.opD||70)/100)); mp.setPaintProperty('base','raster-opacity',(_geo.opS||100)/100); mp.setLight(luz()); }catch(e){} } }
+  window.geo3Dsync=g3Dados;
+  const gDes=geoDesenha; geoDesenha=function(){ const r=gDes.apply(this,arguments); if(G3.on){ clearTimeout(G3.tmD); G3.tmD=setTimeout(g3Dados,60); } return r; };
+  const gQ=geoQual; geoQual=function(k){ const r=gQ.apply(this,arguments); if(G3.map&&G3.map.setPixelRatio) G3.map.setPixelRatio(Math.min(QP[plQualK()]||1,Math.max(2,window.devicePixelRatio||1))); return r; };
+  const gB=geoBase; geoBase=function(v){ const r=gB.apply(this,arguments); if(G3.on&&G3.map) g3Estilo(); return r; };
+
+  /* ───────── mapa GL ───────── */
+  function g3Limpa(){ pare(); if(G3.map){ try{ G3.map.remove(); }catch(e){} G3.map=null; } const g=q('geo-gl'); if(g) g.innerHTML=''; }
+  function bearingDe(a,b){ return Math.atan2((b[1]-a[1])*Math.cos(a[0]*Math.PI/180),(b[0]-a[0]))*180/Math.PI; }
+  window.geo3D=function(on,mantem){
+    const m=_gm; if(!on){ if(G3.W) geo3Dandar(false); if(G3.map) G3.cam={c:G3.map.getCenter(),z:G3.map.getZoom(),p:G3.map.getPitch(),b:G3.map.getBearing()};
+      g3Limpa(); G3.on=false; const mp=q('geo-map'), gl=q('geo-gl'); if(mp) mp.style.display=''; if(gl) gl.style.display='none'; if(q('geo-3dc')) q('geo-3dc').style.display='none';
+      const b=q('geo-b-3d'); if(b){ b.textContent='🎥 Vista inclinada / andar na rua'; b.classList.remove('tb-btn-save'); } if(m){ try{ m.map.invalidateSize(); }catch(e){} } return; }
+    if(!m||_geo.lat==null){ toast('Abra o mapa e posicione o desenho antes.'); return; }
+    const b=q('geo-b-3d'); if(b) b.textContent='⏳ Carregando 3D…';
+    plCarregar(GL_JS).then(()=>{ if(!document.getElementById('gl-css')){ const l=document.createElement('link'); l.id='gl-css'; l.rel='stylesheet'; l.href=GL_CSS; document.head.appendChild(l); }
+      if(!q('geo-gl')||!_gm) return; const ml=window.maplibregl, gl=q('geo-gl'); q('geo-map').style.display='none'; gl.style.display='block'; q('geo-3dc').style.display='inline-flex'; G3.on=true;
+      const cam=G3.cam; const c0=cam?cam.c:{lat:_geo.lat,lng:_geo.lng};
+      G3.map=new ml.Map({container:gl,style:{version:8,sources:{},layers:[]},center:[c0.lng,c0.lat],zoom:cam?cam.z:19,pitch:cam?cam.p:60,bearing:cam?cam.b:0,maxPitch:85,maxZoom:23,pixelRatio:Math.min(QP[plQualK()]||1,Math.max(2,window.devicePixelRatio||1)),attributionControl:{compact:true}});
+      G3.map.addControl(new ml.NavigationControl({visualizePitch:true}),'top-right');
+      G3.map.on('load',()=>{ g3Estilo(); }); G3.map.on('style.load',()=>{ try{ G3.map.setLight(luz()); }catch(e){} });
+      G3.map.on('pitch',sync); G3.map.on('rotate',sync);
+      if(!cam){ const pts=[]; _gm.pts.pistas.forEach(r=>r.forEach(p=>pts.push(geoLL(p)))); const la=pts.map(p=>p[0]), lo=pts.map(p=>p[1]);
+        G3.map.fitBounds([[Math.min(...lo),Math.min(...la)],[Math.max(...lo),Math.max(...la)]],{padding:60,pitch:60,bearing:0,duration:0,maxZoom:21}); }
+      if(b){ b.textContent='🗺 Voltar ao mapa 2D'; b.classList.add('tb-btn-save'); }
+      const d=q('geo-dica'); if(d) d.textContent='Vista 3D: botão direito (ou Ctrl + arrastar) inclina e gira · arrastar com o esquerdo move · roda aproxima · dois dedos no celular giram/inclinam. Para mexer na posição do desenho, volte ao mapa 2D.';
+    }).catch(()=>{ if(b) b.textContent='🎥 Vista inclinada / andar na rua'; toast('Sem conexão para carregar o 3D (MapLibre). Verifique a internet.'); }); };
+  function sync(){ if(!G3.map) return; const p=q('geo-3d-p'), r=q('geo-3d-r'); if(!G3.W){ if(p){ p.value=Math.round(G3.map.getPitch()); q('geo-3d-pn').textContent=p.value; } if(r){ let b=G3.map.getBearing(); b=((b+540)%360)-180; r.value=Math.round(b); q('geo-3d-rn').textContent=r.value; } } }
+  window.geo3Dcam=function(){ if(!G3.map) return; const p=+q('geo-3d-p').value, r=+q('geo-3d-r').value; q('geo-3d-pn').textContent=p; q('geo-3d-rn').textContent=r;
+    if(G3.W){ G3.W.brg=r; G3.W.dirty=true; return; } G3.map.jumpTo({pitch:p,bearing:r}); };
+  window.geo3Dprev=function(t){ if(!G3.map) return; if(G3.W) geo3Dandar(false); G3.map.easeTo({pitch:t==='topo'?0:60,bearing:t==='topo'?0:G3.map.getBearing(),duration:500}); };
+
+  /* ───────── 🚶 andar na rua ───────── */
+  const PMAX=85;
+  function hud(on){ let h=q('geo-hud'); if(!on){ if(h) h.remove(); return; } if(h) return; h=document.createElement('div'); h.id='geo-hud';
+    h.style.cssText='position:absolute;left:0;right:0;bottom:8px;display:flex;justify-content:center;pointer-events:none;z-index:5';
+    h.innerHTML='<div style="background:rgba(20,20,30,.78);color:#fff;border-radius:10px;padding:8px 12px;font-size:12px;pointer-events:auto;text-align:center;max-width:94%">'
+      +'🚶 <b>Andando na rua</b> · W/S ou ↑/↓ andam · A/D de lado · ←/→ ou Q/E giram · arraste para olhar · roda anda · Shift corre · Esc sai'
+      +'<div style="margin-top:6px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap">'
+      +['⟲|q','⬆|w','⬇|s','⟳|e','⤒|r','⤓|f'].map(x=>{ const [t,k]=x.split('|'); return '<button type="button" data-k="'+k+'" style="min-width:42px;height:36px;border-radius:8px;border:0;background:#fff;color:#222;font-size:17px;touch-action:none">'+t+'</button>'; }).join('')
+      +'<button type="button" onclick="geo3Dandar(false)" style="height:36px;border-radius:8px;border:0;background:#e5484d;color:#fff;padding:0 10px">⏹ Sair da rua</button></div></div>';
+    q('geo-gl').appendChild(h);
+    h.querySelectorAll('button[data-k]').forEach(b=>{ const k=b.dataset.k; const d=e=>{ G3.keys[k]=true; e.preventDefault(); }, u=()=>{ G3.keys[k]=false; }; b.addEventListener('pointerdown',d); ['pointerup','pointerleave','pointercancel'].forEach(ev=>b.addEventListener(ev,u)); }); }
+  function teclas(e){ const t=e.target&&e.target.tagName; if(/INPUT|SELECT|TEXTAREA/.test(t||'')) return; const k=(e.key||'').toLowerCase(); if(e.type==='keydown'&&k==='escape'){ geo3Dandar(false); return; }
+    const map={w:'w',s:'s',a:'a',d:'d',q:'q',e:'e',r:'r',f:'f',arrowup:'w',arrowdown:'s',arrowleft:'q',arrowright:'e'}; if(map[k]){ G3.keys[map[k]]=e.type==='keydown'; e.preventDefault(); } G3.keys.shift=e.shiftKey; }
+  let drag=null; const pd=e=>{ if(!G3.W||e.target.closest('#geo-hud')) return; drag={x:e.clientX,y:e.clientY}; }, pm=e=>{ if(!G3.W||!drag) return; const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag={x:e.clientX,y:e.clientY}; G3.W.brg+=dx*0.18; G3.W.pit=Math.max(50,Math.min(PMAX,G3.W.pit+dy*0.15)); G3.W.dirty=true; }, pu=()=>{ drag=null; };
+  const wh=e=>{ if(!G3.W) return; e.preventDefault(); G3.W.imp=(G3.W.imp||0)+(e.deltaY<0?1.5:-1.5); };
+  function aplica(){ const W=G3.W, mp=G3.map, ml=window.maplibregl, br=W.brg*Math.PI/180, d=W.eye*Math.tan(Math.min(85,W.pit)*Math.PI/180),
+    to=new ml.LngLat(W.lng+d*Math.sin(br)/(GEO_M*Math.cos(W.lat*Math.PI/180)), W.lat+d*Math.cos(br)/GEO_M), co=mp.calculateCameraOptionsFromTo(new ml.LngLat(W.lng,W.lat),W.eye,to,0); co.bearing=W.brg; mp.jumpTo(co); }
+  function loop(t){ const W=G3.W; if(!W) return; const dt=Math.min(.1,(t-W.t)/1000||0); W.t=t; const K=G3.keys, v=(+q('geo-3d-v').value||1.4)*(K.shift?3:1);
+    let f=(K.w?1:0)-(K.s?1:0), s=(K.d?1:0)-(K.a?1:0), turn=(K.e?1:0)-(K.q?1:0), imp=W.imp||0; W.imp=0;
+    if(turn){ W.brg+=turn*70*dt; W.dirty=true; } if(K.r){ W.pit=Math.max(50,W.pit-45*dt); W.dirty=true; } if(K.f){ W.pit=Math.min(PMAX,W.pit+45*dt); W.dirty=true; }
+    const dist=(f*v*dt)+imp, lat=W.lat, br=W.brg*Math.PI/180;
+    if(dist||s){ const dn=dist*Math.cos(br)-s*v*dt*Math.sin(br), de=dist*Math.sin(br)+s*v*dt*Math.cos(br); W.lat+=dn/GEO_M; W.lng+=de/(GEO_M*Math.cos(lat*Math.PI/180)); W.dirty=true; }
+    if(W.dirty){ W.dirty=false; aplica(); const r=q('geo-3d-r'); if(r){ r.value=Math.round(((W.brg+540)%360)-180); q('geo-3d-rn').textContent=r.value; } }
+    G3.raf=requestAnimationFrame(loop); }
+  function pare(){ cancelAnimationFrame(G3.raf); document.removeEventListener('keydown',teclas); document.removeEventListener('keyup',teclas); const c=q('geo-gl'); if(c){ c.removeEventListener('pointerdown',pd); c.removeEventListener('wheel',wh); } document.removeEventListener('pointermove',pm); document.removeEventListener('pointerup',pu); G3.keys={}; hud(false); }
+  window.geo3Dandar=function(on){
+    const mp=G3.map; if(!on){ if(!G3.W) return; const W=G3.W; G3.W=null; pare(); if(mp){ ['dragPan','dragRotate','scrollZoom','touchZoomRotate','keyboard','doubleClickZoom','touchPitch'].forEach(h=>mp[h]&&mp[h].enable()); mp.jumpTo({center:[W.lng,W.lat],zoom:20.5,pitch:60,bearing:W.brg}); }
+      const b=q('geo-b-andar'); if(b){ b.textContent='🚶 Andar na rua'; b.classList.remove('tb-btn-save'); } return; }
+    if(!mp){ toast('Abra primeiro a vista inclinada.'); return; }
+    const G=_gm.pts; let p0=null, p1=null; if(G.eixos.length&&G.eixos[0].length>1){ p0=geoLL(G.eixos[0][0]); p1=geoLL(G.eixos[0][1]); } else { p0=[_geo.lat,_geo.lng]; p1=[_geo.lat+1e-4,_geo.lng]; }
+    G3.W={lat:p0[0],lng:p0[1],brg:bearingDe(p0,p1),pit:PMAX,eye:1.7,t:performance.now(),dirty:true,imp:0}; G3.W.brg=bearingDe(p0,p1);
+    ['dragPan','dragRotate','scrollZoom','touchZoomRotate','keyboard','doubleClickZoom','touchPitch'].forEach(h=>mp[h]&&mp[h].disable());
+    document.addEventListener('keydown',teclas); document.addEventListener('keyup',teclas); const c=q('geo-gl'); c.addEventListener('pointerdown',pd); c.addEventListener('wheel',wh,{passive:false}); document.addEventListener('pointermove',pm); document.addEventListener('pointerup',pu);
+    hud(true); const b=q('geo-b-andar'); if(b){ b.textContent='⏹ Sair da rua'; b.classList.add('tb-btn-save'); }
+    aplica(); G3.raf=requestAnimationFrame(loop); };
+})();
+</script>
