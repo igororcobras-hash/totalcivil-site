@@ -6034,3 +6034,203 @@ function geoRelocar(){ if(!_gm) return; geoAuto(_gm.pts,true); geoDesenha(); geo
 (function(){ const md=geoModo; geoModo=function(v,sem){ md.apply(this,arguments); if(!sem){ if(topoTodas) renderTodasRuas(); else renderTopoTable(); calcTopo(); } };
   const cc=geoCoord; geoCoord=function(){ const z=parseInt((document.getElementById('geo-zona')||{}).value); if(z) _geo.zona=z; return cc.apply(this,arguments); }; })();
 </script>
+<script>
+/* PATCH PI-17 (13/11/2026) · GEORREFERENCIAR NA MESMA JANELA DA PLANTA BAIXA E DO 3D, COM PISTA, MEIO-FIO E CALÇADA REALISTAS.
+   (1) O botão 🛰 Georreferenciar deixa de abrir uma janela flutuante: vira o 3º modo da aba (🗺 Planta baixa · 🧊 Ver em 3D · 🛰 Georreferenciar), na mesma área.
+   (2) Tipo de mapa como no Google Maps: Satélite e Mapa (com miniaturas) + caixinha de rótulos (nomes de ruas) sobre o satélite.
+   (3) Aparência “Realista”: pista (com paginação dos blocos quando o zoom permite), sarjeta e meio-fio e CALÇADA preenchidos, de uma extremidade da calçada
+       até a extremidade da calçada do outro lado, sem muros, casas ou entorno. “Só linhas” mantém o desenho técnico anterior.
+   Só desenho/posição: nenhum cálculo muda. Estado em _geo (vis, pag salvos no projeto junto com a posição). */
+(function(){
+  const st=document.createElement('style');
+  st.textContent='#pl-geowrap{display:none;position:relative;flex-direction:column;height:780px;border:1px solid var(--border,#ddd);border-radius:6px;overflow:hidden;background:var(--bg,#fff);color:var(--fg,#111);font-size:13px}'
+   +'@media (max-width:700px){#pl-geowrap{height:88vh!important}}'
+   +'#geo-tipo button{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;padding:3px 0;cursor:pointer;font:13px Arial,Helvetica,sans-serif;color:#3c4043;text-align:left}'
+   +'#geo-tipo .th{width:52px;height:52px;border-radius:8px;border:2px solid #ddd;background-size:cover;background-position:center;flex:none}'
+   +'#geo-tipo button.on .th{border-color:#1a73e8}#geo-tipo button.on{color:#1a73e8;font-weight:600}';
+  document.head.appendChild(st);
+  const w3=document.getElementById('pl-3dwrap');
+  if(w3&&!document.getElementById('pl-geowrap')){ const g=document.createElement('div'); g.id='pl-geowrap'; w3.after(g); }
+})();
+
+/* ── geometria: agora também sarjeta/meio-fio em faixas e calçada (cada lado) ── */
+function geoPontos(){
+  const D=plDados(), P=secaoParams(), w=plMfLarg(P), sb=(P.mf&&P.mf.tipo==='conjugado')?(+P.mf.sbase||0)/100:0, v=plVis();
+  const pistas=[], mfs=[], eixos=[], cals=[], mfr=[], dirs=[]; let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9;
+  D.forEach(d=>{ const A=plAmostras(d,2); if(A.length<2) return;
+    const pi=plPoligono(d,A,0), mf=plPoligono(d,A,w); pistas.push(pi); if(w>0) mfs.push(mf); eixos.push(A.map(s=>s.c)); dirs.push(Math.atan2(d.lay.d[1],d.lay.d[0]));
+    [1,-1].forEach(sg=>{
+      if(w>0&&v.mf!==0){ const ring=(u0,u1)=>A.map(q=>plOff(d,q,sg*(q.b+u0))).concat(A.slice().reverse().map(q=>plOff(d,q,sg*(q.b+u1))));
+        if(sb>0) mfr.push({p:ring(0,sb),s:1}); mfr.push({p:ring(sb,w),s:0}); }
+      if(_cal.ativo&&v.calcada!==0&&A.some(q=>(sg>0?q.calE:q.calD)>0.01)) cals.push(plFaixaCal(d,A,sg,w));
+    });
+    mf.forEach(q=>{ x0=Math.min(x0,q[0]);x1=Math.max(x1,q[0]);y0=Math.min(y0,q[1]);y1=Math.max(y1,q[1]); }); });
+  if(x0>x1) return null; return {pistas,mfs,eixos,cals,mfr,dirs,cx:(x0+x1)/2,cy:(y0+y1)/2,raio:Math.hypot(x1-x0,y1-y0)/2};
+}
+
+/* ── estilos por aparência ── */
+function geoEstilos(){
+  const m=_gm; if(!m) return; const real=(_geo.vis||'real')==='real', o=_geo.opD/100, fo=Math.min(.97,o), key=[real,_geo.opD,_cal.tipo,_cal.ativo].join('|');
+  if(m.stKey===key) return; m.stKey=key;
+  const calCor=_cal.tipo==='intertravado'?'#d8c3a2':'#d6d4cd', oculta={stroke:false,fill:false};
+  if(real){
+    (m.lc||[]).forEach(p=>p.setStyle({stroke:true,fill:true,color:'#8a867c',weight:.6,opacity:o,fillColor:calCor,fillOpacity:fo}));
+    (m.lf||[]).forEach((p,i)=>{ const s=m.pts.mfr[i]&&m.pts.mfr[i].s; p.setStyle({stroke:true,fill:true,color:s?'#80858d':'#5b616b',weight:s?.6:.8,opacity:o,fillColor:s?'#c9ccd1':'#b4b8bf',fillOpacity:fo}); });
+    m.lp.forEach(p=>p.setStyle({stroke:true,fill:true,color:'#f2f0ea',weight:1,opacity:o,fillColor:'#a9a59b',fillOpacity:fo,dashArray:null}));
+    m.lm.forEach(p=>p.setStyle(oculta));
+    m.le.forEach(p=>p.setStyle({color:'#f5d442',weight:1.2,opacity:o,dashArray:'8 5'}));
+  } else {
+    (m.lc||[]).forEach(p=>p.setStyle(oculta)); (m.lf||[]).forEach(p=>p.setStyle(oculta));
+    m.lp.forEach(p=>p.setStyle({stroke:true,fill:true,color:'#ffffff',weight:1.5,opacity:o,fillColor:'#555',fillOpacity:Math.min(.85,o),dashArray:null}));
+    m.lm.forEach(p=>p.setStyle({stroke:true,fill:false,color:'#ffd24a',weight:1,opacity:o,dashArray:'4 3'}));
+    m.le.forEach(p=>p.setStyle({color:'#ff3b30',weight:1.5,opacity:o,dashArray:'8 5'}));
+  }
+  geoPadrao();
+}
+/* paginação dos blocos 20×10 cm na escala real (só quando o zoom deixa o bloco legível) */
+function geoPadrao(){
+  const m=_gm; if(!m||_geo.lat==null||!m.lp.length) return; const rd=m.lp[0]._renderer; if(!rd||!rd._container) return;
+  const real=(_geo.vis||'real')==='real', NS='http://www.w3.org/2000/svg', svg=rd._container;
+  let defs=svg.querySelector('#geodefs'); if(!defs){ defs=document.createElementNS(NS,'defs'); defs.setAttribute('id','geodefs'); svg.insertBefore(defs,svg.firstChild); }
+  const res=40075016.686*Math.cos(_geo.lat*Math.PI/180)/(256*Math.pow(2,m.map.getZoom())), t=0.4*_geo.esc/100/res, usar=real&&_geo.pag!==false&&t>=4;   /* bloco 20×10 cm só aparece perto do zoom máximo do mapa */
+  m.lp.forEach((pl,i)=>{ const p=pl._path; if(!p) return;
+    if(!usar){ p.setAttribute('fill',pl.options.fillColor||'#555'); return; }
+    const id='geopat'+i; let pt=defs.querySelector('#'+id);
+    if(!pt){ pt=document.createElementNS(NS,'pattern'); pt.setAttribute('id',id); pt.setAttribute('patternUnits','userSpaceOnUse'); defs.appendChild(pt); }
+    pt.setAttribute('patternTransform','rotate('+(-((m.pts.dirs[i]||0)*180/Math.PI+_geo.rot)).toFixed(2)+')');
+    const ts=t.toFixed(2); if(pt.getAttribute('data-t')!==ts){ pt.setAttribute('data-t',ts); pt.setAttribute('width',ts); pt.setAttribute('height',ts);
+      const r=t/4, bl=t/2, sw=Math.max(.5,Math.min(1,.12*r)).toFixed(2); let h='<rect width="'+ts+'" height="'+ts+'" fill="#aaa69c"/>';
+      for(let q=0;q<4;q++){ const off=(q%2)?bl/2:0; for(let c=-1;c<3;c++) h+='<rect x="'+(c*bl+off).toFixed(2)+'" y="'+(q*r).toFixed(2)+'" width="'+bl.toFixed(2)+'" height="'+r.toFixed(2)+'" fill="none" stroke="#8c887e" stroke-width="'+sw+'"/>'; }
+      pt.innerHTML=h; }
+    p.setAttribute('fill','url(#'+id+')'); });
+}
+function geoDesenha(){
+  const m=_gm; if(!m||_geo.lat==null) return; const G=m.pts;
+  const set=(arr,lst)=>lst.forEach((pl,i)=>{ if(arr[i]) pl.setLatLngs(arr[i].map(geoLL)); });
+  set(G.pistas,m.lp); set(G.mfs,m.lm); set(G.eixos,m.le);
+  (m.lc||[]).forEach((pl,i)=>{ if(G.cals[i]) pl.setLatLngs(G.cals[i].map(geoLL)); });
+  (m.lf||[]).forEach((pl,i)=>{ if(G.mfr[i]) pl.setLatLngs(G.mfr[i].p.map(geoLL)); });
+  geoEstilos(); geoPadrao();
+  const c=[_geo.lat,_geo.lng]; m.mk.setLatLng(c);
+  const R=G.raio*_geo.esc/100*1.15+8, th=_geo.rot*Math.PI/180; m.mr.setLatLng([c[0]+R*Math.cos(th)/GEO_M, c[1]+R*Math.sin(th)/(GEO_M*Math.cos(c[0]*Math.PI/180))]);
+  m.lh.setLatLngs([c,m.mr.getLatLng()]);
+  geoCampos();
+}
+
+/* ── camadas novas criadas junto com o mapa ── */
+(function(){
+  const ini=geoIniciar;
+  geoIniciar=function(pts){ ini.apply(this,arguments); const m=_gm; if(!m) return; const L=window.L, op={interactive:false,bubblingMouseEvents:false};
+    m.lc=pts.cals.map(()=>L.polygon([[0,0]],Object.assign({weight:.6},op)).addTo(m.map));
+    m.lf=pts.mfr.map(()=>L.polygon([[0,0]],Object.assign({weight:.8},op)).addTo(m.map));
+    m.lf.forEach(x=>x.bringToBack()); m.lc.forEach(x=>x.bringToBack());      /* ordem: calçada, meio-fio, pista, eixo */
+    m.stKey=''; geoDesenha(); m.map.on('zoomend',geoPadrao);
+    if(_gv){ m.map.setView(_gv.c,_gv.z); _gv=null; }
+    const info=document.getElementById('geo-info'); if(info){ const av=document.createElement('div'); av.id='geo-aviso'; av.style.cssText='font-size:12px;padding:3px 10px;background:#fff8e6;color:#4a3500'; info.after(av); geoAviso(); }
+    setTimeout(()=>{ try{ m.map.invalidateSize(); }catch(e){} },60);
+  };
+  const gb=geoBase; geoBase=function(v){ gb.apply(this,arguments); geoTipoUI(); };
+})();
+let _gv=null;
+function geoAviso(){ const el=document.getElementById('geo-aviso'); if(!el) return;
+  if(!_cal.ativo){ el.innerHTML='ℹ <b>Calçada não ativada</b>: sem ela só aparecem pista e meio-fio. Em Topografia › <b>🚶 Calçada…</b> escolha o tipo e a largura (ou lance as cotas de muro) para a calçada ir de uma extremidade à outra, nos dois lados. <button class="tb-btn" onclick="irTopografia();setTimeout(abrirCalcada,250)">Abrir Calçada…</button>'; el.style.display=''; }
+  else el.style.display='none'; }
+
+/* ── tipo de mapa (como no Google Maps): Satélite · Mapa ── */
+function geoTipoUI(){ const t=document.getElementById('geo-tipo'); if(!t) return; const rua=_geo.base==='rua';
+  t.querySelector('[data-t="sat"]').classList.toggle('on',!rua); t.querySelector('[data-t="rua"]').classList.toggle('on',rua);
+  const ck=document.getElementById('geo-rotulos'); if(ck){ ck.checked=_geo.base==='hib'; ck.disabled=rua; }
+  const s=document.getElementById('geo-base'); if(s) s.value=_geo.base||'sat'; }
+function geoTipo(t){ if(t==='rua') geoBase('rua'); else geoBase(document.getElementById('geo-rotulos')&&document.getElementById('geo-rotulos').checked?'hib':'sat'); }
+function geoRotulos(on){ if(_geo.base!=='rua') geoBase(on?'hib':'sat'); }
+function geoVis(v){ _geo.vis=v; geoSalvaLocal(); if(_gm){ _gm.stKey=''; geoDesenha(); } }
+function geoPag(on){ _geo.pag=!!on; geoSalvaLocal(); geoPadrao(); }
+
+/* ── montagem dentro da aba (no lugar da janela flutuante) ── */
+geoAbrir=function(){ plModo('geo'); };
+function geoDestruir(){ if(_gm){ try{ _gm.map.remove(); }catch(e){} _gm=null; } const b=document.getElementById('pl-geowrap'); if(b) b.innerHTML=''; }
+function geoMontar(){
+  const box=document.getElementById('pl-geowrap'); if(!box) return;
+  if(_gm) { setTimeout(()=>{ try{ _gm.map.invalidateSize(); }catch(e){} },60); return; }
+  let pts=null; try{ pts=geoPontos(); }catch(e){ pts=null; }
+  if(!resultado||!pts){ box.innerHTML='<div style="padding:30px;color:var(--fg2)">Preencha a Topografia (ruas com greide e largura) e calcule o dimensionamento para ter um desenho a posicionar.</div>'; return; }
+  const a=geoAuto(pts); _geo._aviso=a?a:null;
+  const T1='https://tile.openstreetmap.org/11/785/1155.png', T2='https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/11/1155/785';
+  box.innerHTML=
+   '<div style="padding:8px 10px;border-bottom:1px solid #ccc;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><b>🛰 Georreferenciar</b>'
+  +'<input id="geo-q" placeholder="Pesquisar rua, bairro, cidade…" style="flex:1;min-width:180px;padding:5px" onkeydown="if(event.key===\'Enter\')geoBusca()"><button class="tb-btn" onclick="geoBusca()">🔍 Pesquisar</button>'
+  +'<span id="geo-res" style="position:relative"></span></div>'
+  +'<div style="padding:6px 10px;border-bottom:1px solid #ddd;display:flex;gap:10px;align-items:center;flex-wrap:wrap">'
+  +'<select id="geo-modo" onchange="geoModo(this.value)"><option value="dec">Lat / Lon (graus)</option><option value="utm">UTM (E / N)</option></select>'
+  +'<label><span id="geo-l1">Latitude</span> <input id="geo-lat" style="width:110px" onchange="geoCoord()"></label>'
+  +'<label><span id="geo-l2">Longitude</span> <input id="geo-lng" style="width:110px" onchange="geoCoord()"></label>'
+  +'<label id="geo-zl" style="display:none">Zona <input id="geo-zona" type="number" value="24" style="width:50px" onchange="geoCoord()"> S</label>'
+  +'<button class="tb-btn" onclick="geoCentro()" title="Coloca o desenho no centro do mapa que você está vendo">📍 Posicionar no centro do mapa</button>'
+  +'<button class="tb-btn" onclick="geoColar()" title="Cole coordenadas copiadas do Google Maps/Earth (ex.: -22.5266, -41.9456)">📋 Colar coordenadas</button></div>'
+  +'<div style="padding:6px 10px;border-bottom:1px solid #ddd;display:flex;gap:12px;align-items:center;flex-wrap:wrap">'
+  +'<label>Giro <input id="geo-rot" type="range" min="-180" max="180" step="0.5" style="vertical-align:middle;width:130px" oninput="geoSet(\'rot\',this.value)"> <input id="geo-rot-n" type="number" step="0.5" style="width:62px" onchange="geoSet(\'rot\',this.value)">°</label>'
+  +'<label>Escala <input id="geo-esc" type="range" min="50" max="150" step="0.5" style="vertical-align:middle;width:90px" oninput="geoSet(\'esc\',this.value)">%</label>'
+  +'<label title="Transparência do desenho sobre a imagem">Desenho <input id="geo-od" type="range" min="10" max="100" style="vertical-align:middle;width:80px" oninput="geoSet(\'opD\',this.value)"></label>'
+  +'<label>Imagem <input id="geo-os" type="range" min="20" max="100" style="vertical-align:middle;width:80px" oninput="geoSet(\'opS\',this.value)"></label>'
+  +'<label>Aparência <select id="geo-vis" onchange="geoVis(this.value)"><option value="real">Realista (pista, meio-fio e calçada)</option><option value="linhas">Só linhas (técnico)</option></select></label>'
+  +'<label title="Desenha a paginação dos blocos 20×10 cm quando o zoom é alto"><input type="checkbox" id="geo-pag" onchange="geoPag(this.checked)"> Blocos</label>'
+  +'<select id="geo-base" style="display:none" onchange="geoBase(this.value)"><option value="sat">Satélite</option><option value="hib">Satélite + nomes</option><option value="rua">Mapa de ruas</option></select>'
+  +'<button class="tb-btn" onclick="geoKml()" title="Baixa um KML do desenho (pista, meio-fio e calçada) para abrir no Google Earth">⬇ KML (Google Earth)</button>'
+  +'<a class="tb-btn" id="geo-gm" target="_blank" rel="noopener" style="text-decoration:none">↗ Abrir no Google Maps</a>'
+  +'<button class="tb-btn tb-btn-save" onclick="geoFechar(true)">✔ Salvar posição</button></div>'
+  +'<div style="font-size:11.5px;color:#666;padding:3px 10px">Arraste o desenho (ou o ponto central ●) para mover · arraste o ponto ◎ para girar · Shift + roda do mouse gira · roda sem Shift dá zoom no mapa.</div>'
+  +'<div id="geo-map" style="flex:1;min-height:300px"></div>'
+  +'<div id="geo-tipo" style="position:absolute;left:10px;bottom:26px;z-index:1000;background:#fff;color:#3c4043;border-radius:10px;box-shadow:0 2px 8px rgba(0,0,0,.45);padding:8px 12px;min-width:132px">'
+  +'<div style="font-size:12px;color:#5f6368;margin-bottom:4px">Tipo</div>'
+  +'<button type="button" data-t="sat" onclick="geoTipo(\'sat\')"><span class="th" style="background-color:#3b5d3a;background-image:url('+T2+')"></span><span>Satélite</span></button>'
+  +'<button type="button" data-t="rua" onclick="geoTipo(\'rua\')"><span class="th" style="background-color:#e8eef2;background-image:url('+T1+')"></span><span>Mapa</span></button>'
+  +'<label style="display:flex;gap:6px;align-items:center;font-size:12px;margin-top:4px;cursor:pointer"><input type="checkbox" id="geo-rotulos" onchange="geoRotulos(this.checked)"> Rótulos (nomes)</label></div>';
+  document.getElementById('geo-vis').value=_geo.vis||'real'; document.getElementById('geo-pag').checked=_geo.pag!==false;
+  plCarregar(GEO_L+'js').then(()=>{ if(!document.getElementById('geo-css')){ const l=document.createElement('link'); l.id='geo-css'; l.rel='stylesheet'; l.href=GEO_L+'css'; document.head.appendChild(l); }
+      if(_pl.modo==='geo'&&document.getElementById('geo-map')&&!_gm) geoIniciar(pts); geoTipoUI(); })
+    .catch(()=>{ const e=document.getElementById('geo-map'); if(e) e.innerHTML='<div style="padding:30px">Sem conexão para carregar o mapa. Verifique a internet e tente de novo.</div>'; });
+  if(!document.getElementById('geo-css')){ const l=document.createElement('link'); l.id='geo-css'; l.rel='stylesheet'; l.href=GEO_L+'css'; document.head.appendChild(l); }
+}
+/* refaz a geometria quando muda a topografia, as ruas ou a calçada (sem recarregar o mapa, se o nº de peças é o mesmo) */
+function geoRefaz(){
+  if(!_gm) return; let pts=null; try{ pts=geoPontos(); }catch(e){}
+  if(!pts){ geoDestruir(); geoMontar(); return; }
+  const o=_gm.pts, igual=o.pistas.length===pts.pistas.length&&o.mfs.length===pts.mfs.length&&o.eixos.length===pts.eixos.length&&o.cals.length===pts.cals.length&&o.mfr.length===pts.mfr.length;
+  if(igual){ _gm.pts=pts; _gm.stKey=''; geoDesenha(); geoAviso(); try{ geoInfo(); }catch(e){} return; }
+  _gv={c:_gm.map.getCenter(),z:_gm.map.getZoom()}; geoDestruir(); geoMontar();
+}
+function geoFechar(salvar){ geoSalvaLocal(); if(salvar) toast('Posição salva no projeto (use “Salvar projeto” para gravar no arquivo).'); }
+
+/* KML com pista, sarjeta/meio-fio, calçada e eixo */
+function geoKml(){ if(!_gm||_geo.lat==null) return; const f=pt=>{ const c=geoLL(pt); return c[1].toFixed(8)+','+c[0].toFixed(8)+',0'; };
+  const pm=(n,ring,est)=>'<Placemark><name>'+n+'</name><styleUrl>#'+est+'</styleUrl><Polygon><tessellate>1</tessellate><outerBoundaryIs><LinearRing><coordinates>'+ring.concat([ring[0]]).map(f).join(' ')+'</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>';
+  const ln=(n,l)=>'<Placemark><name>'+n+'</name><styleUrl>#eixo</styleUrl><LineString><tessellate>1</tessellate><coordinates>'+l.map(f).join(' ')+'</coordinates></LineString></Placemark>';
+  const G=_gm.pts, cc=_cal.tipo==='intertravado'?'ffa2c3d8':'ffcdd4d6', kml='<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>Pavimento intertravado</name>'
+   +'<Style id="cal"><LineStyle><color>ff7c868a</color></LineStyle><PolyStyle><color>cc'+cc.slice(2)+'</color></PolyStyle></Style>'
+   +'<Style id="mf"><LineStyle><color>ff6b616b</color></LineStyle><PolyStyle><color>ccb6b8b4</color></PolyStyle></Style>'
+   +'<Style id="pista"><LineStyle><color>ffeaf0f2</color><width>2</width></LineStyle><PolyStyle><color>cc9ba5a9</color></PolyStyle></Style><Style id="eixo"><LineStyle><color>ff42d4f5</color><width>2</width></LineStyle></Style>'
+   +G.cals.map((r,i)=>pm('Calçada '+(i+1),r,'cal')).join('')+G.mfr.map((r,i)=>pm((r.s?'Sarjeta ':'Meio-fio ')+(i+1),r.p,'mf')).join('')
+   +G.pistas.map((r,i)=>pm('Pista '+(i+1),r,'pista')).join('')+G.eixos.map((l,i)=>ln('Eixo '+(i+1),l)).join('')+'</Document></kml>';
+  triggerDownload(new Blob([kml],{type:'application/vnd.google-earth.kml+xml'}),'intertravado_georef_'+carimbo()+'.kml'); }
+
+/* ── ligação com o seletor de modos da aba ── */
+(function(){
+  const pm=plModo;
+  plModo=function(m){
+    const g=document.getElementById('pl-geowrap'), bg=document.getElementById('pl-b-geo'), bo=document.getElementById('pl-b-obj');
+    if(m!=='geo'){ if(_gm||document.getElementById('geo-map')) geoDestruir(); if(g) g.style.display='none'; if(bg) bg.classList.remove('tb-btn-save'); if(bo) bo.style.display=''; return pm.apply(this,arguments); }
+    _pl.modo='geo';
+    ['pl-b-planta','pl-b-3d'].forEach(id=>{ const b=document.getElementById(id); if(b) b.classList.remove('tb-btn-save'); }); if(bg) bg.classList.add('tb-btn-save'); if(bo) bo.style.display='none';
+    const sv=document.getElementById('pl-svgwrap'), bd=document.getElementById('pl-banda'), w3=document.getElementById('pl-3dwrap');
+    if(sv) sv.style.display='none'; if(bd) bd.style.display='none'; if(w3) w3.style.display='none';
+    ['pl-ev-box','pl-b-svg','pl-b-png'].forEach(id=>{ const e=document.getElementById(id); if(e) e.style.display='none'; });
+    if(g) g.style.display='flex'; geoMontar();
+  };
+  const pr=plRedesenhar; plRedesenhar=function(){ if(_pl.modo==='geo'){ geoRefaz(); return; } return pr.apply(this,arguments); };
+  const pa=plAbrir; plAbrir=function(){ if(_pl.modo==='geo'){ const msg=document.getElementById('pl-msg'); if(msg) msg.textContent=''; plPainel(); if(_gm) setTimeout(()=>{ try{ _gm.map.invalidateSize(); }catch(e){} },60); else geoMontar(); return; } return pa.apply(this,arguments); };
+  const au=atualizarPlantaSeAberta; atualizarPlantaSeAberta=function(){ if(_pl.modo==='geo'){ const pn=document.getElementById('pane-planta'); if(pn&&pn.classList.contains('active')&&resultado){ plPainel(); if(_gm) geoRefaz(); else geoMontar(); } return; } return au.apply(this,arguments); };
+  const en=pl3DEnquadrar; pl3DEnquadrar=function(){ if(_pl.modo==='geo'){ if(_gm&&_gm.lp.length&&_geo.lat!=null) _gm.map.fitBounds(window.L.latLngBounds(_gm.lp.flatMap(p=>p.getLatLngs()[0])).pad(.3)); return; } return en.apply(this,arguments); };
+  const zm=plZoom; plZoom=function(f){ if(_pl.modo==='geo'){ if(_gm) (f<1?_gm.map.zoomIn():_gm.map.zoomOut()); return; } return zm.apply(this,arguments); };
+  const ap=aplicarProjeto; aplicarProjeto=function(){ const r=ap.apply(this,arguments); if(_pl.modo==='geo'&&_gm){ geoDestruir(); geoMontar(); } return r; };
+})();
+</script>
