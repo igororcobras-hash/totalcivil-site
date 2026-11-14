@@ -186,6 +186,16 @@ body.com-barra main{padding-bottom:110px}
 /* Janelas */
 dialog{border:0; padding:0; border-radius:16px; background:var(--card); color:var(--ink); box-shadow:var(--shadow-lg); width:min(560px,calc(100% - 24px)); max-height:calc(100% - 24px)}
 dialog.larga{width:min(1180px,calc(100% - 24px))}
+/* promoção: caixa que abre sozinha na página inicial (PROMO-01) */
+#dl-promo{width:min(460px,calc(100% - 24px))}
+#dl-promo .promo-corpo{padding:26px 24px 22px; text-align:center}
+#dl-promo .promo-selo{display:inline-block; padding:4px 12px; border-radius:99px; background:var(--accent); color:var(--accent-ink); font-size:.75rem; font-weight:750; letter-spacing:.04em; text-transform:uppercase}
+#dl-promo h3{margin:12px 0 6px; font-size:1.45rem; line-height:1.2}
+#dl-promo .promo-ano{font-size:2.6rem; font-weight:800; line-height:1; margin:8px 0 2px; color:var(--accent)}
+#dl-promo p{margin:6px 0; color:var(--muted); font-size:.95rem}
+#dl-promo .promo-bt{display:flex; flex-direction:column; gap:8px; margin-top:18px}
+#dl-promo .fechar{position:absolute; top:10px; right:12px}
+
 dialog::backdrop{background:rgba(10,16,24,.55); backdrop-filter:blur(2px)}
 .dl-cab{display:flex; justify-content:space-between; align-items:flex-start; gap:12px; padding:20px 22px 6px}
 .dl-cab h3{margin:0; font-size:1.25rem}
@@ -349,6 +359,22 @@ footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wr
   </div>
 </dialog>
 
+<!-- ===== Janela: promoção (abre sozinha, o usuário pode fechar) ===== -->
+<dialog id="dl-promo" aria-labelledby="t-promo">
+  <button class="fechar" type="button" data-fechar aria-label="Fechar">×</button>
+  <div class="promo-corpo">
+    <span class="promo-selo">Promoção para novos cadastros</span>
+    <h3 id="t-promo">Teste todos os programas</h3>
+    <div class="promo-ano">1 ano</div>
+    <p><b>de acesso liberado</b> para testar e conhecer.</p>
+    <p>Novos cadastros de profissionais da área ganham o acesso na hora, sem esperar aprovação. Informe sua profissão ao criar a conta.</p>
+    <div class="promo-bt">
+      <button class="bt pri" type="button" id="promo-criar">Criar minha conta</button>
+      <button class="bt" type="button" data-fechar>Agora não</button>
+    </div>
+  </div>
+</dialog>
+
 <!-- ===== Janela: Criar conta / contratar ===== -->
 <dialog id="dl-cadastro" aria-labelledby="t-cad">
   <div class="dl-cab"><div><h3 id="t-cad">Criar conta e contratar</h3><p>Escolha os programas do seu pacote. Os 2 primeiros meses são grátis.</p></div><button class="fechar" type="button" data-fechar aria-label="Fechar">×</button></div>
@@ -362,6 +388,25 @@ footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wr
         <div class="duas">
           <div class="campo"><label for="cd-zap">WhatsApp</label><input id="cd-zap" type="tel" autocomplete="tel" maxlength="30" placeholder="(22) 99999-9999" required></div>
           <div class="campo"><label for="cd-email">E-mail</label><input id="cd-email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" required></div>
+        </div>
+        <div class="duas" id="cd-prof-box">
+          <div class="campo"><label for="cd-prof">Profissão</label>
+            <select id="cd-prof" required>
+              <option value="">Escolha…</option>
+              <option value="eng-civil">Engenheiro(a) civil</option>
+              <option value="eng-outra">Engenheiro(a) de outra modalidade</option>
+              <option value="arquiteto">Arquiteto(a) e urbanista</option>
+              <option value="tec-edificacoes">Técnico(a) em edificações / construção civil</option>
+              <option value="tec-estradas">Técnico(a) em estradas, saneamento ou agrimensura</option>
+              <option value="tecnologo">Tecnólogo(a) em construção civil</option>
+              <option value="topografo">Topógrafo(a) / agrimensor(a)</option>
+              <option value="mestre-obras">Mestre de obras / construtor(a)</option>
+              <option value="servidor-obras">Servidor(a) público(a) de obras e infraestrutura</option>
+              <option value="setor-construcao">Empresário(a) ou profissional do setor da construção</option>
+              <option value="estudante">Estudante de engenharia, arquitetura ou construção civil</option>
+              <option value="outra">Outra profissão</option>
+            </select></div>
+          <div class="campo" id="cd-prof-outra-box" hidden><label for="cd-prof-outra">Qual profissão?</label><input id="cd-prof-outra" maxlength="60"></div>
         </div>
         <div class="duas">
           <div class="campo"><label for="cd-senha">Senha</label><input id="cd-senha" type="password" autocomplete="new-password" placeholder="mínimo de 8 caracteres" required></div>
@@ -504,6 +549,15 @@ const PROGRAMAS = [
    ico:'<circle cx="23" cy="23" r="17"/><path d="M6 23h34M23 6c-6 6-6 28 0 34M23 6c6 6 6 28 0 34"/>'}
 ];
 const porKey = k => PROGRAMAS.find(p => p.key === k);
+/* PROMO-01 (14/11/2026): 1 ano de acesso para novas contas de profissões da engenharia / construção civil.
+   A lista de chaves precisa ser igual à de cadastroPromo() em firestore.rules. */
+const PROF_NOME = {'eng-civil':'Engenheiro(a) civil','eng-outra':'Engenheiro(a) de outra modalidade','arquiteto':'Arquiteto(a) e urbanista',
+  'tec-edificacoes':'Técnico(a) em edificações / construção civil','tec-estradas':'Técnico(a) em estradas, saneamento ou agrimensura',
+  'tecnologo':'Tecnólogo(a) em construção civil','topografo':'Topógrafo(a) / agrimensor(a)','mestre-obras':'Mestre de obras / construtor(a)',
+  'servidor-obras':'Servidor(a) público(a) de obras e infraestrutura','setor-construcao':'Empresário(a) ou profissional do setor da construção',
+  'estudante':'Estudante de engenharia, arquitetura ou construção civil'};
+const PROF_PROMO = new Set(Object.keys(PROF_NOME));
+const PROMO_DIAS = 365;
 /* Combos de cobrança: quem tem os dois programas do par paga só por um (o outro sai grátis).
    Cada programa continua com o código, a página e os dados 100% separados — isto só mexe no PREÇO. */
 const COMBOS_GRATIS = [['drenagem', 'drenagem2']];
@@ -673,6 +727,24 @@ document.addEventListener('click', ev => {
 });
 document.querySelectorAll('dialog').forEach(d => d.addEventListener('click', ev => { if(ev.target === d) d.close(); }));
 
+/* ---------- promoção: caixa que abre sozinha (PROMO-01) ---------- */
+const PROMO_KEY = 'tc_promo_fechada';
+let promoVisto = false;
+function promoMostrar(){
+  if(promoVisto) return; promoVisto = true;
+  try{
+    if(eu) return;                                   // quem já tem conta não precisa da promoção de cadastro
+    const q = new URLSearchParams(location.search);
+    if(q.get('entrar') || q.get('voltar')) return;
+    if(document.querySelector('dialog[open]')) return;
+    const t = +localStorage.getItem(PROMO_KEY) || 0;
+    if(Date.now() - t < 86400000) return;            // se fechou hoje, não abre de novo
+    abrir('dl-promo');
+  }catch(e){}
+}
+$('dl-promo').addEventListener('close', () => { try{ localStorage.setItem(PROMO_KEY, String(Date.now())); }catch(e){} });
+$('promo-criar').onclick = () => abrirCadastro();
+
 /* ---------- cadastro / pedido ---------- */
 let modoTeste = false;
 function abrirCadastro(teste){
@@ -695,6 +767,7 @@ function abrirCadastro(teste){
   resumoCadastro();
   abrir('dl-cadastro');
 }
+$('cd-prof').addEventListener('change', () => { $('cd-prof-outra-box').hidden = $('cd-prof').value !== 'outra'; });
 function marcadosCadastro(){ return [...$('cad-programas').querySelectorAll('input:checked')].map(i => i.value); }
 const planoCadastro = () => (document.querySelector('input[name="cd-plano"]:checked') || {}).value || 'mensal';
 function resumoCadastro(){
@@ -724,12 +797,16 @@ document.querySelectorAll('input[name="cd-plano"]').forEach(r => r.addEventListe
 $('form-cadastro').addEventListener('submit', async ev => {
   ev.preventDefault();
   if(!fb){ msg('cd-msg', 'Conectando ao servidor… tente de novo em instantes.', 'erro'); return; }
-  const ks = marcadosCadastro().filter(k => !(eu && liberado(eu, porKey(k))));
+  let ks = marcadosCadastro().filter(k => !(eu && liberado(eu, porKey(k))));
+  const profSel = !eu ? $('cd-prof').value : '';
+  const promo = !eu && PROF_PROMO.has(profSel);
+  let promoOk = false;
+  if(promo) ks = PROGRAMAS.filter(p => p.disp).map(p => p.key);
   const pag = (document.querySelector('input[name="cd-pag"]:checked') || {}).value || 'pix';
   const plano = planoCadastro();
   const tipoPedido = modoTeste ? 'teste' : 'compra';
   const indic = String($('cd-indic').value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
-  if(!ks.length){ msg('cd-msg', 'Marque ao menos um programa.', 'erro'); return; }
+  if(!ks.length && !promo && (eu || profSel)){ msg('cd-msg', 'Marque ao menos um programa.', 'erro'); return; }
   const {a, d, auth, fs} = fb;
   const bt = $('cd-bt'); bt.disabled = true;
   try{
@@ -739,6 +816,10 @@ $('form-cadastro').addEventListener('submit', async ev => {
       zap = $('cd-zap').value.trim(); email = $('cd-email').value.trim().toLowerCase();
       const s1 = $('cd-senha').value, s2 = $('cd-senha2').value;
       if(nome.length < 3){ throw {mensagem: 'Informe seu nome completo.'}; }
+      const profOutra = $('cd-prof-outra').value.trim();
+      if(!profSel){ throw {mensagem: 'Escolha a sua profissão.'}; }
+      if(profSel === 'outra' && profOutra.length < 3){ throw {mensagem: 'Informe qual é a sua profissão.'}; }
+      const sufProf = ' · Profissão: ' + (profSel === 'outra' ? profOutra.slice(0, 60) : PROF_NOME[profSel]);
       if(!empresa){ throw {mensagem: 'Informe a empresa ou o órgão.'}; }
       if(soDigitos(zap).length < 10){ throw {mensagem: 'Informe o WhatsApp com DDD.'}; }
       if(!emailOk(email)){ throw {mensagem: 'Informe um e-mail válido.'}; }
@@ -750,7 +831,7 @@ $('form-cadastro').addEventListener('submit', async ev => {
       const cred = await comPrazo(auth.createUserWithEmailAndPassword(a, email, s1), 20000);
       uid = cred.user.uid;
       const perfil = {
-        usuario: email.split('@')[0], email, nome: nome.slice(0, 120), empresa: empresa.slice(0, 120), whatsapp: zap.slice(0, 30),
+        usuario: email.split('@')[0], email, nome: nome.slice(0, 120), empresa: (empresa.slice(0, Math.max(0, 120 - sufProf.length)) + sufProf).slice(0, 120), whatsapp: zap.slice(0, 30),
         ativo: false, admin: false, recusado: false, validade: null, criadoEm: fs.serverTimestamp(),
         orcamentoSolicitado: ks.includes('orcamento'), orcamentoAtivo: false,
         intertravadoSolicitado: ks.includes('intertravado'), intertravadoAtivo: false,
@@ -763,7 +844,15 @@ $('form-cadastro').addEventListener('submit', async ev => {
       if(ks.includes('drenagem2')){ perfil.drenagem2Solicitado = true; perfil.drenagem2Ativo = false; }   /* só quem pede o Drenagem 2 (regras do Firestore com drenagem2*) */
       if(ks.includes('esgoto')){ perfil.esgotoSolicitado = true; perfil.esgotoAtivo = false; }   /* só quem pede o Esgoto (regras do Firestore com esgoto*) */
       if(indic && indic !== codigoDe(uid)) perfil.indicadoPor = indic;
-      await gravar('set', fs.doc(d, 'usuarios', uid), perfil);
+      if(promo){
+        /* promoção: todos os programas disponíveis por 1 ano; se as regras do servidor ainda não aceitarem, grava o cadastro normal */
+        const perfilP = Object.assign({}, perfil, {ativo: true, validade: new Date(Date.now() + PROMO_DIAS * 86400000), promo1ano: true, profissao: profSel, gratisUsado: true, tipoPedido: 'promo', programasPedidos: PROGRAMAS.filter(p => p.disp).map(p => p.key)});
+        PROGRAMAS.forEach(p => { if(p.disp){ perfilP[p.campo] = true; if(p.solic && p.campo !== 'ativo' && p.solic in perfil) perfilP[p.solic] = true; } });
+        try{ await gravar('set', fs.doc(d, 'usuarios', uid), perfilP); promoOk = true; }
+        catch(e){ console.warn('Promoção não gravada; cadastro normal.', e); await gravar('set', fs.doc(d, 'usuarios', uid), perfil); }
+      }else{
+        await gravar('set', fs.doc(d, 'usuarios', uid), perfil);
+      }
       criando = false;
       await carregarPerfil(cred.user);
     }else if(eu.semPerfil){
@@ -803,7 +892,9 @@ $('form-cadastro').addEventListener('submit', async ev => {
       await carregarPerfil(fb.a.currentUser);
     }
     sel.clear(); salvarSel(); renderProgramas(); atualizarBarra();
-    mostrarPedido({nome, email, zap, ks: modoTeste ? ks : todosPedidos(ks), pag, plano, indic, teste: modoTeste});
+    if(promoOk){ mostrarPromoOk(); return; }
+    if(promo){ ks = PROGRAMAS.filter(p => p.disp).map(p => p.key); }
+    mostrarPedido({nome, email, zap, ks: (modoTeste || promo) ? ks : todosPedidos(ks), pag, plano, indic, teste: modoTeste || promo});
   }catch(e){
     criando = false;
     msg('cd-msg', e && e.mensagem ? e.mensagem : traduzir(e, 'Não foi possível enviar o pedido'), 'erro');
@@ -822,6 +913,13 @@ function textoPedido(p){
     '\nPagamento: ' + nomePag(p.pag) +
     (p.indic ? '\nCódigo de indicação usado: ' + p.indic : '') +
     '\n\nPor favor, confira e libere meu acesso.';
+}
+function mostrarPromoOk(){
+  $('t-ped').textContent = 'Conta criada';
+  $('pedido-corpo').innerHTML = '<div class="msg ok">Seu acesso a todos os programas está liberado até <b>' + fmtData(eu && eu.validade) + '</b>.</div>' +
+    '<p class="mini" style="margin:12px 0">Escolha um programa na página e use o mesmo e-mail e senha em todos. Seus projetos e obras ficam só na sua conta.</p>' +
+    '<button class="bt pri" type="button" style="width:100%" data-fechar>Ver os programas</button>';
+  abrir('dl-pedido');
 }
 function mostrarPedido(p){
   const v = valores(p.ks);
@@ -1108,6 +1206,7 @@ async function renderUsuarios(){
     const nInd = indicacoes[codigoDe(u.uid)] || 0;
     const bonusPend = Math.max(0, nInd - (u.indicacoesUsadas || 0));
     const pedidoInfo = e === 'adm' ? '' :
+      (u.promo1ano ? '<div><span class="tag pediu">Promoção 1 ano</span></div>' : '') +
       (u.tipoPedido === 'teste' ? '<div><span class="tag pediu">Pediu acesso teste</span></div>' : '') +
       '<div class="mini">Plano ' + nomePlano(plano).toLowerCase() + ': <b>' + brl(valorPlano(nCob, plano)) + sufixoPlano(plano) + '</b></div>' +
       (bonusPend ? '<div class="mini"><span class="tag pediu">' + bonusPend + ' indicação(ões) a creditar: +' + bonusPend * DIAS_INDICACAO[plano] + ' dias</span></div>' : '') +
@@ -1396,12 +1495,13 @@ renderProgramas(); atualizarBarra();
     auth.onAuthStateChanged(a, async u => {
       if(criando) return;                       // o cadastro carrega o perfil quando terminar
       try{ await carregarPerfil(u); }catch(e){ console.error(e); eu = null; aplicarSessao(); if(u) toast(traduzir(e, 'Não foi possível ler seu cadastro')); }
+      setTimeout(promoMostrar, 1200);
       const q = new URLSearchParams(location.search);
       if(!u && q.get('entrar')) abrir('dl-entrar');
       if(eu && q.get('voltar') && /^\/[a-z]+\/?$/.test(q.get('voltar'))) abrirPrograma(q.get('voltar'));
       if(eu && eu.admin && location.hash === '#usuarios'){ abrir('dl-usuarios'); mostrarAba('usuarios'); }
     });
-  }catch(e){ console.error(e); toast('Não foi possível conectar ao servidor. Recarregue a página.'); }
+  }catch(e){ console.error(e); toast('Não foi possível conectar ao servidor. Recarregue a página.'); setTimeout(promoMostrar, 1200); }
 })();
 </script>
 <script src="/estado-pagina.js"></script>
