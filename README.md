@@ -9,3 +9,5 @@ Página principal e programas de engenharia civil. Endereço: https://totalcivil
 - `firestore.rules`: regras do banco. Ao mudar, cole em Firebase › Firestore Database › Regras › Publicar.
 - Os endereços antigos (pavimento./orcamento./intertravado./concreto.totalcivil.com.br) redirecionam para cá.
 - `orcamento/dados/`: bancos mensais SINAPI (RJ) e SCO-Rio, um arquivo por mês (nenhum mês é apagado). Gravados pela rotina **Bancos mensais SINAPI e SCO** (`.github/workflows/bancos-mensais.yml` + `scripts/bancos/`), que roda todo dia do dia 3 ao 28, baixa o mês novo da Caixa e da Prefeitura do Rio, confere abas, colunas, Onerado/Desonerado, mês e preços contra o mês anterior, e só grava se tudo bater. Para buscar meses antigos: Actions › Bancos mensais › Run workflow › "desde" = AAAA-MM. No programa, o seletor "📅 Mês" escolhe o mês.
+
+**Esgoto Sanitário — ES-02 (14/11/2026):** elevatória e recalque (NBR 12208), sifão invertido, diâmetro interno real, recobrimento via/passeio, cava dos PVs, orçamento EMOP/SINAPI/SCO compatível com o programa de Orçamento, exportação DXF e DWG. Fonte em `scripts/esgoto/` (rodar `sh scripts/esgoto/build.sh`).

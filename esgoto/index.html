@@ -167,6 +167,7 @@ body.cel .t3,body.cel .pl-box{height:66vh}
 </style>
 <script src="/assistente-abas.js" data-tabs="#abas .tab-btn" data-auxilio="gerar" data-recolhido="1"></script>
 <script src="/estado-pagina.js" data-abas="nao"></script>
+<script src="/orcamento-comum.js"></script>
 </head>
 <body>
 <div id="toast"></div>
@@ -208,23 +209,57 @@ const ESG = (() => {
     modo: 'pop',            /* 'pop' = população distribuída pelo comprimento; 'taxa' = taxa linear informada */
     popI: 1800, popF: 2500, /* população de início e de fim de plano (hab) */
     qI: 150, qF: 150,       /* consumo de água per capita (L/hab·dia) */
-    C: 0.80, K1: 1.20, K2: 1.50,
+    C: 0.80, K1: 1.20, K2: 1.50, K3: 0.50,
     txI: 1.5, txF: 2.5,     /* taxa linear de esgoto doméstico (L/s·km), só no modo 'taxa' */
     tInf: 0.10,             /* infiltração (L/s·km) — NBR 9649: 0,05 a 1,0 */
     qMin: 1.5,              /* vazão mínima de cálculo em qualquer trecho (L/s) */
     norma: '9649', n: 0.013, tau: 1.0,   /* '9649': n 0,013 e 1,0 Pa · '14486' (PVC): n 0,010 e 0,6 Pa */
     dMin: 150,              /* diâmetro mínimo (mm); a NBR 9649 admite DN 100 */
     yD: 0.75, yDvc: 0.50, vMax: 5.0,
-    rec: 0.90,              /* recobrimento mínimo (m): 0,90 leito da via · 0,65 passeio */
+    rec: 0.90, recPas: 0.65,/* recobrimento mínimo (m): leito da via · passeio (escolhido por trecho) */
+    mat: 'pvcm',            /* tubo da rede até DN 400: pvcm (PVC parede maciça) · pvcc (PVC corrugado) · conc (concreto) */
+    usaDI: true, diMan: {}, /* usar o diâmetro INTERNO real; diMan[mat][DN] = DI digitado (mm) */
     profMax: 4.5, degTQ: 0.50, distPV: 80, distMax: 100, profTL: 1.45,
     remanso: true,          /* nível d'água de saída do PV nunca acima do de chegada */
     folga: 0.60, berco: 0.10, envolt: 0.30, pav: 'asfalto', espPav: 0.05,
-    largRua: 8, habLig: 3.0, ramal: 6, dmt: 5, empol: 1.30,
+    largRua: 8, habLig: 3.0, ramal: 6, dmt: 5, empol: 1.30, folgaCava: 0.30, lastro: 0.10,
+    /* elevatória e recalque (NBR 12208) */
+    eCiclo: 10, eDet: 30, eEta: 0.60, eFolgaMotor: 20, eVmin: 0.60, eVmax: 3.00, eKloc: 10, eSub: 0.50, eRecRec: 1.00, eMat: 'pvc',
+    /* sifão invertido */
+    sVmin: 0.60, sDmin: 150, sLinhas: 2, sMat: 'fofo', sProt: 0.60,
     fator: 1                /* multiplicador da vazão de esgoto (cenários) */
   };
   const crit = P => Object.assign({}, CRIT0, (P && P.crit) || {});
-  /* tubo de concreto (DN > 400) usa sempre n 0,013 e 1,0 Pa */
-  const matDe = (D, c) => D > 400 ? {n: 0.013, tau: 1.0, mat: 'Concreto'} : {n: c.n, tau: c.tau, mat: 'PVC'};
+
+  /* ── tubos: diâmetro externo (DE) e interno (DI) reais, mm ──
+     PVC parede maciça NBR 7362: DE e espessura de catálogo de fabricante (DN 100 a 300); DN 350 e 400 aproximados.
+     PVC corrugado: DI mínimo DN 100 = 100 mm (especificação de concessionária); demais aproximados — confira no catálogo. */
+  const TUBOS = {
+    pvcm: {nome: 'PVC parede maciça (NBR 7362)', DE: {100: 110, 125: 125, 150: 160, 200: 200, 250: 250, 300: 315, 350: 355, 400: 400}, e: {100: 2.5, 125: 2.8, 150: 3.6, 200: 4.5, 250: 6.1, 300: 7.2, 350: 8.7, 400: 9.8}, aprox: [350, 400]},
+    pvcc: {nome: 'PVC corrugado dupla parede (NBR ISO 21138)', DE: {100: 110, 150: 160, 200: 200, 250: 250, 300: 315, 350: 355, 400: 400}, DI: {100: 100, 150: 145, 200: 182, 250: 228, 300: 285, 350: 327, 400: 375}, aprox: [150, 200, 250, 300, 350, 400]},
+    conc: {nome: 'Concreto armado ponta e bolsa (NBR 8890)'}
+  };
+  function tuboGeo(D, c, matT) {
+    const mat = D > 400 ? 'conc' : (matT || c.mat || 'pvcm'), T = TUBOS[mat] || TUBOS.pvcm, man = (c.diMan && c.diMan[mat]) || {};
+    let de, di;
+    if (mat === 'conc') { di = D; de = D + 2 * Math.round(D / 12 + 25); }
+    else { de = T.DE[D] || D * 1.07; di = T.DI ? (T.DI[D] || D) : de - 2 * (T.e[D] || de * 0.03); }
+    if (man[D] > 0) di = +man[D];
+    if (!c.usaDI) di = D;
+    const pvc = mat !== 'conc';
+    return {mat, nome: T.nome, de, di, n: pvc ? c.n : 0.013, tau: pvc ? c.tau : 1.0, aprox: (T.aprox || []).includes(D) && !(man[D] > 0)};
+  }
+  const matDe = (D, c, m) => { const g = tuboGeo(D, c, m); return {n: g.n, tau: g.tau, mat: g.mat === 'conc' ? 'Concreto' : 'PVC'}; };
+
+  /* ── pressão: Hazen-Williams ── */
+  const HW = {pvc: 145, pead: 140, fofo: 120};
+  const RECALQUE = {   /* DN comercial → DI (mm) e classe de pressão (mca) */
+    pvc: {nome: 'PVC DEFOFO (NBR 7665), 1,0 MPa', l: [[100, 108.4], [150, 156.4], [200, 204.2], [250, 252.0], [300, 299.8]], pn: 100, a: 420},
+    pead: {nome: 'PEAD PE 100 SDR 17 (PN 10)', l: [[110, 97.0], [160, 141.2], [200, 176.6], [250, 220.4], [315, 277.6], [400, 352.6]], pn: 100, a: 300},
+    fofo: {nome: 'Ferro fundido dúctil K9 (NBR 7675)', l: [[80, 81.6], [100, 101.6], [150, 152.6], [200, 203.4], [250, 253.0], [300, 302.8], [350, 352.8], [400, 402.8]], pn: 250, a: 1100}
+  };
+  const jHW = (Q, d, C) => 10.643 * Math.pow(Q, 1.852) / (Math.pow(C, 1.852) * Math.pow(d, 4.87));
+  const CV = [1, 1.5, 2, 3, 4, 5, 6, 7.5, 10, 12.5, 15, 20, 25, 30, 40, 50, 60, 75, 100, 125, 150, 200];
 
   /* ── seção circular parcialmente cheia ── */
   function geo(d, yd) {
@@ -264,14 +299,15 @@ const ESG = (() => {
   const compr = (t, a, b) => t.L > 0 ? +t.L : Math.hypot(b.x - a.x, b.y - a.y);
   const fLados = t => t.lados == null ? 1 : t.lados / 2;
 
+  const recDe = (t, c) => t && t.loc === 'passeio' ? c.recPas : c.rec;
   /* dimensiona um trecho: menor DN que atende lâmina, com a menor escavação possível */
   function dimTrecho(t, x, c) {
-    const lista = t.Dfix > 0 ? [+t.Dfix] : SERIE.filter(D => D >= x.Dmin);
+    const lista = t.Dfix > 0 ? [+t.Dfix] : SERIE.filter(D => D >= x.Dmin), rec = recDe(t, c);
     let r = null;
     for (const D of lista) {
-      const d = D / 1000, m = matDe(D, c);
-      const topM = x.ctM - c.rec - d, topJ = x.ctJ - c.rec - d;
-      const Imin = iMinTau(x.QI, d, m.n, m.tau), Imax = iMaxV(x.QF, d, m.n, c.vMax);
+      const g = tuboGeo(D, c, t.mat), d = g.di / 1000, de = g.de / 1000, cima = (d + de) / 2;   /* do fundo interno ao topo externo */
+      const topM = x.ctM - rec - cima, topJ = x.ctJ - rec - cima;
+      const Imin = iMinTau(x.QI, d, g.n, g.tau), Imax = iMaxV(x.QF, d, g.n, c.vMax);
       let ciM = fl3(Math.min(topM, x.limM)), ciJ;
       if (t.iFix > 0) {
         ciJ = fl3(ciM - t.iFix * x.L);
@@ -280,19 +316,39 @@ const ESG = (() => {
         ciJ = fl3(Math.min(topJ, ciM - Imin * x.L));
         if ((ciM - ciJ) / x.L > Imax && Imax > Imin) ciM = fl3(ciJ + Imax * x.L);   /* terreno muito inclinado: aprofunda a montante (degrau / tubo de queda) */
       }
-      const I = (ciM - ciJ) / x.L, hF = hid(x.QF, d, I, m.n), hI = hid(x.QI, d, I, m.n);
+      const I = (ciM - ciJ) / x.L, hF = hid(x.QF, d, I, g.n), hI = hid(x.QI, d, I, g.n);
       const lim = (!hF.carga && hF.V > hF.Vc) ? c.yDvc : c.yD;
-      r = {D, d, I, ciM, ciJ, Imin, Imax, hF, hI, lim, n: m.n, tauMin: m.tau, mat: m.mat, okLam: !hF.carga && hF.yd <= lim + 1e-9};
+      r = {D, d, deExt: de, di: g.di, aproxDI: g.aprox, rec, I, ciM, ciJ, Imin, Imax, hF, hI, lim, n: g.n, tauMin: g.tau, mat: g.mat === 'conc' ? 'Concreto' : 'PVC', matK: g.mat, okLam: !hF.carga && hF.yd <= lim + 1e-9};
       if (r.okLam) break;
     }
     return r;
+  }
+  /* sifão invertido: n linhas iguais; a 1ª linha leva sozinha a vazão inicial (V ≥ Vmin para autolimpeza) e todas juntas a final */
+  function dimSifao(t, x, c) {
+    const s = t.sif || {}, n = Math.max(1, Math.round(s.n || c.sLinhas)), mat = s.mat || c.sMat, T = RECALQUE[mat] || RECALQUE.fofo, C = HW[mat] || 120;
+    const lista = T.l.filter(([dn]) => dn >= (c.sDmin || 150) * 0.73), rec = recDe(t, c);
+    let best = null;
+    for (const [dn, dimm] of lista) {
+      const d = dimm / 1000, A = Math.PI * d * d / 4, Vi = x.QI / A, Vf = x.QF / n / A;
+      const hf = jHW(x.QF / n, d, C) * x.L, hl = 1.5 * Vf * Vf / (2 * G), dH = hf + hl + 0.05;
+      best = {dn, d, de: d * 1.08, Vi, Vf, hf, hl, dH, n, mat, C, matNome: T.nome};
+      if (Vi >= c.sVmin && dH <= 0.6) break;   /* menor diâmetro com autolimpeza e perda razoável */
+      if (Vi < c.sVmin) break;                  /* diâmetros maiores só pioram a velocidade */
+    }
+    const cimaM = x.ctM - rec - best.de;
+    const ciM = fl3(Math.min(cimaM, x.limM)), ciJ = fl3(ciM - best.dH);
+    const obst = s.cota != null && s.cota !== '' ? +s.cota : Math.min(x.ctM, x.ctJ) - 1.5;
+    const fundo = fl3(Math.min(ciM, ciJ) - Math.max(0, (Math.min(ciM, ciJ) - (obst - (s.prot != null ? +s.prot : c.sProt) - best.de))));
+    const hF = {carga: false, yd: 1, y: best.d, V: best.Vf, Rh: best.d / 4, tau: 99, Vc: 99, Fr: 0}, hI = Object.assign({}, hF, {V: best.Vi});
+    return Object.assign({D: best.dn, d: best.d, deExt: best.de, di: best.d * 1000, rec, I: (ciM - ciJ) / x.L, ciM, ciJ, Imin: 0, Imax: 9, hF, hI, lim: 1, n: 0.012, tauMin: 0, mat: T.nome, okLam: true},
+      {sif: Object.assign(best, {obst, fundo: Math.min(fundo, obst - (s.prot != null ? +s.prot : c.sProt) - best.de), prot: s.prot != null ? +s.prot : c.sProt})});
   }
 
   /* ── cálculo completo da rede ── opt.fator: cenário de vazão · opt.fixo: {idTrecho:{D,ciM,ciJ}} (verifica sem redimensionar) */
   function calc(P, opt) {
     opt = opt || {};
     const c = crit(P), fator = opt.fator != null ? opt.fator : (c.fator || 1);
-    const R = {c, fator, erros: [], checks: [], tr: {}, no: {}, ordem: [], coletores: [], vaz: {}, ok: false};
+    const R = {c, fator, erros: [], checks: [], tr: {}, no: {}, ordem: [], coletores: [], vaz: {}, eee: {}, ok: false};
     const nos = new Map((P.nos || []).map(n => [n.id, n]));
     const T = (P.trechos || []).filter(t => nos.has(t.de) && nos.has(t.para) && t.de !== t.para);
     const ins = {}, outs = {};
@@ -308,9 +364,17 @@ const ESG = (() => {
     while (fila.length) { const id = fila.shift(); ordemNos.push(id); outs[id].forEach(t => { if (--grau[t.para] === 0) fila.push(t.para); }); }
     if (ordemNos.length < nos.size) { R.erros.push('Há trechos em círculo (a água voltaria ao mesmo PV). Inverta o sentido de um deles.'); return R; }
 
+    /* elevatórias: os trechos do PV da elevatória até o PV de chegada viram linha de recalque */
+    const recDeT = {}, eeeNo = {};
+    (P.eee || []).forEach(e => {
+      if (!nos.has(e.no)) return; eeeNo[e.no] = e; let n = e.no, k = 0;
+      if (e.ate && e.ate !== e.no) while (n !== e.ate && outs[n] && outs[n][0] && k++ < 60) { const t = outs[n][0]; recDeT[t.id] = e.id; n = t.para; }
+    });
+    const ehRec = t => !!recDeT[t.id], gIns = id => ins[id].filter(t => !ehRec(t));
+
     /* vazões */
     let Lc = 0, Lt = 0;
-    const LT = {}; T.forEach(t => { const L = compr(t, nos.get(t.de), nos.get(t.para)); LT[t.id] = L; Lt += L; Lc += L * fLados(t); });
+    const LT = {}; T.forEach(t => { const L = compr(t, nos.get(t.de), nos.get(t.para)); LT[t.id] = L; Lt += L; if (!ehRec(t)) Lc += L * fLados(t); });
     const QdI = c.modo === 'taxa' ? c.txI / 1000 * Lc * fator : c.K2 * c.C * c.popI * c.qI / 86400 * fator;
     const QdF = c.modo === 'taxa' ? c.txF / 1000 * Lc * fator : c.K1 * c.K2 * c.C * c.popF * c.qF / 86400 * fator;
     const txI = Lc > 0 ? QdI / Lc : 0, txF = Lc > 0 ? QdF / Lc : 0, ti = c.tInf / 1000;
@@ -321,46 +385,57 @@ const ESG = (() => {
     for (const id of ordemNos) {
       const n = nos.get(id);
       outs[id].forEach((t, k) => {
-        const j = nos.get(t.para), L = LT[t.id];
-        const cI = txI * L * fLados(t) + ti * L, cF = txF * L * fLados(t) + ti * L;
+        const j = nos.get(t.para), L = LT[t.id], rec = ehRec(t);
+        const cI = rec ? 0 : txI * L * fLados(t) + ti * L, cF = rec ? 0 : txF * L * fLados(t) + ti * L;
         const QmI = k === 0 ? QnI[id] : 0, QmF = k === 0 ? QnF[id] : 0, QjI = QmI + cI, QjF = QmF + cF;
         QnI[t.para] += QjI; QnF[t.para] += QjF;
+        const gi = gIns(id);
         const x = {L, ctM: +n.ct || 0, ctJ: +j.ct || 0, QI: Math.max(c.qMin, QjI) / 1000, QF: Math.max(c.qMin, QjF) / 1000,
-          limM: ins[id].length ? Math.min(...ins[id].map(a => R.tr[a.id].ciJ)) : Infinity,
-          Dmin: Math.max(c.dMin, ...ins[id].map(a => R.tr[a.id].D))};
+          limM: gi.length && !eeeNo[id] ? Math.min(...gi.map(a => R.tr[a.id].ciJ)) : Infinity,
+          Dmin: Math.max(c.dMin, ...gi.filter(a => !R.tr[a.id].sif).map(a => R.tr[a.id].D))};
         let r; const fx = opt.fixo && opt.fixo[t.id];
-        if (fx) {
-          const d = fx.D / 1000, m = matDe(fx.D, c), I = (fx.ciM - fx.ciJ) / L, hF = hid(x.QF, d, I, m.n), hI = hid(x.QI, d, I, m.n);
-          r = {D: fx.D, d, I, ciM: fx.ciM, ciJ: fx.ciJ, Imin: iMinTau(x.QI, d, m.n, m.tau), Imax: iMaxV(x.QF, d, m.n, c.vMax), hF, hI,
-            lim: (!hF.carga && hF.V > hF.Vc) ? c.yDvc : c.yD, n: m.n, tauMin: m.tau, mat: m.mat};
+        if (rec) {
+          r = {recq: recDeT[t.id], rec: c.eRecRec, D: 0, d: 0.1, deExt: 0.11, I: 0, ciM: x.ctM - c.eRecRec - 0.11, ciJ: x.ctJ - c.eRecRec - 0.11, Imin: 0, Imax: 9,
+            hF: {carga: false, yd: 1, y: 0, V: 0, tau: 99, Vc: 99}, hI: {carga: false, yd: 1, y: 0, V: 0, tau: 99, Vc: 99}, lim: 1, okLam: true, mat: 'Recalque', tauMin: 0};
+        } else if (t.sif) {
+          r = dimSifao(t, x, c);
+        } else if (fx) {
+          const g = tuboGeo(fx.D, c, t.mat), d = g.di / 1000, I = (fx.ciM - fx.ciJ) / L, hF = hid(x.QF, d, I, g.n), hI = hid(x.QI, d, I, g.n);
+          r = {D: fx.D, d, deExt: g.de / 1000, di: g.di, rec: recDe(t, c), I, ciM: fx.ciM, ciJ: fx.ciJ, Imin: iMinTau(x.QI, d, g.n, g.tau), Imax: iMaxV(x.QF, d, g.n, c.vMax), hF, hI,
+            lim: (!hF.carga && hF.V > hF.Vc) ? c.yDvc : c.yD, n: g.n, tauMin: g.tau, mat: g.mat === 'conc' ? 'Concreto' : 'PVC', matK: g.mat};
           r.okLam = !hF.carga && hF.yd <= r.lim + 1e-9;
         } else {
           r = dimTrecho(t, x, c);
-          if (c.remanso && ins[id].length) for (let it = 0; it < 20; it++) {    /* controle de remanso: NA de saída ≤ menor NA de chegada */
-            const naIn = Math.min(...ins[id].map(a => R.tr[a.id].ciJ + R.tr[a.id].hF.y)), naOut = r.ciM + r.hF.y;
+          if (c.remanso && gi.length && !eeeNo[id]) for (let it = 0; it < 20; it++) {    /* controle de remanso: NA de saída ≤ menor NA de chegada */
+            const naIn = Math.min(...gi.map(a => R.tr[a.id].ciJ + R.tr[a.id].hF.y)), naOut = r.ciM + r.hF.y;
             if (naOut <= naIn + 0.0005) break;
             x.limM = r.ciM - (naOut - naIn); r = dimTrecho(t, x, c);
           }
         }
+        const cima = ((r.d || 0) + (r.deExt || r.d || 0)) / 2;
         Object.assign(r, {id: t.id, de: t.de, para: t.para, L, ctM: x.ctM, ctJ: x.ctJ, QmI, QmF, cI, cF, QjI, QjF, QI: x.QI * 1000, QF: x.QF * 1000,
-          profM: x.ctM - r.ciM, profJ: x.ctJ - r.ciJ, recM: x.ctM - r.ciM - r.d, recJ: x.ctJ - r.ciJ - r.d, iTer: (x.ctM - x.ctJ) / L,
-          fixD: t.Dfix > 0, fixI: t.iFix > 0});
+          profM: x.ctM - r.ciM, profJ: x.ctJ - r.ciJ, recM: x.ctM - r.ciM - cima, recJ: x.ctJ - r.ciJ - cima, iTer: (x.ctM - x.ctJ) / L,
+          fixD: t.Dfix > 0, fixI: t.iFix > 0});   /* r.de = PV de montante (id) · r.deExt = diâmetro externo (m) */
         R.tr[t.id] = r; R.ordem.push(t.id);
       });
     }
 
     /* PVs */
     for (const id of ordemNos) {
-      const n = nos.get(id), I = ins[id].map(t => R.tr[t.id]), O = outs[id].map(t => R.tr[t.id]);
-      if (!I.length && !O.length) continue;
-      const cf = O.length ? Math.min(...O.map(o => o.ciM)) : Math.min(...I.map(i => i.ciJ));
-      const ct = +n.ct || 0, prof = ct - cf, Dmax = Math.max(...I.map(i => i.D), ...O.map(o => o.D));
-      const degraus = I.map(i => ({tr: i.id, h: r3(i.ciJ - cf)}));
-      const cab = !I.length, fim = !O.length;
-      const tipo = cab && prof <= c.profTL ? 'TL' : 'PV';
-      R.no[id] = {id, ct, cf, prof, Dmax, degraus, cab, fim, tipo, Dpv: tipo === 'TL' ? 0.60 : (Dmax > 600 ? 1.50 : 1.20),
-        tq: degraus.filter(g => g.h >= c.degTQ - 1e-9).length, QI: QnI[id], QF: QnF[id]};
+      const n = nos.get(id), I = gIns(id).map(t => R.tr[t.id]), O = outs[id].map(t => R.tr[t.id]), OG = O.filter(o => !o.recq);
+      if (!ins[id].length && !O.length) continue;
+      const e = eeeNo[id];
+      const cf = e ? (I.length ? Math.min(...I.map(i => i.ciJ)) : (+n.ct || 0) - 1.5) : OG.length ? Math.min(...OG.map(o => o.ciM)) : I.length ? Math.min(...I.map(i => i.ciJ)) : (+n.ct || 0) - c.rec - 0.2;
+      const ct = +n.ct || 0, prof = ct - cf, Dmax = Math.max(0, ...I.map(i => i.D), ...OG.map(o => o.D));
+      const degraus = I.filter(i => !i.sif).map(i => ({tr: i.id, h: r3(i.ciJ - cf)}));
+      const cab = !ins[id].length, fim = !O.length;
+      const tipo = e ? 'EEE' : cab && prof <= c.profTL ? 'TL' : 'PV';
+      R.no[id] = {id, ct, cf, prof, Dmax, degraus, cab, fim, tipo, Dpv: tipo === 'TL' ? 0.60 : (Dmax > 600 ? 1.50 : 1.20), par: tipo === 'TL' ? 0.08 : 0.15,
+        tq: e ? 0 : degraus.filter(g => g.h >= c.degTQ - 1e-9).length, QI: QnI[id], QF: QnF[id], recebeRec: ins[id].some(ehRec)};
     }
+
+    /* elevatórias: poço, bombas e recalque (NBR 12208) */
+    (P.eee || []).forEach(e => { if (R.no[e.no]) R.eee[e.id] = eeeCalc(e, R, nos, LT, recDeT, c); });
 
     /* coletores: o tronco segue sempre a maior extensão a montante */
     const ext = {}; for (const id of ordemNos) ext[id] = Math.max(0, ...ins[id].map(t => ext[t.de] + LT[t.id]));
@@ -370,7 +445,6 @@ const ESG = (() => {
     while (pend.length) {
       const p = pend.shift(), cadeia = []; let t = p.t;
       while (t) { cadeia.unshift(t.id); ins[t.de].forEach(o => { if (o !== princ(t.de)) pend.push({no: t.de, t: o}); }); t = princ(t.de); }
-      /* ramos deste nó final que não são o principal */
       if (p.t === princ(p.no)) ins[p.no].forEach(o => { if (o !== p.t) pend.push({no: p.no, t: o}); });
       const num = R.coletores.length + 1;
       cadeia.forEach((id, k) => { R.tr[id].col = num; R.tr[id].seq = k + 1; R.tr[id].nome = num + '-' + (k + 1); });
@@ -382,81 +456,288 @@ const ESG = (() => {
     const f = (v, d) => (+v).toFixed(d).replace('.', ',');
     R.ordem.forEach(id => {
       const r = R.tr[id], nm = 'Trecho ' + r.nome;
+      if (r.recq) return;
+      if (r.sif) {
+        const s = r.sif;
+        if (s.Vi < c.sVmin - 0.005) ck('warn', nm + ' (sifão)', 'Velocidade ' + f(s.Vi, 2) + ' m/s com a vazão inicial numa linha, abaixo de ' + f(c.sVmin, 2) + ' m/s: o sifão acumula sólidos (prever limpeza frequente ou DN menor na 1ª linha).', 'sifv', id);
+        if (s.dn < c.sDmin * 0.73) ck('err', nm + ' (sifão)', 'DN ' + s.dn + ' abaixo do mínimo ' + c.sDmin + ' mm.', 'sifd', id);
+        if (r.recM < r.rec - 0.0015) ck('err', nm + ' (sifão)', 'Câmara de entrada com recobrimento ' + f(r.recM, 2) + ' m.', 'rec', id);
+        return;
+      }
       if (r.hF.carga) ck('err', nm, 'Tubo trabalhando cheio (em carga) com a vazão final: DN ' + r.D + ' não comporta ' + f(r.QF, 2) + ' L/s a ' + f(r.I * 100, 3) + ' %.', 'carga', id);
       else if (!r.okLam) ck('err', nm, 'Lâmina y/D = ' + f(r.hF.yd, 2) + ' acima do limite ' + f(r.lim, 2) + (r.lim < c.yD ? ' (velocidade acima da crítica: precisa de mais ar no tubo)' : '') + '.', 'lamina', id);
       if (r.hI.tau < r.tauMin - 0.005) ck('err', nm, 'Tensão trativa ' + f(r.hI.tau, 2) + ' Pa abaixo de ' + f(r.tauMin, 1) + ' Pa: o esgoto não arrasta os sólidos (declividade mínima ' + f(r.Imin * 100, 3) + ' %).', 'tau', id);
       if (r.hF.V > c.vMax + 0.005) ck('err', nm, 'Velocidade final ' + f(r.hF.V, 2) + ' m/s acima de ' + f(c.vMax, 1) + ' m/s.', 'vmax', id);
-      if (r.recM < c.rec - 0.0015 || r.recJ < c.rec - 0.0015) ck('err', nm, 'Recobrimento ' + f(Math.min(r.recM, r.recJ), 2) + ' m menor que o mínimo ' + f(c.rec, 2) + ' m.', 'rec', id);
+      if (r.recM < r.rec - 0.0015 || r.recJ < r.rec - 0.0015) ck('err', nm, 'Recobrimento ' + f(Math.min(r.recM, r.recJ), 2) + ' m menor que o mínimo ' + f(r.rec, 2) + ' m (' + (r.rec === c.recPas ? 'passeio' : 'via') + ').', 'rec', id);
       if (r.I <= 0) ck('err', nm, 'Declividade nula ou contrária ao fluxo.', 'decl', id);
       if (r.L > c.distMax + 0.01) ck('warn', nm, 'Extensão ' + f(r.L, 1) + ' m maior que ' + f(c.distMax, 0) + ' m entre PVs (alcance do equipamento de limpeza).', 'dist', id);
-      if (Math.max(r.profM, r.profJ) > c.profMax + 0.005) ck('warn', nm, 'Profundidade ' + f(Math.max(r.profM, r.profJ), 2) + ' m acima de ' + f(c.profMax, 1) + ' m: avaliar estação elevatória, outro ponto de lançamento ou rede auxiliar.', 'prof', id);
-      ins[r.de].forEach(a => { if (R.tr[a.id].D > r.D) ck('err', nm, 'DN ' + r.D + ' menor que o do trecho de montante (DN ' + R.tr[a.id].D + ').', 'dn', id); });
+      if (Math.max(r.profM, r.profJ) > c.profMax + 0.005) ck('warn', nm, 'Profundidade ' + f(Math.max(r.profM, r.profJ), 2) + ' m acima de ' + f(c.profMax, 1) + ' m: use 🏭 Sugerir elevatória, outro ponto de lançamento ou rede auxiliar.', 'prof', id);
+      gIns(r.de).forEach(a => { const u = R.tr[a.id]; if (!u.sif && u.D > r.D) ck('err', nm, 'DN ' + r.D + ' menor que o do trecho de montante (DN ' + u.D + ').', 'dn', id); });
+      if (r.aproxDI) ck('info', nm, 'Diâmetro interno do DN ' + r.D + ' aproximado: confira no catálogo do fabricante (Dados › Tubos).', 'di', id);
     });
     Object.values(R.no).forEach(x => {
       const n = nos.get(x.id);
       if (x.tq) ck('info', nomeNo(n), 'Tubo de queda: chegada ' + f(Math.max(...x.degraus.map(g => g.h)), 2) + ' m acima do fundo.', 'tq', x.id);
-      if (x.fim && n.cfEx != null && n.cfEx !== '' && x.cf < +n.cfEx - 0.0005) ck('err', nomeNo(n), 'A rede chega na cota ' + f(x.cf, 3) + ', abaixo da cota de fundo disponível no lançamento (' + f(+n.cfEx, 3) + '): precisa de elevatória ou de outro traçado.', 'saida', x.id);
+      if (x.fim && x.tipo !== 'EEE' && n.cfEx != null && n.cfEx !== '' && x.cf < +n.cfEx - 0.0005) ck('err', nomeNo(n), 'A rede chega na cota ' + f(x.cf, 3) + ', abaixo da cota de fundo disponível no lançamento (' + f(+n.cfEx, 3) + '): use 🏭 Sugerir elevatória ou outro traçado.', 'saida', x.id);
     });
+    Object.values(R.eee).forEach(E => E.checks.forEach(k => ck(k[0], E.nome, k[1], k[2], E.no)));
     if (c.tInf < 0.05 || c.tInf > 1) ck('warn', 'Critérios', 'Taxa de infiltração fora da faixa da NBR 9649 (0,05 a 1,0 L/s·km).', 'inf');
     if (c.dMin < 100) ck('err', 'Critérios', 'Diâmetro mínimo abaixo de DN 100 (NBR 9649).', 'dmin');
     R.nErr = R.checks.filter(k => k.st === 'err').length + R.erros.length; R.nWarn = R.checks.filter(k => k.st === 'warn').length;
     R.Qfim = finais.reduce((s, id) => s + QnF[id], 0); R.QfimI = finais.reduce((s, id) => s + QnI[id], 0); R.finais = finais;
-    R.profMaxima = Math.max(0, ...Object.values(R.no).map(x => x.prof));
+    R.profMaxima = Math.max(0, ...Object.values(R.no).filter(x => x.tipo !== 'EEE').map(x => x.prof));
     R.ok = true; return R;
+  }
+
+  /* ── estação elevatória: vazões, poço úmido, bombas, recalque e golpe de aríete ── */
+  function eeeCalc(e, R, nos, LT, recDeT, c) {
+    const n = nos.get(e.no), x = R.no[e.no], E = {id: e.id, no: e.no, nome: 'EEE ' + (e.nome || nomeNo(n)), checks: []};
+    const f = (v, d) => (+v).toFixed(d).replace('.', ',');
+    const QF = Math.max(c.qMin, x.QF), QI = Math.max(c.qMin, x.QI), Qmin = Math.max(0.5, QI / c.K2 * c.K3), Qmed = QI / c.K2;
+    const Qb = QF / 1000, mat = e.mat || c.eMat, T = RECALQUE[mat] || RECALQUE.pvc, C = HW[mat] || 140;
+    const trs = Object.keys(recDeT).filter(k => recDeT[k] === e.id), Lr = e.ext ? +(e.ext.L || 0) : trs.reduce((s, k) => s + LT[k], 0);
+    let esc = null;
+    for (const [dn, di] of T.l) { const d = di / 1000, V = Qb / (Math.PI * d * d / 4); esc = {dn, d, V}; if (V <= 2.0) break; }
+    if (e.dnRec) { const m = T.l.find(q => q[0] === +e.dnRec); if (m) { const d = m[1] / 1000; esc = {dn: m[0], d, V: Qb / (Math.PI * d * d / 4)}; } }
+    /* poço úmido: volume útil para ciclo mínimo de bombas (V = Qb·T/4), circular, h útil ≤ 1,0 m */
+    const Vu = Qb * c.eCiclo * 60 / 4; let Dp = 1.5; while (Vu / (Math.PI * Dp * Dp / 4) > 1.0 && Dp < 4) Dp += 0.5;
+    const A = Math.PI * Dp * Dp / 4, hu = Math.max(0.40, Vu / A), NAmax = x.cf - 0.10, NAmin = NAmax - hu, fundo = NAmin - c.eSub - 0.30;
+    const profP = (+n.ct || 0) - fundo, td = Vu / (Qmed / 1000) / 60;
+    let cotaD, ateNome;
+    if (e.ext) { cotaD = +e.ext.cota; ateNome = e.ext.nome || 'ponto de descarga'; }
+    else { const m = nos.get(e.ate), xm = R.no[e.ate]; cotaD = m ? (+m.ct || 0) - 0.50 : x.ct; ateNome = m ? nomeNo(m) : '?'; }
+    const Hg = cotaD - NAmin, hf = jHW(Qb, esc.d, C) * Lr * 1.10, hl = c.eKloc * esc.V * esc.V / (2 * G), AMT = Math.max(1, Hg + hf + hl);
+    const Pcv = 1000 * Qb * AMT / (75 * c.eEta), Pm = CV.find(v => v >= Pcv * (1 + c.eFolgaMotor / 100)) || Math.ceil(Pcv * 1.2);
+    const dHa = T.a * esc.V / G, Pmax = AMT + dHa, Tc = 4 * Vu / Qb / 60;
+    trs.forEach(k => { const r = R.tr[k]; Object.assign(r, {D: esc.dn, d: esc.d, deExt: esc.d * 1.1, matRec: T.nome, V: esc.V, hF: Object.assign({}, r.hF, {V: esc.V})}); });
+    Object.assign(x, {cfIn: x.cf, cf: fundo, prof: profP, Dpv: Dp, par: 0.20});
+    Object.assign(E, {QI, QF, Qmin, Qmed, Qb: QF, mat, matNome: T.nome, C, Lr, dn: esc.dn, d: esc.d, V: esc.V, Vu, Dp, A, hu, NAmax, NAmin, fundo, profP, td, cotaD, ateNome,
+      Hg, hf, hl, AMT, Pcv, Pm, nB: 2, dHa, Pmax, pn: T.pn, Tc, cheg: x.cf, ext: !!e.ext});
+    if (esc.V < c.eVmin) E.checks.push(['warn', 'Velocidade no recalque ' + f(esc.V, 2) + ' m/s abaixo de ' + f(c.eVmin, 2) + ' m/s (deposição): vazão pequena para o menor DN; avaliar DN menor de outro material.', 'eev']);
+    if (esc.V > c.eVmax) E.checks.push(['err', 'Velocidade no recalque ' + f(esc.V, 2) + ' m/s acima de ' + f(c.eVmax, 2) + ' m/s.', 'eev']);
+    if (td > c.eDet) E.checks.push(['warn', 'Tempo de detenção ' + f(td, 0) + ' min com a vazão média, acima de ' + f(c.eDet, 0) + ' min (septicidade): reduzir o volume útil ou prever aeração.', 'eetd']);
+    if (Pmax > T.pn) E.checks.push(['warn', 'Pressão com golpe de aríete ' + f(Pmax, 0) + ' mca acima da classe do tubo (' + T.pn + ' mca): prever válvula antigolpe ou tubo de classe maior.', 'eepn']);
+    if (Hg <= 0) E.checks.push(['info', 'Desnível geométrico ' + f(Hg, 2) + ' m: a descarga está abaixo do nível do poço; confira se a elevatória é necessária.', 'eehg']);
+    if (!e.ext && !e.ate) E.checks.push(['err', 'Elevatória sem ponto de chegada do recalque.', 'eeate']);
+    trs.forEach(k => { const r = R.tr[k]; if (k !== trs[0]) { const no = nos.get(r.de); if (R.ins[r.de].some(t => !recDeT[t.id])) E.checks.push(['err', nomeNo(no) + ' recebe rede por gravidade no meio da linha de recalque: termine o recalque neste PV.', 'eemeio']); } });
+    E.checks.push(['info', 'Bombas ' + E.nB + ' (1 + 1 reserva) de ' + f(QF, 2) + ' L/s × ' + f(AMT, 1) + ' mca, motor ' + f(Pm, 1).replace(',0', '') + ' cv · recalque ' + T.nome.split(' (')[0] + ' DN ' + esc.dn + ', ' + f(Lr, 0) + ' m até ' + ateNome + '.', 'eeinfo']);
+    return E;
   }
   const geometria = R => { const g = {}; R.ordem.forEach(id => { const r = R.tr[id]; g[id] = {D: r.D, ciM: r.ciM, ciJ: r.ciJ}; }); return g; };
 
-  /* ── quantitativos ── */
+  /* ── quantitativos ──
+     Vala: largura = DE + folga (mín. 0,65 m), profundidade = cota do terreno − geratriz inferior externa + berço; medida de centro a centro dos PVs.
+     Cava do PV (as composições de PV do SINAPI, SCO e EMOP NÃO incluem escavação, escoramento nem reaterro):
+       lado B = Ø externo + 2 × folga da cava; altura = profundidade + laje de fundo + lastro;
+       escavação da cava = B²·h − parte já medida nas valas que chegam (B/2 × largura × profundidade de cada vala);
+       reaterro da cava = escavação da cava × (1 − área do PV / B²). */
   const faixa = h => h <= 1.5 ? 0 : h <= 3 ? 1 : h <= 4.5 ? 2 : 3;
   function quant(P, R) {
-    const c = R.c, Q = {tubos: {}, juntas: {}, escav: [0, 0, 0, 0], escor: [0, 0, 0, 0], reat: [0, 0, 0, 0], fundo: 0, areia: 0, bota: 0, pavA: 0, loc: 0, pvs: [], tq: 0, tampas: 0};
+    const c = R.c, Z4 = () => [0, 0, 0, 0];
+    const Q = {tubos: {}, juntas: {}, escav: Z4(), escor: Z4(), reat: Z4(), cavaEsc: Z4(), cavaEscor: Z4(), cavaReat: Z4(), cavaLastro: 0, cavaLastroSco: 0,
+      fundo: 0, areia: 0, bota: 0, pavA: 0, pasA: 0, loc: 0, pvs: [], tq: 0, tqL: {}, tampas: 0, recalque: {}, sifao: {}, eee: [], escTot: 0, reatTot: 0, memo: {}};
+    const vala = {};   /* id do trecho → {larg, hM, hJ} para descontar na cava */
+    const nosP = new Map((P.nos || []).map(n => [n.id, n])), trP = new Map((P.trechos || []).map(t => [t.id, t]));
     R.ordem.forEach(id => {
-      const r = R.tr[id], larg = Math.max(0.65, r.d + c.folga), h = (r.profM + r.profJ) / 2 + c.berco, k = faixa(h);
-      const vEsc = r.L * larg * h, vTubo = r.L * Math.PI * r.d * r.d / 4, vAreia = Math.max(0, r.L * larg * (c.berco + r.d + c.envolt) - vTubo);
-      Q.tubos[r.D] = (Q.tubos[r.D] || 0) + r.L; Q.juntas[r.D] = (Q.juntas[r.D] || 0) + 2;
-      Q.escav[k] += vEsc; if (h > 1.25) Q.escor[k] += 2 * r.L * h;
-      Q.reat[k] += Math.max(0, vEsc - vAreia - vTubo); Q.areia += vAreia; Q.fundo += r.L * larg; Q.bota += (vAreia + vTubo) * c.empol; Q.loc += r.L;
-      if (c.pav !== 'terra') Q.pavA += r.L * (larg + 0.30);
-      r.larg = larg; r.hEsc = h; r.vEsc = vEsc;
+      const r = R.tr[id], t = trP.get(id) || {}, de = r.deExt || r.d || 0.11, parede = Math.max(0, (de - (r.d || 0)) / 2);
+      let larg, hM, hJ;
+      if (r.recq) {                       /* linha de recalque: vala rasa com o recobrimento do recalque */
+        larg = Math.max(0.60, de + 0.40); hM = hJ = c.eRecRec + de + c.berco;
+        const k = (R.eee[r.recq] && R.eee[r.recq].mat || c.eMat) + '|' + r.D; Q.recalque[k] = (Q.recalque[k] || 0) + r.L;
+      } else if (r.sif) {                /* sifão invertido: n linhas lado a lado até o fundo do sifão */
+        const s = r.sif; larg = Math.max(0.65, s.n * s.de + (s.n - 1) * 0.30 + c.folga);
+        hM = r.ctM - s.fundo + parede + c.berco; hJ = r.ctJ - s.fundo + parede + c.berco;
+        const k = s.mat + '|' + s.dn; Q.sifao[k] = (Q.sifao[k] || 0) + r.L * s.n;
+      } else {
+        larg = Math.max(0.65, de + c.folga); hM = r.profM + parede + c.berco; hJ = r.profJ + parede + c.berco;
+        const k = (r.matK || 'pvcm') + '|' + r.D; Q.tubos[k] = (Q.tubos[k] || 0) + r.L; Q.juntas[r.D] = (Q.juntas[r.D] || 0) + 2;
+      }
+      const h = (hM + hJ) / 2, kf = faixa(h), vEsc = r.L * larg * h, nT = r.sif ? r.sif.n : 1;
+      const vTubo = nT * r.L * Math.PI * de * de / 4, vAreia = Math.max(0, r.L * larg * (c.berco + de + c.envolt) - vTubo);
+      Q.escav[kf] += vEsc; if (h > 1.25) Q.escor[kf] += 2 * r.L * h;
+      const vRea = Math.max(0, vEsc - vAreia - vTubo); Q.reat[kf] += vRea; Q.areia += vAreia; Q.fundo += r.L * larg; Q.loc += r.L;
+      Q.escTot += vEsc; Q.reatTot += vRea;
+      if (t.loc === 'passeio') Q.pasA += r.L * (larg + 0.30); else if (c.pav !== 'terra') Q.pavA += r.L * (larg + 0.30);
+      Object.assign(r, {larg, hEsc: h, vEsc}); vala[id] = {larg, hM, hJ, de: r.de, para: r.para};
     });
-    Object.values(R.no).forEach(x => { Q.pvs.push({id: x.id, tipo: x.tipo, Dpv: x.Dpv, prof: x.prof}); Q.tq += x.tq; Q.tampas++; });
+    /* poços de visita, terminais de limpeza e cavas */
+    Object.values(R.no).forEach(x => {
+      if (x.tipo === 'EEE') return;
+      const Dext = x.Dpv + 2 * x.par, B = Dext + 2 * c.folgaCava, laje = x.tipo === 'TL' ? 0.10 : 0.15, h = x.prof + laje + c.lastro, kf = faixa(h);
+      let desc = 0, descEsc = 0;
+      R.ordem.forEach(id => { const v = vala[id]; if (!v) return; let hv = null; if (v.de === x.id) hv = v.hM; else if (v.para === x.id) hv = v.hJ; if (hv == null) return;
+        desc += B / 2 * Math.min(v.larg, B) * Math.min(h, hv); descEsc += Math.min(v.larg, B) * Math.min(h, hv); });
+      const esc = Math.max(0, B * B * h - desc), reat = esc * Math.max(0, 1 - Math.PI * Dext * Dext / 4 / (B * B));
+      Q.cavaEsc[kf] += esc; Q.cavaReat[kf] += reat; if (h > 1.25) Q.cavaEscor[kf] += Math.max(0, 4 * B * h - descEsc);
+      Q.escTot += esc; Q.reatTot += reat;
+      const lastro = Math.PI * (Dext + 0.20) ** 2 / 4 * c.lastro; Q.cavaLastro += lastro;
+      const n = nosP.get(x.id) || {}; if (n.loc === 'passeio') Q.pasA += Math.max(0, B * B - descEsc * 0.5); else if (c.pav !== 'terra') Q.pavA += Math.max(0, B * B - descEsc * 0.5);
+      Q.pvs.push({id: x.id, tipo: x.tipo, Dpv: x.Dpv, Dext, prof: x.prof, B, h, esc, reat, lastro, tq: x.tq});
+      Q.tampas++;
+      x.degraus.forEach(g => { if (g.h >= c.degTQ - 1e-9) { const D = R.tr[g.tr] ? R.tr[g.tr].D : 150; Q.tqL[D] = (Q.tqL[D] || 0) + g.h; Q.tq++; } });
+    });
+    /* estações elevatórias: poço úmido circular em concreto armado */
+    Object.values(R.eee).forEach(E => {
+      const n = nosP.get(E.no) || {}, ct = +n.ct || 0, esp = 0.20, Dext = E.Dp + 2 * esp, prof = ct - E.fundo, lajeF = 0.25, lajeT = 0.20;
+      const B = Dext + 2 * c.folgaCava, h = prof + lajeF + c.lastro, kf = faixa(h), A = Math.PI * Dext * Dext / 4;
+      const conc = Math.PI * (Dext * Dext - E.Dp * E.Dp) / 4 * prof + A * lajeF + A * lajeT - 2 * 0.60 * 0.60;
+      const esc = B * B * h, reat = (B * B - A) * h;
+      Q.cavaEsc[kf] += esc; Q.cavaReat[kf] += reat; Q.cavaEscor[kf] += 4 * B * h; Q.escTot += esc; Q.reatTot += reat;
+      Q.cavaLastro += (B * B) * c.lastro;
+      Q.eee.push({id: E.id, nome: E.nome, Dp: E.Dp, Dext, prof, B, h, esc, reat, conc, nB: E.nB, Pm: E.Pm, dn: E.dn, mat: E.mat, Lr: E.Lr, AMT: E.AMT, Qb: E.Qb});
+      Q.tampas += 2;
+    });
     Q.lig = c.nLig > 0 ? Math.round(c.nLig) : Math.round(c.popF / Math.max(1, c.habLig));
-    Q.ramal = Q.lig * c.ramal;
+    Q.ramal = Q.lig * c.ramal; Q.ramalEsc = Q.ramal * 0.60 * 1.00;   /* vala do ramal 0,60 × 1,00 m */
+    Q.bota = Math.max(0, Q.escTot - Q.reatTot) * c.empol;
     return Q;
   }
-  /* itens do orçamento com o código SINAPI de referência (o usuário pode trocar código e preço) */
-  const SIN = {tubo: {100: 'SC-90694', 150: 'SC-90695', 200: 'SC-90696', 250: 'SC-90697', 300: 'SC-90698', 350: 'SC-90699', 400: 'SC-90700', 500: 'SC-92837', 600: 'SC-92839', 700: 'SC-92841', 800: 'SC-92843', 900: 'SC-92845', 1000: 'SC-92847'},
+
+  /* ── itens do orçamento: um item por serviço, com o código de cada banco (EMOP, SINAPI RJ, SCO-Rio) ──
+     Mesmo formato do módulo comum de orçamento do site (orcamento-comum.js): {g, k, nome, un, q, cod:{emop,sinapi,sco}, qb:{banco: quantidade na unidade daquele banco}, memo}.
+     Código ausente num banco = usa o equivalente do próximo banco (SINAPI → SCO → EMOP). false = o serviço não existe naquele banco (já está incluído em outra composição).
+     Os códigos EMOP só entram onde foram conferidos no catálogo usado pela Drenagem; nos demais o Orçamento usa o SINAPI ou o SCO. */
+  const SOL = [
+    {k: 'rec', nome: 'Recomendada — PV em anéis pré-moldados de concreto', curto: 'PV pré-moldado', desc: 'Tubos do dimensionamento; poços de visita e terminais de limpeza em anéis de concreto pré-moldado (montagem rápida, menos tempo de vala aberta).'},
+    {k: 'alv', nome: 'PV em alvenaria de tijolos maciços', curto: 'PV em alvenaria', desc: 'Tubos do dimensionamento; poços de visita em alvenaria de tijolo maciço revestida (SINAPI). SCO-Rio e EMOP usam os poços pré-moldados equivalentes.'},
+    {k: 'tub', nome: 'Outro tubo de PVC (maciço ⇄ corrugado) com PV pré-moldado', curto: 'Outro tubo PVC', desc: 'Mesmos DN e cotas, trocando o PVC de parede maciça pelo corrugado de dupla parede (ou o contrário). Confira o diâmetro interno em Dados › Tubos antes de adotar.'}
+  ];
+  const GRUPOS = ['Serviços preliminares', 'Movimento de terra — valas', 'Movimento de terra — cavas dos PVs', 'Tubulação', 'Poços de visita e terminais de limpeza', 'Ligações prediais', 'Estação elevatória e recalque', 'Sifão invertido', 'Pavimentação'];
+  const CS = {   /* códigos */
+    escS: ['SC-90100', 'SC-90102', 'SC-90086', 'SC-90090'], escE: ['03.020.0050', '03.020.0085', '03.020.0090', '03.020.0100'], escC: 'SCO-MT 10.10.0050',
+    scoS: ['SC-101570', 'SC-101578', 'SC-101580', 'SC-101586'], scoC: [false, 'SCO-FD 10.26.0050', 'SCO-FD 10.26.0051', 'SCO-FD 10.26.0052'],
+    reaS: ['SC-93379', 'SC-93381', 'SC-93372', 'SC-93372'], reaE: '03.011.0015', reaC: 'SCO-MT 15.10.0075',
+    tubo: {
+      pvcm: {s: {100: 'SC-90694', 150: 'SC-90695', 200: 'SC-90696', 250: 'SC-90697', 300: 'SC-90698', 350: 'SC-90699', 400: 'SC-90700'}, c: {100: 'SCO-DR 05.40.0050', 150: 'SCO-DR 05.40.0100', 200: 'SCO-DR 05.40.0150', 250: 'SCO-DR 05.40.0200', 300: 'SCO-DR 05.40.0250'}, nome: 'PVC de parede maciça (NBR 7362)'},
+      pvcc: {s: {150: 'SC-90701', 200: 'SC-90702', 250: 'SC-90703', 300: 'SC-90704', 350: 'SC-90705', 400: 'SC-90706'}, c: {}, nome: 'PVC corrugado de dupla parede'},
+      conc: {s: {300: 'SC-92833', 400: 'SC-92835', 500: 'SC-92837', 600: 'SC-92839', 700: 'SC-92841', 800: 'SC-92843', 900: 'SC-92845', 1000: 'SC-92847'}, c: {300: 'SCO-DR 05.27.0300', 400: 'SCO-DR 05.27.0400', 500: 'SCO-DR 05.27.0500', 600: 'SCO-DR 05.27.0600', 700: 'SCO-DR 05.27.0700', 900: 'SCO-DR 05.27.0901'}, nome: 'concreto armado (NBR 8890)'}
+    },
     junta: {100: 'SC-90724', 150: 'SC-90725', 200: 'SC-90726', 250: 'SC-90727', 300: 'SC-90728', 350: 'SC-90729', 400: 'SC-90730', 500: 'SC-90732', 600: 'SC-90732'},
-    escav: ['SC-90100', 'SC-90102', 'SC-90086', 'SC-90090'], escor: ['SC-101570', 'SC-101578', 'SC-101580', 'SC-101586'], reat: ['SC-93379', 'SC-93381', 'SC-93372', 'SC-93372'],
-    pav: {asfalto: 'SC-102098', paralelo: 'SC-101817', intertravado: 'SC-102988'}};
-  const FX = ['até 1,50 m', 'de 1,50 a 3,00 m', 'de 3,00 a 4,50 m', 'acima de 4,50 m'];
-  function itens(P, R, Q) {
-    const c = R.c, L = [], add = (g, k, cod, desc, un, qtd) => { if (qtd > 0.0005) L.push({g, k, cod: cod || '', desc, un, qtd}); };
-    add('Serviços preliminares', 'loc', 'SC-99063', 'Locação de rede de esgoto', 'm', Q.loc);
-    if (c.pav !== 'terra') add('Serviços preliminares', 'pav', SIN.pav[c.pav], c.pav === 'asfalto' ? 'Recomposição de revestimento em concreto asfáltico para fechamento de valas, inclusive demolição (esp. ' + (c.espPav * 100).toFixed(0) + ' cm)' : 'Recomposição de pavimento em ' + (c.pav === 'paralelo' ? 'paralelepípedos' : 'piso intertravado') + ' para fechamento de valas', c.pav === 'asfalto' ? 'm³' : 'm²', c.pav === 'asfalto' ? Q.pavA * c.espPav : Q.pavA);
-    FX.forEach((fx, k) => add('Movimento de terra', 'esc' + k, SIN.escav[k], 'Escavação mecanizada de vala, profundidade ' + fx, 'm³', Q.escav[k]));
-    FX.forEach((fx, k) => add('Movimento de terra', 'sco' + k, SIN.escor[k], 'Escoramento de vala (valas com mais de 1,25 m), profundidade ' + fx, 'm²', Q.escor[k]));
-    add('Movimento de terra', 'fundo', 'SC-101616', 'Preparo de fundo de vala (acerto do solo natural)', 'm²', Q.fundo);
-    add('Movimento de terra', 'areia', 'SC-101622', 'Berço e envoltória do tubo com areia', 'm³', Q.areia);
-    FX.forEach((fx, k) => add('Movimento de terra', 'rea' + k, SIN.reat[k], 'Reaterro mecanizado de vala com compactação, profundidade ' + fx, 'm³', Q.reat[k]));
-    add('Movimento de terra', 'carga', 'SC-100974', 'Carga, manobra e descarga do material excedente (com empolamento)', 'm³', Q.bota);
-    add('Movimento de terra', 'transp', 'SC-93589', 'Transporte do material excedente, DMT ' + c.dmt + ' km', 'm³·km', Q.bota * c.dmt);
-    Object.keys(Q.tubos).map(Number).sort((a, b) => a - b).forEach(D => add('Tubulação', 'tubo' + D, SIN.tubo[D], 'Tubo ' + (D > 400 ? 'de concreto' : 'de PVC') + ' para rede coletora de esgoto, DN ' + D + ', junta elástica — fornecimento e assentamento', 'm', Q.tubos[D]));
-    Object.keys(Q.juntas).map(Number).sort((a, b) => a - b).forEach(D => add('Tubulação', 'junta' + D, SIN.junta[D], 'Junta argamassada entre tubo DN ' + D + ' e o poço de visita', 'un', Q.juntas[D]));
-    const tl1 = Q.pvs.filter(p => p.tipo === 'TL' && p.prof <= 0.95).length, tl2 = Q.pvs.filter(p => p.tipo === 'TL' && p.prof > 0.95).length;
-    add('Poços de visita e acessórios', 'tl1', 'SC-97976', 'Terminal de limpeza / poço de inspeção Ø 0,60 m, profundidade até 0,95 m', 'un', tl1);
-    add('Poços de visita e acessórios', 'tl2', 'SC-97977', 'Terminal de limpeza / poço de inspeção Ø 0,60 m, profundidade até 1,45 m', 'un', tl2);
-    [1.2, 1.5].forEach(Dp => { const l = Q.pvs.filter(p => p.tipo === 'PV' && p.Dpv === Dp), s = Dp === 1.2 ? ['SC-97988', 'SC-97989'] : ['SC-97992', 'SC-97993'], t = Dp.toFixed(2).replace('.', ',');
-      add('Poços de visita e acessórios', 'pvb' + Dp, s[0], 'Base de poço de visita circular Ø ' + t + ' m, profundidade 1,40 m', 'un', l.length);
-      add('Poços de visita e acessórios', 'pva' + Dp, s[1], 'Acréscimo de poço de visita circular Ø ' + t + ' m (altura além de 1,40 m)', 'm', l.reduce((a, p) => a + Math.max(0, p.prof - 1.40), 0)); });
-    add('Poços de visita e acessórios', 'tampa', 'SC-98114', 'Tampão circular de ferro fundido Ø 0,60 m', 'un', Q.tampas);
-    add('Poços de visita e acessórios', 'tq', '', 'Tubo de queda em PV (tê, curva e tubo do mesmo DN) — composição própria', 'un', Q.tq);
-    add('Ligações prediais', 'ramal', 'SC-90694', 'Ramal predial em tubo de PVC DN 100 (' + Q.lig + ' ligações × ' + c.ramal + ' m)', 'm', Q.ramal);
-    add('Ligações prediais', 'selim', '', 'Selim / tê de ligação ao coletor e caixa de inspeção no passeio — composição própria ou padrão da concessionária', 'un', Q.lig);
+    pvScoTL: [[0.80, 'SCO-DR 20.15.0050'], [1.00, 'SCO-DR 20.15.0053']],
+    pvSco: [[1.05, '0056'], [1.20, '0059'], [1.40, '0062'], [1.50, '0065'], [1.60, '0068'], [1.70, '0071'], [2.00, '0074'], [2.30, '0077'], [2.60, '0080'], [3.20, '0083'], [3.50, '0086'], [3.80, '0089'], [4.10, '0092'], [4.40, '0095'], [4.70, '0098'], [5.00, '0101']],
+    rec: {pvc: {s: {100: 'SC-106109'}, c: {100: 'SCO-DR 05.45.0200', 150: 'SCO-DR 05.45.0203', 200: 'SCO-DR 05.45.0206'}},
+      pead: {s: {110: 'SC-103376', 160: 'SC-103377', 200: 'SC-103379'}, c: {}},
+      fofo: {s: {}, c: {80: 'SCO-DR 10.05.0050', 100: 'SCO-DR 10.05.0053', 150: 'SCO-DR 10.05.0056', 200: 'SCO-DR 10.05.0059', 250: 'SCO-DR 10.05.0062', 300: 'SCO-DR 10.05.0065'}}},
+    bombaSco: [[1, 'SCO-EQ 35.10.0050'], [2, 'SCO-EQ 35.10.0100'], [3.5, 'SCO-EQ 35.10.0150'], [8, 'SCO-EQ 35.10.0250'], [15, 'SCO-EQ 35.10.0262']],
+    regSco: {80: 'SCO-DR 15.10.0025', 100: 'SCO-DR 15.10.0056', 110: 'SCO-DR 15.10.0056', 150: 'SCO-DR 15.10.0059', 160: 'SCO-DR 15.10.0059'},
+    regSin: {50: 'SC-103527', 80: 'SC-103528', 100: 'SC-103529', 110: 'SC-103529', 150: 'SC-103530', 160: 'SC-103530', 200: 'SC-103531', 250: 'SC-103532', 300: 'SC-103533'},
+    retSin: {100: 'SC-103539', 110: 'SC-103539', 150: 'SC-103540', 160: 'SC-103540', 200: 'SC-103541'}, retSco: {150: 'SCO-IT 10.35.0550', 160: 'SCO-IT 10.35.0550'},
+    pav: {asfalto: {sinapi: 'SC-102098', sco: 'SCO-BP 10.05.0500', emop: '08.015.0068'}, paralelo: {sinapi: 'SC-101817'}, intertravado: {sinapi: 'SC-102988'}}
+  };
+  const ff = (v, d) => (+v).toFixed(d === undefined ? 2 : d).replace('.', ',');
+  const pick = (tab, v) => { for (const [lim, cod] of tab) if (v <= lim + 1e-9) return cod; return null; };
+  function itens(P, R, Q, sol) {
+    sol = sol || 'rec';
+    const c = R.c, L = [], gm = 1.6;   /* t/m³ do solo (composições EMOP/SCO em tonelada) */
+    const add = (g, k, nome, un, q, cod, memo, qb) => { if (q > 0.0005) L.push({g, k, nome, un, q, cod: cod || {}, memo: memo || '', qb: qb || null}); };
+    const FX = ['até 1,50 m', 'de 1,50 a 3,00 m', 'de 3,00 a 4,50 m', 'acima de 4,50 m'];
+    const G = GRUPOS;
+    /* preliminares */
+    add(G[0], 'loc', 'Locação da rede coletora', 'm', Q.loc, {sinapi: 'SC-99063'}, 'Extensão total da rede, recalque e sifões: ' + ff(Q.loc) + ' m');
+    if (c.pav !== 'terra' && Q.pavA > 0 && c.pav === 'asfalto') add(G[0], 'dem', 'Demolição do pavimento asfáltico sobre as valas e cavas', 'm²', Q.pavA, {emop: '05.002.0005', sinapi: false, sco: false}, 'Área = Σ extensão × (largura da vala + 0,30 m) + cavas dos PVs = ' + ff(Q.pavA) + ' m² (no SINAPI a demolição já está na recomposição)');
+    /* valas */
+    FX.forEach((fx, k) => add(G[1], 'esc' + k, 'Escavação mecanizada de vala, profundidade ' + fx, 'm³', Q.escav[k], {sinapi: CS.escS[k], emop: CS.escE[k], sco: CS.escC}, 'Σ extensão × largura × profundidade média dos trechos nesta faixa'));
+    FX.forEach((fx, k) => add(G[1], 'sco' + k, 'Escoramento de vala (mais de 1,25 m — NR-18), profundidade ' + fx, 'm²', Q.escor[k], {sinapi: CS.scoS[k], sco: CS.scoC[k]}, '2 paredes × extensão × profundidade'));
+    add(G[1], 'fundo', 'Preparo e regularização do fundo de vala', 'm²', Q.fundo, {sinapi: 'SC-101616'}, 'Σ extensão × largura da vala');
+    add(G[1], 'areia', 'Berço e envoltória do tubo (areia / pó de pedra)', 'm³', Q.areia, {sinapi: 'SC-101622', sco: 'SCO-BP 05.05.0100', emop: '06.088.0010'}, 'Largura × (berço ' + ff(c.berco) + ' + DE + envoltória ' + ff(c.envolt) + ' m) − volume do tubo');
+    FX.forEach((fx, k) => add(G[1], 'rea' + k, 'Reaterro compactado de vala, profundidade ' + fx, 'm³', Q.reat[k], {sinapi: CS.reaS[k], emop: CS.reaE, sco: CS.reaC}, 'Escavação − berço/envoltória − tubo'));
+    /* cavas dos PVs */
+    FX.forEach((fx, k) => add(G[2], 'cesc' + k, 'Escavação mecanizada da cava dos PVs, profundidade ' + fx, 'm³', Q.cavaEsc[k], {sinapi: CS.escS[k], emop: CS.escE[k], sco: CS.escC}, 'Cava quadrada de lado Ø externo + 2 × ' + ff(c.folgaCava) + ' m, altura = profundidade + laje + lastro, menos o trecho das valas dentro da cava'));
+    FX.forEach((fx, k) => add(G[2], 'csco' + k, 'Escoramento da cava dos PVs, profundidade ' + fx, 'm²', Q.cavaEscor[k], {sinapi: CS.scoS[k], sco: CS.scoC[k]}, '4 lados × altura, menos as aberturas das valas'));
+    add(G[2], 'clastro', 'Lastro de brita no fundo da cava dos PVs e elevatórias', 'm³', Q.cavaLastro, {sinapi: false, sco: 'SCO-DR 55.05.0050', emop: '06.088.0010'}, 'Círculo de Ø externo + 0,20 m × ' + ff(c.lastro) + ' m (no SINAPI o lastro já está na composição do PV)');
+    FX.forEach((fx, k) => add(G[2], 'crea' + k, 'Reaterro compactado da cava dos PVs, profundidade ' + fx, 'm³', Q.cavaReat[k], {sinapi: CS.reaS[k], emop: CS.reaE, sco: CS.reaC}, 'Escavação da cava × (1 − área do PV / área da cava)'));
+    const tSolo = Q.bota / c.empol * gm;
+    add(G[2], 'carga', 'Carga, manobra e descarga do solo excedente', 'm³', Q.bota, {sinapi: 'SC-100974', emop: '04.011.0052', sco: 'SCO-TC 10.05.0350'}, '(Escavação total ' + ff(Q.escTot) + ' − reaterro ' + ff(Q.reatTot) + ') × empolamento ' + ff(c.empol), {emop: tSolo, sco: tSolo});
+    add(G[2], 'transp', 'Transporte do solo excedente ao bota-fora, DMT ' + ff(c.dmt, 1) + ' km', 'm³·km', Q.bota * c.dmt, {sinapi: 'SC-93589', emop: '04.005.0143', sco: 'SCO-TC 05.05.0150'}, 'Volume solto × DMT (EMOP/SCO em t·km com ' + ff(gm, 1) + ' t/m³)', {emop: tSolo * c.dmt, sco: tSolo * c.dmt});
+    /* tubulação */
+    const outro = m => m === 'pvcm' ? 'pvcc' : m === 'pvcc' ? 'pvcm' : m;
+    Object.keys(Q.tubos).sort((a, b) => +a.split('|')[1] - +b.split('|')[1] || a.localeCompare(b)).forEach(k => {
+      let [m, D] = k.split('|'); D = +D; if (sol === 'tub' && m !== 'conc') m = outro(m);
+      const T = CS.tubo[m] || CS.tubo.pvcm;
+      add(G[3], 'tubo' + k, 'Tubo de ' + T.nome + ' para rede coletora de esgoto, DN ' + D + ', junta elástica — fornecimento e assentamento', 'm', Q.tubos[k], {sinapi: T.s[D] || null, sco: T.c[D] || null}, 'Σ extensão dos trechos DN ' + D);
+    });
+    Object.keys(Q.juntas).map(Number).sort((a, b) => a - b).forEach(D => add(G[3], 'junta' + D, 'Junta argamassada entre tubo DN ' + D + ' e o poço de visita', 'un', Q.juntas[D], {sinapi: CS.junta[D] || null, sco: false, emop: false}, '2 por trecho'));
+    Object.keys(Q.tqL).map(Number).sort((a, b) => a - b).forEach(D => { const m = D > 400 ? 'conc' : (c.mat || 'pvcm'), T = CS.tubo[m] || CS.tubo.pvcm;
+      add(G[3], 'tq' + D, 'Tubo de queda DN ' + D + ' junto ao PV (tubo vertical; tê e curva no mesmo DN)', 'm', Q.tqL[D], {sinapi: T.s[D] || null, sco: T.c[D] || null}, 'Σ alturas dos degraus ≥ ' + ff(c.degTQ) + ' m'); });
+    /* poços de visita */
+    const pvs = Q.pvs, pre = sol !== 'alv';
+    const tls = pvs.filter(p => p.tipo === 'TL');
+    if (tls.length) {
+      const s1 = tls.filter(p => p.prof <= (pre ? 0.90 : 0.95)), s2 = tls.filter(p => p.prof > (pre ? 0.90 : 0.95)), sc = {}, mE = tls.reduce((a, p) => a + p.prof, 0);
+      add(G[4], 'tl1', 'Terminal de limpeza / poço de inspeção Ø 0,60 m, ' + (pre ? 'pré-moldado, até 0,90 m' : 'alvenaria, até 0,95 m'), 'un', s1.length, {sinapi: pre ? 'SC-97974' : 'SC-97976', sco: false, emop: false}, s1.length + ' terminais rasos');
+      add(G[4], 'tl2', 'Terminal de limpeza / poço de inspeção Ø 0,60 m, ' + (pre ? 'pré-moldado, até 1,40 m' : 'alvenaria, até 1,45 m'), 'un', s2.length, {sinapi: pre ? 'SC-97975' : 'SC-97977', sco: false, emop: false}, s2.length + ' terminais');
+      tls.forEach(p => { const cod = pick(CS.pvScoTL, p.prof) || 'SCO-DR 20.15.' + (pick(CS.pvSco, p.prof) || '0101'); sc[cod] = (sc[cod] || 0) + 1; });
+      Object.keys(sc).forEach(cod => add(G[4], 'tlsco' + cod, 'Terminal / poço de inspeção em anéis de concreto (SCO-Rio, pela profundidade útil)', 'un', sc[cod], {sco: cod, sinapi: false, emop: false}, sc[cod] + ' un'));
+      add(G[4], 'tlemop', 'Corpo de poço de inspeção em anéis pré-moldados Ø 0,60 m (EMOP, pela altura útil)', 'm', mE, {emop: '06.017.0080', sinapi: false, sco: false}, 'Σ profundidades dos terminais');
+    }
+    [1.2, 1.5].forEach(Dp => {
+      const l = pvs.filter(p => p.tipo === 'PV' && p.Dpv === Dp); if (!l.length) return;
+      const t = ff(Dp), h0 = pre ? (Dp === 1.2 ? 1.60 : 1.35) : 1.40, acr = l.reduce((a, p) => a + Math.max(0, p.prof - h0), 0);
+      const sb = pre ? (Dp === 1.2 ? 'SC-102139' : 'SC-102141') : (Dp === 1.2 ? 'SC-97988' : 'SC-97992'), sa = pre ? (Dp === 1.2 ? 'SC-97987' : 'SC-97991') : (Dp === 1.2 ? 'SC-97989' : 'SC-97993');
+      add(G[4], 'pvb' + Dp, 'Base de poço de visita circular Ø ' + t + ' m ' + (pre ? 'em concreto pré-moldado' : 'em alvenaria') + ', profundidade ' + ff(h0) + ' m (inclui lastro de brita)', 'un', l.length, {sinapi: sb, sco: false, emop: false}, l.length + ' PVs');
+      add(G[4], 'pva' + Dp, 'Acréscimo de poço de visita Ø ' + t + ' m (altura além de ' + ff(h0) + ' m)', 'm', acr, {sinapi: sa, sco: false, emop: false}, 'Σ (profundidade − ' + ff(h0) + ' m)');
+      const sc = {}; l.forEach(p => { const cod = Dp === 1.5 ? 'SCO-DR 20.20.0500' : 'SCO-DR 20.15.' + (pick(CS.pvSco, p.prof) || '0101'); sc[cod] = (sc[cod] || 0) + 1; });
+      Object.keys(sc).forEach(cod => add(G[4], 'pvsco' + Dp + cod, 'Poço de visita para esgoto Ø ' + (Dp === 1.2 ? '1,10' : '1,50') + ' m (SCO-Rio, modelo da profundidade útil imediatamente acima)', 'un', sc[cod], {sco: cod, sinapi: false, emop: false}, sc[cod] + ' PVs'));
+    });
+    add(G[4], 'tampa', 'Tampão circular de ferro fundido Ø 0,60 m', 'un', Q.tampas, {sinapi: 'SC-98114', sco: 'SCO-DR 35.05.0200', emop: '06.016.0007'}, 'Um por PV/TL e dois por elevatória');
+    /* ligações prediais */
+    add(G[5], 'lig', 'Ligação predial de esgoto (selim, curva e caixa de inspeção)', 'un', Q.lig, {sinapi: 'SC-104076', sco: 'SCO-IT 15.60.0103'}, Q.lig + ' ligações (' + (c.nLig > 0 ? 'informadas' : 'população final ÷ ' + ff(c.habLig, 1) + ' hab/ligação') + '); SINAPI: só o selim — caixa de inspeção à parte');
+    add(G[5], 'ramal', 'Ramal predial em tubo de PVC DN 100 (coletor predial)', 'm', Q.ramal, {sinapi: 'SC-104085', sco: false}, Q.lig + ' × ' + ff(c.ramal, 1) + ' m (SCO: o tubo está na ligação)');
+    add(G[5], 'ramesc', 'Escavação manual da vala do ramal (0,60 × 1,00 m)', 'm³', Q.ramalEsc, {sinapi: 'SC-93358', sco: false}, 'Ramal × 0,60 × 1,00 (SCO por metro no item seguinte)');
+    add(G[5], 'ramrea', 'Reaterro manual compactado da vala do ramal', 'm³', Q.ramalEsc, {sinapi: 'SC-93382', sco: false}, 'Igual à escavação (o tubo DN 100 é desprezível)');
+    add(G[5], 'ramsco', 'Escavação e reaterro de vala para ligação predial de esgoto (SCO-Rio)', 'm', Q.ramal, {sco: 'SCO-MT 05.20.0100', sinapi: false, emop: false}, 'Extensão dos ramais');
+    /* elevatórias e recalque */
+    Q.eee.forEach((e, i) => {
+      const g = G[6], pre2 = 'eee' + i, dn = e.dn;
+      add(g, pre2 + 'c', e.nome + ' — poço úmido em concreto armado Ø ' + ff(e.Dp) + ' m, parede 0,20 m', 'm³', e.conc, {sco: 'SCO-ET 05.60.0200'}, 'Parede π·(Dₑ² − Dᵢ²)/4 × ' + ff(e.prof) + ' m + lajes de fundo (0,25) e de cobertura (0,20) − aberturas');
+      add(g, pre2 + 'b', e.nome + ' — conjunto motobomba submersível para esgoto, ' + ff(e.Pm, 1).replace(',0', '') + ' cv (' + ff(e.Qb) + ' L/s × ' + ff(e.AMT, 1) + ' mca)', 'un', e.nB,
+        {sco: pick(CS.bombaSco, e.Pm) || false, sinapi: e.Pm <= 3.8 ? 'SC-102126' : e.Pm <= 10 ? 'SC-102128' : e.Pm <= 25 ? 'SC-102130' : null}, '1 em operação + 1 reserva');
+      add(g, pre2 + 'r', e.nome + ' — válvula de retenção DN ' + dn, 'un', e.nB, {sinapi: CS.retSin[dn] || null, sco: CS.retSco[dn] || null}, 'Uma por bomba');
+      add(g, pre2 + 'g', e.nome + ' — registro de gaveta DN ' + dn, 'un', e.nB, {sinapi: CS.regSin[dn] || null, sco: CS.regSco[dn] || null}, 'Um por bomba');
+      add(g, pre2 + 'v', e.nome + ' — ventosa tríplice no ponto alto do recalque', 'un', e.Lr > 50 ? 1 : 0, {sco: 'SCO-DR 15.45.0050'}, 'Recalque com ' + ff(e.Lr, 0) + ' m');
+      add(g, pre2 + 'q', e.nome + ' — quadro de comando, boias de nível, grade de barras e barrilete (composição própria)', 'un', 1, {}, 'Orçar por cotação de fornecedor');
+    });
+    Object.keys(Q.recalque).forEach(k => { const [m, dn] = k.split('|'), T = CS.rec[m] || CS.rec.pvc;
+      add(G[6], 'rec' + k, 'Tubo de recalque ' + (RECALQUE[m] || RECALQUE.pvc).nome + ', DN ' + dn, 'm', Q.recalque[k], {sinapi: T.s[+dn] || null, sco: T.c[+dn] || null}, 'Extensão da linha de recalque'); });
+    Object.keys(Q.sifao).forEach(k => { const [m, dn] = k.split('|'), T = CS.rec[m] || CS.rec.fofo;
+      add(G[7], 'sif' + k, 'Tubo do sifão invertido em ' + (RECALQUE[m] || RECALQUE.fofo).nome + ', DN ' + dn, 'm', Q.sifao[k], {sinapi: T.s[+dn] || null, sco: T.c[+dn] || null}, 'Extensão × número de linhas'); });
+    /* pavimentação */
+    const pv = CS.pav[c.pav];
+    if (pv && Q.pavA > 0) {
+      const asf = c.pav === 'asfalto', vol = Q.pavA * c.espPav;
+      add(G[8], 'pav', asf ? 'Recomposição do revestimento em concreto asfáltico sobre as valas e cavas (esp. ' + ff(c.espPav * 100, 0) + ' cm)' : 'Recomposição de pavimento em ' + (c.pav === 'paralelo' ? 'paralelepípedos' : 'blocos intertravados'), asf ? 'm³' : 'm²', asf ? vol : Q.pavA, pv,
+        'Área ' + ff(Q.pavA) + ' m²' + (asf ? ' × ' + ff(c.espPav) + ' m (SCO em m², EMOP em t com 2,4 t/m³)' : ''), asf ? {sco: Q.pavA, emop: vol * 2.4} : null);
+    }
+    add(G[8], 'pas', 'Recomposição de passeio sobre as valas em calçada (composição própria / da prefeitura)', 'm²', Q.pasA, {}, 'Trechos marcados como passeio');
     return L;
   }
 
-  /* ── gerador: das ruas (eixos) para PVs e trechos, com o sentido do escoamento ── */
+  /* ── sugestão de elevatória: onde a rede passa da profundidade máxima ou chega abaixo do lançamento ── */
+  function sugerirEEE(P) {
+    const out = [], R0 = calc(P); if (!R0.ok) return {erro: 'Calcule a rede primeiro.', lista: out};
+    P.eee = P.eee || [];
+    for (let volta = 0; volta < 6; volta++) {
+      const R = volta ? calc(P) : R0, c = R.c;
+      const fundo = R.ordem.map(id => R.tr[id]).find(r => !r.recq && !r.sif && Math.max(r.profM, r.profJ) > c.profMax + 0.005 && !P.eee.some(e => e.no === r.de));
+      if (fundo) {
+        let N = fundo.de; if (R.no[N] && R.no[N].prof > c.profMax) { const ant = (R.ins[N] || []).map(t => R.tr[t.id]).filter(r => !r.recq)[0]; if (ant && !P.eee.some(e => e.no === ant.de)) N = ant.de; }
+        const cam = []; let n = N, k = 0; while (R.outs[n] && R.outs[n][0] && k++ < 80) { n = R.outs[n][0].para; cam.push(n); }
+        if (!cam.length) break;
+        const nos = new Map(P.nos.map(q => [q.id, q])), ctN = +nos.get(N).ct;
+        const cand = []; for (const q of cam) { cand.push(q); if ((R.ins[q] || []).length > 1) break; }   /* o recalque termina no primeiro PV que recebe outra rede */
+        let M = cand[0]; cand.forEach((q, i) => { if (+nos.get(q).ct + i * 1e-6 >= +nos.get(M).ct) M = q; });
+        const e = {id: 'e' + (Date.now() % 1e7) + volta, no: N, ate: M, nome: ''};
+        P.eee.push(e); out.push({motivo: 'profundidade ' + ff(Math.max(fundo.profM, fundo.profJ)) + ' m no trecho ' + (fundo.nome || fundo.id), e});
+        continue;
+      }
+      const saida = Object.values(R.no).find(x => { const nn = P.nos.find(q => q.id === x.id); return x.fim && nn && nn.cfEx != null && nn.cfEx !== '' && x.cf < +nn.cfEx - 0.0005 && !P.eee.some(e => e.no === x.id); });
+      if (saida) { const nn = P.nos.find(q => q.id === saida.id), e = {id: 'e' + (Date.now() % 1e7) + volta, no: saida.id, ext: {nome: 'lançamento', cota: r3(+nn.cfEx + 0.50), L: 30}, nome: ''};
+        P.eee.push(e); out.push({motivo: 'rede chega abaixo da cota do lançamento em ' + nomeNo(nn), e}); continue; }
+      break;
+    }
+    return {lista: out};
+  }
+
   function idw(pts, x, y) {
     if (!pts || !pts.length) return null; let sw = 0, sz = 0;
     for (const p of pts) { const d2 = (p.x - x) ** 2 + (p.y - y) ** 2; if (d2 < 1e-6) return +p.z; const w = 1 / (d2 * d2); sw += w; sz += w * p.z; }
@@ -534,7 +815,7 @@ const ESG = (() => {
   }
   const novo = () => ({v: 1, nome: 'Projeto sem nome', local: '', autor: '', crit: Object.assign({}, CRIT0), ruas: [], topo: [], saida: null, nos: [], trechos: [], orc: {}});
 
-  return {G, GAMA, SERIE, CRIT0, crit, matDe, geo, qMan, lamina, hid, iMinTau, iMaxV, calc, geometria, quant, itens, gerar, exemplo, novo, nomeNo, FX, idw, r3};
+  return {G, GAMA, SERIE, CRIT0, crit, matDe, geo, qMan, lamina, hid, iMinTau, iMaxV, calc, geometria, quant, itens, SOL, GRUPOS, sugerirEEE, tuboGeo, TUBOS, RECALQUE, eeeCalc, gerar, exemplo, novo, nomeNo, idw, r3, ff};
 })();
 /* ════════════════════════════════════════════════════════════════════
    TELA — estado, projetos, abas Dados e Dimensionamento
@@ -555,7 +836,7 @@ let DB = {cur: '', list: {}}, CFG = {tema: '', amb: '', tab: 'dados'}, P = null,
 let SEL = null, UNDO = [], REDO = [];
 const ABAS = [['dados', 'Dados'], ['tracado', 'Traçado'], ['dim', 'Dimensionamento'], ['perfil', 'Perfis e seções'], ['t3', '3D'], ['orc', 'Orçamento'], ['memo', 'Memorial']];
 
-function migrar(p) { const b = ESG.novo(); p = Object.assign(b, p || {}); p.crit = Object.assign({}, ESG.CRIT0, p.crit || {}); ['ruas', 'topo', 'nos', 'trechos'].forEach(k => { if (!Array.isArray(p[k])) p[k] = []; }); p.orc = p.orc || {}; p.seq = p.seq || 1000; return p; }
+function migrar(p) { const b = ESG.novo(); p = Object.assign(b, p || {}); p.crit = Object.assign({}, ESG.CRIT0, p.crit || {}); ['ruas', 'topo', 'nos', 'trechos'].forEach(k => { if (!Array.isArray(p[k])) p[k] = []; }); p.orc = p.orc || {}; p.seq = p.seq || 1000; if (!Array.isArray(p.eee)) p.eee = []; p.crit.diMan = JSON.parse(JSON.stringify(p.crit.diMan || {})); return p; }
 function carregar() {
   CFG = Object.assign(CFG, lsGet(LS_CFG, {})); DB = lsGet(LS_DB, null) || {cur: '', list: {}};
   if (!DB.cur || !DB.list[DB.cur]) { const id = uid(); DB.list[id] = ESG.novo(); DB.cur = id; }
@@ -600,8 +881,10 @@ const CAMPOS = {
     ['C', 'Coeficiente de retorno C', '', 2, 'Parte da água que vira esgoto (0,80)'], ['K1', 'K1 — dia de maior consumo', '', 2], ['K2', 'K2 — hora de maior consumo', '', 2], ['tInf', 'Infiltração', 'L/s·km', 3, 'NBR 9649: 0,05 a 1,0'], ['qMin', 'Vazão mínima do trecho', 'L/s', 2, 'NBR 9649: 1,5 L/s']],
   taxa: [['txI', 'Taxa linear inicial', 'L/s·km', 3], ['txF', 'Taxa linear final', 'L/s·km', 3]],
   hid: [['n', 'Manning n', '', 3], ['tau', 'Tensão trativa mínima', 'Pa', 2], ['dMin', 'Diâmetro mínimo', 'mm', 0, 'Norma admite DN 100; usual DN 150'], ['yD', 'Lâmina máxima y/D', '', 2, 'NBR 9649: 0,75'], ['yDvc', 'y/D se V > V crítica', '', 2, 'NBR 9649: 0,50'], ['vMax', 'Velocidade máxima', 'm/s', 1, 'NBR 9649: 5 m/s']],
-  rede: [['rec', 'Recobrimento mínimo', 'm', 2, '0,90 no leito da via · 0,65 no passeio'], ['profMax', 'Profundidade para alerta', 'm', 1], ['degTQ', 'Degrau que pede tubo de queda', 'm', 2, 'NBR 9649: a partir de 0,50 m'], ['distPV', 'Distância entre PVs ao gerar', 'm', 0], ['distMax', 'Distância máxima entre PVs', 'm', 0, 'Alcance da limpeza: 100 m'], ['profTL', 'Cabeceira com TL até', 'm', 2, 'Mais fundo que isso vira PV']],
-  vala: [['folga', 'Folga da vala (largura = DN + folga)', 'm', 2], ['berco', 'Berço de areia', 'm', 2], ['envolt', 'Envoltória acima do tubo', 'm', 2], ['espPav', 'Espessura do asfalto reposto', 'm', 2], ['habLig', 'Habitantes por ligação', 'hab', 1], ['ramal', 'Comprimento do ramal predial', 'm', 1], ['dmt', 'DMT do bota-fora', 'km', 1], ['largRua', 'Largura da rua (desenho)', 'm', 1]]
+  rede: [['rec', 'Recobrimento mínimo na via', 'm', 2, 'NBR 9649: 0,90 m no leito da via'], ['recPas', 'Recobrimento mínimo no passeio', 'm', 2, 'NBR 9649: 0,65 m — marque o trecho como “passeio” no Traçado'], ['profMax', 'Profundidade para alerta', 'm', 1], ['degTQ', 'Degrau que pede tubo de queda', 'm', 2, 'NBR 9649: a partir de 0,50 m'], ['distPV', 'Distância entre PVs ao gerar', 'm', 0], ['distMax', 'Distância máxima entre PVs', 'm', 0, 'Alcance da limpeza: 100 m'], ['profTL', 'Cabeceira com TL até', 'm', 2, 'Mais fundo que isso vira PV']],
+  vala: [['folga', 'Folga da vala (largura = DN + folga)', 'm', 2], ['berco', 'Berço de areia', 'm', 2], ['envolt', 'Envoltória acima do tubo', 'm', 2], ['espPav', 'Espessura do asfalto reposto', 'm', 2], ['habLig', 'Habitantes por ligação', 'hab', 1], ['ramal', 'Comprimento do ramal predial', 'm', 1], ['dmt', 'DMT do bota-fora', 'km', 1], ['largRua', 'Largura da rua (desenho)', 'm', 1], ['folgaCava', 'Folga da cava do PV (cada lado)', 'm', 2, 'Espaço de trabalho em volta do PV'], ['lastro', 'Lastro de brita sob o PV', 'm', 2], ['empol', 'Empolamento do solo', '', 2]],
+  eee: [['eCiclo', 'Ciclo mínimo das bombas', 'min', 0, 'Define o volume útil: V = Q·T/4'], ['eDet', 'Detenção máxima no poço', 'min', 0, 'NBR 12208: 30 min'], ['eEta', 'Rendimento do conjunto', '', 2], ['eFolgaMotor', 'Folga do motor', '%', 0], ['eVmin', 'Velocidade mínima no recalque', 'm/s', 2], ['eVmax', 'Velocidade máxima no recalque', 'm/s', 2], ['eKloc', 'Σ K das perdas localizadas', '', 1], ['eSub', 'Submergência mínima da bomba', 'm', 2], ['eRecRec', 'Recobrimento do recalque', 'm', 2], ['K3', 'K3 — hora de menor consumo', '', 2]],
+  sif: [['sVmin', 'Velocidade mínima (autolimpeza)', 'm/s', 2], ['sDmin', 'Diâmetro mínimo', 'mm', 0], ['sLinhas', 'Número de linhas', '', 0, '2 = uma para a vazão inicial e outra de reforço'], ['sProt', 'Proteção sob o obstáculo', 'm', 2]]
 };
 const campo = c => `<div class="f"><label>${c[1]}${c[2] ? ' <small>(' + c[2] + ')</small>' : ''}</label><input data-crit="${c[0]}" inputmode="decimal" value="${fm(P.crit[c[0]], c[3]).replace(/\./g, '')}"/>${c[4] ? '<div class="aj">' + c[4] + '</div>' : ''}</div>`;
 function inicioRapido() {
@@ -637,7 +920,7 @@ function vDados(m) {
   <div class="card"><h2>Rede, PVs e vala</h2><div class="fg">${CAMPOS.rede.map(campo).join('')}</div>
     <h3>Vala e orçamento</h3><div class="fg">${CAMPOS.vala.map(campo).join('')}
     <div class="f"><label>Pavimento a repor</label><select data-sel="pav">${[['asfalto', 'Asfalto'], ['paralelo', 'Paralelepípedo'], ['intertravado', 'Intertravado'], ['terra', 'Rua de terra (sem reposição)']].map(o => `<option value="${o[0]}"${c.pav === o[0] ? ' selected' : ''}>${o[1]}</option>`).join('')}</select></div></div></div>
-  </div>`;
+  ${dadosExtra()}</div>`;
 }
 
 /* ══ ABA 3 — DIMENSIONAMENTO ══ */
@@ -657,21 +940,21 @@ function vDim(m) {
   const dn = t => `<select data-tfix="D" data-id="${t.id}"><option value="">auto</option>${ESG.SERIE.map(D => `<option${+t.Dfix === D ? ' selected' : ''}>${D}</option>`).join('')}</select>`;
   const lin = R.coletores.map(col => `<tr class="grp"><td colspan="24">Coletor ${col.num} — ${fm(col.L, 1)} m</td></tr>` + col.trechos.map(id => {
     const r = R.tr[id], t = trDe(id), st = stTr(id), rua = ruaDe(t.rua);
-    return `<tr data-tr="${id}" class="${SEL && SEL.id === id ? 'sel' : ''}"><td><b>${r.nome}</b></td><td class="l">${esc(rua ? rua.nome : '—')}</td><td class="l">${esc(nomeNo(noDe(r.de)))}</td><td class="l">${esc(nomeNo(noDe(r.para)))}</td>
+    return `<tr data-tr="${id}" class="${SEL && SEL.id === id ? 'sel' : ''}"><td><b>${r.nome}</b>${r.recq ? '<br><small>recalque</small>' : r.sif ? '<br><small>sifão ' + r.sif.n + '×</small>' : t.loc === 'passeio' ? '<br><small>passeio</small>' : ''}</td><td class="l">${esc(rua ? rua.nome : '—')}</td><td class="l">${esc(nomeNo(noDe(r.de)))}</td><td class="l">${esc(nomeNo(noDe(r.para)))}</td>
       <td>${fm(r.L, 1)}</td><td><select data-tlad data-id="${id}"><option value="2"${t.lados == null || +t.lados === 2 ? ' selected' : ''}>2 lados</option><option value="1"${+t.lados === 1 ? ' selected' : ''}>1 lado</option><option value="0"${+t.lados === 0 ? ' selected' : ''}>sem</option></select></td>
       <td>${fm(r.QjI, 2)}</td><td>${fm(r.QjF, 2)}</td><td>${dn(t)}</td><td>${fm(r.iTer * 100, 2)}</td>
       <td><input data-tfix="I" data-id="${id}" placeholder="${fm(r.I * 100, 3)}" value="${t.iFix > 0 ? fm(t.iFix * 100, 3) : ''}" inputmode="decimal" title="Vazio = automático"/></td><td>${fm(r.Imin * 100, 3)}</td>
       <td>${fm(r.ctM, 3)}</td><td>${fm(r.ctJ, 3)}</td><td>${fm(r.ciM, 3)}</td><td>${fm(r.ciJ, 3)}</td><td class="${r.profM > R.c.profMax ? 'w' : ''}">${fm(r.profM, 2)}</td><td class="${r.profJ > R.c.profMax ? 'w' : ''}">${fm(r.profJ, 2)}</td>
       <td>${fm(r.hI.yd, 2)}</td><td class="${r.okLam ? '' : 'e'}">${r.hF.carga ? 'cheio' : fm(r.hF.yd, 2)}</td><td>${fm(r.hI.V, 2)}</td><td class="${r.hF.V > R.c.vMax ? 'e' : ''}">${fm(r.hF.V, 2)}</td>
       <td class="${r.hI.tau < r.tauMin - 0.005 ? 'e' : ''}">${fm(r.hI.tau, 2)}</td><td class="${st}">${st === 'e' ? '✖' : st === 'w' ? '⚠' : '✔'}</td></tr>`; }).join('')).join('');
-  const pvs = Object.values(R.no).map(x => { const n = noDe(x.id); return `<tr><td><b>${esc(nomeNo(n))}</b></td><td class="l">${x.tipo === 'TL' ? 'TL — terminal de limpeza' : x.fim ? 'PV — lançamento' : x.cab ? 'PV — cabeceira' : 'PV'}</td><td>${fm(x.ct, 3)}</td><td>${fm(x.cf, 3)}</td><td class="${x.prof > R.c.profMax ? 'w' : ''}">${fm(x.prof, 2)}</td><td>${fm(x.Dpv, 2)}</td><td>${x.Dmax}</td><td class="l">${x.degraus.filter(g => g.h > 0.0005).map(g => (g.h >= R.c.degTQ ? 'tubo de queda ' : 'degrau ') + fm(g.h, 2) + ' m (' + R.tr[g.tr].nome + ')').join(' · ') || '—'}</td><td>${fm(x.QF, 2)}</td></tr>`; }).join('');
+  const pvs = Object.values(R.no).map(x => { const n = noDe(x.id); return `<tr><td><b>${esc(nomeNo(n))}</b></td><td class="l">${x.tipo === 'EEE' ? 'EEE — estação elevatória' : x.tipo === 'TL' ? 'TL — terminal de limpeza' : x.fim ? 'PV — lançamento' : x.cab ? 'PV — cabeceira' : 'PV'}</td><td>${fm(x.ct, 3)}</td><td>${fm(x.cf, 3)}</td><td class="${x.prof > R.c.profMax ? 'w' : ''}">${fm(x.prof, 2)}</td><td>${fm(x.Dpv, 2)}</td><td>${x.Dmax}</td><td class="l">${x.degraus.filter(g => g.h > 0.0005).map(g => (g.h >= R.c.degTQ ? 'tubo de queda ' : 'degrau ') + fm(g.h, 2) + ' m (' + R.tr[g.tr].nome + ')').join(' · ') || '—'}</td><td>${fm(x.QF, 2)}</td></tr>`; }).join('');
   m.innerHTML = `<div class="card"><div class="barra"><b style="margin-right:6px">Verificação</b><span class="esp"></span>
       <button class="bt peq" data-act="dividir">➗ Dividir trechos longos</button><button class="bt peq" data-act="soltar">🧹 Voltar tudo ao automático</button><button class="bt peq" data-act="xlsDim">⬇ Planilha Excel</button></div>${listaVerif()}</div>
     <div class="card"><div class="barra"><h2 style="margin:0">Planilha de dimensionamento</h2><span class="mut" style="font-size:.8rem">DN e declividade vazios = automático (menor escavação que atende à norma). Clique na linha para ver o trecho no perfil.</span></div>
     <div class="tw"><table><thead><tr><th>Trecho</th><th class="l">Rua</th><th class="l">Mont.</th><th class="l">Jus.</th><th>L<small>m</small></th><th>Contribui</th><th>Q inicial<small>L/s</small></th><th>Q final<small>L/s</small></th><th>DN<small>mm</small></th><th>i terreno<small>%</small></th><th>i coletor<small>%</small></th><th>i mín.<small>%</small></th>
       <th>CT mont.</th><th>CT jus.</th><th>CC mont.</th><th>CC jus.</th><th>Prof. mont.<small>m</small></th><th>Prof. jus.<small>m</small></th><th>y/D inic.</th><th>y/D final</th><th>V inic.<small>m/s</small></th><th>V final<small>m/s</small></th><th>τ<small>Pa</small></th><th>OK</th></tr></thead><tbody>${lin}</tbody></table></div>
     <p class="mut" style="font-size:.78rem;margin:8px 0 0">CT = cota do terreno · CC = cota do coletor (geratriz inferior interna) · vazão de cálculo nunca menor que ${fm(R.c.qMin, 1)} L/s · τ calculada com a vazão inicial · lâmina e velocidade com a vazão final.</p></div>
-    <div class="card"><h2>Poços de visita e terminais de limpeza</h2><div class="tw" style="max-height:44vh"><table><thead><tr><th>PV</th><th class="l">Tipo</th><th>Cota terreno</th><th>Cota fundo</th><th>Prof.<small>m</small></th><th>Ø interno<small>m</small></th><th>Maior DN</th><th class="l">Degraus / tubo de queda</th><th>Q final<small>L/s</small></th></tr></thead><tbody>${pvs}</tbody></table></div></div>`;
+    ${eeeCards()}<div class="card"><h2>Poços de visita e terminais de limpeza</h2><div class="tw" style="max-height:44vh"><table><thead><tr><th>PV</th><th class="l">Tipo</th><th>Cota terreno</th><th>Cota fundo</th><th>Prof.<small>m</small></th><th>Ø interno<small>m</small></th><th>Maior DN</th><th class="l">Degraus / tubo de queda</th><th>Q final<small>L/s</small></th></tr></thead><tbody>${pvs}</tbody></table></div></div>`;
 }
 function dividirLongos() {
   let n = 0;
@@ -774,21 +1057,22 @@ function plConteudo(px, o) {
     const f = 0.25, mx = a.x + (b.x - a.x) * f, my = a.y + (b.y - a.y) * f, off = P.crit.largRua / 2 + 13 * px;
     s += `<text transform="translate(${mx} ${-my}) rotate(${ang})" y="${off}" font-size="${10.5 * px}" fill="${mut}" text-anchor="middle" font-weight="700" letter-spacing="${px}" paint-order="stroke" stroke="${halo}" stroke-width="${3 * px}" style="pointer-events:none">${esc(r.nome.toUpperCase())}</text>`; });
   /* trechos */
-  P.trechos.forEach(t => { const a = noDe(t.de), b = noDe(t.para); if (!a || !b) return; const r = R && R.ok && R.tr[t.id], cor = corTr(t.id), sel = SEL && SEL.tipo === 'tr' && SEL.id === t.id;
+  P.trechos.forEach(t => { const a = noDe(t.de), b = noDe(t.para); if (!a || !b) return; const r = R && R.ok && R.tr[t.id], cor = r && r.recq ? '#a21caf' : r && r.sif ? '#0369a1' : corTr(t.id), sel = SEL && SEL.tipo === 'tr' && SEL.id === t.id;
     const w = (r ? 2 + Math.min(4, r.D / 150) : 2) * px, L = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / L, uy = (b.y - a.y) / L, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
     if (sel) s += `<line x1="${a.x}" y1="${-a.y}" x2="${b.x}" y2="${-b.y}" stroke="${CORES.acc}" stroke-width="${w + 6 * px}" stroke-linecap="round" opacity=".35"/>`;
-    s += `<line x1="${a.x}" y1="${-a.y}" x2="${b.x}" y2="${-b.y}" stroke="${cor}" stroke-width="${w}" stroke-linecap="round" data-tr="${t.id}" style="cursor:pointer"/>`;
+    s += `<line x1="${a.x}" y1="${-a.y}" x2="${b.x}" y2="${-b.y}" stroke="${cor}" stroke-width="${w}" stroke-linecap="${r && r.recq ? 'butt' : 'round'}"${r && r.recq ? ` stroke-dasharray="${9 * px} ${5 * px}"` : ''} data-tr="${t.id}" style="cursor:pointer"/>`;
     s += `<line x1="${a.x}" y1="${-a.y}" x2="${b.x}" y2="${-b.y}" stroke="transparent" stroke-width="${14 * px}" data-tr="${t.id}" style="cursor:pointer"/>`;
     const ax = mx + ux * 5 * px, ay = my + uy * 5 * px, n = 4.5 * px; s += `<path d="M${ax} ${-ay}L${ax - ux * 2 * n - uy * n} ${-(ay - uy * 2 * n + ux * n)}L${ax - ux * 2 * n + uy * n} ${-(ay - uy * 2 * n - ux * n)}Z" fill="${cor}" style="pointer-events:none"/>`;
     if (r && PL.rot > 0 && L / px > (PL.rot > 1 ? 150 : 80)) { let ang = -Math.atan2(uy, ux) * 180 / Math.PI; if (ang > 90 || ang < -90) ang += 180;
-      const txt = PL.rot > 1 ? `${r.nome} · DN ${r.D} · ${fm(r.I * 100, 2)} % · ${fm(r.L, 1)} m` : `${r.nome} · DN ${r.D}`;
+      const txt = r.recq ? `${r.nome} · recalque DN ${r.D}` + (PL.rot > 1 ? ` · ${fm(r.L, 1)} m` : '') : r.sif ? `${r.nome} · sifão ${r.sif.n} × DN ${r.D}` : PL.rot > 1 ? `${r.nome} · DN ${r.D} · ${fm(r.I * 100, 2)} % · ${fm(r.L, 1)} m` : `${r.nome} · DN ${r.D}`;
       s += `<text transform="translate(${mx} ${-my}) rotate(${ang})" y="${-7 * px}" font-size="${10 * px}" fill="${cor}" text-anchor="middle" font-weight="650" paint-order="stroke" stroke="${halo}" stroke-width="${3 * px}" style="pointer-events:none">${esc(txt)}</text>`; }
   });
   /* PVs */
   P.nos.forEach(n => { const x = R && R.ok && R.no[n.id], sel = SEL && SEL.tipo === 'no' && SEL.id === n.id, rr = (x && x.tipo === 'TL' ? 4 : 6) * px;
     if (x && x.fim) s += `<path d="M${n.x} ${-n.y - 13 * px}l${11 * px} ${19 * px}h${-22 * px}Z" fill="${CORES.acc}" opacity=".9" style="pointer-events:none"/>`;
+    if (x && x.tipo === 'EEE') s += `<rect x="${n.x - 11 * px}" y="${-n.y - 11 * px}" width="${22 * px}" height="${22 * px}" rx="${3 * px}" fill="#a21caf" stroke="${ink}" stroke-width="${1.5 * px}" style="pointer-events:none"/>`;
     s += `<circle cx="${n.x}" cy="${-n.y}" r="${rr}" fill="${x && x.tipo === 'TL' ? halo : (x && x.tq ? CORES.warn : CORES.agua)}" stroke="${sel ? CORES.acc : ink}" stroke-width="${(sel ? 3 : 1.5) * px}" data-no="${n.id}" style="cursor:${o.edit ? 'move' : 'pointer'}"/>`;
-    if (PL.rot > 0) s += T(n.x + 8 * px, n.y - 15 * px, nomeNo(n) + (x && x.fim ? ' — lançamento' : ''), 10.5, ink, 'start', 700);
+    if (PL.rot > 0) s += T(n.x + 8 * px, n.y - 15 * px, nomeNo(n) + (x && x.tipo === 'EEE' ? ' — EEE' : '') + (x && x.fim ? ' — lançamento' : ''), 10.5, ink, 'start', 700);
     if (PL.rot > 1 && x) s += T(n.x + 8 * px, n.y - 26 * px, 'CT ' + fm(x.ct, 2) + ' · CF ' + fm(x.cf, 2), 9, mut) + T(n.x + 8 * px, n.y - 37 * px, 'prof. ' + fm(x.prof, 2) + ' m', 9, x.prof > R.c.profMax ? CORES.warn : mut);
   });
   if (P.saida && !(R && R.ok)) s += `<path d="M${P.saida.x} ${-P.saida.y - 13 * px}l${11 * px} ${19 * px}h${-22 * px}Z" fill="${CORES.acc}"/>` + T(P.saida.x + 12 * px, P.saida.y, 'lançamento', 10, CORES.acc, 'start', 700);
@@ -817,7 +1101,8 @@ function vTracado(m) {
     <div class="pl-tools">${b('sel', '🖐 Selecionar')}${b('rua', '✏ Desenhar rua')}${b('saida', '🔻 Lançamento')}<span class="sep"></span>
       <button class="bt peq pri" data-act="gerar" title="Cria PVs, trechos e o sentido do esgoto a partir das ruas">🧭 Gerar rede</button><span class="sep"></span>
       ${b('pv', '◉ PV', 'Inserir PV num trecho')}${b('lig', '⟶ Trecho', 'Ligar dois PVs com um trecho novo')}${b('del', '🗑', 'Excluir')}<span class="sep"></span>
-      ${a('rotulos', '🏷 Rótulos', 'Mais ou menos textos no desenho')}${a('enquadrar', '⛶ Enquadrar')}${a('dxf', '⬇ DXF')}${a('svgPlanta', '⬇ SVG')}</div>
+      ${a('sugEEE', '🏭 Elevatória', 'Sugere e cria elevatórias onde a rede passa da profundidade de alerta ou chega abaixo do lançamento')}<span class="sep"></span>
+      ${a('rotulos', '🏷 Rótulos', 'Mais ou menos textos no desenho')}${a('enquadrar', '⛶ Enquadrar')}${a('cadDxf', '⬇ DXF', 'Planta, perfis, quadro e carimbo em DXF')}${a('cadDwg', '⬇ DWG', 'Planta, perfis, quadro e carimbo em DWG (AutoCAD 2000)')}${a('svgPlanta', '⬇ SVG')}</div>
     <div class="pl-dica"><span id="pl-dica">${DICAS[PL.modo]}</span></div></div>
     <div class="lado" id="pl-lado"></div></div>`;
   ladoTracado(); if (!PL.vb) plEnquadrar(); else plDesenhar(); requestAnimationFrame(() => { if (!PL.vb || !$('pl-svg')) return; plDesenhar(); });
@@ -840,13 +1125,13 @@ function ladoTracado() {
       <div class="f"><label>Contribuição concentrada final (L/s)</label><input data-no="${n.id}" data-k="qcF" inputmode="decimal" value="${n.qcF ? fm(+n.qcF, 2) : ''}" placeholder="0"/></div>
       ${x && x.fim ? `<div class="f" style="grid-column:1/-1"><label>Cota de fundo disponível no lançamento (m)</label><input data-no="${n.id}" data-k="cfEx" inputmode="decimal" value="${n.cfEx != null && n.cfEx !== '' ? fm(+n.cfEx, 3).replace(/\./g, '') : ''}" placeholder="vazio = sem restrição"/><div class="aj">Ex.: fundo do PV existente ou da elevatória. A rede não pode chegar abaixo disso.</div></div>` : ''}</div>
       ${x ? `<div class="kpis" style="margin-top:8px"><div class="kpi"><b>${fm(x.cf, 3)}</b><span>Cota de fundo</span></div><div class="kpi"><b>${fm(x.prof, 2)} m</b><span>Profundidade</span></div><div class="kpi"><b>${x.tipo}${x.tq ? ' + TQ' : ''}</b><span>Tipo</span></div><div class="kpi"><b>${fm(x.QF, 2)}</b><span>Q final L/s</span></div></div>` : ''}
-      <div class="barra" style="margin-top:8px"><button class="bt peq" data-delno="${n.id}">🗑 Excluir PV</button></div></div>`; }
+      ${ladoEEE(n, x)}<div class="barra" style="margin-top:8px"><button class="bt peq" data-delno="${n.id}">🗑 Excluir PV</button></div></div>`; }
   if (SEL && SEL.tipo === 'tr' && trDe(SEL.id)) { const t = trDe(SEL.id), r = R && R.ok && R.tr[t.id];
     s += `<div class="card"><div class="barra"><h2 style="margin:0">Trecho ${r ? r.nome : ''}</h2><span class="esp"></span><button class="x" data-act="desel">×</button></div><div class="fg" style="grid-template-columns:1fr 1fr">
       <div class="f"><label>Rua</label><select data-trk="rua" data-id="${t.id}"><option value="">—</option>${P.ruas.map(q => `<option value="${q.id}"${t.rua === q.id ? ' selected' : ''}>${esc(q.nome)}</option>`).join('')}</select></div>
       <div class="f"><label>Lotes que contribuem</label><select data-tlad data-id="${t.id}"><option value="2"${t.lados == null || +t.lados === 2 ? ' selected' : ''}>dos 2 lados</option><option value="1"${+t.lados === 1 ? ' selected' : ''}>de 1 lado</option><option value="0"${+t.lados === 0 ? ' selected' : ''}>nenhum (só transporte)</option></select></div>
       <div class="f"><label>DN (mm)</label><select data-tfix="D" data-id="${t.id}"><option value="">automático</option>${ESG.SERIE.map(D => `<option${+t.Dfix === D ? ' selected' : ''}>${D}</option>`).join('')}</select></div>
-      <div class="f"><label>Declividade (%)</label><input data-tfix="I" data-id="${t.id}" inputmode="decimal" placeholder="${r ? fm(r.I * 100, 3) + ' (auto)' : 'auto'}" value="${t.iFix > 0 ? fm(t.iFix * 100, 3) : ''}"/></div></div>
+      <div class="f"><label>Declividade (%)</label><input data-tfix="I" data-id="${t.id}" inputmode="decimal" placeholder="${r ? fm(r.I * 100, 3) + ' (auto)' : 'auto'}" value="${t.iFix > 0 ? fm(t.iFix * 100, 3) : ''}"/></div>${ladoTrExtra(t, r)}</div>
       ${r ? `<div class="kpis" style="margin-top:8px"><div class="kpi"><b>${fm(r.L, 1)} m</b><span>Extensão</span></div><div class="kpi"><b>${fm(r.QF, 2)}</b><span>Q final L/s</span></div><div class="kpi"><b>${r.hF.carga ? 'cheio' : fm(r.hF.yd, 2)}</b><span>y/D final</span></div><div class="kpi"><b>${fm(r.hI.tau, 2)} Pa</b><span>Tensão trativa</span></div><div class="kpi"><b>${fm(r.profM, 2)} / ${fm(r.profJ, 2)}</b><span>Prof. mont./jus.</span></div><div class="kpi"><b>${fm(r.hF.V, 2)}</b><span>V final m/s</span></div></div>` : ''}
       <div class="barra" style="margin-top:8px"><button class="bt peq" data-inv="${t.id}">⇄ Inverter sentido</button><button class="bt peq" data-act="verPerfil">📈 Ver no perfil</button><button class="bt peq" data-deltr="${t.id}">🗑</button></div></div>`; }
   s += `<div class="card"><div class="barra"><h2 style="margin:0">Ruas (${P.ruas.length})</h2><span class="esp"></span><button class="bt peq" data-act="colarRuas">📋 Colar</button><button class="bt peq" data-act="colarTopo" title="Pontos X; Y; cota do levantamento">📋 Topografia</button></div>
@@ -860,8 +1145,8 @@ function ladoTracado() {
 function ruasMudaram() { if (!P.manual && P.ruas.some(r => r.pts.length > 1)) { const g = ESG.gerar(P); if (!g.erro) renumerar(); } }
 function gerarRede() {
   if (!P.ruas.length) return toast('Desenhe ou cole as ruas primeiro.');
-  if (P.manual && !confirm('Gerar a rede de novo descarta os ajustes feitos à mão (PVs movidos, DN e declividades fixados, trechos criados). Continuar?')) return;
-  let g; editar(() => { g = ESG.gerar(P); if (!g.erro) { delete P.manual; renumerar(); } });
+  if (P.manual && !confirm('Gerar a rede de novo descarta os ajustes feitos à mão (PVs movidos, DN e declividades fixados, trechos criados, elevatórias e sifões). Continuar?')) return;
+  let g; editar(() => { g = ESG.gerar(P); if (!g.erro) { delete P.manual; P.eee = []; renumerar(); } });
   if (g.erro) return toast(g.erro); PL.modo = 'sel'; render();
   toast('Rede gerada: ' + g.nos + ' PVs e ' + g.trechos + ' trechos' + (R.ok ? ' · ' + R.nErr + ' erro(s), ' + R.nWarn + ' alerta(s).' : '.') + (g.avisos.length ? ' ' + g.avisos.join(' ') : ''), 7000);
 }
@@ -935,14 +1220,6 @@ function excluir(tipo, id) {
 }
 
 /* ── DXF (R12, texto) ── */
-function dxfPlanta() {
-  let e = ''; const ln = (c, x1, y1, x2, y2) => { e += `0\nLINE\n8\n${c}\n10\n${x1}\n20\n${y1}\n11\n${x2}\n21\n${y2}\n`; }, tx = (c, x, y, h, t, ang) => { e += `0\nTEXT\n8\n${c}\n10\n${x}\n20\n${y}\n40\n${h}\n1\n${String(t).normalize('NFD').replace(/[̀-ͯ]/g, '')}\n50\n${ang || 0}\n`; }, ci = (c, x, y, r) => { e += `0\nCIRCLE\n8\n${c}\n10\n${x}\n20\n${y}\n40\n${r}\n`; };
-  P.ruas.forEach(r => { for (let i = 1; i < r.pts.length; i++) ln('ESG-EIXO-RUA', r.pts[i - 1].x, r.pts[i - 1].y, r.pts[i].x, r.pts[i].y); tx('ESG-TEXTO-RUA', r.pts[0].x, r.pts[0].y + 5, 2, r.nome); });
-  P.trechos.forEach(t => { const a = noDe(t.de), b = noDe(t.para), r = R.ok && R.tr[t.id]; ln('ESG-REDE', a.x, a.y, b.x, b.y); if (r) tx('ESG-TEXTO-REDE', (a.x + b.x) / 2, (a.y + b.y) / 2 + 1, 1.2, `${r.nome} DN${r.D} i=${(r.I * 100).toFixed(2)}% L=${r.L.toFixed(1)}m`, Math.atan2(b.y - a.y, b.x - a.x) * 180 / Math.PI); });
-  P.nos.forEach(n => { const x = R.ok && R.no[n.id]; ci('ESG-PV', n.x, n.y, x && x.tipo === 'TL' ? 0.4 : 0.6); tx('ESG-TEXTO-PV', n.x + 1, n.y + 1, 1.2, nomeNo(n)); if (x) tx('ESG-TEXTO-PV', n.x + 1, n.y - 1, 1, `CT ${x.ct.toFixed(3)} CF ${x.cf.toFixed(3)} h=${x.prof.toFixed(2)}`); });
-  const cam = ['ESG-EIXO-RUA', 'ESG-TEXTO-RUA', 'ESG-REDE', 'ESG-TEXTO-REDE', 'ESG-PV', 'ESG-TEXTO-PV'], cor = [8, 8, 5, 5, 3, 3];
-  baixar(nomeArq() + '_planta.dxf', `0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLAYER\n70\n${cam.length}\n` + cam.map((c, i) => `0\nLAYER\n2\n${c}\n70\n0\n62\n${cor[i]}\n6\nCONTINUOUS\n`).join('') + `0\nENDTAB\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n${e}0\nENDSEC\n0\nEOF\n`, 'application/dxf');
-}
 /* ════════════════════════════════════════════════════════════════════
    ABA 4 — PERFIS LONGITUDINAIS E SEÇÕES (vala e poço de visita)
    ════════════════════════════════════════════════════════════════════ */
@@ -952,7 +1229,7 @@ function pvGeo(x) { const tl = x.tipo === 'TL', hc = tl ? 0 : Math.max(0, Math.m
 function caminho(num, ate) { const c = R.coletores.find(k => k.num === num) || R.coletores[0]; if (!c) return []; const ids = c.trechos.slice(); if (ate) { let n = R.tr[ids[ids.length - 1]].para; while (R.outs[n] && R.outs[n].length) { const t = R.outs[n][0]; ids.push(t.id); n = t.para; } } return ids; }
 function perfilSVG(ids, ev, W) {
   W = W || 1100; const ml = 96, mr = 24, mt = 34, tr = ids.map(id => R.tr[id]), Lt = tr.reduce((s, r) => s + r.L, 0) || 1, sx = (W - ml - mr) / Lt;
-  const zmax = Math.max(...tr.map(r => Math.max(r.ctM, r.ctJ))) + 0.6, zmin = Math.min(...tr.map(r => r.ciJ)) - 0.7; let sy = sx * ev; if ((zmax - zmin) * sy > 460) sy = 460 / (zmax - zmin); if ((zmax - zmin) * sy < 170) sy = 170 / (zmax - zmin);
+  const zmax = Math.max(...tr.map(r => Math.max(r.ctM, r.ctJ))) + 0.6, zmin = Math.min(...tr.map(r => Math.min(r.ciJ, r.ciM, r.sif ? r.sif.fundo : r.ciJ)), ...[tr[0].de].concat(tr.map(r => r.para)).map(id => R.no[id].cf)) - 0.7; let sy = sx * ev; if ((zmax - zmin) * sy > 460) sy = 460 / (zmax - zmin); if ((zmax - zmin) * sy < 170) sy = 170 / (zmax - zmin);
   const H = (zmax - zmin) * sy, th = 17, TB = mt + H + 12, Ht = TB + th * 6 + 8, X = d => ml + d * sx, Y = z => mt + (zmax - z) * sy, f2 = v => v.toFixed(2).replace('.', ',');
   let s = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${Ht}" width="${W}" height="${Ht}" font-family="Arial,sans-serif" font-size="10"><rect width="${W}" height="${Ht}" fill="#fff"/>`;
   const passo = [0.5, 1, 2, 5, 10].find(p => p * sy >= 22) || 10;
@@ -963,6 +1240,10 @@ function perfilSVG(ids, ev, W) {
   s += `<path d="${pt}L${X(Lt)} ${Y(zmin)}L${X(0)} ${Y(zmin)}Z" fill="#f3ede2"/><path d="${pt}" fill="none" stroke="#8a6a4a" stroke-width="2.2"/>`;
   /* tubos e lâminas */
   tr.forEach((r, i) => { const x1 = X(xs[i]), x2 = X(xs[i + 1]), st = stTr(r.id), cor = st === 'e' ? '#b42318' : st === 'w' ? '#d97706' : '#12263f', sel = SEL && SEL.id === r.id;
+    if (r.recq || r.sif) { const cz = r.recq ? '#a21caf' : '#0369a1', yM = Y(r.ciM + r.d / 2), yJ = Y(r.ciJ + r.d / 2), yF = r.sif ? Y(r.sif.fundo + r.d / 2) : 0, xm = (x1 + x2) / 2;
+      const dd = r.sif ? `M${x1} ${yM}L${x1 + (x2 - x1) * 0.22} ${yF}L${x1 + (x2 - x1) * 0.78} ${yF}L${x2} ${yJ}` : `M${x1} ${yM}L${x2} ${yJ}`;
+      s += `<path d="${dd}" fill="none" stroke="${cz}" stroke-width="${Math.max(3, r.d * sy)}"${r.recq ? ' stroke-dasharray="10 4"' : ''} opacity="${sel ? 1 : .8}" data-tr="${r.id}" style="cursor:pointer"/><text x="${xm}" y="${(r.sif ? yF : Math.max(yM, yJ)) + 16}" text-anchor="middle" fill="${cz}" font-weight="700" style="pointer-events:none">${r.nome} — ${r.recq ? 'recalque' : 'sifão invertido'}</text>`;
+      s += `<text x="${xm}" y="${TB + th * 4 + 12}" text-anchor="middle">${f2(r.L)} m · ${r.sif ? r.sif.n + ' × ' : ''}DN ${r.D}</text><text x="${xm}" y="${TB + th * 5 + 12}" text-anchor="middle">${r.recq ? 'sob pressão · V ' + f2(r.hF.V) + ' m/s' : 'ΔH ' + r.sif.dH.toFixed(3).replace('.', ',') + ' m · V ' + f2(r.sif.Vf) + ' m/s'}</text>`; return; }
     s += `<path d="M${x1} ${Y(r.ciM)}L${x2} ${Y(r.ciJ)}L${x2} ${Y(r.ciJ + r.d)}L${x1} ${Y(r.ciM + r.d)}Z" fill="${r.D > 400 ? '#d7d7d7' : '#f1d9a8'}" stroke="${cor}" stroke-width="${sel ? 2.4 : 1.1}" data-tr="${r.id}" style="cursor:pointer"/>`;
     s += `<path d="M${x1} ${Y(r.ciM)}L${x2} ${Y(r.ciJ)}L${x2} ${Y(r.ciJ + r.hF.y)}L${x1} ${Y(r.ciM + r.hF.y)}Z" fill="#0f766e" opacity=".55" style="pointer-events:none"/>`;
     s += `<line x1="${x1}" y1="${Y(r.ciM + r.hI.y)}" x2="${x2}" y2="${Y(r.ciJ + r.hI.y)}" stroke="#0f766e" stroke-dasharray="4 3" style="pointer-events:none"/>`;
@@ -972,7 +1253,7 @@ function perfilSVG(ids, ev, W) {
   const nos = [tr[0].de].concat(tr.map(r => r.para));
   nos.forEach((id, i) => { const x = R.no[id], n = noDe(id), cx = X(xs[i]), g = pvGeo(x), w = Math.max(7, g.D * sx);
     s += `<rect x="${cx - w / 2}" y="${Y(x.ct)}" width="${w}" height="${Math.max(2, (x.ct - x.cf) * sy)}" fill="${x.tipo === 'TL' ? '#fff' : '#e9e6dc'}" fill-opacity=".85" stroke="#14202e" stroke-width="1.1"/><line x1="${cx - w / 2 - 3}" y1="${Y(x.ct)}" x2="${cx + w / 2 + 3}" y2="${Y(x.ct)}" stroke="#14202e" stroke-width="3"/>`;
-    s += `<text x="${cx}" y="${Y(x.ct) - 7}" text-anchor="middle" font-weight="700">${esc(nomeNo(n))}${x.tq ? ' (TQ)' : ''}</text><line x1="${cx}" y1="${Y(x.cf)}" x2="${cx}" y2="${TB}" stroke="#b9b3a5" stroke-dasharray="2 3"/>`;
+    s += `<text x="${cx}" y="${Y(x.ct) - 7}" text-anchor="middle" font-weight="700">${esc(nomeNo(n))}${x.tq ? ' (TQ)' : ''}${x.tipo === 'EEE' ? ' (EEE)' : ''}</text><line x1="${cx}" y1="${Y(x.cf)}" x2="${cx}" y2="${TB}" stroke="#b9b3a5" stroke-dasharray="2 3"/>`;
     const cin = i > 0 ? tr[i - 1].ciJ : null, cout = i < tr.length ? tr[i].ciM : null, anc = i === 0 ? 'start' : i === nos.length - 1 ? 'end' : 'middle', tx = i === 0 ? cx + 2 : i === nos.length - 1 ? cx - 2 : cx;
     s += `<text x="${tx}" y="${TB + 12}" text-anchor="${anc}" font-weight="700">${esc(nomeNo(n))}</text><text x="${tx}" y="${TB + th + 12}" text-anchor="${anc}">${x.ct.toFixed(3).replace('.', ',')}</text>`;
     s += `<text x="${tx}" y="${TB + th * 2 + 12}" text-anchor="${anc}">${cin != null && cout != null && Math.abs(cin - cout) > 0.0005 ? cin.toFixed(3).replace('.', ',') + ' / ' + cout.toFixed(3).replace('.', ',') : (cout != null ? cout : cin).toFixed(3).replace('.', ',')}</text><text x="${tx}" y="${TB + th * 3 + 12}" text-anchor="${anc}">${f2(x.prof)}</text>`; });
@@ -1092,7 +1373,7 @@ function t3Montar() {
     er: new THREE.MeshLambertMaterial({color: 0xdc2626, transparent: true, opacity: 0.65, side: THREE.DoubleSide, depthWrite: false}),
     pv: new THREE.MeshLambertMaterial({color: 0xb5b5b0, transparent: true, opacity: 0.6}), tampa: new THREE.MeshLambertMaterial({color: 0x23272e}),
     agua: new THREE.MeshLambertMaterial({color: 0x5d7a52, side: THREE.DoubleSide}), aguaEr: new THREE.MeshLambertMaterial({color: 0x8a3b2a, side: THREE.DoubleSide}),
-    vala: new THREE.MeshLambertMaterial({color: 0x8a6a4a, transparent: true, opacity: 0.22, depthWrite: false}), lig: new THREE.MeshLambertMaterial({color: 0xd6a04a})};
+    vala: new THREE.MeshLambertMaterial({color: 0x8a6a4a, transparent: true, opacity: 0.22, depthWrite: false}), lig: new THREE.MeshLambertMaterial({color: 0xd6a04a}), rec: new THREE.MeshLambertMaterial({color: 0xa21caf, transparent: true, opacity: 0.75, side: THREE.DoubleSide})};
   /* faixa (rua, passeio) entre dois pontos, na cota do terreno */
   const faixa = (a, b, d1, d2, dz, mat) => { const dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1, nx = -dy / l, ny = dx / l;
     const v = [P3(a.x + nx * d1, a.y + ny * d1, a.ct + dz), P3(a.x + nx * d2, a.y + ny * d2, a.ct + dz), P3(b.x + nx * d2, b.y + ny * d2, b.ct + dz), P3(b.x + nx * d1, b.y + ny * d1, b.ct + dz)];
@@ -1102,10 +1383,10 @@ function t3Montar() {
     G.solo.add(faixa(A, B, -w, w, 0, M.asf)); G.solo.add(faixa(A, B, w, w + 2, 0.12, M.pas)); G.solo.add(faixa(A, B, -w - 2, -w, 0.12, M.pas));
     const lh = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / lh, uy = (b.y - a.y) / lh, xa = R.no[r.de], xb = R.no[r.para], ca = Math.min(lh * 0.3, xa.Dpv / 2 + 0.15), cb = Math.min(lh * 0.3, xb.Dpv / 2 + 0.15);
     const k1 = ca / lh, k2 = 1 - cb / lh, zi = k => r.ciM + (r.ciJ - r.ciM) * k, pt = (k, dz) => P3(a.x + (b.x - a.x) * k, a.y + (b.y - a.y) * k, zi(k) + dz);
-    const tubo = t3Cil(pt(k1, r.d / 2), pt(k2, r.d / 2), r.d / 2 * 1.08 + 0.004, r.D > 400 ? M.conc : M.pvc, true); G.tubos.add(tubo);
+    const tubo = t3Cil(pt(k1, r.d / 2), pt(k2, r.d / 2), r.d / 2 * 1.08 + 0.004, r.recq ? M.rec : r.D > 400 ? M.conc : M.pvc, true); G.tubos.add(tubo);
     T3.tr.push({id, r, tubo, k1, k2, pt, a, b, lh});
     if (r.L * r.larg) { const va = P3(a.x, a.y, 0), box = new THREE.Mesh(new THREE.BoxGeometry(lh, r.hEsc, r.larg), M.vala); box.position.copy(P3((a.x + b.x) / 2, (a.y + b.y) / 2, (r.ctM + r.ctJ) / 2 - r.hEsc / 2)); box.rotation.y = Math.atan2(uy, ux); G.vala.add(box); }
-    if (t.lados !== 0 && nLig < 1500) for (let s = 8, lado = 1; s < lh - 4; s += 12, lado = -lado) { if (+t.lados === 1 && lado < 0) continue; const k = s / lh, x = a.x + ux * s, y = a.y + uy * s, zt = r.ctM + (r.ctJ - r.ctM) * k, d = w + 1.5;
+    if (t.lados !== 0 && !r.recq && !r.sif && nLig < 1500) for (let s = 8, lado = 1; s < lh - 4; s += 12, lado = -lado) { if (+t.lados === 1 && lado < 0) continue; const k = s / lh, x = a.x + ux * s, y = a.y + uy * s, zt = r.ctM + (r.ctJ - r.ctM) * k, d = w + 1.5;
       G.lig.add(t3Cil(P3(x - uy * d * lado, y + ux * d * lado, zt - 0.6), P3(x, y, zi(k) + r.d), 0.05, M.lig)); nLig++; }
   });
   Object.values(R.no).forEach(x => { const n = noDe(x.id), g = pvGeo(x), re = g.D / 2 + g.par;
@@ -1190,51 +1471,150 @@ function t3Acao(a) {
   const bt = document.querySelector('[data-t3="' + a + '"]'); if (bt) { if (['rot', 'vala', 'lig', 'fluxo'].includes(a)) bt.classList.toggle('on', T3[a]); if (a === 'solo') bt.innerHTML = rotBt('🛣 Rua ' + Math.round(T3.solo * 100) + ' %'); if (a === 'ev') bt.innerHTML = rotBt('↕ ' + T3.ev + '×'); }
 }
 /* ════════════════════════════════════════════════════════════════════
-   ABA 6 — ORÇAMENTO (quantitativos do cálculo + preços SINAPI do site)
+   ABA 6 — ORÇAMENTO (quantitativos do cálculo + EMOP, SINAPI RJ e SCO-Rio, como no programa de Orçamento)
    ABA 7 — MEMORIAL DE CÁLCULO
    ════════════════════════════════════════════════════════════════════ */
-const ORC = {ind: null, bancos: {}, erro: '', carregando: false};
-const orcCfg = () => { P.orc = Object.assign({mes: '', deson: false, bdi: 25, it: {}}, P.orc || {}); P.orc.it = P.orc.it || {}; return P.orc; };
-async function orcCarregar() {
-  if (ORC.carregando) return; ORC.carregando = true; ORC.erro = '';
-  try { const base = '/orcamento/dados/';
-    if (!ORC.ind) { const r = await fetch(base + 'indice.json', {cache: 'no-cache'}); if (!r.ok) throw new Error('índice dos bancos indisponível'); ORC.ind = await r.json(); }
-    const o = orcCfg(), lista = ORC.ind.sinapi || [], ref = lista.find(x => x.ref === o.mes) || lista[0]; if (!ref) throw new Error('nenhum mês do SINAPI publicado');
-    if (!ORC.bancos[ref.ref]) { const r = await fetch(base + ref.arquivo); if (!r.ok) throw new Error('banco ' + ref.competencia + ' indisponível');
-      const txt = await new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).text(); ORC.bancos[ref.ref] = JSON.parse(txt).compMap || {}; }
-    ORC.mes = ref.ref; ORC.comp = ref.competencia;
-  } catch (e) { ORC.erro = (e && e.message) || String(e); }
-  ORC.carregando = false; if (TAB === 'orc' || TAB === 'memo') render();
+const ORC = {ind: null, bk: {sinapi: {}, sco: {}}, ref: {}, emop: undefined, erro: '', carregando: false, pronto: false};
+const BANCOS = {emop: 'EMOP', sinapi: 'SINAPI RJ', sco: 'SCO-Rio'};
+/* EMOP (licenciada): só os códigos que este programa usa; preço embutido apenas para administradores. Usuário comum: preço vem da EMOP importada no programa de Orçamento (mesmo navegador). */
+/* EMOP_ADM:INICIO */
+const EMOP_ADM = {"ref":"09/2026","t":{"03.020.0050":["M3","ESCAVACAO MECANICA DE VALA NAO ESCORADA,EM MATERIAL DE 1ªCATEGORIA,ATE 1,50M DE PROFUNDIDADE,UTILIZANDO ESCAVADEIRA HIDRAULICA DE 0,78M3,EXCLUSIVE ESGOTAMENTO","1",8.48,"B",8.38],"03.020.0085":["M3","ESCAVACAO MECANICA DE VALA ESCORADA,EM MATERIAL DE 1ªCATEGORIA,ENTRE 1,50 E 3,00M DE PROFUNDIDADE,UTILIZANDO ESCAVADEIRA HIDRAULICA DE 0,78M3,EXCLUSIVE ESGOTAMENTO E ESCORAMENTO","1",11.97,"B",11.79],"03.020.0090":["M3","ESCAVACAO MECANICA DE VALA ESCORADA,EM MATERIAL DE 1ªCATEGORIA,ENTRE 3,00 E 4,50M DE PROFUNDIDADE,UTILIZANDO ESCAVADEIRA HIDRAULICA DE 0,78M3,EXCLUSIVE ESGOTAMENTO E ESCORAMENTO","1",17.67,"B",17.39],"03.020.0100":["M3","ESCAVACAO MECANICA DE VALA ESCORADA,EM MATERIAL DE 1ªCATEGORIA,ENTRE 4,50 E 6,00M DE PROFUNDIDADE,UTILIZANDO ESCAVADEIRA HIDRAULICA DE 0,78M3,EXCLUSIVE ESGOTAMENTO E ESCORAMENTO","1",25.78,"B",25.37],"03.011.0015":["M3","REATERRO DE VALA/CAVA COM MATERIAL DE BOA QUALIDADE,UTILIZANDO VIBRO COMPACTADOR PORTATIL,EXCLUSIVE MATERIAL","1",30.21,"B",28.26],"06.088.0010":["M3","EMBASAMENTO DE TUBULACAO,FEITO COM PO-DE-PEDRA","0",214.31,"A",211.24],"04.011.0052":["T","CARGA E DESCARGA MECANICA,COM PA-CARREGADEIRA,COM 1,30M3 DE CAPACIDADE,UTILIZANDO CAMINHAO BASCULANTE A OLEO DIESEL,COM CAPACIDADE UTIL DE 8T,CONSIDERADOS PARA O CAMINHAO OS TEMPOS DE ESPERA,MANOBRA,CARGA E DESCARGA E PARA A CARREGADEIRA OS TEMPOS DE ESPERA E OPERACAO PARA CARGAS DE 100T POR DIA DE 8H","1",10.1,"B",9.93],"04.005.0143":["T X KM","TRANSPORTE DE CARGA DE QUALQUER NATUREZA,EXCLUSIVE AS DESPESAS DE CARGA E DESCARGA,TANTO DE ESPERA DO CAMINHAO COMO DO SERVENTE OU EQUIPAMENTO AUXILIAR,A VELOCIDADE MEDIA DE 30KM/H,EM CAMINHAO BASCULANTE A OLEO DIESEL,COM CAPACIDADE UTIL DE 12T","1",1.65,"B",1.64],"06.017.0080":["M","CORPO DE POCO DE VISITA DE ANEIS PRE-MOLDADOS,COM DIAMETRO DE 600MM,COM DEGRAUS,MEDIDA PELA ALTURA UTIL,INCLUSIVE MAO-DE-OBRA E MATERIAL","0",677.55,"A",671.01],"06.016.0007":["UN","TAMPAO COMPLETO DE FERRO FUNDIDO DUCTIL (NODULAR) ARTICULADO,CIRCULAR,DN 600MM,COM TAMPA PARA ACESSO DE MANUTENCAO E SOBRETAMPA PARA MANOBRA,CLASSE D400,CONFORME ABNT NBR 10160,ASSENTADO COM ARGAMASSA DE CIMENTO E AREIA,NO TRACO 1:4 EM VOLUME.FORNECIMENTO E ASSENTAMENTO","0",624.73,"A",617.41],"05.002.0005":["M2","DEMOLICAO COM EQUIPAMENTO DE AR COMPRIMIDO,DE PAVIMENTACAO DE CONCRETO ASFALTICO,COM 5CM DE ESPESSURA,INCLUSIVE EMPILHAMENTO LATERAL DENTRO DO CANTEIRO DE SERVICO","1",32.71,"B",31.5],"08.015.0068":["T","REVESTIMENTO DE CONCRETO BETUMINOSO USINADO A QUENTE,IMPORTADO DE USINA,EXECUTADO EM UMA CAMADA,DE ACORDO COM AS INSTRUCOES/ESPECIFICACOES DO CONTRATANTE,COMPREENDENDO O PREPARO E OS MATERIAIS,EXCLUSIVE ESPALHAMENTO,COMPACTACAO (VIDE FAMILIA 08.037) E O TRANSPORTE DA USINA PARA PISTA","0",665.91,"A",663.95]}};
+/* EMOP_ADM:FIM */
+const EMOP_TAB = {"03.020.0050":["M3","ESCAVACAO MECANICA DE VALA NAO ESCORADA,EM MATERIAL DE 1ªCATEGORIA,ATE 1,50M DE PROFUNDIDADE,UTILIZANDO ESCAVADEIRA HIDRAULICA DE 0,78M3,EXCLUSIVE ESG","1"],"03.020.0085":["M3","ESCAVACAO MECANICA DE VALA ESCORADA,EM MATERIAL DE 1ªCATEGORIA,ENTRE 1,50 E 3,00M DE PROFUNDIDADE,UTILIZANDO ESCAVADEIRAHIDRAULICA DE 0,78M3,EXCLUSIVE","1"],"03.020.0090":["M3","ESCAVACAO MECANICA DE VALA ESCORADA,EM MATERIAL DE 1ªCATEGORIA,ENTRE 3,00 E 4,50M DE PROFUNDIDADE,UTILIZANDO ESCAVADEIRAHIDRAULICA DE 0,78M3,EXCLUSIVE","1"],"03.020.0100":["M3","ESCAVACAO MECANICA DE VALA ESCORADA,EM MATERIAL DE 1ªCATEGORIA,ENTRE 4,50 E 6,00M DE PROFUNDIDADE,UTILIZANDO ESCAVADEIRAHIDRAULICA DE 0,78M3,EXCLUSIVE","1"],"03.011.0015":["M3","REATERRO DE VALA/CAVA COM MATERIAL DE BOA QUALIDADE,UTILIZANDO VIBRO COMPACTADOR PORTATIL,EXCLUSIVE MATERIAL","1"],"06.088.0010":["M3","EMBASAMENTO DE TUBULACAO,FEITO COM PO-DE-PEDRA","0"],"04.011.0052":["T","CARGA E DESCARGA MECANICA,COM PA-CARREGADEIRA,COM 1,30M3 DECAPACIDADE,UTILIZANDO CAMINHAO BASCULANTE A OLEO DIESEL,COMCAPACIDADE UTIL DE 8T,CONSIDERAD","1"],"04.005.0143":["T X KM","TRANSPORTE DE CARGA DE QUALQUER NATUREZA,EXCLUSIVE AS DESPESAS DE CARGA E DESCARGA,TANTO DE ESPERA DO CAMINHAO COMO DO SERVENTE OU EQUIPAMENTO AUXILIA","1"],"06.017.0080":["M","CORPO DE POCO DE VISITA DE ANEIS PRE-MOLDADOS,COM DIAMETRO DE 600MM,COM DEGRAUS,MEDIDA PELA ALTURA UTIL,INCLUSIVE MAO-DE-OBRA E MATERIAL","0"],"06.016.0007":["UN","TAMPAO COMPLETO DE FERRO FUNDIDO DUCTIL (NODULAR) ARTICULADO,CIRCULAR,DN 600MM,COM TAMPA PARA ACESSO DE MANUTENCAO E SOBRETAMPA PARA MANOBRA,CLASSE D4","0"],"05.002.0005":["M2","DEMOLICAO COM EQUIPAMENTO DE AR COMPRIMIDO,DE PAVIMENTACAO DE CONCRETO ASFALTICO,COM 5CM DE ESPESSURA,INCLUSIVE EMPILHAMENTO LATERAL DENTRO DO CANTEIR","1"],"08.015.0068":["T","REVESTIMENTO DE CONCRETO BETUMINOSO USINADO A QUENTE,IMPORTADO DE USINA,EXECUTADO EM UMA CAMADA,DE ACORDO COM AS INSTRUCOES/ESPECIFICACOES DO CONTRATA","0"]};   /* código → [unidade, descrição, sufixo do código não desonerado] */
+const orcCfg = () => { const o = P.orc = Object.assign({banco: 'sinapi', mes: {}, deson: false, bdi: 25, sol: 'rec', it: {}}, P.orc || {});
+  if (!o.mes || typeof o.mes !== 'object') o.mes = {sinapi: o.mes || ''}; o.it = o.it || {}; if (!BANCOS[o.banco]) o.banco = 'sinapi'; if (!ESG.SOL.some(s => s.k === o.sol)) o.sol = 'rec'; return o; };
+async function lerGz(url) { const r = await fetch(url); if (!r.ok) throw new Error('arquivo ' + url.split('/').pop() + ' indisponível'); if (!window.DecompressionStream) throw new Error('navegador sem descompressão: atualize o Chrome/Safari'); return JSON.parse(await new Response(r.body.pipeThrough(new DecompressionStream('gzip'))).text()); }
+async function ehAdmin() {
+  if (window.TC_USUARIO) return !!window.TC_USUARIO.admin;
+  try { await nuvIniciar(); const em = String(NUV.user && NUV.user.email || '').toLowerCase(); return !!em && (window.ADMINS || []).map(x => String(x).toLowerCase()).includes(em); } catch (e) { return false; }
 }
-const unNorm = u => String(u || '').toUpperCase().replace('³', '3').replace('²', '2').replace('·', 'X').replace(/\s/g, '');
-function orcLinhas() {
-  const o = orcCfg(), cm = ORC.bancos[ORC.mes] || {}, L = ESG.itens(P, R, Q);
-  return L.map(i => { const e = o.it[i.k] || {}, cod = e.cod != null ? e.cod : i.cod, b = cod && cm[cod], pb = b ? (o.deson ? b.precoCom : b.preco) : null, pu = e.pu != null && e.pu !== '' ? +e.pu : pb;
-    return Object.assign({}, i, {cod, banco: b, pBanco: pb, pu, manual: e.pu != null && e.pu !== '', total: pu > 0 ? Math.round(i.qtd * 100) / 100 * pu : 0, unDif: b && unNorm(b.unid) !== unNorm(i.un)}); });
+async function lerEmop() {
+  let out = null; const montar = (l, meta) => { const map = {}; l.forEach(d => { if (d && d.CODIGO) map[String(d.CODIGO).trim()] = d; }); return Object.keys(map).length ? {map, meta: meta || {}} : null; };
+  try { let existe = true; if (indexedDB.databases) existe = (await indexedDB.databases()).some(d => d.name === 'SchuelerHistoricoDB_v1');
+    if (existe) { const db = await new Promise((ok, ko) => { const rq = indexedDB.open('SchuelerHistoricoDB_v1'); rq.onupgradeneeded = e => { try { e.target.transaction.abort(); } catch (x) {} }; rq.onsuccess = () => ok(rq.result); rq.onerror = () => ko(rq.error); });
+      if (db.objectStoreNames.contains('settings')) { const get = k => new Promise(ok => { try { const r = db.transaction('settings').objectStore('settings').get(k); r.onsuccess = () => ok(r.result ? r.result.value : null); r.onerror = () => ok(null); } catch (e) { ok(null); } });
+        const dipr = await get('emopDiprOverride'), meta = await get('emopImportMeta'); if (Array.isArray(dipr) && dipr.length) out = montar(dipr, Object.assign({origem: 'importada no Orçamento'}, meta || {})); }
+      db.close(); } } catch (e) { /* sem acesso ao banco do Orçamento */ }
+  if (!out) try { const c = JSON.parse(localStorage.getItem('orcadipr_base_v11') || '[]'); if (Array.isArray(c) && c.some(x => /^\d\d\.\d{3}\.\d{4}-/.test(x.CODIGO))) out = montar(c, {origem: 'catálogo salvo no Orçamento'}); } catch (e) {}
+  if (!out && EMOP_ADM && EMOP_ADM.ref && await ehAdmin()) { const L = []; Object.entries(EMOP_ADM.t).forEach(([b, [u, d, so, po, sd, pd]]) => { L.push({CODIGO: b + '-' + so, DESCR1: d, UNID: u, CUSTO: po}); if (sd) L.push({CODIGO: b + '-' + sd, DESCR1: d, UNID: u, CUSTO: pd}); }); out = montar(L, {origem: 'embutida (administrador) ' + EMOP_ADM.ref}); }
+  return out;
+}
+async function orcCarregar() {
+  if (ORC.carregando) return; ORC.carregando = true; ORC.erro = ''; const o = orcCfg(), base = '/orcamento/dados/';
+  try { if (!ORC.ind) { const r = await fetch(base + 'indice.json', {cache: 'no-cache'}); if (!r.ok) throw new Error('índice dos bancos indisponível'); ORC.ind = await r.json(); }
+    for (const t of ['sinapi', 'sco']) { const lista = (ORC.ind[t] || []).slice().sort((a, b) => String(b.ref).localeCompare(String(a.ref))), ref = lista.find(x => x.ref === o.mes[t]) || lista[0]; if (!ref) continue;
+      try { if (!ORC.bk[t][ref.ref]) ORC.bk[t][ref.ref] = (await lerGz(base + ref.arquivo)).compMap || {}; ORC.ref[t] = {ref: ref.ref, comp: ref.competencia}; } catch (e) { ORC.erro = BANCOS[t] + ': ' + ((e && e.message) || e); } }
+  } catch (e) { ORC.erro = (e && e.message) || String(e); }
+  if (ORC.emop === undefined) { try { ORC.emop = await lerEmop(); } catch (e) { ORC.emop = null; } }
+  ORC.carregando = false; ORC.pronto = true; orcRegistrar(); if (TAB === 'orc' || TAB === 'memo') render();
+}
+const sufEmop = (s, D) => D ? (s === '1' ? 'B' : 'A') : s;
+function orcResolve(b, s, D) {
+  if (s == null || s === false || s === '') return null;
+  if (b === 'emop') { const E = ORC.emop, base = String(s).replace(/-[0-9AB]$/, ''), t = EMOP_TAB[base] || ['', '', '0'], full = base + '-' + sufEmop(t[2], D);
+    if (E) { const v = E.map[s] || E.map[full] || E.map[base + '-' + sufEmop(t[2] === '0' ? '1' : '0', D)]; if (!v) return null; const p = +v.CUSTO; return {full: v.CODIGO, descr: v.DESCR1 || t[1], unid: v.UNID || t[0], preco: p > 0 ? p : null, src: 'emop'}; }
+    return EMOP_TAB[base] ? {full, descr: t[1], unid: t[0], preco: null, src: 'emop', semBanco: true} : null; }
+  const M = ORC.bk[b][(ORC.ref[b] || {}).ref]; if (!M) return null;
+  let key = M[s] ? s : null;
+  if (!key && b === 'sco') { if (!M.__idx) { Object.defineProperty(M, '__idx', {value: {}, enumerable: false}); Object.keys(M).forEach(k => { M.__idx[k.replace(/\s*\([^)]*\)\s*$/, '')] = k; }); } key = M.__idx[String(s).replace(/\s*\([^)]*\)\s*$/, '')] || null; }
+  if (!key) return null; const c = M[key], pr = +(D ? c.precoCom : c.preco);
+  return {full: key, descr: c.descr, unid: c.unid, preco: pr > 0 ? pr : null, src: b};
+}
+const orcOrdem = b => b === 'emop' ? ['emop', 'sinapi', 'sco'] : b === 'sinapi' ? ['sinapi', 'sco', 'emop'] : ['sco', 'sinapi', 'emop'];
+const r2 = v => Math.round(v * 100) / 100;
+function orcLinhas(sol, banco) {
+  const o = orcCfg(); sol = sol || o.sol; banco = banco || o.banco; const ordem = orcOrdem(banco), L = [];
+  ESG.itens(P, R, Q, sol).forEach(it => { const cod = it.cod || {}; if (cod[banco] === false) return; let r = null, b = null; const e = o.it[banco + '|' + it.k] || {};
+    if (e.cod) { for (const bb of ordem) { const x = orcResolve(bb, e.cod, o.deson); if (x && !x.semBanco) { r = x; b = bb; break; } } if (!r) { r = {full: e.cod, descr: '', unid: '', preco: null, src: banco, naoAchou: true}; b = banco; } }
+    else for (const bb of ordem) { if (bb !== banco && cod[bb] === false) continue; const x = orcResolve(bb, cod[bb], o.deson); if (!x) continue; if (x.preco == null && !(bb === 'emop' && banco === 'emop' && x.semBanco)) continue; r = x; b = bb; break; }
+    const q = b && it.qb && it.qb[b] != null ? it.qb[b] : it.q, pb = r ? r.preco : null, manual = e.pu != null && e.pu !== '', pu = manual ? +e.pu : pb;
+    L.push({g: it.g, k: it.k, nome: it.nome, un: r && r.unid && !manual ? r.unid : it.un, q, r, b, memo: it.memo, pBanco: pb, pu, manual, total: pu > 0 ? r2(r2(q) * pu) : 0}); });
+  return L;
+}
+const orcTotal = (sol, banco) => { const L = orcLinhas(sol, banco), sub = L.reduce((s, i) => s + i.total, 0); return {sub, tot: sub * (1 + (+orcCfg().bdi || 0) / 100), sem: L.filter(i => !(i.pu > 0)).length, n: L.length}; };
+const orcRefTxt = b => b === 'emop' ? (ORC.emop ? (ORC.emop.meta.origem || 'importada') : 'sem preços neste aparelho') : ((ORC.ref[b] || {}).comp || '—');
+/* registra o programa no módulo comum de orçamento do site (janela das 3 soluções, cronograma, PDF, envio e “juntar programas”) */
+function orcRegistrar() {
+  if (!window.TCORC || ORC.reg) return; ORC.reg = true;
+  try { TCORC.registrar({prog: 'esgoto', nome: 'Esgoto Sanitário', solucoes: ESG.SOL, grupos: ESG.GRUPOS, params: [],
+    itens: sol => { if (!R || !R.ok || !Q) return {erro: 'Calcule a rede primeiro (Traçado › 🧭 Gerar rede).'}; return ESG.itens(P, R, Q, sol.k).map(i => ({g: i.g, nome: i.nome, un: i.un, q: i.q, cod: i.cod, qb: i.qb || undefined, memo: i.memo})); },
+    projeto: () => ({nome: P.nome || 'Rede de esgoto', municipio: P.local || ''}),
+    intro: 'As três soluções usam a mesma rede dimensionada (extensões, diâmetros, profundidades, PVs, elevatórias e sifões); mudam o tipo de poço de visita e o tipo de tubo de PVC.',
+    rodape: 'Quantidades do dimensionamento. Valas: largura = diâmetro externo + folga; escoramento acima de 1,25 m. Cavas dos PVs: lado = Ø externo + 2 × folga, medidas à parte porque as composições de PV de EMOP, SINAPI e SCO não incluem escavação, escoramento nem reaterro.'}); } catch (e) { console.error(e); }
 }
 function vOrc(m) {
   if (!R.ok) { m.innerHTML = `<div class="card">${listaVerif()}</div>`; return; }
-  const o = orcCfg(); if (!ORC.ind && !ORC.erro && !ORC.carregando) orcCarregar();
-  const L = orcLinhas(), sub = L.reduce((s, i) => s + i.total, 0), tot = sub * (1 + (+o.bdi || 0) / 100), sem = L.filter(i => !(i.pu > 0)).length; let g = '';
-  const lin = L.map(i => (i.g !== g ? (g = i.g, `<tr class="grp"><td colspan="6">${esc(g)}</td></tr>`) : '') + `<tr><td><input class="l" style="min-width:92px" data-orccod="${i.k}" value="${esc(i.cod)}" placeholder="código"/></td>
-    <td class="l" style="white-space:normal;min-width:280px">${esc(i.desc)}${i.banco ? `<br><small title="${esc(i.banco.descr)}">SINAPI: ${esc(i.banco.descr.slice(0, 110))}${i.banco.descr.length > 110 ? '…' : ''}</small>` : (i.cod ? '<br><small style="color:var(--warn-ink)">código não encontrado neste mês</small>' : '')}${i.unDif ? `<br><small style="color:var(--err)">unidade do banco: ${esc(i.banco.unid)} — confira</small>` : ''}</td>
-    <td>${i.un}</td><td>${fm(i.qtd, 2)}</td><td><input data-orcpu="${i.k}" inputmode="decimal" value="${i.manual ? fm(i.pu, 2) : ''}" placeholder="${i.pBanco != null ? fm(i.pBanco, 2) : 'preço'}" title="Vazio = preço do banco"/></td><td class="${i.total ? '' : 'w'}">${i.total ? fm(i.total, 2) : 'sem preço'}</td></tr>`).join('');
+  const o = orcCfg(); if (!ORC.pronto && !ORC.carregando) orcCarregar();
+  const L = orcLinhas(), sub = L.reduce((s, i) => s + i.total, 0), tot = sub * (1 + (+o.bdi || 0) / 100), sem = L.filter(i => !(i.pu > 0)).length, bk = o.banco; let g = '', gi = 0, ji = 0;
+  const sg = {}; L.forEach(i => { sg[i.g] = (sg[i.g] || 0) + i.total; });
+  const lin = L.map(i => { let h = ''; if (i.g !== g) { g = i.g; gi++; ji = 0; h = `<tr class="grp"><td colspan="6">${gi}. ${esc(g)}</td><td>${fm(sg[g], 2)}</td></tr>`; } ji++;
+    const outro = i.b && i.b !== bk ? ` <span class="chip warn" title="Este serviço não tem composição no ${BANCOS[bk]}: usei o ${BANCOS[i.b]}">${BANCOS[i.b]}</span>` : '';
+    const dsc = i.r && i.r.descr ? `<br><small title="${esc(i.r.descr)}">${esc(i.r.descr.slice(0, 130))}${i.r.descr.length > 130 ? '…' : ''}</small>` : (i.r && i.r.naoAchou ? '<br><small style="color:var(--err)">código não encontrado em nenhum banco</small>' : (!i.r ? '<br><small style="color:var(--warn-ink)">sem composição nos bancos: digite o preço ou o código</small>' : ''));
+    return h + `<tr><td>${gi}.${ji}</td><td class="l"><input class="l" style="min-width:128px" data-orccod="${i.k}" value="${esc(i.r ? i.r.full : '')}" placeholder="código"/>${outro}</td>
+      <td class="l" style="white-space:normal;min-width:280px"><b>${esc(i.nome)}</b>${dsc}<br><small class="mut">📐 ${esc(i.memo)}</small></td>
+      <td>${esc(i.un)}</td><td>${fm(i.q, 2)}</td><td><input data-orcpu="${i.k}" inputmode="decimal" value="${i.manual ? fm(i.pu, 2) : ''}" placeholder="${i.pBanco != null ? fm(i.pBanco, 2) : 'preço'}" title="Vazio = preço do banco"/></td><td class="${i.total ? '' : 'w'}">${i.total ? fm(i.total, 2) : 'sem preço'}</td></tr>`; }).join('');
+  const meses = bk === 'emop' ? '' : `<div class="f"><select id="orc-mes" title="Mês de referência">${ORC.ind ? (ORC.ind[bk] || []).slice().sort((a, b) => String(b.ref).localeCompare(String(a.ref))).map(x => `<option value="${x.ref}"${x.ref === (ORC.ref[bk] || {}).ref ? ' selected' : ''}>${x.competencia}</option>`).join('') : '<option>…</option>'}</select></div>`;
+  const comp = ORC.pronto ? `<div class="tw" style="margin-top:10px"><table><thead><tr><th class="l">Solução (total com BDI)</th>${Object.keys(BANCOS).map(b => `<th>${BANCOS[b]}<small>${esc(orcRefTxt(b))}</small></th>`).join('')}<th></th></tr></thead><tbody>${ESG.SOL.map(s => `<tr class="${s.k === o.sol ? 'sel' : ''}"><td class="l" style="white-space:normal"><b>${esc(s.nome)}</b><br><small class="mut">${esc(s.desc)}</small></td>${Object.keys(BANCOS).map(b => { const t = orcTotal(s.k, b); return `<td>${t.tot > 0 ? 'R$ ' + fm(t.tot, 2) : 'sem preços'}${t.sem ? `<br><small class="mut">${t.sem} sem preço</small>` : ''}</td>`; }).join('')}<td><button class="bt peq${s.k === o.sol ? ' on' : ''}" data-orcsol="${s.k}">${s.k === o.sol ? '✔ em uso' : 'Usar'}</button></td></tr>`).join('')}</tbody></table></div>` : '';
   m.innerHTML = `<div class="card"><div class="barra"><h2 style="margin:0">Orçamento da rede</h2><span class="esp"></span>
-      <div class="f"><select id="orc-mes">${ORC.ind ? (ORC.ind.sinapi || []).map(x => `<option value="${x.ref}"${x.ref === ORC.mes ? ' selected' : ''}>SINAPI RJ ${x.competencia}</option>`).join('') : '<option>SINAPI…</option>'}</select></div>
-      <label style="font-size:.84rem;display:flex;gap:5px;align-items:center"><input type="checkbox" id="orc-deson"${o.deson ? ' checked' : ''}/> com desoneração</label>
-      <div class="f" style="width:92px"><input id="orc-bdi" inputmode="decimal" value="${fm(+o.bdi || 0, 2)}" title="BDI (%)"/></div><span class="mut" style="font-size:.8rem">% BDI</span>
-      <button class="bt peq" data-act="xlsOrc">⬇ Planilha Excel</button></div>
-    ${ORC.erro ? `<div class="aviso">Não consegui abrir o banco de preços do site (${esc(ORC.erro)}). Os quantitativos estão certos; digite os preços na coluna “Preço unit.” ou tente de novo com internet. <a href="#" data-act="orcDeNovo">Tentar de novo</a></div>` : ORC.carregando ? '<div class="aviso inf">Abrindo o banco SINAPI do site…</div>' : ''}
-    <div class="kpis" style="margin-bottom:10px"><div class="kpi"><b>R$ ${fm(sub, 2)}</b><span>Custo direto</span></div><div class="kpi"><b>R$ ${fm(tot, 2)}</b><span>Total com BDI</span></div><div class="kpi"><b>R$ ${fm(tot / Math.max(1, R.vaz.Lt), 2)}</b><span>por metro de rede</span></div><div class="kpi"><b>R$ ${fm(tot / Math.max(1, R.c.popF), 2)}</b><span>por habitante</span></div><div class="kpi"><b>${fm(R.vaz.Lt, 0)} m</b><span>Extensão</span></div><div class="kpi"><b>${Q.tampas}</b><span>PVs e TLs</span></div></div>
-    ${sem ? `<div class="aviso">${sem} item(ns) sem preço: são composições próprias (tubo de queda, ligação predial) ou códigos que não existem no mês escolhido. Digite o preço para entrarem no total.</div>` : ''}
-    <div class="tw"><table><thead><tr><th class="l">Código</th><th class="l">Serviço</th><th>Un.</th><th>Quantidade</th><th>Preço unit. (R$)</th><th>Total (R$)</th></tr></thead><tbody>${lin}</tbody>
-      <tfoot><tr><td colspan="5" style="text-align:right">Custo direto</td><td>${fm(sub, 2)}</td></tr><tr><td colspan="5" style="text-align:right">BDI ${fm(+o.bdi || 0, 2)} %</td><td>${fm(tot - sub, 2)}</td></tr><tr><td colspan="5" style="text-align:right">TOTAL</td><td>${fm(tot, 2)}</td></tr></tfoot></table></div>
-    <p class="mut" style="font-size:.78rem;margin:8px 0 0">Quantidades vêm do dimensionamento (extensão, profundidade média de cada trecho, largura da vala = DN + folga, escoramento em valas com mais de 1,25 m). Os códigos são sugestões do SINAPI: troque o código ou digite o preço da sua base (EMOP, SCO, cotação). Não entram: escavação dos PVs, rebaixamento de lençol, sinalização, canteiro e administração local.</p></div>`;
+      <div class="f"><select id="orc-banco" title="Banco de preços">${Object.keys(BANCOS).map(b => `<option value="${b}"${b === bk ? ' selected' : ''}>${BANCOS[b]}</option>`).join('')}</select></div>${meses}
+      <label style="font-size:.84rem;display:flex;gap:5px;align-items:center"><input type="checkbox" id="orc-deson"${o.deson ? ' checked' : ''}/> desonerado</label>
+      <div class="f" style="width:84px"><input id="orc-bdi" inputmode="decimal" value="${fm(+o.bdi || 0, 2)}" title="BDI (%)"/></div><span class="mut" style="font-size:.8rem">% BDI</span></div>
+    <div class="barra"><button class="bt peq pri" data-act="orcEnviar" title="Abre o programa de Orçamento já com esta planilha para importar">🚀 Enviar ao Orçamento</button><button class="bt peq" data-act="xlsOrc">⬇ Planilha Excel</button>
+      <button class="bt peq" data-act="orcTres" title="Janela comum do site: 3 soluções, cronograma físico-financeiro, PDF e juntar com outros programas">💰 3 soluções, cronograma e PDF</button><button class="bt peq" data-act="orcDeNovo">⟳ Recarregar bancos</button><button class="bt peq" data-act="orcLimpar" title="Apaga códigos e preços digitados">🧹 Voltar aos códigos do programa</button></div>
+    ${ORC.erro ? `<div class="aviso">Não consegui abrir um banco de preços do site (${esc(ORC.erro)}). As quantidades estão certas; digite os preços ou tente de novo com internet.</div>` : ORC.carregando ? '<div class="aviso inf">Abrindo os bancos SINAPI e SCO-Rio do site e a EMOP deste aparelho…</div>' : ''}
+    ${bk === 'emop' && ORC.pronto && !ORC.emop ? '<div class="aviso"><b>EMOP sem preços neste aparelho.</b> A EMOP é licenciada: importe o catálogo EMOP no programa de <a href="/orcamento/" target="tc_orcamento">Orçamento</a> (neste mesmo navegador) e volte aqui — os preços aparecem sozinhos. Enquanto isso os itens EMOP saem com o código certo e sem preço, e os demais usam SINAPI/SCO.</div>' : ''}
+    <div class="kpis" style="margin-bottom:10px"><div class="kpi"><b>R$ ${fm(sub, 2)}</b><span>Custo direto — ${BANCOS[bk]} ${esc(orcRefTxt(bk))}</span></div><div class="kpi"><b>R$ ${fm(tot, 2)}</b><span>Total com BDI</span></div><div class="kpi"><b>R$ ${fm(tot / Math.max(1, R.vaz.Lt), 2)}</b><span>por metro de rede</span></div><div class="kpi"><b>R$ ${fm(tot / Math.max(1, R.c.popF), 2)}</b><span>por habitante</span></div><div class="kpi"><b>${L.length}</b><span>itens</span></div></div>
+    ${sem ? `<div class="aviso">${sem} item(ns) sem preço: composições próprias (quadro da elevatória, passeio) ou serviços sem composição nos três bancos. Digite o preço ou o código para entrarem no total.</div>` : ''}
+    ${comp}</div>
+    <div class="card"><div class="tw"><table><thead><tr><th>Item</th><th class="l">Código</th><th class="l">Serviço</th><th>Un.</th><th>Quantidade</th><th>Preço unit. (R$)</th><th>Total (R$)</th></tr></thead><tbody>${lin}</tbody>
+      <tfoot><tr><td colspan="6" style="text-align:right">Custo direto</td><td>${fm(sub, 2)}</td></tr><tr><td colspan="6" style="text-align:right">BDI ${fm(+o.bdi || 0, 2)} %</td><td>${fm(tot - sub, 2)}</td></tr><tr><td colspan="6" style="text-align:right">TOTAL</td><td>${fm(tot, 2)}</td></tr></tfoot></table></div>
+    <p class="mut" style="font-size:.78rem;margin:8px 0 0">Quantidades do dimensionamento. <b>Valas:</b> largura = diâmetro externo + folga, profundidade média do trecho + berço, escoramento acima de 1,25 m. <b>Cavas dos PVs</b> (as composições de PV de EMOP, SINAPI e SCO não incluem escavação): cava de lado Ø externo + 2 × ${fm(R.c.folgaCava, 2)} m, medida à parte, com escoramento, lastro e reaterro. Serviço que não existe no banco escolhido usa o equivalente de outro banco (etiqueta ao lado do código). Não entram: rebaixamento de lençol, sinalização, canteiro e administração local.</p></div>`;
 }
-function xlsOrc() { const o = orcCfg(), L = orcLinhas(), A = [['Orçamento — ' + (P.nome || ''), '', '', '', '', ''], ['Referência: SINAPI RJ ' + (ORC.comp || '—') + (o.deson ? ' (com desoneração)' : ' (sem desoneração)'), '', '', '', '', ''], ['Código', 'Serviço', 'Un.', 'Quantidade', 'Preço unit.', 'Total']]; let g = ''; const lt = [];
-  L.forEach(i => { if (i.g !== g) { g = i.g; A.push([g.toUpperCase(), '', '', '', '', '']); } const n = A.length + 1; lt.push(n); A.push([i.cod, i.desc, i.un, Math.round(i.qtd * 100) / 100, i.pu > 0 ? i.pu : 0, {f: `ROUND(D${n}*E${n},2)`}]); });
-  const n = A.length + 1; A.push(['', '', '', '', 'Custo direto', {f: lt.map(x => 'F' + x).join('+')}], ['', '', '', '', 'BDI (%)', +o.bdi || 0], ['', '', '', '', 'TOTAL', {f: `ROUND(F${n}*(1+F${n + 1}/100),2)`}]);
-  xlsx(nomeArq() + '_orcamento', [{nome: 'Orçamento', linhas: A}, {nome: 'Dimensionamento', linhas: linhasDim()}, {nome: 'PVs', linhas: linhasPV()}]); }
+/* planilha no mesmo formato que o “Importar Lista” do programa de Orçamento lê (ITEM, CÓDIGO, DESCRIÇÃO, UNIDADE, QUANTIDADE, VALOR UNITÁRIO, TOTAL, FONTE) */
+function orcAoa() {
+  const o = orcCfg(), L = orcLinhas(), sol = ESG.SOL.find(s => s.k === o.sol), H = ['ITEM', 'CÓDIGO', 'DESCRIÇÃO', 'UNIDADE', 'QUANTIDADE', 'VALOR UNITÁRIO', 'TOTAL', 'FONTE'];
+  const aoa = [['ORÇAMENTO — ESGOTO SANITÁRIO — ' + sol.nome.toUpperCase()], [(P.nome || '') + (P.local ? ' — ' + P.local : '')], ['Banco ' + BANCOS[o.banco] + ' ' + orcRefTxt(o.banco) + ' · ' + (o.deson ? 'desonerado' : 'não desonerado') + ' · preços sem BDI; BDI de referência ' + fm(+o.bdi || 0, 2) + ' %'], [], H];
+  const mem = [['MEMÓRIA DE CÁLCULO DAS QUANTIDADES'], [], ['ITEM', 'DESCRIÇÃO', 'UNIDADE', 'QUANTIDADE', 'MEMÓRIA DE CÁLCULO']]; let gi = 0; const subs = [];
+  ESG.GRUPOS.forEach(g => { const ls = L.filter(i => i.g === g); if (!ls.length) return; gi++; const nome = 'ESGOTO SANITÁRIO — ' + g; aoa.push([String(gi), '', nome, '', '', '', '', '']); mem.push([String(gi), nome, '', '', '']); const ini = aoa.length + 1;
+    ls.forEach((i, j) => { const n = aoa.length + 1, q = r2(i.q), p = i.pu > 0 ? r2(i.pu) : '';
+      aoa.push([gi + '.' + (j + 1), i.r ? i.r.full : '', i.r && i.r.descr ? i.r.descr : i.nome, i.un, q, p, p === '' ? '' : {t: 'n', v: r2(q * p), f: `ROUND(E${n}*F${n},2)`}, i.manual ? 'Preço informado' : i.r ? BANCOS[i.r.src] + (i.r.semBanco ? ' (preço no Orçamento)' : '') : 'sem composição']);
+      mem.push([gi + '.' + (j + 1), i.nome, i.un, q, i.memo]); });
+    const n = aoa.length + 1; subs.push('G' + n); aoa.push(['', '', 'SUBTOTAL DO ITEM ' + gi, '', '', '', {t: 'n', v: r2(ls.reduce((s, i) => s + i.total, 0)), f: `SUM(G${ini}:G${n - 1})`}, '']); });
+  const sub = L.reduce((s, i) => s + i.total, 0), bdi = +o.bdi || 0, n = aoa.length + 2;
+  aoa.push([], ['', '', 'TOTAL SEM BDI', '', '', '', {t: 'n', v: r2(sub), f: subs.join('+') || '0'}, ''], ['', '', 'BDI ' + fm(bdi, 2) + ' %', '', '', '', {t: 'n', v: r2(sub * bdi / 100), f: `ROUND(G${n}*${bdi}/100,2)`}, ''], ['', '', 'TOTAL GERAL', '', '', '', {t: 'n', v: r2(sub * (1 + bdi / 100)), f: `G${n}+G${n + 1}`}, '']);
+  return {aoa, mem, sol, o};
+}
+function orcWb() {
+  const A = orcAoa(), wb = XLSX.utils.book_new(), ws = XLSX.utils.aoa_to_sheet(A.aoa);
+  Object.keys(ws).forEach(k => { const c = ws[k]; if (c && c.t === 'n' && /^[E-G]/.test(k)) c.z = '#,##0.00'; });
+  ws['!cols'] = [{wch: 7}, {wch: 26}, {wch: 80}, {wch: 8}, {wch: 12}, {wch: 14}, {wch: 15}, {wch: 26}]; XLSX.utils.book_append_sheet(wb, ws, 'Orçamento');
+  const wm = XLSX.utils.aoa_to_sheet(A.mem); wm['!cols'] = [{wch: 7}, {wch: 70}, {wch: 8}, {wch: 12}, {wch: 110}]; XLSX.utils.book_append_sheet(wb, wm, 'Memória de cálculo');
+  const wsol = XLSX.utils.aoa_to_sheet([['SOLUÇÃO'], [A.sol.nome], [A.sol.desc], [], ['Quantidades calculadas pelo programa Esgoto Sanitário (Total Civil) a partir do dimensionamento; confira os critérios na aba Memória de cálculo.']]); wsol['!cols'] = [{wch: 120}]; XLSX.utils.book_append_sheet(wb, wsol, 'Solução');
+  wb.Props = {Title: A.aoa[0][0], Author: P.autor || 'Total Civil', Company: 'Total Civil'};
+  return wb;
+}
+const carregarXlsx = async () => { if (!window.XLSX) await carregarScript('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js'); };
+async function xlsOrc() {
+  try { await carregarXlsx(); } catch (e) { return toast('Sem internet para gerar o Excel. Conecte e tente de novo.'); }
+  const wb = orcWb(), ap = (nome, linhas) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), nome);
+  ap('Dimensionamento', linhasDim()); ap('PVs', linhasPV()); ap('Cavas dos PVs', linhasCava()); if (Object.keys(R.eee).length) ap('Elevatórias', linhasEEE());
+  XLSX.writeFile(wb, nomeArq() + '_orcamento_' + orcCfg().banco + '.xlsx'); toast('Planilha gerada: orçamento, memória de cálculo, dimensionamento, PVs e cavas.');
+}
+async function orcEnviar() {
+  let w = null; try { w = window.open('', 'tc_orcamento'); if (w && (!w.location.href || w.location.href === 'about:blank')) w.location.href = '/orcamento/'; } catch (e) { w = null; }
+  try { await carregarXlsx(); } catch (e) { return toast('Sem internet para montar a planilha. Conecte e tente de novo.'); }
+  const A = orcAoa(), o = A.o, env = {v: 1, origem: 'Esgoto Sanitário', projeto: P.nome || '', municipio: P.local || '', solucao: A.sol.nome, banco: BANCOS[o.banco], regime: o.deson ? 'D' : 'O', bdi: +o.bdi || 0,
+    arquivo: 'orcamento-esgoto-' + o.sol + '-' + o.banco + '-' + nomeArq() + '.xlsx', b64: XLSX.write(orcWb(), {bookType: 'xlsx', type: 'base64'}), crono: null, em: new Date().toISOString()};
+  try { localStorage.setItem('tc_envio_orcamento', JSON.stringify(env)); } catch (e) { return toast('Não coube no armazenamento do navegador. Use ⬇ Planilha Excel e o “Importar Lista” do Orçamento.'); }
+  if (w) { try { w.focus(); } catch (e) {} toast('Enviado. O programa de Orçamento abre o Importar Lista com esta planilha.', 6000); }
+  else toast('Enviado. O navegador bloqueou a nova aba: abra o Orçamento (totalcivil.com.br/orcamento) e a importação começa sozinha.', 8000);
+}
+function linhasCava() { const L = [['PV', 'Tipo', 'Ø interno (m)', 'Ø externo (m)', 'Profundidade (m)', 'Lado da cava (m)', 'Altura da cava (m)', 'Escavação além das valas (m³)', 'Reaterro (m³)', 'Lastro (m³)']];
+  Q.pvs.forEach(p => L.push([nomeNo(noDe(p.id)), p.tipo, p.Dpv, a3(p.Dext), a3(p.prof), a3(p.B), a3(p.h), a3(p.esc), a3(p.reat), a3(p.lastro)]));
+  Q.eee.forEach(e => L.push([e.nome, 'EEE', e.Dp, a3(e.Dext), a3(e.prof), a3(e.B), a3(e.h), a3(e.esc), a3(e.reat), '']));
+  L.push([], ['Critério: cava quadrada de lado = Ø externo + 2 × folga (' + R.c.folgaCava + ' m); altura = profundidade + laje de fundo + lastro; desconta-se o volume das valas que chegam (meia cava × largura da vala); reaterro = escavação × (1 − área do PV ÷ área da cava).']); return L; }
+function linhasEEE() { const L = [['Elevatória', 'Q bomba (L/s)', 'Q mín. (L/s)', 'AMT (mca)', 'Desnível (m)', 'Perda distribuída (m)', 'Perda localizada (m)', 'Potência (cv)', 'Motor (cv)', 'Bombas', 'Recalque', 'DN', 'Extensão (m)', 'V (m/s)', 'Volume útil (m³)', 'Ø poço (m)', 'NA máx.', 'NA mín.', 'Fundo', 'Detenção (min)', 'Golpe de aríete (mca)', 'Pressão máx. (mca)']];
+  Object.values(R.eee).forEach(E => L.push([E.nome, a3(E.Qb), a3(E.Qmin), a3(E.AMT), a3(E.Hg), a3(E.hf), a3(E.hl), a3(E.Pcv), E.Pm, '1 + 1 reserva', E.matNome, E.dn, a3(E.Lr), a3(E.V), a3(E.Vu), E.Dp, a3(E.NAmax), a3(E.NAmin), a3(E.fundo), a3(E.td), a3(E.dHa), a3(E.Pmax)])); return L; }
 
 /* ══ MEMORIAL ══ */
 function memorialHTML() {
@@ -1251,7 +1631,8 @@ function memorialHTML() {
       ['Coeficiente de Manning n', f(c.n, 3) + ' (concreto 0,013)', 'Tensão trativa mínima', f(c.tau, 1) + ' Pa (vazão inicial)'],
       ['Vazão mínima de cálculo', f(c.qMin, 1) + ' L/s', 'Diâmetro mínimo', 'DN ' + c.dMin],
       ['Lâmina máxima y/D', f(c.yD, 2) + ' (vazão final)', 'y/D quando V &gt; V crítica', f(c.yDvc, 2)],
-      ['Velocidade máxima', f(c.vMax, 1) + ' m/s', 'Recobrimento mínimo', f(c.rec, 2) + ' m'],
+      ['Velocidade máxima', f(c.vMax, 1) + ' m/s', 'Recobrimento mínimo', f(c.rec, 2) + ' m na via · ' + f(c.recPas, 2) + ' m no passeio'],
+      ['Tubo da rede até DN 400', esc((ESG.TUBOS[c.mat] || ESG.TUBOS.pvcm).nome), 'Diâmetro de cálculo', c.usaDI ? 'interno real do tubo (DI)' : 'nominal (DN)'],
       ['Distância máxima entre PVs', f(c.distMax, 0) + ' m', 'Tubo de queda a partir de', f(c.degTQ, 2) + ' m de degrau'],
       ['Taxa de infiltração', f(c.tInf, 3) + ' L/s·km', 'Controle de remanso', c.remanso ? 'sim' : 'não']])}
     <h2>2. Vazões de projeto</h2>
@@ -1269,21 +1650,193 @@ function memorialHTML() {
     ${tb(['Trecho', 'Mont.', 'Jus.', 'L (m)', 'Q<sub>i</sub> (L/s)', 'Q<sub>f</sub> (L/s)', 'DN', 'I (%)', 'I mín. (%)', 'CC mont.', 'CC jus.', 'Prof. mont.', 'Prof. jus.', 'y/D<sub>i</sub>', 'y/D<sub>f</sub>', 'V<sub>i</sub>', 'V<sub>f</sub>', 'V<sub>c</sub>', 'σ (Pa)'], dim)}
     <h2>5. Poços de visita e terminais de limpeza</h2>
     ${tb(['PV', 'Tipo', 'Cota terreno', 'Cota fundo', 'Prof. (m)', 'Ø (m)', 'Tubos de queda', 'Q final (L/s)'], pvs)}
-    <h2>6. Verificação</h2>
+    ${memoExtra()}<h2>6. Verificação</h2>
     ${R.checks.filter(k => k.st !== 'info').length ? '<ul>' + R.checks.filter(k => k.st !== 'info').map(k => `<li><b>${k.st === 'err' ? 'ERRO' : 'Alerta'} — ${esc(k.onde)}:</b> ${esc(k.msg)}</li>`).join('') + '</ul>' : '<p>Todos os trechos atendem a tensão trativa mínima, lâmina máxima, velocidade máxima, recobrimento mínimo e controle de remanso.</p>'}
-    <p>Resumo: ${R.ordem.length} trechos, ${f(v.Lt, 1)} m de rede, ${Object.keys(R.no).length} PVs/TLs, ${Q.tq} tubo(s) de queda, profundidade máxima ${f(R.profMaxima, 2)} m. Extensão por diâmetro: ${Object.keys(Q.tubos).map(D => 'DN ' + D + ' = ' + f(Q.tubos[D], 1) + ' m').join(' · ')}.</p>
+    <p>Resumo: ${R.ordem.length} trechos, ${f(v.Lt, 1)} m de rede, ${Object.keys(R.no).length} PVs/TLs, ${Q.tq} tubo(s) de queda, profundidade máxima ${f(R.profMaxima, 2)} m. Extensão por diâmetro: ${Object.keys(Q.tubos).map(D => 'DN ' + D.split('|')[1] + ' = ' + f(Q.tubos[D], 1) + ' m').join(' · ')}.</p>
     <h2>7. Quantitativos${sub > 0 ? ' e orçamento' : ''}</h2>
-    ${tb(['Código', 'Serviço', 'Un.', 'Quantidade'].concat(sub > 0 ? ['Preço unit.', 'Total (R$)'] : []), L.map(i => [esc(i.cod), esc(i.desc), i.un, f(i.qtd, 2)].concat(sub > 0 ? [i.pu > 0 ? f(i.pu, 2) : '—', i.total ? f(i.total, 2) : '—'] : [])))}
-    ${sub > 0 ? `<p>Custo direto R$ ${f(sub, 2)} · BDI ${f(+o.bdi || 0, 2)} % · <b>Total R$ ${f(sub * (1 + (+o.bdi || 0) / 100), 2)}</b> · referência SINAPI RJ ${ORC.comp || '—'}${o.deson ? ' com desoneração' : ' sem desoneração'}.</p>` : ''}
+    ${tb(['Código', 'Serviço', 'Un.', 'Quantidade'].concat(sub > 0 ? ['Preço unit.', 'Total (R$)'] : []), L.map(i => [esc(i.r ? i.r.full : ''), esc(i.nome), esc(i.un), f(i.q, 2)].concat(sub > 0 ? [i.pu > 0 ? f(i.pu, 2) : '—', i.total ? f(i.total, 2) : '—'] : [])))}
+    ${sub > 0 ? `<p>Custo direto R$ ${f(sub, 2)} · BDI ${f(+o.bdi || 0, 2)} % · <b>Total R$ ${f(sub * (1 + (+o.bdi || 0) / 100), 2)}</b> · referência ${BANCOS[o.banco]} ${esc(orcRefTxt(o.banco))}${o.deson ? ', desonerado' : ', não desonerado'} · solução: ${esc(ESG.SOL.find(x => x.k === o.sol).nome)}.</p>` : ''}
+    <p><b>Critérios de medição.</b> Vala: largura = diâmetro externo + ${f(c.folga, 2)} m (mínimo 0,65 m); profundidade média do trecho + berço de ${f(c.berco, 2)} m; escoramento nas valas com mais de 1,25 m (NR-18). Cava dos poços de visita (as composições de PV de EMOP, SINAPI e SCO não incluem escavação, escoramento nem reaterro): cava quadrada de lado = Ø externo + 2 × ${f(c.folgaCava, 2)} m e altura = profundidade + laje + lastro de ${f(c.lastro, 2)} m, descontado o volume das valas que chegam; reaterro = escavação × (1 − área do PV ÷ área da cava). Bota-fora = (escavação total ${f(Q.escTot, 1)} m³ − reaterro ${f(Q.reatTot, 1)} m³) × empolamento ${f(c.empol, 2)}.</p>
     <h2>8. Planta da rede</h2><div style="text-align:center">${plantaSVG(980)}</div>
     <h2>9. Perfis longitudinais</h2>${R.coletores.map(col => `<div style="margin:8px 0;overflow:auto">${perfilSVG(col.trechos, 10, 980)}</div>`).join('')}
     <p style="margin-top:18px;color:#555">Gerado no programa Esgoto Sanitário — Total Civil (totalcivil.com.br). O projetista é responsável pela conferência dos dados de entrada, das cotas de campo e das exigências da concessionária local.</p></div>`;
 }
+function memoExtra() {
+  const f = fm, c = R.c, E = Object.values(R.eee), S = R.ordem.map(id => R.tr[id]).filter(r => r.sif); let s = '';
+  if (E.length) { s += '<h2>5.1 Estações elevatórias e linhas de recalque (NBR 12208)</h2>';
+    E.forEach(e => { s += `<p><b>${esc(e.nome)}</b> — recalque em ${esc(e.matNome)} DN ${e.dn}, ${f(e.Lr, 1)} m até ${esc(e.ateNome)}.</p>
+      <div class="fx">Vazão de bombeamento Q<sub>b</sub> = vazão máxima final afluente = <b>${f(e.Qb, 2)} L/s</b> (mínima ${f(e.Qmin, 2)} L/s, com K3 = ${f(c.K3, 2)}) · 2 conjuntos (1 + 1 reserva)</div>
+      <div class="fx">Volume útil do poço V<sub>u</sub> = Q<sub>b</sub> · T / 4 = ${f(e.Qb, 2)} × ${f(c.eCiclo, 0)} min × 60 / 4 / 1000 = <b>${f(e.Vu, 2)} m³</b> → poço Ø ${f(e.Dp, 2)} m, altura útil ${f(e.hu, 2)} m (NA máx. ${f(e.NAmax, 3)} · NA mín. ${f(e.NAmin, 3)} · fundo ${f(e.fundo, 3)})</div>
+      <div class="fx">Tempo de detenção com a vazão média = ${f(e.td, 1)} min (limite ${f(c.eDet, 0)} min)</div>
+      <div class="fx">Velocidade no recalque V = Q / A = <b>${f(e.V, 2)} m/s</b> (DI ${f(e.d * 1000, 1)} mm)</div>
+      <div class="fx">Hazen-Williams (C = ${e.C}): J = 10,643 · Q<sup>1,852</sup> / (C<sup>1,852</sup> · D<sup>4,87</sup>) → perda distribuída ${f(e.hf, 2)} m (com 10 % de folga) · localizadas K = ${f(c.eKloc, 0)} → ${f(e.hl, 2)} m</div>
+      <div class="fx">Altura manométrica AMT = desnível ${f(e.Hg, 2)} + ${f(e.hf, 2)} + ${f(e.hl, 2)} = <b>${f(e.AMT, 2)} mca</b></div>
+      <div class="fx">Potência P = γ · Q · AMT / (75 · η) = ${f(e.Pcv, 2)} cv (η = ${f(c.eEta, 2)}) → motor comercial <b>${f(e.Pm, 1)} cv</b> (folga ${f(c.eFolgaMotor, 0)} %)</div>
+      <div class="fx">Golpe de aríete (Joukowsky): ΔH = a · V / g = ${f(e.dHa, 1)} mca → pressão máxima ${f(e.Pmax, 1)} mca (classe do tubo ${e.pn} mca)</div>`; }); }
+  if (S.length) { s += '<h2>5.2 Sifões invertidos</h2>' + S.map(r => { const x = r.sif; return `<p><b>Trecho ${r.nome}</b> — ${x.n} linha(s) de ${esc(x.matNome)} DN ${x.dn}, ${f(r.L, 1)} m. Velocidade com a vazão inicial numa linha ${f(x.Vi, 2)} m/s (mínima ${f(c.sVmin, 2)} m/s para autolimpeza); com a vazão final em todas as linhas ${f(x.Vf, 2)} m/s. Perda de carga (Hazen-Williams + localizadas 1,5·V²/2g + 0,05 m) = <b>${f(x.dH, 3)} m</b> = desnível entre as câmaras de entrada (${f(r.ciM, 3)}) e de saída (${f(r.ciJ, 3)}). Fundo do sifão na cota ${f(x.fundo, 3)} (obstáculo ${f(x.obst, 3)}, proteção ${f(x.prot, 2)} m).</p>`; }).join(''); }
+  return s;
+}
 function vMemo(m) {
   if (!R.ok) { m.innerHTML = `<div class="card">${listaVerif()}</div>`; return; }
-  if (!ORC.ind && !ORC.erro && !ORC.carregando) orcCarregar();
-  m.innerHTML = `<div class="barra noprint"><button class="bt pri" data-act="imprimir">🖨 Imprimir / salvar em PDF</button><button class="bt" data-act="word">⬇ Word (.doc)</button><button class="bt" data-act="xlsOrc">⬇ Planilhas (Excel)</button><button class="bt" data-act="dxf">⬇ Planta DXF</button><button class="bt" data-act="expJson">⬇ Projeto (.json)</button></div>${memorialHTML()}`;
+  if (!ORC.pronto && !ORC.carregando) orcCarregar();
+  m.innerHTML = `<div class="barra noprint"><button class="bt pri" data-act="imprimir">🖨 Imprimir / salvar em PDF</button><button class="bt" data-act="word">⬇ Word (.doc)</button><button class="bt" data-act="xlsOrc">⬇ Planilhas (Excel)</button><button class="bt" data-act="cadDxf">⬇ Projeto DXF</button><button class="bt" data-act="cadDwg">⬇ Projeto DWG</button><button class="bt" data-act="expJson">⬇ Projeto (.json)</button></div>${memorialHTML()}`;
 }
+/* ════════════════════════════════════════════════════════════════════
+   ELEVATÓRIA, RECALQUE, SIFÃO, TUBOS (tela) · EXPORTAÇÃO CAD (DXF e DWG)
+   ════════════════════════════════════════════════════════════════════ */
+const selOp = (ops, v) => ops.map(o => `<option value="${o[0]}"${String(v == null ? '' : v) === String(o[0]) ? ' selected' : ''}>${esc(o[1])}</option>`).join('');
+const MATS_REDE = [['pvcm', 'PVC de parede maciça (NBR 7362)'], ['pvcc', 'PVC corrugado de dupla parede'], ['conc', 'Concreto (todos os diâmetros)']];
+const MATS_PRESS = [['pvc', 'PVC DEFOFO 1,0 MPa'], ['pead', 'PEAD PE 100 PN 10'], ['fofo', 'Ferro fundido dúctil K9']];
+function dadosExtra() {
+  const c = R && R.c || ESG.crit(P), m = c.mat || 'pvcm', dns = m === 'conc' ? [] : ESG.SERIE.filter(D => D <= 400 && (ESG.TUBOS[m].DE[D] || m === 'pvcm'));
+  const lin = dns.map(D => { const g = ESG.tuboGeo(D, Object.assign({}, c, {usaDI: true}), m), man = c.diMan && c.diMan[m] && c.diMan[m][D];
+    return `<tr><td>DN ${D}</td><td>${fm(g.de, 0)}</td><td><input data-di="${D}" inputmode="decimal" style="width:84px" value="${man ? fm(+man, 1) : ''}" placeholder="${fm(g.di, 1)}${g.aprox ? ' ≈' : ''}" title="Vazio = valor do programa. Digite o DI do catálogo do fabricante."/></td></tr>`; }).join('');
+  return `<div class="card"><h2>Tubos da rede</h2><div class="fg" style="grid-template-columns:1fr">
+      <div class="f"><label>Tubo até DN 400 (acima disso, concreto)</label><select data-sel="mat">${selOp(MATS_REDE, m)}</select><div class="aj">Dá para trocar em cada trecho, no Traçado.</div></div></div>
+    <label style="display:flex;gap:7px;align-items:center;margin:8px 0;font-size:.86rem"><input type="checkbox" data-chk="usaDI"${c.usaDI ? ' checked' : ''}/> Calcular com o diâmetro interno real (DI), e não com o nominal</label>
+    ${lin ? `<div class="tw" style="max-height:230px"><table><thead><tr><th>Tubo</th><th>Externo<small>mm</small></th><th>Interno (DI)<small>mm</small></th></tr></thead><tbody>${lin}</tbody></table></div>
+    <p class="mut" style="font-size:.76rem;margin:6px 0 0">“≈” = valor aproximado: confira no catálogo do fabricante e digite o DI. O diâmetro externo entra na largura da vala e no recobrimento.</p>` : '<p class="mut" style="font-size:.8rem">Concreto: DI = DN; parede ≈ DN/12 + 25 mm.</p>'}</div>
+  <div class="card"><h2>Elevatória e recalque <small>(NBR 12208)</small></h2><div class="fg">
+      <div class="f"><label>Tubo do recalque</label><select data-sel="eMat">${selOp(MATS_PRESS, c.eMat)}</select></div>${CAMPOS.eee.map(campo).join('')}</div>
+    <p class="mut" style="font-size:.78rem;margin:8px 0 0">Para criar: no Traçado, botão <b>🏭 Elevatória</b> (o programa sugere onde) ou clique num PV › “Criar elevatória neste PV”.</p>
+    <h3>Sifão invertido</h3><div class="fg"><div class="f"><label>Tubo do sifão</label><select data-sel="sMat">${selOp(MATS_PRESS.slice().reverse(), c.sMat)}</select></div>${CAMPOS.sif.map(campo).join('')}</div>
+    <p class="mut" style="font-size:.78rem;margin:8px 0 0">Para criar: no Traçado, clique no trecho que passa sob o córrego/galeria › “Sifão invertido”.</p></div>`;
+}
+function ladoTrExtra(t, r) {
+  if (r && r.recq) return `<div class="aviso inf" style="grid-column:1/-1;margin:0">Linha de recalque da ${esc((R.eee[r.recq] || {}).nome || 'elevatória')}: ${esc(r.matRec || '')} DN ${r.D}, V = ${fm(r.hF.V, 2)} m/s. Não recebe ligações.</div>`;
+  let s = `<div class="f"><label>Onde passa</label><select data-trk="loc" data-id="${t.id}">${selOp([['', 'Leito da via (recobrimento ' + fm(P.crit.rec, 2) + ' m)'], ['passeio', 'Passeio (recobrimento ' + fm(P.crit.recPas, 2) + ' m)']], t.loc || '')}</select></div>
+    <div class="f"><label>Tubo</label><select data-trk="mat" data-id="${t.id}">${selOp([['', 'do projeto']].concat(MATS_REDE), t.mat || '')}</select></div>
+    <div class="f" style="grid-column:1/-1"><label>Travessia</label><select data-sif="on" data-id="${t.id}">${selOp([['', 'Trecho comum (escoamento livre)'], ['1', 'Sifão invertido (passa por baixo de córrego, galeria, adutora…)']], t.sif ? '1' : '')}</select></div>`;
+  if (t.sif) s += `<div class="f"><label>Linhas do sifão</label><select data-sif="n" data-id="${t.id}">${selOp([['', 'do projeto (' + P.crit.sLinhas + ')'], [1, '1'], [2, '2'], [3, '3']], t.sif.n || '')}</select></div>
+    <div class="f"><label>Cota do fundo do obstáculo (m)</label><input data-sif="cota" data-id="${t.id}" inputmode="decimal" value="${t.sif.cota != null && t.sif.cota !== '' ? fm(+t.sif.cota, 3).replace(/\./g, '') : ''}" placeholder="${r && r.sif ? fm(r.sif.obst, 2) + ' (1,5 m abaixo do terreno)' : ''}"/></div>
+    ${r && r.sif ? `<div class="aviso inf" style="grid-column:1/-1;margin:0">${r.sif.n} × ${esc(r.sif.matNome)} DN ${r.sif.dn} · V inicial ${fm(r.sif.Vi, 2)} · final ${fm(r.sif.Vf, 2)} m/s · perda ${fm(r.sif.dH, 3)} m · fundo na cota ${fm(r.sif.fundo, 3)}</div>` : ''}`;
+  return s;
+}
+const eeeCaminho = id => { const l = []; let n = id, k = 0; while (R && R.ok && R.outs[n] && R.outs[n][0] && k++ < 200) { n = R.outs[n][0].para; l.push(n); } return l; };
+function ladoEEE(n, x) {
+  if (!R || !R.ok) return '';
+  const e = (P.eee || []).find(q => q.no === n.id);
+  if (!e) return x && x.recebeRec ? '<div class="aviso inf" style="margin:8px 0 0">Este PV recebe uma linha de recalque: a rede segue daqui por gravidade.</div>' : `<div class="barra" style="margin-top:8px"><button class="bt peq" data-eeenovo="${n.id}" title="A rede que chega aqui passa a ser bombeada para um PV mais alto ou para um ponto de descarga">🏭 Criar elevatória neste PV</button></div>`;
+  const E = R.eee[e.id], cam = eeeCaminho(n.id), T = ESG.RECALQUE[e.mat || P.crit.eMat] || ESG.RECALQUE.pvc;
+  return `<h3>🏭 Estação elevatória</h3><div class="fg" style="grid-template-columns:1fr 1fr">
+    <div class="f" style="grid-column:1/-1"><label>Recalca para</label><select data-eee="ate" data-id="${e.id}">${selOp(cam.map(id => [id, nomeNo(noDe(id)) + ' (terreno ' + fm(+noDe(id).ct, 2) + ')']).concat([['@ext', 'Ponto fora da rede (ETE, PV existente…)']]), e.ext ? '@ext' : e.ate)}</select></div>
+    ${e.ext ? `<div class="f"><label>Cota de chegada (m)</label><input data-eee="extCota" data-id="${e.id}" inputmode="decimal" value="${fm(+e.ext.cota, 3).replace(/\./g, '')}"/></div><div class="f"><label>Extensão do recalque (m)</label><input data-eee="extL" data-id="${e.id}" inputmode="decimal" value="${fm(+e.ext.L, 1).replace(/\./g, '')}"/></div>` : ''}
+    <div class="f"><label>Tubo do recalque</label><select data-eee="mat" data-id="${e.id}">${selOp([['', 'do projeto']].concat(MATS_PRESS), e.mat || '')}</select></div>
+    <div class="f"><label>DN do recalque</label><select data-eee="dnRec" data-id="${e.id}">${selOp([['', 'automático']].concat(T.l.map(q => [q[0], 'DN ' + q[0]])), e.dnRec || '')}</select></div></div>
+    ${E ? `<div class="kpis" style="margin-top:8px"><div class="kpi"><b>${fm(E.Qb, 2)} L/s</b><span>Vazão da bomba</span></div><div class="kpi"><b>${fm(E.AMT, 1)} mca</b><span>Altura manométrica</span></div><div class="kpi"><b>${fm(E.Pm, 1)} cv</b><span>Motor (1 + 1 reserva)</span></div><div class="kpi"><b>DN ${E.dn}</b><span>${fm(E.Lr, 0)} m · ${fm(E.V, 2)} m/s</span></div><div class="kpi"><b>Ø ${fm(E.Dp, 2)} m</b><span>Poço · útil ${fm(E.Vu, 2)} m³</span></div><div class="kpi"><b>${fm(E.profP, 2)} m</b><span>Profundidade do poço</span></div></div>` : ''}
+    <div class="barra" style="margin-top:8px"><button class="bt peq" data-eeedel="${e.id}">✖ Retirar a elevatória</button></div>`;
+}
+function eeeNova(id) {
+  editar(() => { const cam = eeeCaminho(id), e = {id: novoId('e'), no: id}, n = noDe(id);
+    if (cam.length) { let M = cam[0]; for (const q of cam) { M = q; if ((R.ins[q] || []).length > 1) break; } e.ate = M; } else e.ext = {nome: 'ponto de descarga', cota: ESG.r3((+n.ct || 0) + 3), L: 100};
+    P.eee = (P.eee || []).concat([e]); P.manual = true; });
+  toast('Elevatória criada. Escolha para onde ela recalca; bombas, poço e recalque já foram calculados.', 6000);
+}
+function sugEEE() {
+  if (!R || !R.ok) return toast('Gere a rede primeiro.');
+  let res; editar(() => { res = ESG.sugerirEEE(P); if (res.lista && res.lista.length) P.manual = true; });
+  if (!res.lista || !res.lista.length) return toast('Nenhuma elevatória necessária: a rede não passa de ' + fm(R.c.profMax, 1) + ' m de profundidade nem chega abaixo do lançamento. Para criar à mão, clique num PV › “Criar elevatória neste PV”.', 9000);
+  modal(`<h2>🏭 Elevatórias criadas</h2><p class="mut" style="font-size:.86rem">O programa pôs uma elevatória onde a rede por gravidade ficava funda demais. Tudo já foi calculado (NBR 12208) e entra no perfil, no 3D, no memorial e no orçamento. Use ↶ Desfazer se não quiser.</p>
+    ${res.lista.map(x => { const E = R.eee[x.e.id]; return `<div class="aviso inf"><b>${esc(E ? E.nome : 'EEE')}</b> — motivo: ${esc(x.motivo)}.${E ? `<br>Bombas 1 + 1 de ${fm(E.Qb, 2)} L/s × ${fm(E.AMT, 1)} mca, motor ${fm(E.Pm, 1)} cv · recalque ${esc(E.matNome)} DN ${E.dn}, ${fm(E.Lr, 0)} m até ${esc(E.ateNome)} (V ${fm(E.V, 2)} m/s) · poço Ø ${fm(E.Dp, 2)} m, ${fm(E.profP, 2)} m de profundidade.` : ''}</div>`; }).join('')}
+    <p style="font-size:.86rem">Profundidade máxima da rede agora: <b>${fm(R.profMaxima, 2)} m</b> · ${R.nErr} erro(s), ${R.nWarn} alerta(s).</p><div class="barra"><button class="bt pri" data-fechar>Entendi</button></div>`);
+}
+function eeeCards() {
+  const L = Object.values(R.eee || {}); if (!L.length) return '';
+  return `<div class="card"><h2>Estações elevatórias e recalque <small>(NBR 12208)</small></h2><div class="tw"><table><thead><tr><th class="l">Elevatória</th><th>Q bomba<small>L/s</small></th><th>AMT<small>mca</small></th><th>Desnível<small>m</small></th><th>Perdas<small>m</small></th><th>Motor<small>cv</small></th><th class="l">Recalque</th><th>L<small>m</small></th><th>V<small>m/s</small></th><th>Vol. útil<small>m³</small></th><th>Ø poço<small>m</small></th><th>NA máx./mín.</th><th>Fundo</th><th>Detenção<small>min</small></th><th>Golpe<small>mca</small></th></tr></thead><tbody>
+    ${L.map(E => `<tr data-selc="${E.no}" style="cursor:pointer"><td class="l"><b>${esc(E.nome)}</b></td><td>${fm(E.Qb, 2)}</td><td>${fm(E.AMT, 2)}</td><td>${fm(E.Hg, 2)}</td><td>${fm(E.hf + E.hl, 2)}</td><td>${fm(E.Pm, 1)} <small>(${fm(E.Pcv, 2)})</small></td><td class="l">${esc(E.matNome.split(' (')[0])} DN ${E.dn} → ${esc(E.ateNome)}</td><td>${fm(E.Lr, 0)}</td><td class="${E.V < R.c.eVmin || E.V > R.c.eVmax ? 'w' : ''}">${fm(E.V, 2)}</td><td>${fm(E.Vu, 2)}</td><td>${fm(E.Dp, 2)}</td><td>${fm(E.NAmax, 2)} / ${fm(E.NAmin, 2)}</td><td>${fm(E.fundo, 2)}</td><td class="${E.td > R.c.eDet ? 'w' : ''}">${fm(E.td, 0)}</td><td>${fm(E.dHa, 0)}</td></tr>`).join('')}</tbody></table></div>
+    <p class="mut" style="font-size:.78rem;margin:8px 0 0">Bombas submersíveis 1 + 1 reserva · volume útil V = Q·T/4 · perdas por Hazen-Williams + localizadas · golpe de aríete por Joukowsky (fechamento brusco, a favor da segurança). O ponto de trabalho deve ser conferido na curva da bomba escolhida.</p></div>`;
+}
+
+/* ══ EXPORTAÇÃO CAD: uma só "cena" (planta, quadro, perfis e carimbo) gravada em DXF ou DWG ══ */
+function cadCena() {
+  const E = [], LAY = [['ESG-RUA-EIXO', 8], ['ESG-RUA-NOME', 8], ['ESG-TOPOGRAFIA', 9], ['ESG-REDE', 5], ['ESG-REDE-TEXTO', 5], ['ESG-RECALQUE', 6], ['ESG-SIFAO', 4], ['ESG-PV', 3], ['ESG-PV-TEXTO', 3], ['ESG-EEE', 6], ['ESG-LANCAMENTO', 1],
+    ['ESG-PERFIL-TERRENO', 34], ['ESG-PERFIL-TUBO', 5], ['ESG-PERFIL-PV', 3], ['ESG-PERFIL-GRADE', 8], ['ESG-PERFIL-TEXTO', 7], ['ESG-QUADRO', 7], ['ESG-CARIMBO', 7]];
+  const Ln = (l, x1, y1, x2, y2) => E.push({t: 'L', l, x1, y1, x2, y2}), Pl = (l, pts, c) => E.push({t: 'P', l, pts, c: !!c}), Ci = (l, x, y, r) => E.push({t: 'C', l, x, y, r});
+  const Tx = (l, x, y, h, txt, ang, al) => { txt = String(txt); ang = ang || 0; if (al === 'C' || al === 'R') { const w = 0.62 * h * txt.length * (al === 'C' ? 0.5 : 1), a = ang * Math.PI / 180; x -= w * Math.cos(a); y -= w * Math.sin(a); } E.push({t: 'T', l, x, y, h, txt, ang}); };
+  const B = limites(), ht = Math.max(0.8, Math.min(2.5, Math.max(B.w, B.h) / 260)), f2 = v => (+v).toFixed(2).replace('.', ','), f3 = v => (+v).toFixed(3).replace('.', ',');
+  const angT = (ux, uy) => { let a = Math.atan2(uy, ux) * 180 / Math.PI; if (a > 90) a -= 180; if (a < -90) a += 180; return a; };
+  /* ── planta ── */
+  P.ruas.forEach(r => { if (r.pts.length < 2) return; Pl('ESG-RUA-EIXO', r.pts.map(q => [q.x, q.y])); const a = r.pts[0], b = r.pts[1], l = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / l, uy = (b.y - a.y) / l, an = angT(ux, uy), k = an * Math.PI / 180;
+    Tx('ESG-RUA-NOME', a.x + ux * l * 0.25 + Math.sin(k) * (P.crit.largRua / 2 + ht), a.y + uy * l * 0.25 - Math.cos(k) * (P.crit.largRua / 2 + ht * 2), ht * 1.2, r.nome.toUpperCase(), an, 'C'); });
+  P.topo.forEach(q => { Ln('ESG-TOPOGRAFIA', q.x - ht / 3, q.y, q.x + ht / 3, q.y); Ln('ESG-TOPOGRAFIA', q.x, q.y - ht / 3, q.x, q.y + ht / 3); Tx('ESG-TOPOGRAFIA', q.x + ht / 2, q.y + ht / 2, ht * 0.7, f2(q.z)); });
+  P.trechos.forEach(t => { const a = noDe(t.de), b = noDe(t.para), r = R.tr[t.id]; if (!a || !b || !r) return; const lay = r.recq ? 'ESG-RECALQUE' : r.sif ? 'ESG-SIFAO' : 'ESG-REDE', l = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / l, uy = (b.y - a.y) / l, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, an = angT(ux, uy), k = an * Math.PI / 180;
+    Ln(lay, a.x, a.y, b.x, b.y); const s = ht * 0.9; Pl(lay, [[mx + ux * s, my + uy * s], [mx - ux * s - uy * s * 0.5, my - uy * s + ux * s * 0.5], [mx - ux * s + uy * s * 0.5, my - uy * s - ux * s * 0.5]], true);
+    const txt = r.recq ? `${r.nome} RECALQUE DN${r.D} L=${f2(r.L)}m` : r.sif ? `${r.nome} SIFÃO ${r.sif.n}xDN${r.D} L=${f2(r.L)}m` : `${r.nome} DN${r.D} i=${(r.I * 100).toFixed(2).replace('.', ',')}% L=${f2(r.L)}m`;
+    if (l > txt.length * ht * 0.62) Tx('ESG-REDE-TEXTO', mx - Math.sin(k) * ht * 0.7, my + Math.cos(k) * ht * 0.7, ht, txt, an, 'C'); else Tx('ESG-REDE-TEXTO', mx - Math.sin(k) * ht * 0.7, my + Math.cos(k) * ht * 0.7, ht * 0.8, r.nome + ' DN' + r.D, an, 'C'); });
+  Object.values(R.no).forEach(x => { const n = noDe(x.id); if (!n) return; const re = x.Dpv / 2 + x.par;
+    if (x.tipo === 'EEE') { Pl('ESG-EEE', [[n.x - re, n.y - re], [n.x + re, n.y - re], [n.x + re, n.y + re], [n.x - re, n.y + re]], true); Ci('ESG-EEE', n.x, n.y, x.Dpv / 2); } else { Ci('ESG-PV', n.x, n.y, re); if (x.tipo === 'PV') Ci('ESG-PV', n.x, n.y, 0.30); }
+    if (x.fim) Pl('ESG-LANCAMENTO', [[n.x, n.y + re + ht * 2], [n.x + ht, n.y + re + ht * 0.2], [n.x - ht, n.y + re + ht * 0.2]], true);
+    Tx('ESG-PV-TEXTO', n.x + re + ht * 0.5, n.y + ht * 0.4, ht, nomeNo(n) + (x.tipo === 'EEE' ? ' (EEE)' : x.tq ? ' (TQ)' : '') + (x.fim ? ' - LANÇAMENTO' : ''));
+    Tx('ESG-PV-TEXTO', n.x + re + ht * 0.5, n.y - ht * 0.8, ht * 0.75, 'CT ' + f3(x.ct) + '  CF ' + f3(x.cf) + '  h=' + f2(x.prof)); });
+  /* ── quadro de trechos ── */
+  const qx = B.x + B.w + 30 * ht, qy = B.y + B.h, rh = ht * 2.2, cols = [['TRECHO', 8], ['MONTANTE', 10], ['JUSANTE', 10], ['L (m)', 8], ['DN', 6], ['i (%)', 8], ['CC MONT.', 10], ['CC JUS.', 10], ['PROF.M', 8], ['PROF.J', 8], ['Qf (L/s)', 9], ['y/D', 6], ['V (m/s)', 8]], cw = cols.map(c => c[1] * ht), tw = cw.reduce((a, b) => a + b, 0);
+  const linhasQ = []; R.coletores.forEach(c => c.trechos.forEach(id => { const r = R.tr[id]; linhasQ.push([r.nome, nomeNo(noDe(r.de)), nomeNo(noDe(r.para)), f2(r.L), r.recq ? 'R' + r.D : r.sif ? r.sif.n + 'x' + r.D : r.D, r.recq || r.sif ? '-' : (r.I * 100).toFixed(3).replace('.', ','), f3(r.ciM), f3(r.ciJ), f2(r.profM), f2(r.profJ), f2(r.QF), r.recq || r.sif ? '-' : r.hF.carga ? 'cheio' : f2(r.hF.yd), f2(r.hF.V)]); }));
+  Tx('ESG-QUADRO', qx, qy + rh * 0.6, ht * 1.3, 'QUADRO DE TRECHOS - REDE COLETORA DE ESGOTO');
+  [cols.map(c => c[0])].concat(linhasQ).forEach((row, i) => { const y = qy - i * rh; let x = qx; row.forEach((v, j) => { Tx('ESG-QUADRO', x + cw[j] / 2, y - rh * 0.72, ht * 0.85, v, 0, 'C'); x += cw[j]; }); Ln('ESG-QUADRO', qx, y, qx + tw, y); });
+  const yb = qy - (linhasQ.length + 1) * rh; Ln('ESG-QUADRO', qx, yb, qx + tw, yb); { let x = qx; Ln('ESG-QUADRO', x, qy, x, yb); cw.forEach(w => { x += w; Ln('ESG-QUADRO', x, qy, x, yb); }); }
+  /* ── perfis (escala horizontal 1:1, vertical exagerada 10×) ── */
+  const ev = 10; let py = B.y - 12 * ht;
+  R.coletores.forEach(col => { const tr = col.trechos.map(id => R.tr[id]), nos = [tr[0].de].concat(tr.map(r => r.para)), xs = [0]; tr.forEach(r => xs.push(xs[xs.length - 1] + r.L));
+    const zmax = Math.max(...tr.map(r => Math.max(r.ctM, r.ctJ))), zmin = Math.min(...tr.map(r => Math.min(r.ciM, r.ciJ, r.sif ? r.sif.fundo : r.ciJ)), ...nos.map(id => R.no[id].cf)), zr = Math.floor(zmin) - 1, H = (zmax - zr + 1) * ev;
+    const x0 = B.x, y0 = py - H, X = d => x0 + d, Y = z => y0 + (z - zr) * ev, Lt = xs[xs.length - 1];
+    Tx('ESG-PERFIL-TEXTO', x0, py + ht, ht * 1.3, 'PERFIL - COLETOR ' + col.num + '  (H 1:1 - V ' + ev + 'x)  ' + f2(Lt) + ' m');
+    for (let z = zr; z <= zmax + 1; z++) { Ln('ESG-PERFIL-GRADE', X(0), Y(z), X(Lt), Y(z)); Tx('ESG-PERFIL-GRADE', X(0) - ht * 0.5, Y(z) - ht * 0.35, ht * 0.8, f2(z), 0, 'R'); }
+    Pl('ESG-PERFIL-TERRENO', [[X(0), Y(tr[0].ctM)]].concat(tr.map((r, i) => [X(xs[i + 1]), Y(r.ctJ)])));
+    tr.forEach((r, i) => { const x1 = X(xs[i]), x2 = X(xs[i + 1]), xm = (x1 + x2) / 2;
+      if (r.recq) Ln('ESG-RECALQUE', x1, Y(r.ciM + r.d / 2), x2, Y(r.ciJ + r.d / 2));
+      else if (r.sif) Pl('ESG-SIFAO', [[x1, Y(r.ciM + r.d / 2)], [x1 + (x2 - x1) * 0.22, Y(r.sif.fundo + r.d / 2)], [x1 + (x2 - x1) * 0.78, Y(r.sif.fundo + r.d / 2)], [x2, Y(r.ciJ + r.d / 2)]]);
+      else { Ln('ESG-PERFIL-TUBO', x1, Y(r.ciM), x2, Y(r.ciJ)); Ln('ESG-PERFIL-TUBO', x1, Y(r.ciM + r.d), x2, Y(r.ciJ + r.d)); }
+      Tx('ESG-PERFIL-TEXTO', xm, y0 - ht * 10.2, ht * 0.8, f2(r.L) + ' m - ' + (r.recq ? 'REC. ' : r.sif ? 'SIFAO ' + r.sif.n + 'x' : '') + 'DN ' + r.D, 0, 'C');
+      Tx('ESG-PERFIL-TEXTO', xm, y0 - ht * 12.6, ht * 0.8, r.recq ? 'sob pressao' : r.sif ? 'dH ' + f3(r.sif.dH) + ' m' : 'i = ' + (r.I * 100).toFixed(3).replace('.', ',') + ' %', 0, 'C'); });
+    nos.forEach((id, i) => { const x = R.no[id], n = noDe(id), cx = X(xs[i]), w = x.Dpv / 2;
+      Pl('ESG-PERFIL-PV', [[cx - w, Y(x.cf)], [cx + w, Y(x.cf)], [cx + w, Y(x.ct)], [cx - w, Y(x.ct)]], true); Ln('ESG-PERFIL-GRADE', cx, Y(x.cf), cx, y0 - ht * 7.6);
+      const cin = i > 0 ? tr[i - 1].ciJ : null, cout = i < tr.length ? tr[i].ciM : null, cc = cin != null && cout != null && Math.abs(cin - cout) > 0.0005 ? f3(cin) + '/' + f3(cout) : f3(cout != null ? cout : cin), al = i === 0 ? 'L' : i === nos.length - 1 ? 'R' : 'C';
+      [nomeNo(n) + (x.tipo === 'EEE' ? ' (EEE)' : x.tq ? ' (TQ)' : ''), f3(x.ct), cc, f2(x.prof)].forEach((v, k) => Tx('ESG-PERFIL-TEXTO', cx, y0 - ht * (0.6 + 2.4 * k) - ht * 0.8, ht * 0.8, v, 0, al)); });
+    ['PV', 'COTA DO TERRENO', 'COTA DO COLETOR', 'PROFUNDIDADE (m)', 'EXTENSAO - DN', 'DECLIVIDADE'].forEach((v, k) => { Ln('ESG-PERFIL-GRADE', X(0) - 22 * ht, y0 - ht * 2.4 * k, X(Lt), y0 - ht * 2.4 * k); Tx('ESG-PERFIL-TEXTO', X(0) - 21.5 * ht, y0 - ht * (0.6 + 2.4 * k) - ht * 0.8, ht * 0.8, v); });
+    Ln('ESG-PERFIL-GRADE', X(0) - 22 * ht, y0 - ht * 14.4, X(Lt), y0 - ht * 14.4); Ln('ESG-PERFIL-GRADE', X(0) - 22 * ht, y0, X(0) - 22 * ht, y0 - ht * 14.4); Ln('ESG-PERFIL-GRADE', X(0), Y(zr), X(0), Y(zmax + 1));
+    py = y0 - ht * 14.4 - 14 * ht; });
+  /* ── carimbo ── */
+  const cx0 = qx, cy0 = Math.min(yb - 10 * ht, B.y) - 26 * ht, cwid = Math.max(tw, 90 * ht);
+  Pl('ESG-CARIMBO', [[cx0, cy0], [cx0 + cwid, cy0], [cx0 + cwid, cy0 + 24 * ht], [cx0, cy0 + 24 * ht]], true); [18, 12, 6].forEach(k => Ln('ESG-CARIMBO', cx0, cy0 + k * ht, cx0 + cwid, cy0 + k * ht));
+  Tx('ESG-CARIMBO', cx0 + 2 * ht, cy0 + 19.8 * ht, ht * 2, 'REDE COLETORA DE ESGOTO SANITARIO - PLANTA, QUADRO E PERFIS');
+  Tx('ESG-CARIMBO', cx0 + 2 * ht, cy0 + 14 * ht, ht * 1.6, 'PROJETO: ' + (P.nome || '') + (P.local ? '  -  ' + P.local : ''));
+  Tx('ESG-CARIMBO', cx0 + 2 * ht, cy0 + 8 * ht, ht * 1.3, 'RESP. TECNICO: ' + (P.autor || '') + '     DATA: ' + new Date().toLocaleDateString('pt-BR'));
+  Tx('ESG-CARIMBO', cx0 + 2 * ht, cy0 + 2.2 * ht, ht * 1.1, 'Desenho em metros (1 unidade = 1 m). Perfis: horizontal 1:1, vertical ' + ev + 'x. ' + R.ordem.length + ' trechos, ' + f2(R.vaz.Lt) + ' m, Qfinal ' + f2(R.Qfim) + ' L/s. NBR 9649. Total Civil.');
+  return {layers: LAY, ents: E};
+}
+function cadDxf(C) {
+  const n = v => (Math.round(v * 10000) / 10000).toString(), tx = s => String(s).replace(/[^\x20-\x7e]/g, ch => '\\U+' + ('0000' + ch.charCodeAt(0).toString(16).toUpperCase()).slice(-4));
+  let e = '';
+  C.ents.forEach(o => {
+    if (o.t === 'L') e += `0\nLINE\n8\n${o.l}\n10\n${n(o.x1)}\n20\n${n(o.y1)}\n30\n0\n11\n${n(o.x2)}\n21\n${n(o.y2)}\n31\n0\n`;
+    else if (o.t === 'C') e += `0\nCIRCLE\n8\n${o.l}\n10\n${n(o.x)}\n20\n${n(o.y)}\n30\n0\n40\n${n(o.r)}\n`;
+    else if (o.t === 'T') e += `0\nTEXT\n8\n${o.l}\n10\n${n(o.x)}\n20\n${n(o.y)}\n30\n0\n40\n${n(o.h)}\n1\n${tx(o.txt)}\n50\n${n(o.ang)}\n`;
+    else if (o.t === 'P') { e += `0\nPOLYLINE\n8\n${o.l}\n66\n1\n70\n${o.c ? 1 : 0}\n`; o.pts.forEach(p => { e += `0\nVERTEX\n8\n${o.l}\n10\n${n(p[0])}\n20\n${n(p[1])}\n30\n0\n`; }); e += `0\nSEQEND\n8\n${o.l}\n`; } });
+  return `0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1009\n9\n$INSUNITS\n70\n6\n0\nENDSEC\n0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLTYPE\n70\n1\n0\nLTYPE\n2\nCONTINUOUS\n70\n0\n3\nSolid line\n72\n65\n73\n0\n40\n0.0\n0\nENDTAB\n0\nTABLE\n2\nLAYER\n70\n${C.layers.length}\n` +
+    C.layers.map(l => `0\nLAYER\n2\n${l[0]}\n70\n0\n62\n${l[1]}\n6\nCONTINUOUS\n`).join('') + `0\nENDTAB\n0\nTABLE\n2\nSTYLE\n70\n1\n0\nSTYLE\n2\nSTANDARD\n70\n0\n40\n0.0\n41\n1.0\n50\n0.0\n71\n0\n42\n2.5\n3\ntxt\n4\n\n0\nENDTAB\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n${e}0\nENDSEC\n0\nEOF\n`;
+}
+/* DWG: biblioteca acad-ts (licença MIT), empacotada em /tc-dwg.min.js e carregada só quando o usuário pede o DWG */
+async function cadDwg(C) {
+  if (!window.TCDWG) await carregarScript(location.origin + '/tc-dwg.min.js');
+  const A = window.TCDWG, doc = new A.CadDocument(), lay = {};
+  C.layers.forEach(([nm, cor]) => { const l = new A.Layer(nm); l.name = nm; l.color = new A.Color(cor); doc.layers.add(l); lay[nm] = l; });
+  const add = (o, l) => { o.layer = lay[l]; doc.modelSpace.entities.add(o); };
+  C.ents.forEach(o => {
+    if (o.t === 'L') { const l = new A.Line(); l.startPoint = new A.XYZ(o.x1, o.y1, 0); l.endPoint = new A.XYZ(o.x2, o.y2, 0); add(l, o.l); }
+    else if (o.t === 'C') { const c = new A.Circle(); c.center = new A.XYZ(o.x, o.y, 0); c.radius = o.r; add(c, o.l); }
+    else if (o.t === 'T') { const t = new A.TextEntity(o.txt); t.insertPoint = new A.XYZ(o.x, o.y, 0); t.height = o.h; t.rotation = o.ang * Math.PI / 180; add(t, o.l); }
+    else if (o.t === 'P') { const p = new A.LwPolyline(); o.pts.forEach(q => { const v = new A.LwPolylineVertex(); v.location = new A.XY(q[0], q[1]); p.vertices.push(v); }); p.isClosed = o.c; add(p, o.l); } });
+  doc.header.version = A.ACadVersion.AC1015;   /* AutoCAD 2000: abre em qualquer versão posterior */
+  return A.DwgWriter.writeToBuffer(doc);
+}
+async function cadExportar(tipo) {
+  if (!R || !R.ok) return toast('Gere a rede primeiro.');
+  const C = cadCena();
+  if (tipo === 'dxf') { baixar(nomeArq() + '_projeto.dxf', cadDxf(C), 'application/dxf'); return toast('DXF gerado: planta, quadro de trechos, perfis de todos os coletores e carimbo, em camadas ESG-*.', 6000); }
+  try { toast('Montando o DWG…'); const buf = await cadDwg(C); baixar(nomeArq() + '_projeto.dwg', new Blob([buf], {type: 'application/acad'})); toast('DWG gerado (formato AutoCAD 2000): planta, quadro, perfis e carimbo.', 6000); }
+  catch (e) { console.error(e); baixar(nomeArq() + '_projeto.dxf', cadDxf(C), 'application/dxf'); toast('Não consegui gerar o DWG (' + ((e && e.message) || e) + '). Baixei o DXF, que o AutoCAD abre igual.', 9000); }
+}
+window.__esgCad = {cadCena, cadDxf, cadDwg};
 /* ════════════════════════════════════════════════════════════════════
    EVENTOS E PARTIDA
    ════════════════════════════════════════════════════════════════════ */
@@ -1301,12 +1854,13 @@ function janelaColar(tipo) {
 const ACOES = {
   exemplo: () => usarExemplo(false), exemploNovo: () => usarExemplo(true), irTracado: () => irAba('tracado'), gerar: gerarRede, enquadrar: plEnquadrar,
   colarRuas: () => janelaColar('ruas'), colarTopo: () => janelaColar('topo'), colarRuasOk: () => colarRuas($('colar-txt').value), colarTopoOk: () => colarTopo($('colar-txt').value),
-  rotulos: () => { PL.rot = (PL.rot + 1) % 3; plDesenhar(); }, dxf: dxfPlanta, svgPlanta: () => baixar(nomeArq() + '_planta.svg', plantaSVG(1600), 'image/svg+xml'),
+  rotulos: () => { PL.rot = (PL.rot + 1) % 3; plDesenhar(); }, dxf: () => cadExportar('dxf'), cadDxf: () => cadExportar('dxf'), cadDwg: () => cadExportar('dwg'), sugEEE, orcEnviar, orcTres: () => { orcRegistrar(); if (window.TCORC) TCORC.abrir('esgoto'); else toast('Módulo de orçamento do site indisponível (sem internet?).'); },
+  orcLimpar: () => { editar(() => { orcCfg().it = {}; }); toast('Códigos e preços voltaram aos do programa.'); }, svgPlanta: () => baixar(nomeArq() + '_planta.svg', plantaSVG(1600), 'image/svg+xml'),
   desel: () => { SEL = null; ladoTracado(); plDesenhar(); }, limparTopo: () => editar(() => { P.topo = []; ruasMudaram(); }), verPerfil: () => irAba('perfil'),
   dividir: dividirLongos, soltar: () => { editar(() => P.trechos.forEach(t => { delete t.Dfix; delete t.iFix; })); toast('DN e declividades voltaram ao automático.'); },
   xlsDim: () => xlsx(nomeArq() + '_dimensionamento', [{nome: 'Dimensionamento', linhas: linhasDim()}, {nome: 'PVs', linhas: linhasPV()}]), xlsOrc,
   novoProj: () => novoProjeto(ESG.novo()), expJson: () => { salvarJa(); baixar(nomeArq() + '.json', JSON.stringify(Object.assign({app: 'totalcivil-esgoto'}, P), null, 1), 'application/json'); },
-  impJson: () => $('arq-json') && $('arq-json').click(), nuvSalvar, nuvListar, orcDeNovo: () => { ORC.erro = ''; orcCarregar(); render(); },
+  impJson: () => $('arq-json') && $('arq-json').click(), nuvSalvar, nuvListar, orcDeNovo: () => { ORC.erro = ''; ORC.pronto = false; ORC.emop = undefined; ORC.bk = {sinapi: {}, sco: {}}; orcCarregar(); render(); },
   svgPerfil: () => baixar(nomeArq() + '_perfil_coletor' + PF.col + '.svg', perfilSVG(caminho(PF.col, PF.ate), PF.ev, 1400), 'image/svg+xml'),
   svgPerfis: () => R.coletores.forEach((c, i) => setTimeout(() => baixar(nomeArq() + '_perfil_coletor' + c.num + '.svg', perfilSVG(c.trechos, PF.ev, 1400), 'image/svg+xml'), i * 350)),
   imprimir: () => window.print(),
@@ -1327,6 +1881,9 @@ document.addEventListener('click', ev => {
   if (e = q('[data-delrua]')) return excluir('rua', e.dataset.delrua);
   if (e = q('[data-delno]')) return excluir('no', e.dataset.delno);
   if (e = q('[data-deltr]')) return excluir('tr', e.dataset.deltr);
+  if (e = q('[data-orcsol]')) return editar(() => { orcCfg().sol = e.dataset.orcsol; });
+  if (e = q('[data-eeenovo]')) return eeeNova(e.dataset.eeenovo);
+  if (e = q('[data-eeedel]')) return editar(() => { P.eee = P.eee.filter(x => x.id !== e.dataset.eeedel); });
   if (e = q('[data-inv]')) return editar(() => { const x = trDe(e.dataset.inv), a = x.de; x.de = x.para; x.para = a; P.manual = true; renumerar(); });
   if (e = q('[data-pvlado]')) { PF.pvj = e.dataset.pvlado === 'j'; return render(); }
   if (e = q('[data-selc]')) { const id = e.dataset.selc; if (id && trDe(id)) { SEL = {tipo: 'tr', id}; return irAba('perfil'); } if (id && noDe(id)) { SEL = {tipo: 'no', id}; return irAba('tracado'); } return; }
@@ -1350,14 +1907,21 @@ document.addEventListener('change', ev => {
   if (d.chk) return editar(() => { P.crit[d.chk] = t.checked; });
   if (d.tfix) return editar(() => { const x = trDe(d.id); if (d.tfix === 'D') { if (v) x.Dfix = +v; else delete x.Dfix; } else { const i = num(v); if (i > 0) x.iFix = i / 100; else delete x.iFix; } P.manual = true; });
   if (d.tlad != null) return editar(() => { trDe(d.id).lados = +v; P.manual = true; });
-  if (d.trk) return editar(() => { trDe(d.id)[d.trk] = v; });
+  if (d.trk) return editar(() => { const x = trDe(d.id); if (v === '') delete x[d.trk]; else x[d.trk] = v; if (d.trk !== 'rua') P.manual = true; });
+  if (d.sif) return editar(() => { const x = trDe(d.id); if (d.sif === 'on') { if (v === '1') x.sif = x.sif || {}; else delete x.sif; } else if (x.sif) { const k = num(v); if (isFinite(k)) x.sif[d.sif] = k; else delete x.sif[d.sif]; } P.manual = true; });
+  if (d.eee) return editar(() => { const E = P.eee.find(x => x.id === d.id); if (!E) return; const k = d.eee;
+    if (k === 'ate') { if (v === '@ext') { E.ext = E.ext || {nome: 'ponto de descarga', cota: ESG.r3((+noDe(E.no).ct || 0) + 3), L: 100}; delete E.ate; } else { E.ate = v; delete E.ext; } }
+    else if (k === 'extCota' || k === 'extL') { const x = num(v); if (isFinite(x) && E.ext) E.ext[k === 'extCota' ? 'cota' : 'L'] = x; }
+    else if (k === 'extNome') { if (E.ext) E.ext.nome = v.trim(); } else if (k === 'dnRec') { if (v) E.dnRec = +v; else delete E.dnRec; } else if (v === '') delete E[k]; else E[k] = v; });
+  if (d.di) return editar(() => { const c = P.crit, m = c.mat || 'pvcm', x = num(v); c.diMan = JSON.parse(JSON.stringify(c.diMan || {})); c.diMan[m] = c.diMan[m] || {}; if (isFinite(x) && x > 20) c.diMan[m][d.di] = x; else delete c.diMan[m][d.di]; });
   if (d.no && d.k) return editar(() => { const n = noDe(d.no); if (d.k === 'nome') { n.nome = v.trim() || n.nome; } else { const x = num(v); if (d.k === 'ct') { if (isFinite(x)) n.ct = x; } else if (isFinite(x) && (x !== 0 || d.k === 'cfEx')) n[d.k] = x; else delete n[d.k]; } P.manual = true; });
   if (d.ruanome) return editar(() => { ruaDe(d.ruanome).nome = v.trim() || 'Rua'; });
   if (d.ruaz) return editar(() => { const [id, i] = d.ruaz.split(':'), x = num(v); ruaDe(id).pts[+i].z = isFinite(x) ? x : null; ruasMudaram(); });
   if (t.id === 'pf-col') { PF.col = +v; SEL = null; return render(); } if (t.id === 'pf-ate') { PF.ate = t.checked; return render(); } if (t.id === 'pf-ev') { PF.ev = +v; return render(); }
-  if (d.orccod) return editar(() => { const o = orcCfg(); o.it[d.orccod] = Object.assign({}, o.it[d.orccod], {cod: v.trim().toUpperCase()}); });
-  if (d.orcpu) return editar(() => { const o = orcCfg(), x = num(v), e = Object.assign({}, o.it[d.orcpu]); if (isFinite(x) && x >= 0) e.pu = x; else delete e.pu; o.it[d.orcpu] = e; });
-  if (t.id === 'orc-mes') { editar(() => { orcCfg().mes = v; }, true); return orcCarregar(); }
+  if (d.orccod) return editar(() => { const o = orcCfg(), k = o.banco + '|' + d.orccod, e = Object.assign({}, o.it[k]); if (v.trim()) e.cod = v.trim(); else delete e.cod; o.it[k] = e; });
+  if (d.orcpu) return editar(() => { const o = orcCfg(), k = o.banco + '|' + d.orcpu, x = num(v), e = Object.assign({}, o.it[k]); if (isFinite(x) && x >= 0) e.pu = x; else delete e.pu; o.it[k] = e; });
+  if (t.id === 'orc-mes') { editar(() => { const o = orcCfg(); o.mes[o.banco] = v; }, true); return orcCarregar(); }
+  if (t.id === 'orc-banco') return editar(() => { orcCfg().banco = v; });
   if (t.id === 'orc-deson') return editar(() => { orcCfg().deson = t.checked; });
   if (t.id === 'orc-bdi') return editar(() => { const x = num(v); orcCfg().bdi = isFinite(x) ? x : 0; });
   if (t.id === 'arq-json' && t.files[0]) { const fr = new FileReader(); fr.onload = () => { try { const p = migrar(JSON.parse(fr.result)); delete p.nuvem; novoProjeto(p); toast('Projeto aberto do arquivo.'); } catch (e) { toast('Arquivo inválido: escolha um .json salvo por este programa.'); } }; fr.readAsText(t.files[0]); }
