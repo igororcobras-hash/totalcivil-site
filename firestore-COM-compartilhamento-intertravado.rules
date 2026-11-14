@@ -16,7 +16,7 @@ rules_version = '2';
 // O que estas regras garantem, no servidor (não dá para burlar pelo navegador):
 //   1. Um único cadastro por pessoa para todos os programas.
 //   2. Só os administradores liberam programas, definem validade e veem todos os cadastros.
-//   3. Ninguém se promove a administrador nem se libera sozinho.
+//   3. Ninguém se promove a administrador. Só a promoção de 14/11/2026 libera na criação da conta (profissão da lista, máx. 1 ano).
 //   4. O próprio usuário só pode fazer pedidos (programas, forma de pagamento, aviso de pagamento).
 //   5. Pedidos de programa personalizado: qualquer visitante envia; só o administrador lê.
 //   6. Pagamentos recebidos: só os administradores registram e consultam.
@@ -101,6 +101,53 @@ service cloud.firestore {
       return !(campo in d) || d[campo] == false;
     }
 
+    // Cadastro normal: nada liberado.
+    function cadastroNormal() {
+      return request.resource.data.keys().hasOnly([
+               'usuario','email','nome','empresa','whatsapp',
+               'ativo','admin','recusado','validade','criadoEm',
+               'orcamentoSolicitado','orcamentoAtivo','intertravadoSolicitado','intertravadoAtivo',
+               'drenagemSolicitado','drenagemAtivo','drenagem2Solicitado','drenagem2Ativo','esgotoSolicitado','esgotoAtivo','estruturaAtivo','visitasSolicitado','visitasAtivo','manutencaoSolicitado','manutencaoAtivo',
+               'googleearthSolicitado','googleearthAtivo',
+               'programasPedidos','formaPagamento','plano','tipoPedido','pedidoEm','indicadoPor'])
+          && request.resource.data.ativo == false
+          && request.resource.data.admin == false
+          && request.resource.data.recusado == false
+          && request.resource.data.validade == null
+          && falsoOuAusente(request.resource.data, 'orcamentoAtivo')
+          && falsoOuAusente(request.resource.data, 'intertravadoAtivo')
+          && falsoOuAusente(request.resource.data, 'drenagemAtivo')
+          && falsoOuAusente(request.resource.data, 'drenagem2Ativo')
+          && falsoOuAusente(request.resource.data, 'esgotoAtivo')
+          && falsoOuAusente(request.resource.data, 'estruturaAtivo')
+          && falsoOuAusente(request.resource.data, 'visitasAtivo')
+          && falsoOuAusente(request.resource.data, 'manutencaoAtivo')
+          && falsoOuAusente(request.resource.data, 'googleearthAtivo');
+    }
+
+    // Cadastro da promoção (1 ano de acesso para testar). A lista de profissões precisa ser igual
+    // à PROF_PROMO do index.html. Validade: no máximo 367 dias a partir de agora (folga de relógio).
+    function cadastroPromo() {
+      return request.resource.data.keys().hasOnly([
+               'usuario','email','nome','empresa','whatsapp',
+               'ativo','admin','recusado','validade','criadoEm',
+               'orcamentoSolicitado','orcamentoAtivo','intertravadoSolicitado','intertravadoAtivo',
+               'drenagemSolicitado','drenagemAtivo','drenagem2Solicitado','drenagem2Ativo','esgotoSolicitado','esgotoAtivo','estruturaAtivo','visitasSolicitado','visitasAtivo','manutencaoSolicitado','manutencaoAtivo',
+               'googleearthSolicitado','googleearthAtivo',
+               'programasPedidos','formaPagamento','plano','tipoPedido','pedidoEm','indicadoPor',
+               'promo1ano','profissao','gratisUsado'])
+          && request.resource.data.promo1ano == true
+          && request.resource.data.gratisUsado == true
+          && request.resource.data.profissao in [
+               'eng-civil','eng-outra','arquiteto','tec-edificacoes','tec-estradas','tecnologo',
+               'topografo','mestre-obras','estudante','servidor-obras','setor-construcao']
+          && request.resource.data.admin == false
+          && request.resource.data.recusado == false
+          && request.resource.data.validade is timestamp
+          && request.resource.data.validade > request.time
+          && request.resource.data.validade <= request.time + duration.value(367, 'd');
+    }
+
     // Código dos programas (gravado só pela publicação automática, com conta de serviço).
     // Entregue apenas a quem tem o programa liberado: mesmo campo, recusa e validade
     // do painel Usuários. A lista abaixo precisa ser igual à de scripts/publicar/montar-site.js.
@@ -135,30 +182,15 @@ service cloud.firestore {
       // Cada um lê o próprio cadastro; o administrador lê todos.
       allow read: if logado() && (uid == request.auth.uid || admin());
 
-      // Cadastro novo: o próprio usuário cria seu perfil, sempre sem nenhum programa liberado.
+      // Cadastro novo: o próprio usuário cria seu perfil. Dois caminhos:
+      //   1) normal: sem nenhum programa liberado (o administrador libera depois);
+      //   2) PROMOÇÃO 14/11/2026: profissão da engenharia / construção civil (lista fixa abaixo) recebe
+      //      todos os programas por no máximo 1 ano, só na criação da conta. Nenhum dos dois caminhos
+      //      dá acesso a projetos ou obras de outras pessoas (isso continua só do dono e do administrador).
       allow create: if logado()
                     && uid == request.auth.uid
-                    && request.resource.data.keys().hasOnly([
-                         'usuario','email','nome','empresa','whatsapp',
-                         'ativo','admin','recusado','validade','criadoEm',
-                         'orcamentoSolicitado','orcamentoAtivo','intertravadoSolicitado','intertravadoAtivo',
-                         'drenagemSolicitado','drenagemAtivo','drenagem2Solicitado','drenagem2Ativo','esgotoSolicitado','esgotoAtivo','estruturaAtivo','visitasSolicitado','visitasAtivo','manutencaoSolicitado','manutencaoAtivo',
-                         'googleearthSolicitado','googleearthAtivo',
-                         'programasPedidos','formaPagamento','plano','tipoPedido','pedidoEm','indicadoPor'])
-                    && request.resource.data.ativo == false
-                    && request.resource.data.admin == false
-                    && request.resource.data.recusado == false
-                    && request.resource.data.validade == null
-                    && falsoOuAusente(request.resource.data, 'orcamentoAtivo')
-                    && falsoOuAusente(request.resource.data, 'intertravadoAtivo')
-                    && falsoOuAusente(request.resource.data, 'drenagemAtivo')
-                    && falsoOuAusente(request.resource.data, 'drenagem2Ativo')
-                    && falsoOuAusente(request.resource.data, 'esgotoAtivo')
-                    && falsoOuAusente(request.resource.data, 'estruturaAtivo')
-                    && falsoOuAusente(request.resource.data, 'visitasAtivo')
-                    && falsoOuAusente(request.resource.data, 'manutencaoAtivo')
-                    && falsoOuAusente(request.resource.data, 'googleearthAtivo')
-                    && request.resource.data.email == request.auth.token.email;
+                    && request.resource.data.email == request.auth.token.email
+                    && (cadastroNormal() || cadastroPromo());
 
       // Liberar programas, validade, recusa: somente administrador.
       // O próprio usuário pode apenas fazer pedidos e avisar o pagamento.
@@ -358,7 +390,9 @@ service cloud.firestore {
     // só o próprio registro (nome, empresa, usuário) ao abrir o programa; quem tem o Intertravado
     // liberado lê a lista. Não contém e-mail, senha nem dados de pagamento.
     match /diretorioIntertravado/{uid} {
-      allow read: if podeUsar('intertravado');
+      // Contas da promoção de 1 ano (promo1ano) não leem a lista de outros usuários.
+      allow read: if podeUsar('intertravado')
+                  && (admin() || perfil().get('promo1ano', false) != true);
       allow create, update: if podeUsar('intertravado')
                             && uid == request.auth.uid
                             && request.resource.data.uid == request.auth.uid
