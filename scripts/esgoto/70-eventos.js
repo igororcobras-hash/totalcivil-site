@@ -3,8 +3,8 @@
    ════════════════════════════════════════════════════════════════════ */
 function aplicarTema() { const t = CFG.tema || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'); document.documentElement.dataset.theme = t; }
 function aplicarAmb() { document.body.classList.toggle('cel', CFG.amb === 'android' || CFG.amb === 'iphone'); $('amb').hidden = !!CFG.amb; }
-function usarExemplo(novo) { const p = ESG.exemplo(); if (novo || P.ruas.length || P.trechos.length) return novoProjeto(p);
-  editar(() => { Object.assign(P, p, {crit: Object.assign({}, P.crit)}); ESG.gerar(P); renumerar(); }, true); PL.vb = null; irAba('tracado'); toast('Exemplo carregado: bairro com a rede já calculada. Veja o Dimensionamento, os Perfis e o 3D.', 6000); }
+function usarExemplo(novo, morro) { const p = morro ? ESG.exemploMorro() : ESG.exemplo(); if (novo || P.ruas.length || P.trechos.length) return novoProjeto(p);
+  editar(() => { Object.assign(P, p, {crit: Object.assign({}, P.crit)}); if (!morro) { ESG.gerar(P); renumerar(); } }, true); PL.vb = null; irAba('tracado'); toast(morro ? 'Exemplo com morro carregado: o esgoto desce a encosta até o fundo do vale e uma elevatória recalca até a ETE na crista. Veja o Perfil, o 3D e a aba Dimensionamento.' : 'Exemplo carregado: bairro com a rede já calculada. Veja o Dimensionamento, os Perfis e o 3D.', 7000); }
 function janelaColar(tipo) {
   modal(tipo === 'ruas' ? `<h2>📋 Colar ruas</h2><p class="mut" style="font-size:.86rem">Uma rua por linha, copiada do Excel ou do levantamento: <b>Nome; X1; Y1; cota1; X2; Y2; cota2; …</b> (coordenadas em metros; a cota pode ficar vazia). Rua com o mesmo nome é substituída.</p>
     <textarea class="inp" id="colar-txt" placeholder="Rua das Flores; 0; 0; 12,40; 180; 0; 10,95&#10;Rua A; 90; -60; 12,10; 90; 0; 11,62; 90; 80; 10,30"></textarea><div class="barra" style="margin-top:10px"><button class="bt pri" data-act="colarRuasOk">Lançar ruas</button><button class="bt" data-fechar>Cancelar</button></div>`
@@ -13,8 +13,9 @@ function janelaColar(tipo) {
   setTimeout(() => $('colar-txt') && $('colar-txt').focus(), 50);
 }
 const ACOES = {
-  exemplo: () => usarExemplo(false), exemploNovo: () => usarExemplo(true), irTracado: () => irAba('tracado'), gerar: gerarRede, enquadrar: plEnquadrar,
+  exemplo: () => usarExemplo(false), exemploNovo: () => usarExemplo(true), exemploMorro: () => usarExemplo(false, true), exemploMorroNovo: () => usarExemplo(true, true), irTracado: () => irAba('tracado'), gerar: gerarRede, enquadrar: plEnquadrar,
   colarRuas: () => janelaColar('ruas'), colarTopo: () => janelaColar('topo'), colarRuasOk: () => colarRuas($('colar-txt').value), colarTopoOk: () => colarTopo($('colar-txt').value),
+  lotes: () => { PL.lotes = !PL.lotes; plDesenhar(); const b = document.querySelector('[data-act="lotes"]'); if (b) b.classList.toggle('on', PL.lotes); },
   rotulos: () => { PL.rot = (PL.rot + 1) % 3; plDesenhar(); }, dxf: () => cadExportar('dxf'), cadDxf: () => cadExportar('dxf'), cadDwg: () => cadExportar('dwg'), sugEEE, orcEnviar, orcTres: () => { orcRegistrar(); if (window.TCORC) TCORC.abrir('esgoto'); else toast('Módulo de orçamento do site indisponível (sem internet?).'); },
   orcLimpar: () => { editar(() => { orcCfg().it = {}; }); toast('Códigos e preços voltaram aos do programa.'); }, svgPlanta: () => baixar(nomeArq() + '_planta.svg', plantaSVG(1600), 'image/svg+xml'),
   desel: () => { SEL = null; ladoTracado(); plDesenhar(); }, limparTopo: () => editar(() => { P.topo = []; ruasMudaram(); }), verPerfil: () => irAba('perfil'),
@@ -38,6 +39,8 @@ document.addEventListener('click', ev => {
   if (e = q('[data-t3]')) return t3Acao(e.dataset.t3);
   if (e = q('[data-plmodo]')) { PL.modo = e.dataset.plmodo; PL.des = []; PL.cur = null; PL.ligDe = null; if (TAB !== 'tracado') return irAba('tracado'); return render(); }
   if (e = q('[data-modo]')) return editar(() => { P.crit.modo = e.dataset.modo; });
+  if (e = q('[data-ligauto]')) { editar(() => { delete trDe(e.dataset.ligauto).lig; }); return toast('Ligações do trecho refeitas pela testada.'); }
+  if (e = q('[data-tstall]')) { editar(() => { const t0 = trDe(e.dataset.tstall); P.trechos.filter(t => t.rua === t0.rua).forEach(t => { if (t0.testada > 0) t.testada = t0.testada; else delete t.testada; delete t.lig; }); }); return toast('Testada aplicada à rua toda.'); }
   if (e = q('[data-selrua]')) { SEL = {tipo: 'rua', id: e.dataset.selrua}; ladoTracado(); return plDesenhar(); }
   if (e = q('[data-delrua]')) return excluir('rua', e.dataset.delrua);
   if (e = q('[data-delno]')) return excluir('no', e.dataset.delno);
@@ -67,8 +70,9 @@ document.addEventListener('change', ev => {
   if (d.sel) return editar(() => { P.crit[d.sel] = v; });
   if (d.chk) return editar(() => { P.crit[d.chk] = t.checked; });
   if (d.tfix) return editar(() => { const x = trDe(d.id); if (d.tfix === 'D') { if (v) x.Dfix = +v; else delete x.Dfix; } else { const i = num(v); if (i > 0) x.iFix = i / 100; else delete x.iFix; } P.manual = true; });
+  if (d.tst) return editar(() => { const x = trDe(d.tst), k = num(v); if (isFinite(k) && k >= 2) x.testada = k; else delete x.testada; delete x.lig; });
   if (d.tlad != null) return editar(() => { trDe(d.id).lados = +v; P.manual = true; });
-  if (d.trk) return editar(() => { const x = trDe(d.id); if (v === '') delete x[d.trk]; else x[d.trk] = v; if (d.trk !== 'rua') P.manual = true; });
+  if (d.trk) return editar(() => { const x = trDe(d.id); if (v === '') delete x[d.trk]; else x[d.trk] = v; if (d.trk !== 'rua' && d.trk !== 'ladoLote') P.manual = true; if (d.trk === 'loc' || d.trk === 'ladoLote' || d.trk === 'ladoPas') delete x.lig; });
   if (d.sif) return editar(() => { const x = trDe(d.id); if (d.sif === 'on') { if (v === '1') x.sif = x.sif || {}; else delete x.sif; } else if (x.sif) { const k = num(v); if (isFinite(k)) x.sif[d.sif] = k; else delete x.sif[d.sif]; } P.manual = true; });
   if (d.eee) return editar(() => { const E = P.eee.find(x => x.id === d.id); if (!E) return; const k = d.eee;
     if (k === 'ate') { if (v === '@ext') { E.ext = E.ext || {nome: 'ponto de descarga', cota: ESG.r3((+noDe(E.no).ct || 0) + 3), L: 100}; delete E.ate; } else { E.ate = v; delete E.ext; } }

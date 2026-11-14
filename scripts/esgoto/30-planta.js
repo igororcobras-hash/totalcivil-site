@@ -3,7 +3,7 @@
    Ideia central: o usuário só informa as RUAS (nome uma única vez) e as cotas;
    PVs, trechos, sentido do escoamento e numeração saem do botão 🧭 Gerar rede.
    ════════════════════════════════════════════════════════════════════ */
-const PL = {vb: null, modo: 'sel', des: [], rot: 1, drag: null, pts: new Map(), cur: null};
+const PL = {vb: null, modo: 'sel', des: [], rot: 1, drag: null, pts: new Map(), cur: null, lotes: true};
 const CORES = {ok: '#12263f', warn: '#d97706', err: '#b42318', rua: '#e4e0d5', agua: '#0f766e', acc: '#c2410c'};
 const escuro = () => document.documentElement.dataset.theme === 'dark';
 
@@ -34,15 +34,24 @@ function plConteudo(px, o) {
     s += `<text transform="translate(${mx} ${-my}) rotate(${ang})" y="${off}" font-size="${10.5 * px}" fill="${mut}" text-anchor="middle" font-weight="700" letter-spacing="${px}" paint-order="stroke" stroke="${halo}" stroke-width="${3 * px}" style="pointer-events:none">${esc(r.nome.toUpperCase())}</text>`; });
   /* trechos */
   P.trechos.forEach(t => { const a = noDe(t.de), b = noDe(t.para); if (!a || !b) return; const r = R && R.ok && R.tr[t.id], cor = r && r.recq ? '#a21caf' : r && r.sif ? '#0369a1' : corTr(t.id), sel = SEL && SEL.tipo === 'tr' && SEL.id === t.id;
-    const w = (r ? 2 + Math.min(4, r.D / 150) : 2) * px, L = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / L, uy = (b.y - a.y) / L, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-    if (sel) s += `<line x1="${a.x}" y1="${-a.y}" x2="${b.x}" y2="${-b.y}" stroke="${CORES.acc}" stroke-width="${w + 6 * px}" stroke-linecap="round" opacity=".35"/>`;
-    s += `<line x1="${a.x}" y1="${-a.y}" x2="${b.x}" y2="${-b.y}" stroke="${cor}" stroke-width="${w}" stroke-linecap="${r && r.recq ? 'butt' : 'round'}"${r && r.recq ? ` stroke-dasharray="${9 * px} ${5 * px}"` : ''} data-tr="${t.id}" style="cursor:pointer"/>`;
-    s += `<line x1="${a.x}" y1="${-a.y}" x2="${b.x}" y2="${-b.y}" stroke="transparent" stroke-width="${14 * px}" data-tr="${t.id}" style="cursor:pointer"/>`;
+    const w = (r ? 2 + Math.min(4, r.D / 150) : 2) * px, L = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / L, uy = (b.y - a.y) / L, of = ESG.offsetTr(t, P.crit), A0 = {x: a.x - uy * of, y: a.y + ux * of}, B0 = {x: b.x - uy * of, y: b.y + ux * of}, mx = (A0.x + B0.x) / 2, my = (A0.y + B0.y) / 2;
+    if (of) s += `<path d="M${a.x} ${-a.y}L${A0.x} ${-A0.y}L${B0.x} ${-B0.y}L${b.x} ${-b.y}" fill="none" stroke="${cor}" stroke-width="${px}" stroke-dasharray="${3 * px} ${3 * px}" opacity=".7" style="pointer-events:none"/>`;
+    if (sel) s += `<line x1="${A0.x}" y1="${-A0.y}" x2="${B0.x}" y2="${-B0.y}" stroke="${CORES.acc}" stroke-width="${w + 6 * px}" stroke-linecap="round" opacity=".35"/>`;
+    s += `<line x1="${A0.x}" y1="${-A0.y}" x2="${B0.x}" y2="${-B0.y}" stroke="${cor}" stroke-width="${w}" stroke-linecap="${r && r.recq ? 'butt' : 'round'}"${r && r.recq ? ` stroke-dasharray="${9 * px} ${5 * px}"` : ''} data-tr="${t.id}" style="cursor:pointer"/>`;
+    s += `<line x1="${A0.x}" y1="${-A0.y}" x2="${B0.x}" y2="${-B0.y}" stroke="transparent" stroke-width="${14 * px}" data-tr="${t.id}" style="cursor:pointer"/>`;
     const ax = mx + ux * 5 * px, ay = my + uy * 5 * px, n = 4.5 * px; s += `<path d="M${ax} ${-ay}L${ax - ux * 2 * n - uy * n} ${-(ay - uy * 2 * n + ux * n)}L${ax - ux * 2 * n + uy * n} ${-(ay - uy * 2 * n - ux * n)}Z" fill="${cor}" style="pointer-events:none"/>`;
     if (r && PL.rot > 0 && L / px > (PL.rot > 1 ? 150 : 80)) { let ang = -Math.atan2(uy, ux) * 180 / Math.PI; if (ang > 90 || ang < -90) ang += 180;
       const txt = r.recq ? `${r.nome} · recalque DN ${r.D}` + (PL.rot > 1 ? ` · ${fm(r.L, 1)} m` : '') : r.sif ? `${r.nome} · sifão ${r.sif.n} × DN ${r.D}` : PL.rot > 1 ? `${r.nome} · DN ${r.D} · ${fm(r.I * 100, 2)} % · ${fm(r.L, 1)} m` : `${r.nome} · DN ${r.D}`;
       s += `<text transform="translate(${mx} ${-my}) rotate(${ang})" y="${-7 * px}" font-size="${10 * px}" fill="${cor}" text-anchor="middle" font-weight="650" paint-order="stroke" stroke="${halo}" stroke-width="${3 * px}" style="pointer-events:none">${esc(txt)}</text>`; }
   });
+  /* lotes e ligações prediais */
+  if (PL.lotes && R && R.ok) { const LG = ESG.ligacoes(P, R), perto = LG.length < 3000, c = P.crit, alin = c.largRua / 2 + c.largPas;
+    LG.forEach(q => { const t = trDe(q.tr), tst = t && t.testada > 0 ? +t.testada : c.testada, sel = SEL && SEL.tipo === 'tr' && SEL.id === q.tr;
+      if (perto && tst / px > 14) { const dx = q.fx - q.x, dy = q.fy - q.y, l = Math.hypot(dx, dy) || 1, ex = dx / l, ey = dy / l, nx = -ey, ny = ex, h = tst / 2, D = Math.min(18, tst * 1.5);   /* lote: frente × fundo */
+        const P1 = [q.fx - nx * h, q.fy - ny * h], P2 = [q.fx + nx * h, q.fy + ny * h], P3 = [P2[0] + ex * D, P2[1] + ey * D], P4 = [P1[0] + ex * D, P1[1] + ey * D];
+        s += `<path d="M${P1[0]} ${-P1[1]}L${P2[0]} ${-P2[1]}L${P3[0]} ${-P3[1]}L${P4[0]} ${-P4[1]}Z" fill="#d6a04a" fill-opacity="${sel ? .16 : .07}" stroke="#b7791f" stroke-width="${.8 * px}" stroke-dasharray="${4 * px} ${3 * px}" style="pointer-events:none"/>`; }
+      s += `<line x1="${q.x}" y1="${-q.y}" x2="${q.fx}" y2="${-q.fy}" stroke="${q.ok ? '#b7791f' : CORES.err}" stroke-width="${1.1 * px}" style="pointer-events:none"/>`;
+      s += `<rect x="${q.fx - 3.2 * px}" y="${-q.fy - 3.2 * px}" width="${6.4 * px}" height="${6.4 * px}" fill="${q.man ? '#fff7e0' : '#d6a04a'}" stroke="${q.ok ? '#8a5a12' : CORES.err}" stroke-width="${1.2 * px}" data-lg="${q.tr}:${q.i}" style="cursor:${o.edit ? 'move' : 'default'}"><title>Ligação predial${q.man ? ' (posição ajustada)' : ''} · ramal ${fm(q.L, 1)} m${q.ok ? '' : ' · recobrimento baixo no lote'}</title></rect>`; }); }
   /* PVs */
   P.nos.forEach(n => { const x = R && R.ok && R.no[n.id], sel = SEL && SEL.tipo === 'no' && SEL.id === n.id, rr = (x && x.tipo === 'TL' ? 4 : 6) * px;
     if (x && x.fim) s += `<path d="M${n.x} ${-n.y - 13 * px}l${11 * px} ${19 * px}h${-22 * px}Z" fill="${CORES.acc}" opacity=".9" style="pointer-events:none"/>`;
@@ -67,16 +76,17 @@ function plDesenhar() { const svg = $('pl-svg'); if (!svg || !PL.vb) return; con
 function plantaSVG(larg) { const L = limites(), px = L.w / (larg || 1000), ant = PL.rot, sel = SEL; PL.rot = 2; SEL = null; const c = plConteudo(px, {claro: true}); PL.rot = ant; SEL = sel;
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${L.x} ${-(L.y + L.h)} ${L.w} ${L.h}" width="${larg || 1000}" height="${Math.round((larg || 1000) * L.h / L.w)}" font-family="Arial,sans-serif"><rect x="${L.x}" y="${-(L.y + L.h)}" width="${L.w}" height="${L.h}" fill="#fff"/>${c}</svg>`; }
 
-const DICAS = {sel: 'Arraste para mover a vista · roda do mouse aproxima · clique em rua, PV ou trecho para editar · arraste um PV para movê-lo',
+const DICAS = {sel: 'Arraste para mover a vista · roda do mouse aproxima · clique em rua, PV ou trecho para editar · arraste um PV ou uma ligação (quadradinho âmbar) para movê-los',
   rua: 'Clique os pontos do eixo da rua · duplo clique ou Enter termina · Esc cancela · encoste em outra rua para cruzar',
   pv: 'Clique sobre um trecho para inserir um PV nele', lig: 'Clique no PV de montante e depois no PV de jusante para criar um trecho',
-  saida: 'Clique no ponto de lançamento (ETE, interceptor, elevatória ou PV existente)', del: 'Clique em rua, PV ou trecho para excluir'};
+  lgadd: 'Clique num trecho no ponto onde fica a nova ligação predial (o lado da rua é o lado do clique)', saida: 'Clique no ponto de lançamento (ETE, interceptor, elevatória ou PV existente)', del: 'Clique em rua, PV, trecho ou ligação predial para excluir'};
 function vTracado(m) {
   const b = (mo, t, tit) => `<button class="bt peq${PL.modo === mo ? ' on' : ''}" data-plmodo="${mo}" title="${tit || t}">${rotBt(t)}</button>`, a = (act, t, tit, cls) => `<button class="bt peq${cls || ''}" data-act="${act}" title="${tit || t}">${rotBt(t)}</button>`;
   m.innerHTML = `<div class="tr-grid"><div class="pl-box"><svg id="pl-svg"></svg>
     <div class="pl-tools">${b('sel', '🖐 Selecionar')}${b('rua', '✏ Desenhar rua')}${b('saida', '🔻 Lançamento')}<span class="sep"></span>
       <button class="bt peq pri" data-act="gerar" title="Cria PVs, trechos e o sentido do esgoto a partir das ruas">🧭 Gerar rede</button><span class="sep"></span>
       ${b('pv', '◉ PV', 'Inserir PV num trecho')}${b('lig', '⟶ Trecho', 'Ligar dois PVs com um trecho novo')}${b('del', '🗑', 'Excluir')}<span class="sep"></span>
+      ${b('lgadd', '🏠 + Ligação', 'Adiciona uma ligação predial clicando no trecho')}<button class="bt peq${PL.lotes ? ' on' : ''}" data-act="lotes" title="Mostra ou esconde os lotes e as ligações prediais">${rotBt('🏘 Lotes')}</button><span class="sep"></span>
       ${a('sugEEE', '🏭 Elevatória', 'Sugere e cria elevatórias onde a rede passa da profundidade de alerta ou chega abaixo do lançamento')}<span class="sep"></span>
       ${a('rotulos', '🏷 Rótulos', 'Mais ou menos textos no desenho')}${a('enquadrar', '⛶ Enquadrar')}${a('cadDxf', '⬇ DXF', 'Planta, perfis, quadro e carimbo em DXF')}${a('cadDwg', '⬇ DWG', 'Planta, perfis, quadro e carimbo em DWG (AutoCAD 2000)')}${a('svgPlanta', '⬇ SVG')}</div>
     <div class="pl-dica"><span id="pl-dica">${DICAS[PL.modo]}</span></div></div>
@@ -86,7 +96,7 @@ function vTracado(m) {
 function ladoTracado() {
   const el = $('pl-lado'); if (!el) return; let s = '';
   if (!P.ruas.length && !P.trechos.length) s += `<div class="card"><h2>Comece pelas ruas</h2><p class="mut" style="font-size:.85rem;margin:0 0 8px">Desenhe o eixo de cada rua no mapa, ou cole a tabela do levantamento. O nome de cada rua é digitado uma vez só.</p>
-    <div class="barra"><button class="bt peq pri" data-plmodo="rua">✏ Desenhar rua</button><button class="bt peq" data-act="colarRuas">📋 Colar ruas</button><button class="bt peq" data-act="exemplo">Exemplo</button></div></div>`;
+    <div class="barra"><button class="bt peq pri" data-plmodo="rua">✏ Desenhar rua</button><button class="bt peq" data-act="colarRuas">📋 Colar ruas</button><button class="bt peq" data-act="exemplo">Exemplo</button><button class="bt peq" data-act="exemploMorro">⛰ Exemplo com morro</button></div></div>`;
   if (SEL && SEL.tipo === 'rua' && ruaDe(SEL.id)) { const r = ruaDe(SEL.id);
     s += `<div class="card"><div class="barra"><h2 style="margin:0">Rua selecionada</h2><span class="esp"></span><button class="x" data-act="desel">×</button></div>
       <div class="f"><label>Nome</label><input data-ruanome="${r.id}" value="${esc(r.nome)}"/></div>
@@ -106,10 +116,15 @@ function ladoTracado() {
     s += `<div class="card"><div class="barra"><h2 style="margin:0">Trecho ${r ? r.nome : ''}</h2><span class="esp"></span><button class="x" data-act="desel">×</button></div><div class="fg" style="grid-template-columns:1fr 1fr">
       <div class="f"><label>Rua</label><select data-trk="rua" data-id="${t.id}"><option value="">—</option>${P.ruas.map(q => `<option value="${q.id}"${t.rua === q.id ? ' selected' : ''}>${esc(q.nome)}</option>`).join('')}</select></div>
       <div class="f"><label>Lotes que contribuem</label><select data-tlad data-id="${t.id}"><option value="2"${t.lados == null || +t.lados === 2 ? ' selected' : ''}>dos 2 lados</option><option value="1"${+t.lados === 1 ? ' selected' : ''}>de 1 lado</option><option value="0"${+t.lados === 0 ? ' selected' : ''}>nenhum (só transporte)</option></select></div>
+      <div class="f"><label>Testada do lote (m)</label><input data-tst="${t.id}" inputmode="decimal" placeholder="${fm(P.crit.testada, 1)} (padrão)" value="${t.testada > 0 ? fm(+t.testada, 1).replace(/\./g, '') : ''}"/></div>
+      <div class="f"><label>Lado do lote (se de 1 lado)</label><select data-trk="ladoLote" data-id="${t.id}"><option value="">esquerda</option><option value="-1"${+t.ladoLote === -1 ? ' selected' : ''}>direita</option></select></div>
       <div class="f"><label>DN (mm)</label><select data-tfix="D" data-id="${t.id}"><option value="">automático</option>${ESG.SERIE.map(D => `<option${+t.Dfix === D ? ' selected' : ''}>${D}</option>`).join('')}</select></div>
       <div class="f"><label>Declividade (%)</label><input data-tfix="I" data-id="${t.id}" inputmode="decimal" placeholder="${r ? fm(r.I * 100, 3) + ' (auto)' : 'auto'}" value="${t.iFix > 0 ? fm(t.iFix * 100, 3) : ''}"/></div>${ladoTrExtra(t, r)}</div>
       ${r ? `<div class="kpis" style="margin-top:8px"><div class="kpi"><b>${fm(r.L, 1)} m</b><span>Extensão</span></div><div class="kpi"><b>${fm(r.QF, 2)}</b><span>Q final L/s</span></div><div class="kpi"><b>${r.hF.carga ? 'cheio' : fm(r.hF.yd, 2)}</b><span>y/D final</span></div><div class="kpi"><b>${fm(r.hI.tau, 2)} Pa</b><span>Tensão trativa</span></div><div class="kpi"><b>${fm(r.profM, 2)} / ${fm(r.profJ, 2)}</b><span>Prof. mont./jus.</span></div><div class="kpi"><b>${fm(r.hF.V, 2)}</b><span>V final m/s</span></div></div>` : ''}
-      <div class="barra" style="margin-top:8px"><button class="bt peq" data-inv="${t.id}">⇄ Inverter sentido</button><button class="bt peq" data-act="verPerfil">📈 Ver no perfil</button><button class="bt peq" data-deltr="${t.id}">🗑</button></div></div>`; }
+      <div class="barra" style="margin-top:8px"><button class="bt peq" data-inv="${t.id}">⇄ Inverter sentido</button><button class="bt peq" data-act="verPerfil">📈 Ver no perfil</button><button class="bt peq" data-deltr="${t.id}">🗑</button></div>
+      <div class="barra" style="margin-top:6px"><button class="bt peq" data-ligauto="${t.id}" title="Refaz as ligações deste trecho pela testada, descartando as posições ajustadas">↺ Ligações automáticas</button><button class="bt peq" data-tstall="${t.id}" title="Usa a testada deste trecho em todos os trechos da mesma rua">Testada para a rua toda</button></div></div>`; }
+  if (Q && Q.ligList && Q.ligList.length) s += `<div class="card"><h2 style="margin:0 0 6px">🏠 Ligações prediais</h2><div class="kpis"><div class="kpi"><b>${Q.ligList.length}</b><span>Ligações (1 por lote)</span></div><div class="kpi"><b>${fm(Q.ramal / Math.max(1, Q.ligList.length), 1)} m</b><span>Ramal médio</span></div><div class="kpi"><b>${Q.ligList.filter(q => q.man).length}</b><span>Ajustadas à mão</span></div></div>
+    <p class="mut" style="font-size:.78rem;margin:6px 0 0">Testada padrão ${fm(P.crit.testada, 1)} m (muda em Dados › Vala e pavimento, ou por trecho). Arraste o quadradinho âmbar para mover uma ligação; <b>🏠 + Ligação</b> cria outra; <b>🗑</b> exclui.</p>${Q.ligBaixas ? `<div class="aviso" style="margin:6px 0 0;font-size:.78rem">${Q.ligBaixas} ligação(ões) com recobrimento menor que ${fm(P.crit.ligCob, 2)} m no lote (ramal em vermelho): rede rasa demais para atender aquele lote por gravidade.</div>` : ''}</div>`;
   s += `<div class="card"><div class="barra"><h2 style="margin:0">Ruas (${P.ruas.length})</h2><span class="esp"></span><button class="bt peq" data-act="colarRuas">📋 Colar</button><button class="bt peq" data-act="colarTopo" title="Pontos X; Y; cota do levantamento">📋 Topografia</button></div>
     ${P.ruas.length ? `<div class="lista">${P.ruas.map(r => `<div class="lin"><input data-ruanome="${r.id}" value="${esc(r.nome)}"/><small>${r.pts.filter(q => q.z != null && q.z !== '').length}/${r.pts.length} cotas</small><button class="bt peq" data-selrua="${r.id}">✎</button><button class="x" data-delrua="${r.id}">🗑</button></div>`).join('')}</div>` : '<p class="mut" style="font-size:.84rem;margin:0">Nenhuma rua ainda.</p>'}
     ${P.topo.length ? `<p class="mut" style="font-size:.78rem;margin:6px 0 0">${P.topo.length} ponto(s) de topografia colados. <a href="#" data-act="limparTopo">limpar</a></p>` : ''}
@@ -157,7 +172,7 @@ function plDown(ev) {
   if (PL.pts.size === 2) { const [a, b] = [...PL.pts.values()]; PL.drag = {tipo: 'pinca', d0: Math.hypot(a.x - b.x, a.y - b.y), vb: Object.assign({}, PL.vb)}; return; }
   const p = plMundo(ev), al = ev.target.closest ? ev.target : null, ds = al && al.dataset || {};
   PL.drag = {tipo: 'pan', x: ev.clientX, y: ev.clientY, vb: Object.assign({}, PL.vb), mov: false, ds, p};
-  if (PL.modo === 'sel' && ev.button === 0) { if (ds.vx) PL.drag.tipo = 'vx'; else if (ds.no) PL.drag.tipo = 'no'; if (PL.drag.tipo !== 'pan') PL.drag.antes = JSON.stringify(P); }
+  if (PL.modo === 'sel' && ev.button === 0) { if (ds.vx) PL.drag.tipo = 'vx'; else if (ds.no) PL.drag.tipo = 'no'; else if (ds.lg) PL.drag.tipo = 'lg'; if (PL.drag.tipo !== 'pan') PL.drag.antes = JSON.stringify(P); }
 }
 function plMove(ev) {
   if (!PL.vb) return; if (PL.pts.has(ev.pointerId)) PL.pts.set(ev.pointerId, {x: ev.clientX, y: ev.clientY});
@@ -167,13 +182,18 @@ function plMove(ev) {
   if (PL.modo === 'rua' && PL.des.length && !d) { PL.cur = plIma(plMundo(ev)); return plDesenhar(); }
   if (!d) return; const dx = ev.clientX - d.x, dy = ev.clientY - d.y; if (Math.abs(dx) + Math.abs(dy) > 4) d.mov = true; if (!d.mov) return;
   if (d.tipo === 'pan') { PL.vb.x = d.vb.x - dx / r.width * d.vb.w; PL.vb.y = d.vb.y - dy / r.height * d.vb.h; }
+  else if (d.tipo === 'lg') { const [tid, i] = d.ds.lg.split(':'), t = trDe(tid); if (t) { ligMat(t); const q = ligPos(t, plMundo(ev)); if (t.lig[+i] && q) t.lig[+i] = q; } }
   else { const p = plMundo(ev); if (d.tipo === 'no') { const n = noDe(d.ds.no); n.x = ESG.r3(p.x); n.y = ESG.r3(p.y); P.trechos.forEach(t => { if (t.de === n.id || t.para === n.id) delete t.L; }); }
     else { const [rid, i] = d.ds.vx.split(':'), q = ruaDe(rid).pts[+i], s = plIma(p); q.x = ESG.r3(s.x); q.y = ESG.r3(s.y); } }
   plDesenhar();
 }
+/* ligações: lista manual do trecho (criada a partir das automáticas na primeira edição) e posição do ponteiro → {s, lado} */
+function ligMat(t) { if (Array.isArray(t.lig)) return; t.lig = R && R.ok ? ESG.ligacoes(P, R).filter(q => q.tr === t.id).map(q => ({s: ESG.r3(q.s), lado: q.lado})) : []; }
+function ligPos(t, p) { const a = noDe(t.de), b = noDe(t.para); if (!a || !b) return null; const lh = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / lh, uy = (b.y - a.y) / lh, of = ESG.offsetTr(t, P.crit), r = R && R.ok && R.tr[t.id], L = r ? r.L : lh;
+  const sh = Math.max(0, Math.min(lh, (p.x - a.x) * ux + (p.y - a.y) * uy)), lat = ux * (p.y - a.y) - uy * (p.x - a.x); return {s: ESG.r3(sh / lh * L), lado: lat - of >= 0 ? 1 : -1}; }
 function plUp(ev) {
   PL.pts.delete(ev.pointerId); const d = PL.drag; PL.drag = null; if (!d || d.tipo === 'pinca') return;
-  if (d.mov) { if (d.tipo === 'no' || d.tipo === 'vx') { const depois = JSON.stringify(P); P = migrar(JSON.parse(d.antes)); DB.list[DB.cur] = P; editar(() => { const q = JSON.parse(depois); P.nos = q.nos; P.ruas = q.ruas; P.trechos = q.trechos; if (d.tipo === 'no') P.manual = true; else ruasMudaram(); }, true); ladoTracado(); plDesenhar(); } return; }
+  if (d.mov) { if (d.tipo === 'no' || d.tipo === 'vx' || d.tipo === 'lg') { const depois = JSON.stringify(P); P = migrar(JSON.parse(d.antes)); DB.list[DB.cur] = P; editar(() => { const q = JSON.parse(depois); P.nos = q.nos; P.ruas = q.ruas; P.trechos = q.trechos; if (d.tipo === 'no') P.manual = true; else if (d.tipo === 'vx') ruasMudaram(); }, true); ladoTracado(); plDesenhar(); } return; }
   const p = d.p, ds = d.ds;
   if (PL.modo === 'rua') { const s = plIma(p), u = PL.des[PL.des.length - 1]; if (u && Math.hypot(u.x - s.x, u.y - s.y) < 6 * p.px) return plConcluirRua(); PL.des.push(s); PL.cur = null; return plDesenhar(); }
   if (PL.modo === 'saida') { editar(() => { P.saida = {x: ESG.r3(p.x), y: ESG.r3(p.y)}; if (P.trechos.length && !P.manual) ruasMudaram(); }, true); PL.modo = 'sel'; render(); return toast(P.manual ? 'Lançamento marcado. Use 🧭 Gerar rede para refazer o sentido do esgoto.' : 'Lançamento marcado; rede refeita para escoar até ele.'); }
@@ -182,8 +202,9 @@ function plUp(ev) {
       P.trechos.push({id: novoId('t'), de: n.id, para: t.para, rua: t.rua, L: ESG.r3(Lt * (1 - k)), lados: t.lados}); t.para = n.id; t.L = ESG.r3(Lt * k); P.manual = true; renumerar(); SEL = {tipo: 'no', id: n.id}; }); return; }
   if (PL.modo === 'lig') { if (!ds.no) return toast('Clique num PV.'); if (!PL.ligDe) { PL.ligDe = ds.no; SEL = {tipo: 'no', id: ds.no}; plDesenhar(); return toast('Agora clique no PV de jusante.'); }
     const de = PL.ligDe; PL.ligDe = null; if (de === ds.no) return; editar(() => { P.trechos.push({id: novoId('t'), de, para: ds.no, rua: '', lados: 2}); P.manual = true; renumerar(); }); return; }
-  if (PL.modo === 'del') { if (ds.tr) return excluir('tr', ds.tr); if (ds.no) return excluir('no', ds.no); if (ds.rua) return excluir('rua', ds.rua); return; }
-  SEL = ds.vx ? {tipo: 'rua', id: ds.vx.split(':')[0]} : ds.no ? {tipo: 'no', id: ds.no} : ds.tr ? {tipo: 'tr', id: ds.tr} : ds.rua ? {tipo: 'rua', id: ds.rua} : null; ladoTracado(); plDesenhar();
+  if (PL.modo === 'lgadd') { if (!ds.tr && !ds.lg) return toast('Clique sobre um trecho.'); const t = trDe(ds.tr || ds.lg.split(':')[0]); editar(() => { ligMat(t); const q = ligPos(t, p); if (q) t.lig.push(q); }); SEL = {tipo: 'tr', id: t.id}; return plDesenhar(); }
+  if (PL.modo === 'del') { if (ds.lg) { const [tid, i] = ds.lg.split(':'); return editar(() => { const t = trDe(tid); ligMat(t); t.lig.splice(+i, 1); }); } if (ds.tr) return excluir('tr', ds.tr); if (ds.no) return excluir('no', ds.no); if (ds.rua) return excluir('rua', ds.rua); return; }
+  SEL = ds.lg ? {tipo: 'tr', id: ds.lg.split(':')[0]} : ds.vx ? {tipo: 'rua', id: ds.vx.split(':')[0]} : ds.no ? {tipo: 'no', id: ds.no} : ds.tr ? {tipo: 'tr', id: ds.tr} : ds.rua ? {tipo: 'rua', id: ds.rua} : null; ladoTracado(); plDesenhar();
 }
 function plRoda(ev) { ev.preventDefault(); if (!PL.vb) return; const svg = $('pl-svg'), r = svg.getBoundingClientRect(), k = ev.deltaY > 0 ? 1.18 : 1 / 1.18, cx = (ev.clientX - r.left) / r.width, cy = (ev.clientY - r.top) / r.height, v = PL.vb;
   PL.vb = {w: v.w * k, h: v.h * k, x: v.x + v.w * cx * (1 - k), y: v.y + v.h * cy * (1 - k)}; plDesenhar(); }

@@ -312,3 +312,13 @@ Sem o passo 2 o programa abre e calcula, mas a nuvem responde "sem permissão".
 - `r.de` = PV de montante; `r.deExt` = diâmetro externo; `r.recq` = id da elevatória do recalque; `r.rec` = recobrimento exigido (nomes separados depois de duas colisões).
 - Exportação CAD por uma “cena” única (`cadCena`: linhas, polilinhas, círculos, textos em camadas ESG-*), gravada em DXF (texto) ou DWG.
 - **DWG:** formato binário fechado; em vez de escrever o formato à mão, usa-se a biblioteca `@node-projects/acad-ts` (MIT), empacotada com esbuild em `/tc-dwg.min.js` (955 kB, carregada só ao pedir o DWG), gravando AC1015 (AutoCAD 2000). Conferido lendo o arquivo de volta com o LibreDWG (leitor independente): mesmas contagens de entidades e camadas.
+
+## Versão 3 (ES-03): ligações por lote, rede no passeio, ajuda e exemplo com morro
+
+**Engenharia.** Cada lote tem uma ligação predial (NBR 9649: a rede coletora atende cada economia por ramal). O número de ligações deixou de ser "população ÷ habitantes por ligação" e passou a sair da planta: testada padrão de 12 m (editável por trecho), dos dois lados da rua ou de um só. O ramal é medido do coletor ao alinhamento do lote (meia rua + passeio, ou menos quando a rede está no passeio) e confere o recobrimento mínimo no lote com declividade de ramal de 2 %: rede rasa demais para atender um lote aparece em vermelho. Rede no passeio é o caso comum em ruas largas e rede dupla: menos recomposição de asfalto, ramais curtos de um lado e travessia do outro.
+
+**Programação.** `ESG.ligacoes(P,R)` é uma função pura: a mesma lista alimenta planta, 3D, CAD, orçamento e memorial, então nada diverge. A posição ajustada à mão fica em `t.lig`; sem ela, vale o automático (por isso mudar testada refaz). Arrastar na planta usa o mesmo caminho de desfazer dos PVs (JSON antes/depois).
+
+**Webdesign.** A explicação de cada campo aparece ao passar o mouse, no mesmo padrão do programa de Pavimento Intertravado (balão escuro, texto com o valor usual e a norma, ⓘ para tocar no celular). O balão não captura cliques para nunca cobrir um botão.
+
+**Exemplo.** O bairro plano não mostrava a elevatória nem o degrau de tubo de queda. O exemplo com morro tem encosta de 5 %, vale e crista: o esgoto desce até a elevatória e é recalcado até a ETE.

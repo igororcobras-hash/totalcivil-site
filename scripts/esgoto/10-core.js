@@ -27,7 +27,7 @@ const ESG = (() => {
     profMax: 4.5, degTQ: 0.50, distPV: 80, distMax: 100, profTL: 1.45,
     remanso: true,          /* nível d'água de saída do PV nunca acima do de chegada */
     folga: 0.60, berco: 0.10, envolt: 0.30, pav: 'asfalto', espPav: 0.05,
-    largRua: 8, habLig: 3.0, ramal: 6, dmt: 5, empol: 1.30, folgaCava: 0.30, lastro: 0.10,
+    largRua: 8, largPas: 2.5, testada: 12, habLig: 3.0, ramal: 6, ligIm: 0.02, ligDN: 100, ligCob: 0.30, dmt: 5, empol: 1.30, folgaCava: 0.30, lastro: 0.10,
     /* elevatória e recalque (NBR 12208) */
     eCiclo: 10, eDet: 30, eEta: 0.60, eFolgaMotor: 20, eVmin: 0.60, eVmax: 3.00, eKloc: 10, eSub: 0.50, eRecRec: 1.00, eMat: 'pvc',
     /* sifão invertido */
@@ -337,6 +337,39 @@ const ESG = (() => {
        escavação da cava = B²·h − parte já medida nas valas que chegam (B/2 × largura × profundidade de cada vala);
        reaterro da cava = escavação da cava × (1 − área do PV / B²). */
   const faixa = h => h <= 1.5 ? 0 : h <= 3 ? 1 : h <= 4.5 ? 2 : 3;
+  /* ══ LIGAÇÕES PREDIAIS (ramais) — um ramal por lote ══
+     Lotes de testada `testada` (padrão 12 m) dos dois lados do trecho (ou de um só, `lados`).
+     Cada trecho pode ter a sua testada (`t.testada`) e a posição dos ramais pode ser ajustada à mão (`t.lig = [{s, lado}]`,
+     s = distância desde o PV de montante, lado +1 = esquerda de quem anda de montante para jusante).
+     Rede no passeio (`t.loc='passeio'`, lado `t.ladoPas`): o coletor fica deslocado do eixo da rua e o ramal fica mais curto. */
+  function offsetTr(t, c) { return t && t.loc === 'passeio' ? (+t.ladoPas === -1 ? -1 : 1) * (c.largRua / 2 + c.largPas / 2) : 0; }
+  function ligacoes(P, R) {
+    const c = R.c, out = [], nos = new Map(P.nos.map(n => [n.id, n])), alin = c.largRua / 2 + c.largPas;   /* distância do eixo ao alinhamento dos lotes */
+    R.ordem.forEach(id => {
+      const t = P.trechos.find(q => q.id === id), r = R.tr[id]; if (!t || !r || r.recq || r.sif) return;
+      const a = nos.get(t.de), b = nos.get(t.para); if (!a || !b) return;
+      const lh = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / lh, uy = (b.y - a.y) / lh, off = offsetTr(t, c), L = r.L || lh;
+      let lista;
+      if (Array.isArray(t.lig)) lista = t.lig.map(q => ({s: +q.s, lado: +q.lado >= 0 ? 1 : -1, man: true}));
+      else {
+        lista = []; const lados = t.lados == null ? 2 : +t.lados; if (lados === 0) return;
+        const tst = t.testada > 0 ? +t.testada : c.testada, n = Math.max(1, Math.round(L / tst)), w = L / n, lad = lados === 1 ? [+t.ladoLote === -1 ? -1 : 1] : [1, -1];
+        lad.forEach(lado => { for (let i = 0; i < n; i++) lista.push({s: (i + 0.5) * w, lado, man: false}); });
+      }
+      lista.forEach((q, i) => {
+        const s = Math.max(0, Math.min(L, q.s)), k = s / L, sh = s / L * lh;   /* posição ao longo do eixo (planta) */
+        const px = a.x + ux * sh - uy * off, py = a.y + uy * sh + ux * off;         /* ponto no coletor (deslocado se no passeio) */
+        const Lr = Math.max(0.5, q.lado > 0 ? alin - off : alin + off);              /* ramal perpendicular até o alinhamento */
+        const fx = px - uy * Lr * q.lado, fy = py + ux * Lr * q.lado;
+        const ct = r.ctM + (r.ctJ - r.ctM) * k, ci = r.ciM + (r.ciJ - r.ciM) * k, topo = ci + r.d;       /* geratriz superior do coletor */
+        const cl = ct;                                                                                      /* terreno no alinhamento ≈ terreno do trecho */
+        const cfRamal = topo + 0.10 + Lr * c.ligIm, profLote = cl - cfRamal, ok = profLote >= c.ligCob - 1e-9;
+        out.push({id: id + '#' + i, tr: id, i, s, lado: q.lado, man: q.man, x: px, y: py, fx, fy, L: Lr, ct, ci, cfRamal, prof: profLote, ok});
+      });
+    });
+    return out;
+  }
+
   function quant(P, R) {
     const c = R.c, Z4 = () => [0, 0, 0, 0];
     const Q = {tubos: {}, juntas: {}, escav: Z4(), escor: Z4(), reat: Z4(), cavaEsc: Z4(), cavaEscor: Z4(), cavaReat: Z4(), cavaLastro: 0, cavaLastroSco: 0,
@@ -392,8 +425,9 @@ const ESG = (() => {
       Q.eee.push({id: E.id, nome: E.nome, Dp: E.Dp, Dext, prof, B, h, esc, reat, conc, nB: E.nB, Pm: E.Pm, dn: E.dn, mat: E.mat, Lr: E.Lr, AMT: E.AMT, Qb: E.Qb});
       Q.tampas += 2;
     });
-    Q.lig = c.nLig > 0 ? Math.round(c.nLig) : Math.round(c.popF / Math.max(1, c.habLig));
-    Q.ramal = Q.lig * c.ramal; Q.ramalEsc = Q.ramal * 0.60 * 1.00;   /* vala do ramal 0,60 × 1,00 m */
+    const LG = ligacoes(P, R); Q.ligList = LG; Q.ligBaixas = LG.filter(q => !q.ok).length;
+    Q.lig = c.nLig > 0 ? Math.round(c.nLig) : LG.length; Q.ligPop = c.nLig > 0 ? 0 : Math.round(c.popF / Math.max(1, c.habLig));
+    Q.ramal = c.nLig > 0 ? Q.lig * c.ramal : LG.reduce((x, q) => x + q.L, 0); Q.ramalEsc = Q.ramal * 0.60 * 1.00;   /* vala do ramal 0,60 × 1,00 m */
     Q.bota = Math.max(0, Q.escTot - Q.reatTot) * c.empol;
     return Q;
   }
@@ -486,8 +520,8 @@ const ESG = (() => {
     });
     add(G[4], 'tampa', 'Tampão circular de ferro fundido Ø 0,60 m', 'un', Q.tampas, {sinapi: 'SC-98114', sco: 'SCO-DR 35.05.0200', emop: '06.016.0007'}, 'Um por PV/TL e dois por elevatória');
     /* ligações prediais */
-    add(G[5], 'lig', 'Ligação predial de esgoto (selim, curva e caixa de inspeção)', 'un', Q.lig, {sinapi: 'SC-104076', sco: 'SCO-IT 15.60.0103'}, Q.lig + ' ligações (' + (c.nLig > 0 ? 'informadas' : 'população final ÷ ' + ff(c.habLig, 1) + ' hab/ligação') + '); SINAPI: só o selim — caixa de inspeção à parte');
-    add(G[5], 'ramal', 'Ramal predial em tubo de PVC DN 100 (coletor predial)', 'm', Q.ramal, {sinapi: 'SC-104085', sco: false}, Q.lig + ' × ' + ff(c.ramal, 1) + ' m (SCO: o tubo está na ligação)');
+    add(G[5], 'lig', 'Ligação predial de esgoto (selim, curva e caixa de inspeção)', 'un', Q.lig, {sinapi: 'SC-104076', sco: 'SCO-IT 15.60.0103'}, Q.lig + ' ligações (' + (c.nLig > 0 ? 'informadas' : 'uma por lote de testada ' + ff(c.testada, 1) + ' m, posição conforme a planta') + '); SINAPI: só o selim — caixa de inspeção à parte');
+    add(G[5], 'ramal', 'Ramal predial em tubo de PVC DN 100 (coletor predial)', 'm', Q.ramal, {sinapi: 'SC-104085', sco: false}, (c.nLig > 0 ? Q.lig + ' × ' + ff(c.ramal, 1) + ' m' : Q.lig + ' ramais, média ' + ff(Q.ramal / Math.max(1, Q.lig), 1) + ' m (do coletor ao alinhamento do lote)') + ' (SCO: o tubo está na ligação)');
     add(G[5], 'ramesc', 'Escavação manual da vala do ramal (0,60 × 1,00 m)', 'm³', Q.ramalEsc, {sinapi: 'SC-93358', sco: false}, 'Ramal × 0,60 × 1,00 (SCO por metro no item seguinte)');
     add(G[5], 'ramrea', 'Reaterro manual compactado da vala do ramal', 'm³', Q.ramalEsc, {sinapi: 'SC-93382', sco: false}, 'Igual à escavação (o tubo DN 100 é desprezível)');
     add(G[5], 'ramsco', 'Escavação e reaterro de vala para ligação predial de esgoto (SCO-Rio)', 'm', Q.ramal, {sco: 'SCO-MT 05.20.0100', sinapi: false, emop: false}, 'Extensão dos ramais');
@@ -609,17 +643,29 @@ const ESG = (() => {
   }
 
   /* exemplo: bairro em malha, terreno caindo para um canto */
-  function exemplo(nx, ny, quadra, decl) {
+  /* tipo 'morro': encosta íngreme (≈ 5 %) que desce até um fundo de vale e sobe de novo até o ponto de lançamento,
+     então a rede por gravidade não chega lá sem ficar muito funda: pede elevatória (use 🏭 Elevatória). */
+  function exemplo(nx, ny, quadra, decl, tipo) {
     nx = nx || 4; ny = ny || 3; quadra = quadra || 90; decl = decl || 0.012;
-    const z = (x, y) => r3(25 - x * decl - y * decl * 0.6 + 0.35 * Math.sin(x / 70) * Math.cos(y / 55));
+    const Wm = (nx - 1) * quadra, Hm = (ny - 1) * quadra, xv = Wm - quadra, morro = tipo === 'morro';
+    const z = morro ? (x, y) => r3(46 - Math.min(x, xv) * 0.05 + Math.max(0, x - xv) * (0.085 + (Hm - y) * 0.0004) - y * 0.004 + 0.25 * Math.sin(x / 45) * Math.cos(y / 40))
+      : (x, y) => r3(25 - x * decl - y * decl * 0.6 + 0.35 * Math.sin(x / 70) * Math.cos(y / 55));
     const ruas = [], W = (nx - 1) * quadra, H = (ny - 1) * quadra; let k = 0;
     const pts = (x1, y1, x2, y2, n) => Array.from({length: n + 1}, (_, i) => { const x = x1 + (x2 - x1) * i / n, y = y1 + (y2 - y1) * i / n; return {x, y, z: z(x, y)}; });
     for (let j = 0; j < ny; j++) ruas.push({id: 'r' + (++k), nome: 'Rua ' + (j + 1), pts: pts(0, j * quadra, W, j * quadra, nx - 1)});
     for (let i = 0; i < nx; i++) ruas.push({id: 'r' + (++k), nome: 'Rua ' + String.fromCharCode(65 + i), pts: pts(i * quadra, 0, i * quadra, H, ny - 1)});
-    return {v: 1, nome: 'Exemplo — bairro ' + nx + ' × ' + ny + ' ruas', local: '', autor: '', crit: Object.assign({}, CRIT0), ruas, topo: [], saida: {x: W, y: H}, nos: [], trechos: [], orc: {}};
+    return {v: 1, nome: morro ? 'Exemplo — encosta com morro e elevatória' : 'Exemplo — bairro ' + nx + ' × ' + ny + ' ruas', local: '', autor: '', crit: Object.assign({}, CRIT0), ruas, topo: [], saida: {x: W, y: H}, nos: [], trechos: [], orc: {}};
+  }
+  /* exemplo pronto com morro: rede por gravidade até o fundo do vale + elevatória que recalca até a ETE, na crista */
+  function exemploMorro() {
+    const nx = 6, ny = 3, q = 100, P = exemplo(nx, ny, q, 0, 'morro'), xv = (nx - 2) * q, Hm = (ny - 1) * q;
+    P.saida = {x: xv, y: Hm}; gerar(P);
+    const n = P.nos.find(k => Math.hypot(k.x - xv, k.y - Hm) < 1);
+    if (n) { P.eee = [{id: 'e1', no: n.id, ext: {nome: 'ETE na crista do morro', cota: r3(+n.ct + 11), L: 170}, nome: ''}]; P.manual = true; }
+    P.nome = 'Exemplo — encosta com morro e elevatória'; return P;
   }
   const novo = () => ({v: 1, nome: 'Projeto sem nome', local: '', autor: '', crit: Object.assign({}, CRIT0), ruas: [], topo: [], saida: null, nos: [], trechos: [], orc: {}});
 
-  return {G, GAMA, SERIE, CRIT0, crit, matDe, geo, qMan, lamina, hid, iMinTau, iMaxV, calc, geometria, quant, itens, SOL, GRUPOS, sugerirEEE, tuboGeo, TUBOS, RECALQUE, eeeCalc, gerar, exemplo, novo, nomeNo, idw, r3, ff};
+  return {ligacoes, offsetTr, G, GAMA, SERIE, CRIT0, crit, matDe, geo, qMan, lamina, hid, iMinTau, iMaxV, calc, geometria, quant, itens, SOL, GRUPOS, sugerirEEE, tuboGeo, TUBOS, RECALQUE, eeeCalc, gerar, exemplo, exemploMorro, novo, nomeNo, idw, r3, ff};
 })();
 if (typeof module !== 'undefined') module.exports = ESG;
