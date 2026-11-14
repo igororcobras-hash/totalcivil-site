@@ -47,9 +47,8 @@ function plConteudo(px, o) {
   /* lotes e ligações prediais */
   if (PL.lotes && R && R.ok) { const LG = ESG.ligacoes(P, R), perto = LG.length < 3000, c = P.crit, alin = c.largRua / 2 + c.largPas;
     LG.forEach(q => { const t = trDe(q.tr), tst = t && t.testada > 0 ? +t.testada : c.testada, sel = SEL && SEL.tipo === 'tr' && SEL.id === q.tr;
-      if (perto && tst / px > 14) { const dx = q.fx - q.x, dy = q.fy - q.y, l = Math.hypot(dx, dy) || 1, ex = dx / l, ey = dy / l, nx = -ey, ny = ex, h = tst / 2, D = Math.min(18, tst * 1.5);   /* lote: frente × fundo */
-        const P1 = [q.fx - nx * h, q.fy - ny * h], P2 = [q.fx + nx * h, q.fy + ny * h], P3 = [P2[0] + ex * D, P2[1] + ey * D], P4 = [P1[0] + ex * D, P1[1] + ey * D];
-        s += `<path d="M${P1[0]} ${-P1[1]}L${P2[0]} ${-P2[1]}L${P3[0]} ${-P3[1]}L${P4[0]} ${-P4[1]}Z" fill="#d6a04a" fill-opacity="${sel ? .16 : .07}" stroke="#b7791f" stroke-width="${.8 * px}" stroke-dasharray="${4 * px} ${3 * px}" style="pointer-events:none"/>`; }
+      if (perto && tst / px > 14 && q.lote) { const L4 = q.lote;   /* lote: frente × fundo (sem sobrepor o vizinho) */
+        s += `<path d="M${L4.map(v => v[0] + ' ' + (-v[1])).join('L')}Z" fill="#d6a04a" fill-opacity="${sel ? .16 : .07}" stroke="#b7791f" stroke-width="${.8 * px}" stroke-dasharray="${4 * px} ${3 * px}" style="pointer-events:none"/>`; }
       s += `<line x1="${q.x}" y1="${-q.y}" x2="${q.fx}" y2="${-q.fy}" stroke="${q.ok ? '#b7791f' : CORES.err}" stroke-width="${1.1 * px}" style="pointer-events:none"/>`;
       s += `<rect x="${q.fx - 3.2 * px}" y="${-q.fy - 3.2 * px}" width="${6.4 * px}" height="${6.4 * px}" fill="${q.man ? '#fff7e0' : '#d6a04a'}" stroke="${q.ok ? '#8a5a12' : CORES.err}" stroke-width="${1.2 * px}" data-lg="${q.tr}:${q.i}" style="cursor:${o.edit ? 'move' : 'default'}"><title>Ligação predial${q.man ? ' (posição ajustada)' : ''} · ramal ${fm(q.L, 1)} m${q.ok ? '' : ' · recobrimento baixo no lote'}</title></rect>`; }); }
   /* PVs */
@@ -182,13 +181,13 @@ function plMove(ev) {
   if (PL.modo === 'rua' && PL.des.length && !d) { PL.cur = plIma(plMundo(ev)); return plDesenhar(); }
   if (!d) return; const dx = ev.clientX - d.x, dy = ev.clientY - d.y; if (Math.abs(dx) + Math.abs(dy) > 4) d.mov = true; if (!d.mov) return;
   if (d.tipo === 'pan') { PL.vb.x = d.vb.x - dx / r.width * d.vb.w; PL.vb.y = d.vb.y - dy / r.height * d.vb.h; }
-  else if (d.tipo === 'lg') { const [tid, i] = d.ds.lg.split(':'), t = trDe(tid); if (t) { ligMat(t); const q = ligPos(t, plMundo(ev)); if (t.lig[+i] && q) t.lig[+i] = q; } }
+  else if (d.tipo === 'lg') { const [tid, i] = d.ds.lg.split(':'), t = trDe(tid); if (t) { ligMat(t); const q = ligPos(t, plMundo(ev)); if (t.lig[+i] && q) t.lig[+i] = t.lig[+i].w ? Object.assign(q, {w: t.lig[+i].w}) : q; } }
   else { const p = plMundo(ev); if (d.tipo === 'no') { const n = noDe(d.ds.no); n.x = ESG.r3(p.x); n.y = ESG.r3(p.y); P.trechos.forEach(t => { if (t.de === n.id || t.para === n.id) delete t.L; }); }
     else { const [rid, i] = d.ds.vx.split(':'), q = ruaDe(rid).pts[+i], s = plIma(p); q.x = ESG.r3(s.x); q.y = ESG.r3(s.y); } }
   plDesenhar();
 }
 /* ligações: lista manual do trecho (criada a partir das automáticas na primeira edição) e posição do ponteiro → {s, lado} */
-function ligMat(t) { if (Array.isArray(t.lig)) return; t.lig = R && R.ok ? ESG.ligacoes(P, R).filter(q => q.tr === t.id).map(q => ({s: ESG.r3(q.s), lado: q.lado})) : []; }
+function ligMat(t) { if (Array.isArray(t.lig)) return; t.lig = R && R.ok ? ESG.ligacoes(P, R).filter(q => q.tr === t.id).map(q => ({s: ESG.r3(q.s), lado: q.lado, w: ESG.r3(q.ws)})) : []; }
 function ligPos(t, p) { const a = noDe(t.de), b = noDe(t.para); if (!a || !b) return null; const lh = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / lh, uy = (b.y - a.y) / lh, of = ESG.offsetTr(t, P.crit), r = R && R.ok && R.tr[t.id], L = r ? r.L : lh;
   const sh = Math.max(0, Math.min(lh, (p.x - a.x) * ux + (p.y - a.y) * uy)), lat = ux * (p.y - a.y) - uy * (p.x - a.x); return {s: ESG.r3(sh / lh * L), lado: lat - of >= 0 ? 1 : -1}; }
 function plUp(ev) {

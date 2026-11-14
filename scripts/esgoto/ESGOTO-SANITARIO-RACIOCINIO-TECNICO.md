@@ -322,3 +322,6 @@ Sem o passo 2 o programa abre e calcula, mas a nuvem responde "sem permissão".
 **Webdesign.** A explicação de cada campo aparece ao passar o mouse, no mesmo padrão do programa de Pavimento Intertravado (balão escuro, texto com o valor usual e a norma, ⓘ para tocar no celular). O balão não captura cliques para nunca cobrir um botão.
 
 **Exemplo.** O bairro plano não mostrava a elevatória nem o degrau de tubo de queda. O exemplo com morro tem encosta de 5 %, vale e crista: o esgoto desce até a elevatória e é recalcado até a ETE.
+
+### ES-03b — um lote por esquina
+Os lotes de um trecho começam e terminam no alinhamento da rua que cruza (o recuo em cada ponta e de cada lado vale meia rua + passeio, dividido pelo seno do ângulo entre as ruas). Entre as esquinas a testada é repartida igualmente. Depois, todos os lotes são conferidos juntos: um lote que se sobrepõe a outro já aceito é descartado com a sua ligação, de modo que cada esquina fica com um único lote e uma única ligação, e o fundo de cada lote é reduzido até não invadir o lote vizinho. Os lotes posicionados à mão têm prioridade e nunca são descartados.

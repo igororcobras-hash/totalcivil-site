@@ -25,12 +25,16 @@ for(let k=0;k<300;k++){
 }
 console.log('trechos testados',tot,'violações',viol,'tubos de queda',tq,'prof máx',maxProf.toFixed(2),piores.slice(0,5));
 /* ES-03: ligações prediais — 200 redes: nenhuma ligação com NaN, ramal ≥ 0,5 m, contagem = lotes, passeio muda ramal */
-(function () { const E2 = require('./10-core.js'); let seed = 5; const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; }; let n = 0, ruim = 0, tot = 0, pas = 0;
+(function () { const E2 = require('./10-core.js'); let seed = 5; const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; }; let n = 0, ruim = 0, tot = 0, pas = 0, sobT = 0;
   for (let k = 0; k < 200; k++) { const P = E2.exemplo(2 + Math.floor(rnd() * 5), 2 + Math.floor(rnd() * 3), 60 + rnd() * 100, [0.001, 0.01, 0.03][k % 3], k % 4 === 0 ? 'morro' : undefined); P.crit.testada = 6 + Math.floor(rnd() * 20); E2.gerar(P);
     if (k % 3 === 0) P.trechos.forEach((t, i) => { if (i % 2) { t.loc = 'passeio'; t.ladoPas = rnd() < 0.5 ? -1 : 1; } });
     if (k % 5 === 0) P.trechos.forEach((t, i) => { if (i % 4 === 0) t.testada = 8 + Math.floor(rnd() * 14); });
     const R = E2.calc(P); if (!R.ok) continue; n++; const L = E2.ligacoes(P, R); tot += L.length;
     if (L.some(q => !isFinite(q.L) || !isFinite(q.x) || !isFinite(q.fx) || !isFinite(q.prof) || q.L < 0.5 - 1e-9 || q.s < 0 || q.s > R.tr[q.tr].L + 1e-6)) ruim++;
-    const esp = R.ordem.reduce((a, id) => { const t = P.trechos.find(x => x.id === id), r = R.tr[id]; if (r.recq || r.sif) return a; const l = t.lados == null ? 2 : +t.lados; if (!l) return a; const tst = t.testada > 0 ? +t.testada : P.crit.testada; return a + Math.max(1, Math.round(r.L / tst)) * l; }, 0);
-    if (esp !== L.length) ruim++; const Q = E2.quant(P, R); if (!isFinite(Q.ramal) || Q.lig !== L.length) ruim++; }
-  console.log('ES-03 ligações: redes', n, 'ligações', tot, 'ruins', ruim); })();
+    /* ES-03b: um lote por lugar — nenhum par de lotes sobreposto mais de 0,5 m (lascas só em curvas da rua) */
+    const pen = (A, B) => { let m = 1e9; for (const P0 of [A, B]) for (let i = 0; i < 4; i++) { const p = P0[i], q = P0[(i + 1) % 4]; let nx = q[1] - p[1], ny = p[0] - q[0]; const l = Math.hypot(nx, ny) || 1; nx /= l; ny /= l;
+      let a1 = 1e9, a2 = -1e9, b1 = 1e9, b2 = -1e9; A.forEach(v => { const z = v[0] * nx + v[1] * ny; a1 = Math.min(a1, z); a2 = Math.max(a2, z); }); B.forEach(v => { const z = v[0] * nx + v[1] * ny; b1 = Math.min(b1, z); b2 = Math.max(b2, z); }); m = Math.min(m, a2 - b1, b2 - a1); } return m; };
+    let sob = 0; for (let i = 0; i < L.length; i++) for (let j = i + 1; j < L.length; j++) { const a = L[i], b = L[j]; if (Math.hypot(a.fx - b.fx, a.fy - b.fy) < 60 && pen(a.lote, b.lote) > 0.5) sob++; }
+    sobT += sob; const esp = sob;
+    if (esp) ruim++; const Q = E2.quant(P, R); if (!isFinite(Q.ramal) || Q.lig !== L.length) ruim++; }
+  console.log('ES-03 ligações: redes', n, 'ligações', tot, 'ruins', ruim, 'lotes sobrepostos', sobT); })();
