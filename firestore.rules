@@ -30,6 +30,7 @@ rules_version = '2';
 //   projetos ................ Pavimento Flexível — projetos na nuvem
 //   projetosDrenagem ........ Drenagem Pluvial — projetos na nuvem
 //   projetosDrenagem2 ....... Drenagem Pluvial 2 — projetos na nuvem
+//   projetosEsgoto .......... Esgoto Sanitário — projetos na nuvem
 //   projetosIntertravado .... Pavimento Intertravado — projetos na nuvem com compartilhamento
 //   diretorioIntertravado ... Pavimento Intertravado — lista de usuários para compartilhar
 //   obrasServicos ........... Serviços Públicos — obras na nuvem
@@ -37,7 +38,7 @@ rules_version = '2';
 //   (Visitas Técnicas, Estrutura em Concreto e Imagens GoogleEarth não usam o Firestore para dados;
 //    config/avisos é gravado só pela rotina do GitHub com conta de serviço, que não passa por estas regras.)
 // Campos de liberação no cadastro: ativo (Pavimento Flexível), orcamentoAtivo, intertravadoAtivo,
-// drenagemAtivo, drenagem2Ativo, estruturaAtivo, visitasAtivo, manutencaoAtivo, googleearthAtivo
+// drenagemAtivo, drenagem2Ativo, esgotoAtivo, estruturaAtivo, visitasAtivo, manutencaoAtivo, googleearthAtivo
 // (os mesmos de PROGRAMAS no index.html e de scripts/publicar/montar-site.js).
 // ════════════════════════════════════════════════════════════════════════
 
@@ -108,6 +109,7 @@ service cloud.firestore {
         'intertravado': 'intertravadoAtivo',
         'drenagem': 'drenagemAtivo',
         'drenagem2': 'drenagem2Ativo',
+        'esgoto': 'esgotoAtivo',
         'concreto': 'estruturaAtivo',
         'visitas': 'visitasAtivo',
         'manutencao': 'manutencaoAtivo',
@@ -138,7 +140,7 @@ service cloud.firestore {
                          'usuario','email','nome','empresa','whatsapp',
                          'ativo','admin','recusado','validade','criadoEm',
                          'orcamentoSolicitado','orcamentoAtivo','intertravadoSolicitado','intertravadoAtivo',
-                         'drenagemSolicitado','drenagemAtivo','drenagem2Solicitado','drenagem2Ativo','estruturaAtivo','visitasSolicitado','visitasAtivo','manutencaoSolicitado','manutencaoAtivo',
+                         'drenagemSolicitado','drenagemAtivo','drenagem2Solicitado','drenagem2Ativo','esgotoSolicitado','esgotoAtivo','estruturaAtivo','visitasSolicitado','visitasAtivo','manutencaoSolicitado','manutencaoAtivo',
                          'googleearthSolicitado','googleearthAtivo',
                          'programasPedidos','formaPagamento','plano','tipoPedido','pedidoEm','indicadoPor'])
                     && request.resource.data.ativo == false
@@ -149,6 +151,7 @@ service cloud.firestore {
                     && falsoOuAusente(request.resource.data, 'intertravadoAtivo')
                     && falsoOuAusente(request.resource.data, 'drenagemAtivo')
                     && falsoOuAusente(request.resource.data, 'drenagem2Ativo')
+                    && falsoOuAusente(request.resource.data, 'esgotoAtivo')
                     && falsoOuAusente(request.resource.data, 'estruturaAtivo')
                     && falsoOuAusente(request.resource.data, 'visitasAtivo')
                     && falsoOuAusente(request.resource.data, 'manutencaoAtivo')
@@ -160,7 +163,7 @@ service cloud.firestore {
       allow update: if admin()
                     || (logado() && uid == request.auth.uid
                         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                             'orcamentoSolicitado','intertravadoSolicitado','drenagemSolicitado','drenagem2Solicitado','visitasSolicitado','manutencaoSolicitado','googleearthSolicitado',
+                             'orcamentoSolicitado','intertravadoSolicitado','drenagemSolicitado','drenagem2Solicitado','esgotoSolicitado','visitasSolicitado','manutencaoSolicitado','googleearthSolicitado',
                              'programasPedidos','formaPagamento','plano','tipoPedido','pedidoEm','indicadoPor','pagamentoAvisadoEm'])
                         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['orcamentoSolicitado'])
                             || request.resource.data.orcamentoSolicitado == true)
@@ -170,6 +173,8 @@ service cloud.firestore {
                             || request.resource.data.drenagemSolicitado == true)
                         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['drenagem2Solicitado'])
                             || request.resource.data.drenagem2Solicitado == true)
+                        && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['esgotoSolicitado'])
+                            || request.resource.data.esgotoSolicitado == true)
                         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['visitasSolicitado'])
                             || request.resource.data.visitasSolicitado == true)
                         && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['manutencaoSolicitado'])
@@ -300,6 +305,24 @@ service cloud.firestore {
                     && resource.data.uid == request.auth.uid
                     && request.resource.data.uid == request.auth.uid;
       allow delete: if podeUsar('drenagem2')
+                    && (resource.data.uid == request.auth.uid || admin());
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // 6B. ESGOTO SANITÁRIO
+    // ════════════════════════════════════════════════════════════════
+
+    // Projetos do Esgoto Sanitário (coleção própria). Cada usuário vê e grava só os seus;
+    // o administrador pode ler e excluir (suporte).
+    match /projetosEsgoto/{projetoId} {
+      allow read: if podeUsar('esgoto')
+                  && (resource.data.uid == request.auth.uid || admin());
+      allow create: if podeUsar('esgoto')
+                    && request.resource.data.uid == request.auth.uid;
+      allow update: if podeUsar('esgoto')
+                    && resource.data.uid == request.auth.uid
+                    && request.resource.data.uid == request.auth.uid;
+      allow delete: if podeUsar('esgoto')
                     && (resource.data.uid == request.auth.uid || admin());
     }
 

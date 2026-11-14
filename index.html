@@ -486,6 +486,9 @@ const PROGRAMAS = [
    video:'/videos/drenagem-apresentacao.mp4',
    desc:'Nova versão da Drenagem Pluvial: gera a rede pela topografia em 3 opções, PVs no tamanho da base (EMOP, SINAPI, SCO), correção de erros e alertas em um clique, bacia de dissipação, 3D e orçamentos (EMOP, SINAPI, SCO).',
    ico:'<path d="M23 5C23 5 11 19 11 28a12 12 0 0 0 24 0C35 19 23 5 23 5Z"/><path d="M17 29a6 6 0 0 0 6 6"/><path d="M38 6h6M41 3v6"/>'},
+  {key:'esgoto',       campo:'esgotoAtivo',       solic:'esgotoSolicitado',       nome:'Esgoto Sanitário',            url:'/esgoto/',       disp:true,
+   desc:'Rede coletora completa pela NBR 9649: desenhe as ruas e o programa gera PVs, vazões, diâmetros, cotas, tensão trativa, planta, perfis, seções, 3D com controle da vazão de esgoto, orçamento SINAPI e memorial.',
+   ico:'<circle cx="23" cy="13" r="8"/><path d="M15 13h16M23 5v16"/><path d="M6 31h34v8H6z"/><path d="M6 35h7M18 35h6M29 35h11"/>'},
   {key:'estrutura',    campo:'estruturaAtivo',    solic:'estruturaSolicitado',    nome:'Estrutura em Concreto Armado', url:'/concreto/', disp:true,
    video:'/videos/concreto-apresentacao.mp4',
    desc:'Dimensionamento de fundações e estruturas de concreto armado. Sapatas, estacas, radier, corrida. NBR 6118:2023 · NBR 6122:2022.',
@@ -657,7 +660,7 @@ async function abrirPrograma(url){
 document.addEventListener('click', ev => {
   const a = ev.target.closest('a[href]'); if(!a) return;
   const href = a.getAttribute('href');
-  if(!/^\/(pavimento|orcamento|intertravado|drenagem|drenagem2|concreto|visitas|manutencao|googleearth)\/$/.test(href) || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+  if(!/^\/(pavimento|orcamento|intertravado|drenagem|drenagem2|esgoto|concreto|visitas|manutencao|googleearth)\/$/.test(href) || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
   ev.preventDefault(); a.style.opacity = '.6'; abrirPrograma(href);
 });
 
@@ -758,6 +761,7 @@ $('form-cadastro').addEventListener('submit', async ev => {
         programasPedidos: ks, formaPagamento: pag, plano, tipoPedido, pedidoEm: fs.serverTimestamp()
       };
       if(ks.includes('drenagem2')){ perfil.drenagem2Solicitado = true; perfil.drenagem2Ativo = false; }   /* só quem pede o Drenagem 2 (regras do Firestore com drenagem2*) */
+      if(ks.includes('esgoto')){ perfil.esgotoSolicitado = true; perfil.esgotoAtivo = false; }   /* só quem pede o Esgoto (regras do Firestore com esgoto*) */
       if(indic && indic !== codigoDe(uid)) perfil.indicadoPor = indic;
       await gravar('set', fs.doc(d, 'usuarios', uid), perfil);
       criando = false;
@@ -775,6 +779,7 @@ $('form-cadastro').addEventListener('submit', async ev => {
         drenagemSolicitado: ks.includes('drenagem'), drenagemAtivo: false,
         programasPedidos: ks, formaPagamento: pag, plano, tipoPedido, pedidoEm: fs.serverTimestamp()};
       if(ks.includes('drenagem2')){ perfil.drenagem2Solicitado = true; perfil.drenagem2Ativo = false; }
+      if(ks.includes('esgoto')){ perfil.esgotoSolicitado = true; perfil.esgotoAtivo = false; }
       if(indic && indic !== codigoDe(uid)) perfil.indicadoPor = indic;
       msg('cd-msg', 'Enviando pedido…', 'info');
       await gravar('set', fs.doc(d, 'usuarios', uid), perfil);
@@ -791,6 +796,7 @@ $('form-cadastro').addEventListener('submit', async ev => {
       if(ks.includes('googleearth') && !eu.googleearthSolicitado) upd.googleearthSolicitado = true;
       if(ks.includes('drenagem') && !eu.drenagemSolicitado) upd.drenagemSolicitado = true;
       if(ks.includes('drenagem2') && !eu.drenagem2Solicitado) upd.drenagem2Solicitado = true;
+      if(ks.includes('esgoto') && !eu.esgotoSolicitado) upd.esgotoSolicitado = true;
       if(indic && !eu.indicadoPor && indic !== codigoDe(uid)) upd.indicadoPor = indic;
       msg('cd-msg', 'Enviando pedido…', 'info');
       await gravar('update', fs.doc(d, 'usuarios', uid), upd);
