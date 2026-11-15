@@ -431,8 +431,10 @@ body.ios .field input,.ios .field select{font-size:16px;}
   <div class="sec">
     <div class="sec-title">D) Sapatas Isoladas — NBR 6122:2022 · NBR 6118:2023 §22</div>
     <p style="font-size:11px;color:var(--fg3);margin-bottom:8px;">
-      Dimensionamento completo: σ biaxial nos 4 cantos · punção pelo perímetro crítico a 2d (NBR 6118 §19.5) ·
-      armadura Asx e Asy · volume tronco-piramidal exato · verificação de levantamento.
+      Dimensionamento completo: σ biaxial nos 4 cantos com peso próprio e solo sobre a sapata (levantamento: só compressão) ·
+      flexão com esforços de cálculo e bielas-tirantes (sapata rígida) · armadura mínima ρmin·b·h ·
+      compressão diagonal no contorno C e punção no contorno C′ a 2d (sapata flexível) (NBR 6118 §19.5) ·
+      volume com rodapé + tronco de pirâmide.
     </p>
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
       <button class="btn-calc" onclick="otimizar()">⚡ Otimizar B×L×h automaticamente</button>
@@ -500,7 +502,7 @@ body.ios .field input,.ios .field select{font-size:16px;}
         <input type="number" id="cor_qk" value="150" step="10" oninput="calcCorreida()">
         <span class="unit">Carga distribuída da parede/pilares</span></div>
       <div class="field"><label>Largura B (m)</label>
-        <input type="number" id="cor_B" value="0.8" step="0.1" min="0.3" oninput="calcCorreida()">
+        <input type="number" id="cor_B" value="0.9" step="0.1" min="0.3" oninput="calcCorreida()">
         <span class="unit">Largura da base</span></div>
       <div class="field"><label>Altura h (m)</label>
         <input type="number" id="cor_h" value="0.4" step="0.05" oninput="calcCorreida()">
@@ -508,6 +510,9 @@ body.ios .field input,.ios .field select{font-size:16px;}
       <div class="field"><label>Comprimento total L (m)</label>
         <input type="number" id="cor_L" value="10" step="0.5" oninput="calcCorreida()">
         <span class="unit">Extensão da parede/alinhamento</span></div>
+      <div class="field"><label>Espessura da parede (m)</label>
+        <input type="number" id="cor_bw" value="0.20" step="0.01" min="0.1" oninput="calcCorreida()">
+        <span class="unit">Define o balanço (B − espessura)/2</span></div>
     </div>
     <div id="cor-out" style="margin-top:12px;"></div>
   </div>
@@ -529,11 +534,14 @@ body.ios .field input,.ios .field select{font-size:16px;}
         <input type="number" id="rad_A" value="120" step="5" oninput="calcRadier()">
         <span class="unit">Área total da laje de radier</span></div>
       <div class="field"><label>Espessura h (m)</label>
-        <input type="number" id="rad_h" value="0.35" step="0.05" min="0.15" oninput="calcRadier()">
+        <input type="number" id="rad_h" value="0.45" step="0.05" min="0.15" oninput="calcRadier()">
         <span class="unit">Mín. L/20 do vão entre pilares</span></div>
       <div class="field"><label>kv Winkler (kN/m³)</label>
         <input type="number" id="rad_kv" value="20000" step="1000" oninput="calcRadier()">
         <span class="unit">Coeficiente de recalque vertical</span></div>
+      <div class="field"><label>Vão médio entre pilares (m)</label>
+        <input type="number" id="rad_vao" value="" placeholder="auto" step="0.5" min="0" oninput="calcRadier()">
+        <span class="unit">Vazio = calculado pela posição dos pilares</span></div>
     </div>
     <div id="rad-out" style="margin-top:12px;"></div>
   </div>
@@ -639,16 +647,20 @@ body.ios .field input,.ios .field select{font-size:16px;}
     <div class="tbl-wrap"><table>
       <thead><tr><th>Verificação</th><th>Equação</th><th>Norma</th><th>Limite</th></tr></thead>
       <tbody>
-        <tr><td>σ biaxial — 4 cantos</td><td>σ = N/A ± Mky/Wx ± Mkx/Wy</td><td>NBR 6122:2022 §8</td><td>σmax ≤ σadm</td></tr>
-        <tr><td>σ triangular (e &gt; L/6)</td><td>σmax = 2N / [3·(L/2−e)·B]</td><td>NBR 6122:2022 §8.3</td><td>—</td></tr>
-        <tr><td>Armadura sapata</td><td>As = Msd / (0,9·d·fyd)</td><td>NBR 6118:2023 §22.7</td><td>As ≥ 0,15%·bw·d</td></tr>
-        <tr><td>Punção — perímetro crítico</td><td>u₁ = 2(bp+hp) + 4π·2d</td><td>NBR 6118:2023 §19.5</td><td>τSd ≤ τRd2</td></tr>
-        <tr><td>Punção — resistência</td><td>τRd2 = 0,27·(1−fck/250)·fcd</td><td>NBR 6118:2023 §19.5.2</td><td>—</td></tr>
-        <tr><td>Volume tronco-piramidal</td><td>V = h/3·(A1+A2+√(A1·A2))</td><td>Geometria</td><td>—</td></tr>
-        <tr><td>Linha neutra viga</td><td>0,8x·bw·fcd·(d−0,4x) = Md</td><td>NBR 6118:2023 §17.3</td><td>x/d ≤ 0,45</td></tr>
-        <tr><td>Capacidade estaca (Aoki-Velloso)</td><td>R = Rp + Rs = α·Np·Ap + β·Nl·U·L</td><td>NBR 6122:2022 §7</td><td>—</td></tr>
-        <tr><td>Capacidade corrida</td><td>σ = q/B ≤ σadm</td><td>NBR 6122:2022 §8</td><td>—</td></tr>
-        <tr><td>Radier — recalque Winkler</td><td>w = q/kv</td><td>NBR 6122:2022 §8.5</td><td>w ≤ wlim</td></tr>
+        <tr><td>σ biaxial — 4 cantos</td><td>σ = (Nk + Pp + Psolo)/A ± Mky/Wx ± Mkx/Wy</td><td>NBR 6122:2022 §8</td><td>σmax ≤ σadm</td></tr>
+        <tr><td>σ triangular (e &gt; B/6)</td><td>σmax = 2N / [3·L·(B/2−e)] (dois eixos: solução numérica só com compressão)</td><td>NBR 6122:2022 §8.3</td><td>e &lt; B/2</td></tr>
+        <tr><td>Sapata rígida</td><td>h ≥ (a − ap)/3</td><td>NBR 6118:2023 §22.6</td><td>—</td></tr>
+        <tr><td>Armadura sapata (flexão)</td><td>Msd = σd·c²/2·b ; As = Msd / (0,9·d·fyd), com γf nos esforços</td><td>NBR 6118:2023 §22.6</td><td>—</td></tr>
+        <tr><td>Armadura sapata rígida (bielas)</td><td>T = Rd·(a − ap) / (8·d) ; As = T/fyd</td><td>NBR 6118:2023 §22.6</td><td>—</td></tr>
+        <tr><td>Armadura mínima</td><td>As,min = ρmin·b·h (ρmin da Tab. 17.3: 0,150% até fck 30)</td><td>NBR 6118:2023 §17.3.5.2.1</td><td>As ≥ As,min</td></tr>
+        <tr><td>Compressão diagonal — contorno C</td><td>τSd = β·Fd/(u₀·d), u₀ = 2(bp+hp) ; τRd2 = 0,27·(1−fck/250)·fcd</td><td>NBR 6118:2023 §19.5.2</td><td>τSd ≤ τRd2</td></tr>
+        <tr><td>Punção — contorno C′ (sapata flexível / radier)</td><td>u₁ = 2(bp+hp) + 2π·(2d) ; τRd1 = 0,13·(1+√(20/d))·(100ρ·fck)^⅓ (d em cm)</td><td>NBR 6118:2023 §19.5.3</td><td>τSd ≤ τRd1</td></tr>
+        <tr><td>Volume da sapata</td><td>V = B·L·h0 + (h−h0)/3·(A1+A2+√(A1·A2)), h0 = máx(20 cm; h/3)</td><td>Geometria</td><td>—</td></tr>
+        <tr><td>Capacidade estaca (Aoki-Velloso)</td><td>R = K·Np/F1·Ap + α·K·Nl/F2·U·L ; F2 = 2·F1</td><td>Aoki &amp; Velloso (1975); Cintra &amp; Aoki (2010)</td><td>R/FS ≥ carga</td></tr>
+        <tr><td>Bloco sobre estacas (bielas-tirantes)</td><td>T = (Fd/n)·r/d (radial); 2 estacas: Fd·e/4d; 4 estacas: Fd·e/8d</td><td>Blévot (1967); NBR 6118:2023 §22.7</td><td>—</td></tr>
+        <tr><td>Capacidade corrida</td><td>σ = (q + Pp + Psolo)/B ≤ σadm</td><td>NBR 6122:2022 §8</td><td>—</td></tr>
+        <tr><td>Radier — recalque Winkler</td><td>w = σ/kv ; Msd = γf·(N/A)·vão²/10</td><td>NBR 6122:2022 §8.5</td><td>w ≤ wlim</td></tr>
+        <tr><td>Módulo secante</td><td>Ecs = αi·Eci ; Eci = 5600·√fck ; αi = 0,8 + 0,2·fck/80 ≤ 1</td><td>NBR 6118:2023 §8.2.8</td><td>—</td></tr>
       </tbody>
     </table></div>
   </div>
@@ -682,6 +694,7 @@ let _sapatas = [];   // resultados calculados
 let _subtipo = 'iso';
 let _tipoEstaca = 'helice';
 let _sapSel = null;  // id sapata selecionada na planta
+let _corr = null, _rad = null, _est = null; // resultados da corrida, radier e estacas (usados também pelo orçamento)
 
 // planta SVG
 let _svgScale = 1, _svgPanX = 0, _svgPanY = 0;
@@ -792,7 +805,7 @@ function getP() {
     fcd:fck/gc, fyd:fyk/gs,
     cob:cobBase+10,           // mm — fundação
     cobEst:cobBase,           // mm — superestrutura
-    Ecs:5600*Math.sqrt(fck)/1000, // GPa
+    Ecs:(Math.min(1,0.8+0.2*fck/80)*(fck<=50?5600*Math.sqrt(fck):21500*Math.pow(fck/10+1.25,1/3)))/1000, // GPa — Ecs = αi·Eci (NBR 6118 §8.2.8), αE=1,0 (granito/gnaisse)
     sigma_adm:V('sigma_adm'),
     spt:V('spt'), D:V('D'), NA:V('NA'),
     gama_s:V('gama_s')
@@ -800,78 +813,190 @@ function getP() {
 }
 
 /* ═══════════════════════════════════════════════════════════
-   CÁLCULO DA SAPATA ISOLADA — CORRIGIDO
-   • σ biaxial nos 4 cantos
-   • Punção pelo perímetro crítico real a 2d
-   • Volume tronco-piramidal exato
-   • Fd separado de Nk para armadura
+   CÁLCULO DA SAPATA ISOLADA — REVISADO (PATCH CON-REV, 15/11/2026)
+   • σ no solo = (Nk + peso próprio + solo sobre a sapata) com momentos
+     biaxiais; se algum canto tracionar, distribuição só com compressão
+   • Flexão e punção com ESFORÇOS DE CÁLCULO (γf aplicado), sem o peso
+     próprio (que se equilibra com a reação do solo)
+   • Armadura mínima NBR 6118 Tab. 17.3 sobre b·h (não b·d), largura certa
+   • Sapata rígida: h ≥ (a − ap)/3; bielas-tirantes (T = Rd·(a−ap)/8d)
+   • Punção: contorno C (u0) × τRd2 e, se flexível, contorno C' (2d) × τRd1
+   • Volume com rodapé (h0 ≥ 20 cm e ≥ h/3) + tronco de pirâmide
 ═══════════════════════════════════════════════════════════ */
+const RHO_MIN_TAB = {20:.150,25:.150,30:.150,35:.164,40:.179,45:.194,50:.208,55:.211,60:.219,65:.226,70:.233,75:.239,80:.245,85:.251,90:.256}; // % — NBR 6118 Tab. 17.3 (CA-50)
+function rhoMin(fck, fyk) {
+  const ks = Object.keys(RHO_MIN_TAB).map(Number).sort((a,b)=>a-b);
+  let r;
+  if (fck <= ks[0]) r = RHO_MIN_TAB[ks[0]];
+  else if (fck >= ks[ks.length-1]) r = RHO_MIN_TAB[ks[ks.length-1]];
+  else {
+    let lo = ks[0]; ks.forEach(k => { if (k <= fck) lo = k; });
+    const hi = lo + 5;
+    r = RHO_MIN_TAB[lo] + (RHO_MIN_TAB[hi] - RHO_MIN_TAB[lo]) * (fck - lo) / 5;
+  }
+  return Math.max(0.0015, r / 100 * (500 / (fyk || 500)));
+}
+// resistência média à tração do concreto (MPa) — NBR 6118 §8.2.5
+function fctmC(fck) { return fck <= 50 ? 0.3 * Math.pow(fck, 2/3) : 2.12 * Math.log(1 + 0.11 * fck); }
+
+/* Pressão no solo sob base B×L (x ao longo de B, y ao longo de L).
+   N em kN (compressão), mkx/mky em kN·m. Só compressão no solo. */
+function pressaoBase(B, L, N, mkx, mky) {
+  const A = B * L;
+  const ex = N > 0 ? Math.abs(mky) / N : 0, ey = N > 0 ? Math.abs(mkx) / N : 0;
+  const s0 = N / A;
+  const dsx = N > 0 ? Math.abs(mky) / (L * B * B / 6) : 0;
+  const dsy = N > 0 ? Math.abs(mkx) / (B * L * L / 6) : 0;
+  const sigmas = [s0 + dsx + dsy, s0 + dsx - dsy, s0 - dsx + dsy, s0 - dsx - dsy];
+  const r = {ex, ey, sigmas, smax: Math.max(...sigmas), smin: Math.min(...sigmas),
+             levanta: false, areaComp: 1, tomba: false, aprox: false};
+  if (r.smin >= -1e-9) return r;
+  r.levanta = true;
+  if (N <= 0 || ex >= B / 2 || ey >= L / 2) { r.tomba = true; r.areaComp = 0; return r; }
+  // um só eixo excêntrico → solução exata (triângulo de tensões)
+  if (ey < 1e-9 * B) { r.smax = 2 * N / (3 * L * (B / 2 - ex)); r.smin = 0; r.areaComp = 3 * (B / 2 - ex) / B; return r; }
+  if (ex < 1e-9 * L) { r.smax = 2 * N / (3 * B * (L / 2 - ey)); r.smin = 0; r.areaComp = 3 * (L / 2 - ey) / L; return r; }
+  // dois eixos: plano σ = a + b·x + c·y, só compressão, resolvido por Newton (grade 48×48)
+  const nx = 48, ny = 48, dA = A / (nx * ny);
+  const xs = [], ys = [];
+  for (let i = 0; i < nx; i++) xs.push(-B / 2 + (i + 0.5) * B / nx);
+  for (let j = 0; j < ny; j++) ys.push(-L / 2 + (j + 0.5) * L / ny);
+  const F = (a, b, c) => {
+    let f0 = 0, f1 = 0, f2 = 0;
+    for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) {
+      const s = a + b * xs[i] + c * ys[j];
+      if (s > 0) { f0 += s; f1 += s * xs[i]; f2 += s * ys[j]; }
+    }
+    return [f0 * dA - N, f1 * dA - N * ex, f2 * dA - N * ey];
+  };
+  let a = s0, b = dsx / (B / 2), c = dsy / (L / 2);
+  const norm = f => Math.hypot(f[0] / N, f[1] / (N * Math.max(ex, 1e-6)), f[2] / (N * Math.max(ey, 1e-6)));
+  let f = F(a, b, c), ok = false;
+  for (let it = 0; it < 80; it++) {
+    if (norm(f) < 1e-7) { ok = true; break; }
+    const h = [1e-3 * s0, 1e-3 * s0 / B + 1e-9, 1e-3 * s0 / L + 1e-9];
+    const J = [[], [], []];
+    const base = [a, b, c];
+    for (let k = 0; k < 3; k++) {
+      const q = base.slice(); q[k] += h[k];
+      const fk = F(q[0], q[1], q[2]);
+      for (let m = 0; m < 3; m++) J[m][k] = (fk[m] - f[m]) / h[k];
+    }
+    // resolve J·Δ = −f (eliminação de Gauss)
+    const M = J.map((row, m) => row.concat([-f[m]]));
+    for (let p = 0; p < 3; p++) {
+      let piv = p; for (let m = p + 1; m < 3; m++) if (Math.abs(M[m][p]) > Math.abs(M[piv][p])) piv = m;
+      [M[p], M[piv]] = [M[piv], M[p]];
+      if (Math.abs(M[p][p]) < 1e-12) { piv = -1; break; }
+      for (let m = p + 1; m < 3; m++) { const t = M[m][p] / M[p][p]; for (let k = p; k < 4; k++) M[m][k] -= t * M[p][k]; }
+    }
+    if (Math.abs(M[2][2]) < 1e-12) break;
+    const dl = [0, 0, 0];
+    for (let m = 2; m >= 0; m--) { let s = M[m][3]; for (let k = m + 1; k < 3; k++) s -= M[m][k] * dl[k]; dl[m] = s / M[m][m]; }
+    let t = 1, nf = f, na = a, nb = b, nc = c, melhorou = false;
+    for (let ls = 0; ls < 25; ls++) {
+      na = a + t * dl[0]; nb = b + t * dl[1]; nc = c + t * dl[2];
+      nf = F(na, nb, nc);
+      if (norm(nf) < norm(f)) { melhorou = true; break; }
+      t /= 2;
+    }
+    if (!melhorou) break;
+    a = na; b = nb; c = nc; f = nf;
+  }
+  if (!ok && norm(f) < 1e-4) ok = true;
+  if (!ok) { r.aprox = true; return r; }    // não convergiu: mantém a distribuição linear (limite inferior)
+  let comp = 0, mx = 0;
+  for (let i = 0; i < nx; i++) for (let j = 0; j < ny; j++) if (a + b * xs[i] + c * ys[j] > 0) comp++;
+  [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([sx, sy]) => { mx = Math.max(mx, a + b * sx * B / 2 + c * sy * L / 2); });
+  r.smax = mx; r.smin = 0; r.areaComp = comp / (nx * ny);
+  return r;
+}
+
+/* Punção — NBR 6118 §19.5. Fd em kN; tudo em m; devolve kPa.
+   sigD: reação líquida de cálculo média (kPa) para descontar o que cai dentro de C'. */
+function puncao(Fd, bp, hp, d, rho, p, areaTot, beta) {
+  const u0 = 2 * (bp + hp);
+  const u1 = 2 * (bp + hp) + 4 * Math.PI * d;                  // C' a 2d do pilar: 2(bp+hp) + 2π·(2d)
+  const tauSd0 = beta * Fd / (u0 * d);                          // kN/m² = kPa
+  const tauRd2 = 0.27 * (1 - p.fck / 250) * p.fcd * 1000;       // kPa
+  const areaC1 = Math.min(areaTot, bp * hp + 4 * d * (bp + hp) + 4 * Math.PI * d * d);
+  const Fred = Fd * (1 - areaC1 / areaTot);                     // reação do solo dentro de C' não pune
+  const tauSd1 = beta * Fred / (u1 * d);
+  const rh = Math.min(0.02, rho);
+  const tauRd1 = 0.13 * (1 + Math.sqrt(20 / (d * 100))) * Math.cbrt(100 * rh * p.fck) * 1000; // kPa (d em cm na fórmula)
+  return {u0, u1, tauSd0, tauRd2, tauSd1, tauRd1, ok0: tauSd0 <= tauRd2, ok1: tauSd1 <= tauRd1};
+}
+
 function calcSapata(pil, p) {
   const {gk,qk,mkx=0,mky=0,bp=0.25,hp=0.3,B=1.5,L=1.5,h=0.6} = pil;
-  const Nk = gk+qk;
-  const Fd = p.gfg*gk + p.gfq*qk;
+  const Nk = gk + qk;
+  const Fd = p.gfg * gk + p.gfq * qk;
+  const fatD = Nk > 0 ? Fd / Nk : 1.4;                     // γf médio da combinação
   const {fck,fcd,fyd,cob,sigma_adm} = p;
 
-  const A = B*L;
-  // Momentos de inércia da seção da sapata
-  const Wx = B*B*L/6;   // resistência à flexão em torno de Y (excentricidade ex)
-  const Wy = B*L*L/6;   // resistência à flexão em torno de X (excentricidade ey)
-  // Excentricidades
-  const ex = Nk>0 ? Math.abs(mky)/Nk : 0;  // ex → mky → verifica B/6
-  const ey = Nk>0 ? Math.abs(mkx)/Nk : 0;  // ey → mkx → verifica L/6
+  const A = B * L, A2 = bp * hp;
+  // Geometria: rodapé h0 + tronco de pirâmide até a seção do pilar
+  const h0 = Math.min(h, Math.max(0.20, h / 3));
+  const H1 = Math.max(0, h - h0);
+  const vol = A * h0 + (H1 / 3) * (A + A2 + Math.sqrt(A * A2));
+  const slX = Math.hypot((B - bp) / 2, H1), slY = Math.hypot((L - hp) / 2, H1);
+  const forma = 2 * (B + L) * h0 + (L + hp) * slX + (B + bp) * slY;   // m² de fôrma lateral
 
-  // σ nos 4 cantos — fórmula biaxial completa
-  const s0 = Nk/A;
-  const dsx = Nk>0 ? Math.abs(mky)/Wx : 0;
-  const dsy = Nk>0 ? Math.abs(mkx)/Wy : 0;
-  const sigmas = [s0+dsx+dsy, s0+dsx-dsy, s0-dsx+dsy, s0-dsx-dsy];
-  const sigma_max = Math.max(...sigmas);
-  const sigma_min = Math.min(...sigmas);
-  const levanta = sigma_min < 0;
+  // Pressão no solo: Nk + peso próprio + solo sobre a sapata (NBR 6122)
+  const Pp = 25 * vol;
+  const Ps = (p.gama_s || 0) * Math.max(0, (p.D || 0) - h) * Math.max(0, A - A2);
+  const Nbase = Nk + Pp + Ps;
+  const pr = pressaoBase(B, L, Nbase, mkx, mky);
+  const {ex, ey, sigmas, levanta, tomba} = pr;
+  const sigma_max = pr.smax, sigma_min = pr.smin;
+  const Wx = L * B * B / 6, Wy = B * L * L / 6;
 
   // Altura útil d
-  const d = Math.max(0.1, h - cob/1000 - 0.010); // m
+  const d = Math.max(0.1, h - cob / 1000 - 0.010); // m
 
-  // Momentos para armadura (sapata rígida — balanço em relação à face do pilar)
-  const cb_x = (B - bp) / 2;  // balanço em X
-  const cb_y = (L - hp) / 2;  // balanço em Y
-  const smax_u = Math.max(sigma_max, s0); // usa σmax da sapata
-  // Msd por unidade de largura → total pelo B ou L
-  const MsdX = smax_u * cb_x * cb_x / 2 * L; // kN·m
-  const MsdY = smax_u * cb_y * cb_y / 2 * B; // kN·m
-
-  // Armadura (cm²)
-  const AsX = d>0 ? MsdX*1000/(0.9*d*fyd)/100 : 0;
-  const AsY = d>0 ? MsdY*1000/(0.9*d*fyd)/100 : 0;
-  // Mínima: 0,15% bw·d (por m de largura)
-  const AsMinX = 0.0015*B*1000*d*1000/100;
-  const AsMinY = 0.0015*L*1000*d*1000/100;
+  // Esforços de cálculo para a armadura: só as cargas do pilar, com γf
+  const pn = pressaoBase(B, L, Nk, mkx, mky);
+  const sdMax = pn.smax * fatD;                    // kPa de cálculo (borda mais carregada)
+  const cb_x = (B - bp) / 2, cb_y = (L - hp) / 2;
+  const MsdX = sdMax * cb_x * cb_x / 2 * L;        // kN·m
+  const MsdY = sdMax * cb_y * cb_y / 2 * B;
+  const rigidaX = h >= (B - bp) / 3 - 1e-9, rigidaY = h >= (L - hp) / 3 - 1e-9;
+  const rigida = rigidaX && rigidaY;
+  // Flexão (braço 0,9d) e, se rígida, bielas-tirantes: T = Rd·(a−ap)/(8d)
+  const AsXf = MsdX * 1000 / (0.9 * d * fyd) / 100;
+  const AsYf = MsdY * 1000 / (0.9 * d * fyd) / 100;
+  const Rd = sdMax * A;
+  const AsXb = rigidaX ? Rd * (B - bp) / (8 * d) * 10 / fyd : 0;
+  const AsYb = rigidaY ? Rd * (L - hp) / (8 * d) * 10 / fyd : 0;
+  const AsX = Math.max(AsXf, AsXb), AsY = Math.max(AsYf, AsYb);
+  // Mínima: ρmin·b·h (NBR 6118 Tab. 17.3). Barras em X trabalham na largura L; em Y, na largura B
+  const rm = rhoMin(fck, p.fyk);
+  const AsMinX = rm * (L * 100) * (h * 100);
+  const AsMinY = rm * (B * 100) * (h * 100);
   const AsXa = Math.max(AsX, AsMinX);
   const AsYa = Math.max(AsY, AsMinY);
 
-  // Punção — NBR 6118:2023 §19.5
-  // Perímetro crítico a 2d do contorno do pilar
-  const u1 = 2*(bp+hp) + 4*Math.PI*(2*d);  // m
-  const tau_sd = Fd/(u1*d)*1000;            // kPa
-  const tau_rd2 = 0.27*(1-fck/250)*fcd*1000; // kPa
-  const puncOk = tau_sd <= tau_rd2;
-
-  // Volume tronco-piramidal exato
-  const A1 = B*L, A2 = bp*hp;
-  const vol = (h/3)*(A1+A2+Math.sqrt(A1*A2));
+  // Punção / compressão diagonal — NBR 6118 §19.5 e §22.6
+  const beta = (mkx || mky) ? 1.15 : 1.0;
+  const rho = Math.sqrt((AsXa / (L * 100 * d * 100)) * (AsYa / (B * 100 * d * 100)));
+  const pu = puncao(Fd, bp, hp, d, rho, p, A, beta);
+  const puncOk = pu.ok0 && (rigida || pu.ok1);
 
   // Status
-  const taxa = sigma_max/sigma_adm;
+  const taxa = tomba ? 9.99 : sigma_max / sigma_adm;
   let st, stCl;
-  if(sigma_max>sigma_adm){st='SUBDIMENSIONADA';stCl='danger';}
-  else if(taxa>0.8){st='Próxima ao limite';stCl='warn';}
-  else if(taxa<0.5){st='Sub-utilizada';stCl='info';}
-  else{st='OK';stCl='ok';}
+  if (tomba) { st = 'TOMBAMENTO (e ≥ B/2)'; stCl = 'danger'; }
+  else if (sigma_max > sigma_adm) { st = 'SUBDIMENSIONADA'; stCl = 'danger'; }
+  else if (levanta) { st = 'Levantamento parcial (' + Math.round(pr.areaComp * 100) + '% comprimida)'; stCl = 'warn'; }
+  else if (taxa > 0.8) { st = 'Próxima ao limite'; stCl = 'warn'; }
+  else if (taxa < 0.5) { st = 'Sub-utilizada'; stCl = 'info'; }
+  else { st = 'OK'; stCl = 'ok'; }
 
   return {id:pil.id,gk,qk,Nk,Fd,mkx,mky,bp,hp,B,L,h,x:pil.x||0,y:pil.y||0,
-    A,Wx,Wy,ex,ey,sigma_max,sigma_min,sigmas,levanta,
+    A,Wx,Wy,ex,ey,sigma_max,sigma_min,sigmas,levanta,tomba,areaComp:pr.areaComp,aproxLev:pr.aprox,
+    Pp,Ps,Nbase,sdMax,h0,forma,rigida,
     d,MsdX,MsdY,AsX,AsY,AsXa,AsYa,AsMinX,AsMinY,
-    u1,tau_sd,tau_rd2,puncOk,vol,taxa,st,stCl};
+    u0:pu.u0,u1:pu.u1,tau_sd:pu.tauSd0,tau_rd2:pu.tauRd2,tau_sd1:pu.tauSd1,tau_rd1:pu.tauRd1,puncOk,vol,taxa,st,stCl};
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -891,7 +1016,7 @@ function calc() {
 
   // Alertas solo
   const alertas = [];
-  if(p.NA < p.D+0.3) alertas.push({c:'danger',t:'⚠ Lençol freático ('+fmt(p.NA,1)+'m) abaixo da sapata (D='+fmt(p.D,1)+'m) — verificar rebaixamento ou mudar para fundação profunda.'});
+  if(p.NA < p.D+0.3) alertas.push({c:'danger',t:'⚠ Lençol freático (NA = '+fmt(p.NA,1)+' m) acima da cota de assentamento ou a menos de 0,30 m abaixo dela (D = '+fmt(p.D,1)+' m) — verificar rebaixamento ou mudar para fundação profunda.'});
   const sptSigma = p.spt<=5?50:p.spt<=10?100:p.spt<=20?200:300;
   if(p.sigma_adm>sptSigma*1.3) alertas.push({c:'warn',t:'⚠ σ_adm ('+p.sigma_adm+'kPa) pode ser alta para SPT '+p.spt+' — verificar laudo de sondagem.'});
   if(p.spt<=4) alertas.push({c:'warn',t:'⚠ SPT ≤ 4 — solo muito fraco. Considerar fundação profunda ou radier.'});
@@ -919,22 +1044,41 @@ function calc() {
 /* ═══════════════════════════════════════════════════════════
    TABELA DE PILARES
 ═══════════════════════════════════════════════════════════ */
+// Digitação: só grava se o campo tem número válido (campo vazio/incompleto mantém o valor anterior)
+function setPil(i,campo,el){
+  const v=parseFloat(el.value);
+  if(isNaN(v)||!_pilares[i]) return;
+  if(['B','L','h','bp','hp'].includes(campo)&&v<=0) return;
+  _pilares[i][campo]=v; calc();
+}
 function renderTbPilares(p) {
   const tb = document.getElementById('tb-pilares'); if(!tb) return;
   p = p||getP();
-  tb.innerHTML='';
-  _pilares.forEach((pil,i)=>{
+  const ids=_pilares.map(q=>q.id).join('|');
+  const campos=[['gk',50,''],['qk',20,''],['mkx',1,''],['mky',1,''],['bp',0.05,'0.15'],['hp',0.05,'0.15'],['x',0.5,''],['y',0.5,'']];
+  const padrao={bp:0.25,hp:0.30};
+  const inp=(i,c,val)=>`<td class="td-inp"><input type="number" data-c="${c[0]}" value="${val}" step="${c[1]}" ${c[2]?'min="'+c[2]+'"':''} style="width:60px;padding:2px 4px;border:1px solid var(--inp-border);background:var(--inp);border-radius:3px;font-size:11px;font-family:inherit" oninput="setPil(${i},'${c[0]}',this)"></td>`;
+  if(tb.dataset.ids!==ids){            // número/ordem de pilares mudou: reconstrói as linhas
+    tb.innerHTML=''; tb.dataset.ids=ids;
+    _pilares.forEach((pil,i)=>{
+      const tr=document.createElement('tr');
+      const v=c=>pil[c[0]]??(padrao[c[0]]??0);
+      tr.innerHTML=`<td><b>${pil.id}</b></td>
+        ${inp(i,campos[0],v(campos[0]))}${inp(i,campos[1],v(campos[1]))}
+        <td class="td-out" data-o="nk"></td><td class="td-out" data-o="fd"></td>
+        ${inp(i,campos[2],v(campos[2]))}${inp(i,campos[3],v(campos[3]))}
+        ${inp(i,campos[4],v(campos[4]))}${inp(i,campos[5],v(campos[5]))}
+        ${inp(i,campos[6],v(campos[6]))}${inp(i,campos[7],v(campos[7]))}
+        <td><button class="btn-rem" onclick="remPilar(${i})">✕</button></td>`;
+      tb.appendChild(tr);
+    });
+  }
+  _pilares.forEach((pil,i)=>{          // atualização no lugar: não mexe no campo que está sendo digitado
+    const tr=tb.children[i]; if(!tr) return;
     const Nk=pil.gk+pil.qk, Fd=p.gfg*pil.gk+p.gfq*pil.qk;
-    const inp=(campo,val,step,min='')=>`<td class="td-inp"><input type="number" value="${val}" step="${step}" ${min?'min="'+min+'"':''} style="width:60px;padding:2px 4px;border:1px solid var(--inp-border);background:var(--inp);border-radius:3px;font-size:11px;font-family:inherit" oninput="_pilares[${i}].${campo}=parseFloat(this.value)||0;calc()"></td>`;
-    const tr=document.createElement('tr');
-    tr.innerHTML=`<td><b>${pil.id}</b></td>
-      ${inp('gk',pil.gk,50)}${inp('qk',pil.qk,20)}
-      <td class="td-out">${fmt(Nk,0)}</td><td class="td-out">${fmt(Fd,0)}</td>
-      ${inp('mkx',pil.mkx||0,1)}${inp('mky',pil.mky||0,1)}
-      ${inp('bp',pil.bp||0.25,0.05,0.15)}${inp('hp',pil.hp||0.30,0.05,0.15)}
-      ${inp('x',pil.x||0,0.5)}${inp('y',pil.y||0,0.5)}
-      <td><button class="btn-rem" onclick="remPilar(${i})">✕</button></td>`;
-    tb.appendChild(tr);
+    tr.querySelector('[data-o="nk"]').textContent=fmt(Nk,0);
+    tr.querySelector('[data-o="fd"]').textContent=fmt(Fd,0);
+    campos.forEach(c=>{ const el=tr.querySelector(`input[data-c="${c[0]}"]`); if(el&&el!==document.activeElement) el.value=pil[c[0]]??(padrao[c[0]]??0); });
   });
 }
 
@@ -957,68 +1101,69 @@ function setSubtipo(t) {
 
 function renderSapatas() {
   const div = document.getElementById('sapatas-cards'); if(!div) return;
-  div.innerHTML='';
   const p = getP();
+  const ids=_sapatas.map(q=>q.id).join('|');
+  if(div.dataset.ids!==ids){ div.innerHTML=''; div.dataset.ids=ids; }   // só reconstrói se mudou a lista de pilares
+  const campos=[['B','B — largura (m)',0.05,'0.1',1.5],['L','L — comprimento (m)',0.05,'0.1',1.5],['h','h — altura (m)',0.05,'0.1',0.6],
+    ['bp','bp — pilar menor (m)',0.05,'0.1',0.25],['hp','hp — pilar maior (m)',0.05,'0.1',0.30],['x','X em planta (m)',0.5,'-99',0],
+    ['y','Y em planta (m)',0.5,'-99',0],['mkx','Mkx (kN·m)',1,'-999',0],['mky','Mky (kN·m)',1,'-999',0]];
   _sapatas.forEach((sa,i)=>{
     const pil=_pilares[i];
-    const clrH = {ok:'background:var(--ok);color:var(--ok-fg)',warn:'background:var(--warn);color:var(--warn-fg)',
-                  danger:'background:var(--danger);color:var(--danger-fg)',info:'background:var(--out);color:var(--accent)'}[sa.stCl];
-    const card=document.createElement('div');
-    card.className='sap-card';
-    card.id='sap-card-'+sa.id;
+    let card=document.getElementById('sap-card-'+sa.id);
+    if(!card){
+      card=document.createElement('div');
+      card.className='sap-card';
+      card.id='sap-card-'+sa.id;
+      const aberto=_sapSel===sa.id;
+      card.innerHTML=`
+      <div class="sap-card-header" onclick="toggleCard('${sa.id}')">
+        <div>
+          <span class="sap-id">${sa.id}</span>
+          <span style="font-size:11px;opacity:.8;margin-left:8px;" data-r="hd"></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:80px;text-align:right;font-size:11px" data-r="pct"></div>
+          <span class="sap-status badge" data-r="st"></span>
+          <span style="font-size:12px;opacity:.7" id="sap-arr-${sa.id}">${aberto?'▼':'▶'}</span>
+        </div>
+      </div>
+      <div class="sap-card-body" id="sap-body-${sa.id}" style="${aberto?'':'display:none'}">
+        <div style="margin-bottom:2px">
+          <div class="sigma-wrap"><div class="sigma-bar" data-r="bar"></div></div>
+          <div style="font-size:10px;color:var(--fg3);margin-top:2px" data-r="sg"></div>
+        </div>
+        <div class="g4" style="margin-top:10px;">
+          ${campos.map(c=>`<div class="field"><label>${c[1]}</label><input type="number" data-c="${c[0]}" value="${pil[c[0]]??c[4]}" step="${c[2]}" min="${c[3]}" style="width:70px;padding:4px 6px;border:1px solid var(--inp-border);background:var(--inp);border-radius:4px;font-size:12px;font-family:inherit" oninput="setPil(${i},'${c[0]}',this)"></div>`).join('')}
+        </div>
+        <div class="sap-resultado" data-r="res"></div>
+        <div data-r="extra"></div>
+      </div>`;
+      div.appendChild(card);
+    }
+    const q=r=>card.querySelector('[data-r="'+r+'"]');
     const taxa100=Math.round(sa.taxa*100);
     const barW=Math.min(100,taxa100);
     const barClr=sa.taxa>1?'var(--danger-fg)':sa.taxa>0.8?'var(--warn-fg)':sa.taxa<0.5?'var(--accent2)':'var(--ok-fg)';
-    const inp=(campo,val,step,min='0.1')=>`<input type="number" value="${val}" step="${step}" min="${min}" style="width:70px;padding:4px 6px;border:1px solid var(--inp-border);background:var(--inp);border-radius:4px;font-size:12px;font-family:inherit" oninput="_pilares[${i}].${campo}=parseFloat(this.value)||${val};calc()">`;
-
-    card.innerHTML=`
-    <div class="sap-card-header" onclick="toggleCard('${sa.id}')">
-      <div>
-        <span class="sap-id">${sa.id}</span>
-        <span style="font-size:11px;opacity:.8;margin-left:8px;">Nk ${fmt(sa.Nk,0)} kN · ${fmt(sa.B,2)}×${fmt(sa.L,2)}×${fmt(sa.h,2)} m</span>
-      </div>
-      <div style="display:flex;align-items:center;gap:8px;">
-        <div style="width:80px;text-align:right;font-size:11px">${taxa100}% σadm</div>
-        <span class="sap-status badge badge-${sa.stCl}">${sa.st}</span>
-        <span style="font-size:12px;opacity:.7" id="sap-arr-${sa.id}">▼</span>
-      </div>
-    </div>
-    <div class="sap-card-body" id="sap-body-${sa.id}" ${_sapSel!==sa.id?'':''}style="">
-      <div style="margin-bottom:2px">
-        <div class="sigma-wrap"><div class="sigma-bar" style="width:${barW}%;background:${barClr}"></div></div>
-        <div style="font-size:10px;color:var(--fg3);margin-top:2px">σmax=${fmt(sa.sigma_max,1)} kPa · σmin=${fmt(sa.sigma_min,1)} kPa · σadm=${p.sigma_adm} kPa</div>
-      </div>
-      <div class="g4" style="margin-top:10px;">
-        <div class="field"><label>B — largura (m)</label>${inp('B',pil.B||1.5,0.05)}</div>
-        <div class="field"><label>L — comprimento (m)</label>${inp('L',pil.L||1.5,0.05)}</div>
-        <div class="field"><label>h — altura (m)</label>${inp('h',pil.h||0.6,0.05)}</div>
-        <div class="field"><label>bp — pilar menor (m)</label>${inp('bp',pil.bp||0.25,0.05)}</div>
-        <div class="field"><label>hp — pilar maior (m)</label>${inp('hp',pil.hp||0.30,0.05)}</div>
-        <div class="field"><label>X em planta (m)</label>${inp('x',pil.x||0,0.5,'-99')}</div>
-        <div class="field"><label>Y em planta (m)</label>${inp('y',pil.y||0,0.5,'-99')}</div>
-        <div class="field"><label>Mkx (kN·m)</label>${inp('mkx',pil.mkx||0,1,'-999')}</div>
-        <div class="field"><label>Mky (kN·m)</label>${inp('mky',pil.mky||0,1,'-999')}</div>
-      </div>
-      <div class="sap-resultado">
-        <b>Excentricidades:</b> ex = ${fmt(sa.ex,3)} m (lim B/6=${fmt(sa.B/6,3)} m) · ey = ${fmt(sa.ey,3)} m (lim L/6=${fmt(sa.L/6,3)} m)<br>
-        <b>σ nos 4 cantos (kPa):</b> ${sa.sigmas.map(s=>fmt(s,1)).join(' | ')} ${sa.levanta?'<span style="color:var(--danger-fg)">⚠ Levantamento!</span>':''}<br>
+    q('hd').textContent=`Nk ${fmt(sa.Nk,0)} kN · ${fmt(sa.B,2)}×${fmt(sa.L,2)}×${fmt(sa.h,2)} m`;
+    q('pct').textContent=`${taxa100}% σadm`;
+    const stEl=q('st'); stEl.className='sap-status badge badge-'+sa.stCl; stEl.textContent=sa.st;
+    const bar=q('bar'); bar.style.width=barW+'%'; bar.style.background=barClr;
+    q('sg').textContent=`σmax=${fmt(sa.sigma_max,1)} kPa · σmin=${fmt(sa.sigma_min,1)} kPa · σadm=${p.sigma_adm} kPa`;
+    campos.forEach(c=>{ const el=card.querySelector(`input[data-c="${c[0]}"]`); if(el&&el!==document.activeElement) el.value=pil[c[0]]??c[4]; });
+    q('res').innerHTML=`<b>Excentricidades:</b> ex = ${fmt(sa.ex,3)} m (lim B/6=${fmt(sa.B/6,3)} m) · ey = ${fmt(sa.ey,3)} m (lim L/6=${fmt(sa.L/6,3)} m)<br>
+        <b>Reação no solo:</b> Nk ${fmt(sa.Nk,0)} + peso próprio ${fmt(sa.Pp,0)} + solo sobre a sapata ${fmt(sa.Ps,0)} = ${fmt(sa.Nbase,0)} kN<br>
+        <b>σ nos 4 cantos, distribuição linear (kPa):</b> ${sa.sigmas.map(s=>fmt(s,1)).join(' | ')} ${sa.levanta?'<span style="color:var(--danger-fg)">⚠ Levantamento! σmax recalculado só com compressão (área comprimida '+fmt(sa.areaComp*100,0)+'%)'+(sa.tomba?' — resultante fora da base: TOMBAMENTO':'')+(sa.aproxLev?' — não convergiu: valor é limite inferior':'')+'</span>':''}<br>
         <b>σmax = ${fmt(sa.sigma_max,1)} kPa</b> → ${sa.taxa*100<=80?'✅':'⚠'} ${fmt(sa.taxa*100,0)}% de σadm = ${p.sigma_adm} kPa<br>
         <b>Altura útil d:</b> ${fmt(sa.d,3)} m (cob. ${p.cob} mm + Ø10 mm)<br>
-        <b>Armadura em X (vence L):</b> Asx = ${fmt(sa.AsXa,2)} cm² (calc ${fmt(sa.AsX,2)} · mín ${fmt(sa.AsMinX,2)} cm²)<br>
-        <b>Armadura em Y (vence B):</b> Asy = ${fmt(sa.AsYa,2)} cm² (calc ${fmt(sa.AsY,2)} · mín ${fmt(sa.AsMinY,2)} cm²)<br>
-        <b>Punção:</b> τSd = ${fmt(sa.tau_sd,1)} kPa · τRd2 = ${fmt(sa.tau_rd2,1)} kPa · u₁ = ${fmt(sa.u1,2)} m →
-        <span class="${sa.puncOk?'badge badge-ok':'badge badge-danger'}">${sa.puncOk?'OK':'NÃO ATENDE — aumentar d ou fck'}</span><br>
-        <b>Volume concreto (tronco-piramidal):</b> ${fmt(sa.vol,3)} m³ · Peso ≈ ${fmt(sa.vol*25,0)} kN
-      </div>
-      ${(_subtipo==='div')?`<div class="val-bar warn" style="margin-top:8px;">⚠ Sapata de Divisa: verificar viga de equilíbrio. O momento de tombamento My=${fmt(sa.mky,1)} kN·m deve ser equilibrado pelo par de forças pilar-divisa → pilar-interno.</div>`:''}
-      ${(_subtipo==='col')?`<div class="val-bar info" style="margin-top:8px;">ℹ Colarinho: embutimento mínimo = ${fmt(Math.max(pil.hp||0.3,0.4)*1.3,2)} m. Verificar transferência de momento pelo atrito lateral no colarinho (NBR 9062).</div>`:''}
-    </div>`;
-    div.appendChild(card);
-    // Fechar por padrão exceto selecionada
-    if(_sapSel !== sa.id) {
-      const body = card.querySelector('.sap-card-body');
-      if(body) body.style.display='none';
-    }
+        <b>Sapata ${sa.rigida?'rígida':'flexível'}</b> (h ${sa.rigida?'≥':'<'} (a − ap)/3 nas duas direções)<br>
+        <b>Armadura paralela a X (balanço em X, largura L):</b> Asx = ${fmt(sa.AsXa,2)} cm² (calc ${fmt(sa.AsX,2)} · mín ${fmt(sa.AsMinX,2)} cm²)<br>
+        <b>Armadura paralela a Y (balanço em Y, largura B):</b> Asy = ${fmt(sa.AsYa,2)} cm² (calc ${fmt(sa.AsY,2)} · mín ${fmt(sa.AsMinY,2)} cm²)<br>
+        <b>Compressão diagonal (contorno C, u₀ = ${fmt(sa.u0,2)} m):</b> τSd = ${fmt(sa.tau_sd,0)} kPa · τRd2 = ${fmt(sa.tau_rd2,0)} kPa<br>
+        ${sa.rigida?'<b>Punção (contorno C′ a 2d):</b> dispensada em sapata rígida':`<b>Punção (contorno C′ a 2d, u₁ = ${fmt(sa.u1,2)} m):</b> τSd = ${fmt(sa.tau_sd1,0)} kPa · τRd1 = ${fmt(sa.tau_rd1,0)} kPa`} →
+        <span class="${sa.puncOk?'badge badge-ok':'badge badge-danger'}">${sa.puncOk?'OK':'NÃO ATENDE — aumentar h ou fck'}</span><br>
+        <b>Volume concreto (rodapé ${fmt(sa.h0,2)} m + tronco de pirâmide):</b> ${fmt(sa.vol,3)} m³ · Peso ≈ ${fmt(sa.vol*25,0)} kN`;
+    q('extra').innerHTML=(_subtipo==='div')?`<div class="val-bar warn" style="margin-top:8px;">⚠ Sapata de Divisa: verificar viga de equilíbrio. O momento de tombamento My=${fmt(sa.mky,1)} kN·m deve ser equilibrado pelo par de forças pilar-divisa → pilar-interno.</div>`
+      :(_subtipo==='col')?`<div class="val-bar info" style="margin-top:8px;">ℹ Colarinho: embutimento mínimo = ${fmt(Math.max(pil.hp||0.3,0.4)*1.3,2)} m. Verificar transferência de momento pelo atrito lateral no colarinho (NBR 9062).</div>`:'';
   });
 
   // Resumo global
@@ -1052,7 +1197,7 @@ function toggleCard(id) {
 const SVG_W=800, SVG_H=420;
 
 function plantaCoords() {
-  if(!_sapatas.length) return {minX:0,maxX:10,minY:0,maxY:10,scale:30,cx:SVG_W/2,cy:SVG_H/2};
+  if(!_sapatas.length) return {minX:0,maxX:10,minY:0,maxY:10,rX:10,rY:10,scale:30,cx:SVG_W/2,cy:SVG_H/2};
   const xs=_sapatas.map(s=>s.x), ys=_sapatas.map(s=>s.y);
   const minX=Math.min(...xs)-2, maxX=Math.max(...xs)+2;
   const minY=Math.min(...ys)-2, maxY=Math.max(...ys)+2;
@@ -1214,9 +1359,14 @@ function renderPaleta() {
   const sigma=p.sigma_adm, spt=p.spt, D=p.D, NA=p.NA;
   // Área relativa: estimar baseado em Nk total e σadm
   const sumNk=_pilares.reduce((s,p)=>s+p.gk+p.qk,0);
-  const areaEdif=_pilares.reduce((s,p)=>s+p.B*p.L,0)||1;
-  const areaTotal=_sapatas.length?_sapatas.reduce((s,a)=>s+a.A,0):sumNk/sigma;
-  const areaRel=areaTotal/(areaEdif||100);
+  // área da planta ≈ retângulo dos pilares ampliado de um vão médio em cada direção
+  const xsP=_pilares.map(q=>q.x||0), ysP=_pilares.map(q=>q.y||0);
+  const nxD=new Set(xsP.map(v=>Math.round(v*100))).size, nyD=new Set(ysP.map(v=>Math.round(v*100))).size;
+  const rXp=Math.max(...xsP)-Math.min(...xsP), rYp=Math.max(...ysP)-Math.min(...ysP);
+  const vx=nxD>1?rXp/(nxD-1):5, vy=nyD>1?rYp/(nyD-1):5;
+  const areaEdif=Math.max(1,(rXp+vx)*(rYp+vy));
+  const areaTotal=_sapatas.length?_sapatas.reduce((s,a)=>s+a.A,0):(sigma>0?sumNk/sigma:0);
+  const areaRel=areaTotal/areaEdif;
 
   // Recomendação geral
   const recDiv=document.getElementById('paleta-rec');
@@ -1252,76 +1402,132 @@ function renderPaleta() {
 function calcCorreida() {
   const p=getP();
   const qk=V('cor_qk'), B=V('cor_B'), h=V('cor_h'), L=V('cor_L');
-  const Fd=p.gfg*qk;
-  const sigma=qk/B;
-  const sigmaF=Fd/B;
+  const bw=V('cor_bw')>0?V('cor_bw'):0.2;           // espessura da parede/viga apoiada (m)
+  const gm=Math.max(p.gfg,p.gfq);
+  const Fd=gm*qk;                                    // kN/m de cálculo
+  // σ no solo: carga + peso próprio da sapata + solo sobre ela (por metro de comprimento)
+  const pp=25*B*h, ps=(p.gama_s||0)*Math.max(0,(p.D||0)-h)*Math.max(0,B-bw);
+  const sigma=B>0?(qk+pp+ps)/B:0;
+  const sigmaF=B>0?Fd/B:0;                           // reação líquida de cálculo (kPa)
   const ok=sigma<=p.sigma_adm;
   const d=Math.max(0.1,h-p.cob/1000-0.01);
-  const Msd=sigmaF*(B-0.2)*(B-0.2)/8; // balanço simplificado
-  const As=(Msd*1000)/(0.9*d*p.fyd)/100;
+  const c=Math.max(0,(B-bw)/2);                      // balanço
+  const rigida=h>=(B-bw)/3-1e-9;
+  const Msd=sigmaF*c*c/2;                            // kN·m por metro
+  const AsF=(Msd*1000)/(0.9*d*p.fyd)/100;            // cm²/m (flexão)
+  const AsB=rigida?Fd*(B-bw)/(8*d)*10/p.fyd:0;       // cm²/m (bielas-tirantes, T = Rd·(a−ap)/8d)
+  const As=Math.max(AsF,AsB);
+  const AsMin=rhoMin(p.fck,p.fyk)*h*1e4;             // cm²/m = ρmin · 100 cm · h(cm)
+  const Asa=Math.max(As,AsMin);
+  // cisalhamento sem estribos (só exigido na sapata flexível; rígida: biela comprimida)
+  const Vsd=sigmaF*Math.max(0,c-d);                  // kN/m a d da face
+  const fctd=0.7*fctmC(p.fck)/p.gc;                  // MPa
+  const tauRd=0.25*fctd*1000;                        // kPa
+  const k=Math.max(1,1.6-d);
+  const rho1=Math.min(0.02,Asa/(100*d*100));
+  const VRd1=tauRd*k*(1.2+40*rho1)*d;                // kN/m
+  const cisOk=rigida||Vsd<=VRd1;
   const vol=B*h*L;
+  _corr={Fd,sigma,d,As,AsMin,Asa,vol,rigida,B,h,L};
   const div=document.getElementById('cor-out'); if(!div)return;
   div.innerHTML=`<div class="g4">
     ${outCell('Fd linear (kN/m)',fmt(Fd,1))}
-    ${outCell('σ solo (kPa)',fmt(sigma,1),ok?'':'danger')}
+    ${outCell('σ solo c/ peso próprio (kPa)',fmt(sigma,1),ok?'':'danger')}
     ${outCell('σadm (kPa)',p.sigma_adm)}
     ${outCell('Status',ok?'OK ✅':'SUBDIM. ❌',ok?'ok':'danger')}
     ${outCell('Altura útil d (m)',fmt(d,3))}
-    ${outCell('As transversal (cm²/m)',fmt(As,2))}
+    ${outCell('As transversal (cm²/m)',fmt(Asa,2))}
+    ${outCell('As calc / mín (cm²/m)',fmt(As,2)+' / '+fmt(AsMin,2))}
+    ${outCell('Sapata',rigida?'Rígida':'Flexível')}
+    ${outCell('Cisalhamento VSd / VRd1 (kN/m)',rigida?'dispensado':fmt(Vsd,1)+' / '+fmt(VRd1,1),cisOk?'':'danger')}
     ${outCell('Volume concreto (m³)',fmt(vol,2))}
     ${outCell('Peso sapata corrida (kN)',fmt(vol*25,1))}
   </div>
   <div class="val-bar ${ok?'ok':'danger'}" style="margin-top:8px;">
     σ = ${fmt(sigma,1)} kPa ${ok?'≤':'>'} σadm = ${p.sigma_adm} kPa → ${ok?'ATENDE':'NÃO ATENDE — aumentar B'}
-  </div>`;
+  </div>
+  ${cisOk?'':'<div class="val-bar danger">⚠ Cisalhamento sem estribos não atendido — aumentar h (NBR 6118 §19.4.1).</div>'}
+  <div style="font-size:11px;color:var(--fg3);margin-top:6px;">Balanço medido a partir da face da parede (espessura ${fmt(bw*100,0)} cm — campo “Espessura da parede”). A reação líquida usa só a carga da parede com γf; o peso próprio entra apenas na tensão do solo.</div>`;
 }
 
 /* ═══════════════════════════════════════════════════════════
    RADIER
 ═══════════════════════════════════════════════════════════ */
+// vão médio entre pilares = média da distância ao pilar mais próximo (m)
+function vaoMedio() {
+  if (_pilares.length < 2) return 4;
+  let s = 0, n = 0;
+  _pilares.forEach((a, i) => {
+    let m = Infinity;
+    _pilares.forEach((b, j) => { if (i !== j) { const dd = Math.hypot((a.x||0)-(b.x||0), (a.y||0)-(b.y||0)); if (dd > 0.01 && dd < m) m = dd; } });
+    if (isFinite(m)) { s += m; n++; }
+  });
+  return n ? s / n : 4;
+}
 function calcRadier() {
   const p=getP();
   const N=V('rad_N')||(_sapatas.length?_sapatas.reduce((a,s)=>a+s.Nk,0):0);
   const A=V('rad_A'), h=V('rad_h'), kv=V('rad_kv');
-  const sigma=N/A;
+  const vaoIn=V('rad_vao'), vao=vaoIn>0?vaoIn:vaoMedio();
+  const pp=25*h;                                   // peso próprio (kPa)
+  const sigma=A>0?N/A+pp:0;
   const ok=sigma<=p.sigma_adm;
-  const recalque=sigma/kv*100; // cm
+  const recalque=kv>0?sigma/kv*100:0;              // cm
   const d=Math.max(0.1,h-p.cob/1000-0.012);
-  const Msd=sigma*1*1/10; // simplificado: laje em duas direções
+  const gm=Math.max(p.gfg,p.gfq);
+  const sd=A>0?gm*N/A:0;                           // reação líquida de cálculo (kPa)
+  const Msd=sd*vao*vao/10;                         // kN·m/m — laje contínua apoiada nos pilares (q·l²/10)
   const As=(Msd*1000)/(0.9*d*p.fyd)/100;
-  const As_min=0.0015*1000*d*1000/100; // por metro
+  const As_min=rhoMin(p.fck,p.fyk)*h*1e4;          // cm²/m
   const Asa=Math.max(As,As_min);
   const vol=A*h;
+  // punção no pilar mais carregado
+  let pu=null, pilM=null;
+  if(_pilares.length && sd>0){
+    pilM=_pilares.reduce((m,x)=>(p.gfg*x.gk+p.gfq*x.qk)>(p.gfg*m.gk+p.gfq*m.qk)?x:m,_pilares[0]);
+    const Fdp=p.gfg*pilM.gk+p.gfq*pilM.qk, areaTrib=Math.max(Fdp/sd,1e-6);
+    pu=puncao(Fdp,pilM.bp||.25,pilM.hp||.3,d,Asa/(100*d*100),p,areaTrib,(pilM.mkx||pilM.mky)?1.15:1.0);
+  }
+  const puOk=!pu||(pu.ok0&&pu.ok1);
+  _rad={N,A,h,sigma,Asa,As,As_min,vao,vol,puOk};
   const div=document.getElementById('rad-out'); if(!div)return;
   div.innerHTML=`<div class="g4">
-    ${outCell('σ media no radier (kPa)',fmt(sigma,1),ok?'':'danger')}
+    ${outCell('σ no solo c/ peso próprio (kPa)',fmt(sigma,1),ok?'':'danger')}
     ${outCell('σadm solo (kPa)',p.sigma_adm)}
     ${outCell('Recalque estimado w (cm)',fmt(recalque,2),recalque>2.5?'warn':'')}
     ${outCell('Status',ok?'OK ✅':'SUBDIM. ❌',ok?'ok':'danger')}
+    ${outCell('Vão considerado (m)',fmt(vao,2)+(vaoIn>0?'':' (auto)'))}
     ${outCell('Altura útil d (m)',fmt(d,3))}
     ${outCell('As (cm²/m) cada direção',fmt(Asa,2))}
+    ${outCell('As calc / mín (cm²/m)',fmt(As,2)+' / '+fmt(As_min,2))}
+    ${pu?outCell('Punção '+pilM.id+' (C: τSd/τRd2 kPa)',fmt(pu.tauSd0,0)+' / '+fmt(pu.tauRd2,0),pu.ok0?'':'danger'):''}
+    ${pu?outCell('Punção '+pilM.id+' (C′: τSd/τRd1 kPa)',fmt(pu.tauSd1,0)+' / '+fmt(pu.tauRd1,0),pu.ok1?'':'danger'):''}
     ${outCell('Volume concreto (m³)',fmt(vol,2))}
     ${outCell('Peso radier (kN)',fmt(vol*25,0))}
   </div>
   <div class="val-bar ${ok?'ok':'danger'}" style="margin-top:8px;">
     σ = ${fmt(sigma,1)} kPa ${ok?'≤':'>'} σadm = ${p.sigma_adm} kPa → ${ok?'ATENDE':'AUMENTAR ÁREA'}
   </div>
+  ${puOk?'':'<div class="val-bar danger">⚠ Punção não atendida no pilar mais carregado — aumentar h ou prever armadura de punção (NBR 6118 §19.5).</div>'}
   ${recalque>2.5?`<div class="val-bar warn">⚠ Recalque estimado ${fmt(recalque,2)} cm > 2,5 cm — verificar recalque diferencial (NBR 6122 §7.2).</div>`:''}
-  <div style="font-size:11px;color:var(--fg3);margin-top:6px;">Obs.: Cálculo de radier pelo método de Winkler simplificado. Para projeto executivo, usar análise por elementos finitos.</div>`;
+  <div style="font-size:11px;color:var(--fg3);margin-top:6px;">Momento: Msd = γf·(N/A)·vão²/10 (laje contínua apoiada nos pilares); o peso próprio do radier entra só na tensão do solo. Recalque pelo modelo de Winkler (w = σ/kv). Para projeto executivo, usar análise por elementos finitos.</div>`;
 }
 
 /* ═══════════════════════════════════════════════════════════
-   ESTACAS — AOKI-VELLOSO SIMPLIFICADO
+   ESTACAS — AOKI-VELLOSO (Cintra & Aoki, 2010)
+   Rp = K·Np/F1 · Ap          Rs = α·K·Nl/F2 · U·L      (F2 = 2·F1)
 ═══════════════════════════════════════════════════════════ */
 const EST_INFO = {
-  helice:{nome:'Hélice Contínua Monitorada',F1:0.23,F2:0.45,alpha:{areia:1.0,argila:0.6},desc:'Execução contínua sem vibração, com monitoramento eletrônico. Não há extração de amostras. Indica para SPT qualquer. Fator de segurança FS=4 para cálculo pela fórmula dinâmica ou FS=2 a 2,5 pelo Aoki-Velloso.',FS:2.5},
-  franki:{nome:'Estaca Franki (Compressão de Base)',F1:0.18,F2:0.23,alpha:{areia:0.8,argila:0.5},desc:'Base alargada por martelamento do bulbo. Alta resistência de ponta. Indicada para solos granulares e pedregulhosos. Vibração pode ser problemática em áreas urbanas. FS=2.',FS:2.0},
-  strauss:{nome:'Estaca Strauss (Escavação Simples)',F1:0.28,F2:0.5,alpha:{areia:0.7,argila:0.5},desc:'Escavação com trado tipo Strauss, concreto lançado por gravidade. Obras de pequeno e médio porte. Sem lama bentonítica. Limitada a ~12 m de profundidade. FS=2.',FS:2.0},
-  escav:{nome:'Estaca Escavada (Fluido Estabilizador)',F1:0.35,F2:0.5,alpha:{areia:0.8,argila:0.6},desc:'Escavação com fluido bentonítico ou polímero. Grandes diâmetros e profundidades. Sem vibração ou percussão. Indicada para obras próximas a edificações. FS=3.',FS:3.0},
-  premold:{nome:'Estaca Pré-moldada de Concreto',F1:0.2,F2:0.3,alpha:{areia:1.0,argila:0.6},desc:'Cravada por percussão ou prensagem. Resistência confirmada por fórmula dinâmica. Necessita espaço para transporte e içamento. FS=2 para PDA ou fórmula dinâmica.',FS:2.0},
-  raiz:{nome:'Estaca Raiz (Micropilote)',F1:0.45,F2:0.6,alpha:{areia:0.5,argila:0.4},desc:'Executada por injeção de calda de cimento sob pressão. Alta resistência ao atrito lateral. Para recuperação de fundações, obras em locais de difícil acesso, carga inclinada.',FS:3.0},
-  tubulao:{nome:'Tubulão a Céu Aberto / Ar Comprimido',F1:0.12,F2:0.18,alpha:{areia:0.5,argila:0.35},desc:'Grande diâmetro, inspecionado manualmente. Alta capacidade de ponta pela base alargada (sino). Indicado quando camada rochosa ou muito resistente está acessível. FS=2,5.',FS:2.5},
+  helice:{nome:'Hélice Contínua Monitorada',f1:()=>2.0,desc:'Execução contínua sem vibração, com monitoramento eletrônico. Não há extração de amostras. Indica para SPT qualquer. Fator de segurança FS=4 para cálculo pela fórmula dinâmica ou FS=2 a 2,5 pelo Aoki-Velloso.',FS:2.5},
+  franki:{nome:'Estaca Franki (Compressão de Base)',f1:()=>2.5,desc:'Base alargada por martelamento do bulbo. Alta resistência de ponta. Indicada para solos granulares e pedregulhosos. Vibração pode ser problemática em áreas urbanas. FS=2.',FS:2.0},
+  strauss:{nome:'Estaca Strauss (Escavação Simples)',f1:()=>3.0,desc:'Escavação com trado tipo Strauss, concreto lançado por gravidade. Obras de pequeno e médio porte. Sem lama bentonítica. Limitada a ~12 m de profundidade. FS=2. (Cálculo com F1/F2 de estaca escavada.)',FS:2.0},
+  escav:{nome:'Estaca Escavada (Fluido Estabilizador)',f1:()=>3.0,desc:'Escavação com fluido bentonítico ou polímero. Grandes diâmetros e profundidades. Sem vibração ou percussão. Indicada para obras próximas a edificações. FS=3.',FS:3.0},
+  premold:{nome:'Estaca Pré-moldada de Concreto',f1:D=>1+D/0.8,desc:'Cravada por percussão ou prensagem. Resistência confirmada por fórmula dinâmica. Necessita espaço para transporte e içamento. FS=2 para PDA ou fórmula dinâmica. (F1 = 1 + D/0,80.)',FS:2.0},
+  raiz:{nome:'Estaca Raiz (Micropilote)',f1:()=>2.0,desc:'Executada por injeção de calda de cimento sob pressão. Alta resistência ao atrito lateral. Para recuperação de fundações, obras em locais de difícil acesso, carga inclinada.',FS:3.0},
+  tubulao:{nome:'Tubulão a Céu Aberto / Ar Comprimido',f1:()=>3.0,desc:'Grande diâmetro, inspecionado manualmente. Alta capacidade de ponta pela base alargada (sino). Indicado quando camada rochosa ou muito resistente está acessível. FS=2,5. Atenção: o Aoki-Velloso não é o método usual para tubulão — confira também pela tensão admissível do solo na base alargada (NBR 6122).',FS:2.5},
 };
+// K (kPa) e α (razão de atrito) — Aoki & Velloso (1975): argila, silte e areia puros
+const SOLO_AV = {Argiloso:{K:200,a:0.060}, Arenoso:{K:1000,a:0.014}, Siltoso:{K:400,a:0.030}};
 
 function setEstaca(t) {
   _tipoEstaca=t;
@@ -1338,40 +1544,43 @@ function calcEstaca() {
   const esp=V('est_esp'), fck_bl=V('est_fck');
   const spt=p.spt;
 
-  // Capacidade Aoki-Velloso simplificado
-  // Rp = (K × Np) / F1 × Ap   onde K = fator de resistência (areia~500, argila~170)
-  // Rs = (α/F2) × Nl × U × L
+  // Capacidade de carga — Aoki-Velloso com SPT
   const tipo_solo=S('tipo_solo');
-  const K = tipo_solo.includes('Argiloso')||tipo_solo.includes('Siltoso') ? 170 : 500; // kPa
-  const alpha_lat = (tipo_solo.includes('Argiloso')||tipo_solo.includes('Siltoso'))
-    ? info.alpha.argila : info.alpha.areia;
+  const solo=SOLO_AV[tipo_solo]||SOLO_AV.Siltoso;
+  const soloAprox=!SOLO_AV[tipo_solo];            // rocha / aterro: método não se aplica
+  const K=solo.K, alpha_lat=solo.a;
+  const F1=info.f1(D_est), F2=2*F1;
   const Ap = Math.PI*(D_est/2)*(D_est/2); // m²
   const U  = Math.PI*D_est;               // m
-  const Rp_bruto = (K*spt/info.F1)*Ap;    // kN
-  const Rs_bruto = (alpha_lat/info.F2)*spt*U*L_est; // kN (Nl=SPT médio simplificado)
+  const Rp_bruto = (K*spt/F1)*Ap;                       // kN
+  const Rs_bruto = (alpha_lat*K*spt/F2)*U*L_est;        // kN (Nl = SPT médio, simplificado)
   const R_bruto  = Rp_bruto + Rs_bruto;
   const R_adm    = R_bruto / info.FS;     // kN — admissível
 
   // Número de estacas necessárias
-  const n_nec = Math.ceil(Nk / R_adm);
+  const n_nec = R_adm>0 ? Math.ceil(Nk / R_adm) : 0;
   const ok = n >= n_nec;
 
-  // Bloco de coroamento — dimensionamento simplificado
-  // Alturas recomendadas: h_bl = 0,5 × espaçamento + d_estaca (Montoya)
+  // Bloco de coroamento — pré-dimensionamento
   const esp_m = esp*D_est;
-  const esp_diag = n===1?esp_m:Math.sqrt(2)*esp_m; // diagonal para n>2
+  const esp_diag = n===1?esp_m:Math.sqrt(2)*esp_m;
   const h_bl_rec = Math.max(0.3, esp_diag/2);
   const d_bl = Math.max(0.1, h_bl_rec - p.cob/1000 - 0.012);
-  // Momento no bloco (biela-tirante simplificado)
-  const Fd_bl = p.gfg*Nk; // kN (aproximado, Gk≈Nk, Qk=0 no exemplo)
-  const Msd_bl = Fd_bl*esp_m/n/4; // kN·m — tirante horizontal simplificado
-  const As_bl = d_bl>0 ? Msd_bl*1000/(0.9*d_bl*p.fyd)/100 : 0;
+  // Bielas-tirantes (Blévot), com ap = 0 (conservador): cada estaca externa recebe Fd/n e
+  // empurra a biela para o centro; T radial = (Fd/n)·r/d. No bloco de 4 estacas a armadura
+  // vai nos lados: T = T_radial/√2 (= Fd·e/8d).
+  const Fd_bl = Math.max(p.gfg,p.gfq)*Nk;
+  const rRad = n===1?0 : n===2?esp_m/2 : n===3?esp_m/Math.sqrt(3) : n===4?esp_m/Math.SQRT2 : esp_m;
+  const T_rad = Fd_bl/n*rRad/d_bl;                       // kN
+  const T_bl = n===4 ? T_rad/Math.SQRT2 : T_rad;
+  const As_bl = T_bl*10/p.fyd;                           // cm² por tirante
 
-  // Verificação à compressão da estaca
+  // Verificação à compressão da estaca (tensão ≤ 0,25·fck)
   const Ac_est=Ap;
   const sigma_est_adm = 0.25*fck_bl*1000; // kPa
-  const sigma_est = Nk/n/Ac_est;
+  const sigma_est = n>0&&Ac_est>0?Nk/n/Ac_est:0;
   const estOk = sigma_est <= sigma_est_adm;
+  _est={hb:h_bl_rec,db:d_bl,As:As_bl,T:T_bl,n};
 
   const div=document.getElementById('est-out'); if(!div)return;
   div.innerHTML=`<div class="g4">
@@ -1383,7 +1592,8 @@ function calcEstaca() {
     ${outCell('Estacas adotadas',n,n>=n_nec?'ok':'warn')}
     ${outCell('Espaçamento (m)',fmt(esp_m,2),esp_m>=2.5*D_est?'ok':'warn')}
     ${outCell('h bloco recomendada (m)',fmt(h_bl_rec,2))}
-    ${outCell('As bloco (cm²)',fmt(As_bl,2))}
+    ${outCell('Tirante T (kN)',n===1?'—':fmt(T_bl,0))}
+    ${outCell('As do tirante (cm²)',n===1?'fretagem':fmt(As_bl,2))}
     ${outCell('σ estaca (kPa)',fmt(sigma_est,0),estOk?'ok':'danger')}
     ${outCell('σadm comp. estaca (kPa)',fmt(sigma_est_adm,0))}
     ${outCell('Status bloco',estOk?'OK':'REVISAR',estOk?'ok':'danger')}
@@ -1396,7 +1606,8 @@ function calcEstaca() {
   <div class="val-bar ${esp_m>=2.5*D_est?'ok':'warn'}">
     Espaçamento entre eixos: ${fmt(esp_m,2)} m ${esp_m>=2.5*D_est?'≥':'<'} 2,5D = ${fmt(2.5*D_est,2)} m (NBR 6122 §7.8) → ${esp_m>=2.5*D_est?'OK':'AUMENTAR ESPAÇAMENTO'}
   </div>
-  <div style="font-size:11px;color:var(--fg3);margin-top:6px;">Método Aoki-Velloso simplificado (K=${K} kPa para ${tipo_solo}, α=${alpha_lat}, F1=${info.F1}, F2=${info.F2}). Para projeto executivo, complementar com provas de carga (NBR 12131:2022) ou ensaios PDA.</div>`;
+  ${soloAprox?`<div class="val-bar warn">⚠ Solo “${tipo_solo}”: o Aoki-Velloso não se aplica; o cálculo usou os parâmetros de silte. Use prova de carga ou outro método.</div>`:''}
+  <div style="font-size:11px;color:var(--fg3);margin-top:6px;">Aoki-Velloso (Cintra &amp; Aoki, 2010): K=${K} kPa e α=${fmt(alpha_lat*100,1)}% (${soloAprox?'silte':tipo_solo}), F1=${fmt(F1,2)}, F2=${fmt(F2,2)}. Rp = K·Np/F1·Ap; Rs = α·K·Nl/F2·U·L. Armadura do bloco por bielas-tirantes (Blévot) com pilar de dimensão nula (conservador); n=3 e n≥5 com tirante radial. Para projeto executivo, complementar com provas de carga (NBR 12131:2022) ou ensaios PDA.</div>`;
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1538,17 +1749,26 @@ function remPilar(i){if(_pilares.length<=1){aviso('Mínimo 1 pilar.','err');retu
 /* ═══════════════════════════════════════════════════════════
    OTIMIZAR B×L
 ═══════════════════════════════════════════════════════════ */
+function dimensionarPilar(pil,p){
+  const up=(x,q)=>Math.ceil(x/q-1e-9)*q;                       // arredonda PARA CIMA
+  const Nk=pil.gk+pil.qk;
+  const lado=Math.sqrt(Nk*1.15/p.sigma_adm);                   // +15% p/ peso próprio e solo
+  pil.B=Math.max(.6,+up(lado,0.1).toFixed(2));
+  pil.L=Math.max(.6,+up(lado*1.05,0.1).toFixed(2));
+  const hRig=()=>Math.max(.4,+up(Math.max(pil.B-pil.bp,pil.L-pil.hp)/3,0.05).toFixed(2)); // sapata rígida
+  pil.h=hRig();
+  // cresce até atender σ (com momentos, peso próprio e levantamento) e a punção/compressão diagonal
+  for(let k=0;k<80;k++){
+    const r=calcSapata(pil,p);
+    if(r.sigma_max<=p.sigma_adm && !r.levanta && !r.tomba && r.puncOk) break;
+    if(r.sigma_max>p.sigma_adm || r.levanta || r.tomba){ pil.B=+(pil.B+0.1).toFixed(2); pil.L=+(pil.L+0.1).toFixed(2); pil.h=Math.max(pil.h,hRig()); }
+    else { pil.h=+(pil.h+0.05).toFixed(2); }
+  }
+}
 function otimizar(){
   const p=getP();
-  _pilares.forEach(pil=>{
-    const Nk=pil.gk+pil.qk;
-    const Anec=Nk*1.05/p.sigma_adm;
-    const lado=Math.sqrt(Anec);
-    pil.B=Math.max(.6,Math.round(lado*10)/10);
-    pil.L=Math.max(.6,Math.round(lado*1.05*10)/10);
-    pil.h=Math.max(.4,Math.round(Math.max(pil.bp*2.5,0.4)*10)/10);
-  });
-  calc(); aviso('B×L×h otimizados para todos os pilares.');
+  _pilares.forEach(pil=>dimensionarPilar(pil,p));
+  calc(); aviso('B×L×h dimensionados (σ, momentos, peso próprio, rigidez e punção).');
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1564,6 +1784,7 @@ function exemplosPadrao(){
     {id:'P6',gk:310,qk:70,mkx:12,mky:14,bp:.25,hp:.35,x:10, y:5,  B:1.6,L:1.6,h:.60},
   ];
   _nextId=7;
+  try{ const p=getP(); _pilares.forEach(pil=>dimensionarPilar(pil,p)); }catch(e){ console.warn('dimensionar exemplo:',e); }
 }
 
 /* ═══════════════════════════════════════════════════════════
@@ -1588,11 +1809,11 @@ function gerarMem(){
     h+=`<div style="border-left:3px solid var(--${sa.stCl==='ok'?'ok-border':sa.stCl==='danger'?'danger-border':'warn-border'});padding:6px 10px;margin:6px 0;background:var(--bg);border-radius:0 6px 6px 0">
       <b>${sa.id}</b> — Nk=${fmt(sa.Nk,0)} kN · Fd=${fmt(sa.Fd,0)} kN · B×L×h=${fmt(sa.B,2)}×${fmt(sa.L,2)}×${fmt(sa.h,2)} m<br>
       ex=${fmt(sa.ex,3)} m (lim ${fmt(sa.B/6,3)} m) · ey=${fmt(sa.ey,3)} m (lim ${fmt(sa.L/6,3)} m)<br>
-      σ nos 4 cantos: ${sa.sigmas.map(s=>fmt(s,1)).join(' | ')} kPa ${sa.levanta?'⚠ LEVANTAMENTO':''}<br>
+      Reação no solo: Nk+peso próprio+solo = ${fmt(sa.Nbase,0)} kN · σ nos 4 cantos (linear): ${sa.sigmas.map(s=>fmt(s,1)).join(' | ')} kPa ${sa.levanta?'⚠ LEVANTAMENTO (área comprimida '+fmt(sa.areaComp*100,0)+'%)':''}<br>
       σmax=${fmt(sa.sigma_max,1)} kPa = ${fmt(sa.taxa*100,0)}% de σadm → <b>${sa.st}</b><br>
-      d=${fmt(sa.d,3)} m · Asx=${fmt(sa.AsXa,2)} cm² · Asy=${fmt(sa.AsYa,2)} cm²<br>
-      Punção: τSd=${fmt(sa.tau_sd,1)} kPa · τRd2=${fmt(sa.tau_rd2,1)} kPa → ${sa.puncOk?'OK':'NÃO ATENDE'}<br>
-      Volume=${fmt(sa.vol,3)} m³ (tronco-piramidal exato)
+      d=${fmt(sa.d,3)} m · Asx=${fmt(sa.AsXa,2)} cm² (mín ${fmt(sa.AsMinX,2)}) · Asy=${fmt(sa.AsYa,2)} cm² (mín ${fmt(sa.AsMinY,2)})<br>
+      Sapata ${sa.rigida?'rígida':'flexível'} · Compressão diagonal (C): τSd=${fmt(sa.tau_sd,0)} kPa · τRd2=${fmt(sa.tau_rd2,0)} kPa${sa.rigida?'':' · Punção (C′): τSd='+fmt(sa.tau_sd1,0)+' kPa · τRd1='+fmt(sa.tau_rd1,0)+' kPa'} → ${sa.puncOk?'OK':'NÃO ATENDE'}<br>
+      Volume=${fmt(sa.vol,3)} m³ (rodapé ${fmt(sa.h0,2)} m + tronco de pirâmide)
     </div>`;
   });
   h+='</div>';
@@ -1781,16 +2002,16 @@ setEstaca('helice');
   function sapatas(sol, p, P){
     var L = [], g = G[2], n = _sapatas.length, vol = 0, forma = 0, kg = 0, escav = 0, lastro = 0, lat = 0;
     _sapatas.forEach(function(s){
-      vol += s.vol; forma += 2 * (s.B + s.L) * s.h; lat += s.A + 2 * (s.B + s.L) * s.h;
+      vol += s.vol; forma += (s.forma != null ? s.forma : 2 * (s.B + s.L) * s.h); lat += s.A + (s.forma != null ? s.forma : 2 * (s.B + s.L) * s.h);
       kg += (s.AsXa * (s.B - 0.1) + s.AsYa * (s.L - 0.1)) * 1e-4 * ACO;
       escav += (s.B + 0.4) * (s.L + 0.4) * Math.max(P.D, s.h + 0.1); lastro += (s.B + 0.2) * (s.L + 0.2);
     });
     var reat = Math.max(0, escav - vol - lastro * 0.05);
     L.push({g: G[1], nome: 'Escavação mecanizada para sapatas (inclui escavação para colocação de fôrmas)', un: 'm³', q: escav, cod: {sinapi: 'SC-96521', sco: 'SCO-MT 10.10.0050'}, memo: n + ' sapata(s): (B + 0,40) × (L + 0,40) × profundidade ' + nf(P.D, 2) + ' m'});
     L.push({g: G[1], nome: 'Lastro de concreto magro sob as sapatas, 5 cm', un: 'm²', q: lastro, cod: {sinapi: 'SC-96619'}, memo: 'Σ (B + 0,20) × (L + 0,20)'});
-    L.push({g: g, nome: 'Fôrma para sapata em ' + NOMEF[sol.form], un: 'm²', q: forma, cod: {sinapi: FORMA.sapata[sol.form][0], sco: false}, memo: 'Σ 2 × (B + L) × h das faces laterais. No SCO a fôrma já está na composição do concreto armado'});
+    L.push({g: g, nome: 'Fôrma para sapata em ' + NOMEF[sol.form], un: 'm²', q: forma, cod: {sinapi: FORMA.sapata[sol.form][0], sco: false}, memo: 'Σ faces laterais: rodapé 2 × (B + L) × h0 + faces inclinadas do tronco de pirâmide. No SCO a fôrma já está na composição do concreto armado'});
     L.push({g: g, nome: 'Armação de sapatas isoladas, aço CA-50 (bitola de referência 10 mm)', un: 'kg', q: kg, cod: {sinapi: 'SC-104919', sco: false}, memo: 'Asx e Asy calculadas × comprimento das barras × 7.850 kg/m³. No SCO o aço já está na composição do concreto armado'});
-    L.push({g: g, nome: 'Concretagem de sapatas, fck 30 MPa, com bomba' + sco, un: 'm³', q: vol, cod: {sinapi: 'SC-96558', sco: p.fck <= 20 ? 'SCO-ET 05.60.0150' : 'SCO-ET 05.60.0200'}, memo: 'Volume tronco-piramidal calculado: ' + nf(vol, 3) + ' m³; fck do projeto ' + nf(p.fck, 0) + ' MPa'});
+    L.push({g: g, nome: 'Concretagem de sapatas, fck 30 MPa, com bomba' + sco, un: 'm³', q: vol, cod: {sinapi: 'SC-96558', sco: p.fck <= 20 ? 'SCO-ET 05.60.0150' : 'SCO-ET 05.60.0200'}, memo: 'Volume calculado (rodapé + tronco de pirâmide): ' + nf(vol, 3) + ' m³; fck do projeto ' + nf(p.fck, 0) + ' MPa'});
     if (sol.imper) L.push({g: g, nome: 'Impermeabilização das faces enterradas com emulsão asfáltica, 2 demãos', un: 'm²', q: lat, cod: {sinapi: 'SC-98557'}, memo: 'Área de topo e faces laterais das sapatas'});
     L.push({g: G[1], nome: 'Reaterro manual compactado das sapatas', un: 'm³', q: reat, cod: {sinapi: 'SC-93382', sco: 'SCO-MT 15.10.0075'}, memo: 'Escavação − sapatas − lastro (o volume do pilar não é descontado)'});
     return L;
@@ -1799,8 +2020,8 @@ setEstaca('helice');
   function corrida(sol, p){
     var qk = V('cor_qk'), B = V('cor_B'), h = V('cor_h'), Lc = V('cor_L');
     if (!(B > 0 && h > 0 && Lc > 0)) return [];
-    var Fd = p.gfg * qk, sF = Fd / B, d = Math.max(0.1, h - p.cob / 1000 - 0.01), Msd = sF * (B - 0.2) * (B - 0.2) / 8;
-    var As = (Msd * 1000) / (0.9 * d * p.fyd) / 100, vol = B * h * Lc, kg = As * 1e-4 * B * 1.2 * Lc * ACO, forma = 2 * h * Lc, esc = (B + 0.4) * Math.max(V('D'), h + 0.1) * Lc, lastro = (B + 0.2) * Lc;
+    if (typeof calcCorreida === 'function' && (!_corr || _corr.B !== B || _corr.h !== h)) calcCorreida();
+    var As = _corr ? _corr.Asa : 0, vol = B * h * Lc, kg = As * 1e-4 * B * 1.2 * Lc * ACO, forma = 2 * h * Lc, esc = (B + 0.4) * Math.max(V('D'), h + 0.1) * Lc, lastro = (B + 0.2) * Lc;
     var g = G[3], reat = Math.max(0, esc - vol - lastro * 0.05);
     return [
       {g: G[1], nome: 'Escavação mecanizada para sapata corrida (inclui escavação para colocação de fôrmas)', un: 'm³', q: esc, cod: {sinapi: 'SC-96525', sco: 'SCO-MT 10.10.0050'}, memo: '(B + 0,40) × profundidade ' + nf(V('D'), 2) + ' m × ' + nf(Lc, 2) + ' m'},
@@ -1816,7 +2037,8 @@ setEstaca('helice');
     var A = V('rad_A'), h = V('rad_h');
     if (!(A > 0 && h > 0)) return [];
     var N = V('rad_N') || (typeof _sapatas !== 'undefined' ? _sapatas.reduce(function(a, s){ return a + s.Nk; }, 0) : 0), sigma = N / A;
-    var d = Math.max(0.1, h - p.cob / 1000 - 0.012), Msd = sigma * 1 * 1 / 10, As = (Msd * 1000) / (0.9 * d * p.fyd) / 100, Asa = Math.max(As, 0.0015 * 1000 * d * 1000 / 100);
+    if (typeof calcRadier === 'function') calcRadier();
+    var Asa = _rad ? _rad.Asa : 0;
     var vol = A * h, kg = Asa * 1e-4 * ACO * A * 2, per = 4 * Math.sqrt(A), g = G[4];
     return [
       {g: g, nome: 'Compactação mecânica do solo para execução do radier', un: 'm²', q: A, cod: {sinapi: 'SC-97083', sco: false}, memo: 'Área do radier: ' + nf(A, 2) + ' m²'},
@@ -1834,8 +2056,8 @@ setEstaca('helice');
     var tipo = (typeof _tipoEstaca !== 'undefined' && _tipoEstaca) || 'helice', lista = EST[tipo] || EST.helice, e = perto(lista, D * 100), g = G[5];
     var espM = esp * D, lado = function(k){ return (k - 1) * espM + D + 0.3; }, k = Math.ceil(Math.sqrt(n));
     var C = n === 1 ? D + 0.3 : n === 2 ? espM + D + 0.3 : lado(k), W = n <= 2 ? D + 0.3 : lado(Math.ceil(n / k));
-    var diag = n === 1 ? espM : Math.sqrt(2) * espM, hb = Math.max(0.3, diag / 2), db = Math.max(0.1, hb - p.cob / 1000 - 0.012);
-    var Fd = p.gfg * Nk, Msd = Fd * espM / n / 4, As = db > 0 ? Msd * 1000 / (0.9 * db * p.fyd) / 100 : 0;
+    if (typeof calcEstaca === 'function') calcEstaca();
+    var hb = _est ? _est.hb : 0.3, As = _est ? _est.As : 0;
     var vb = C * W * hb, kg = As * 1e-4 * ACO * (C + W), fb = 2 * (C + W) * hb, eb = (C + 0.2) * (W + 0.2) * (hb + 0.1), lb = (C + 0.2) * (W + 0.2);
     var m = n * nb * Le;
     var nomes = {helice: 'Estaca hélice contínua monitorada', franki: 'Estaca Franki', strauss: 'Estaca Strauss', escav: 'Estaca escavada mecanicamente', premold: 'Estaca pré-moldada de concreto', raiz: 'Estaca raiz', tubulao: 'Tubulão'};
@@ -1846,7 +2068,7 @@ setEstaca('helice');
       {g: G[1], nome: 'Escavação mecanizada para blocos de coroamento (inclui escavação para fôrmas)', un: 'm³', q: eb * nb, cod: {sinapi: 'SC-96521', sco: 'SCO-MT 10.10.0050'}, memo: nb + ' bloco(s) de ' + nf(C, 2) + ' × ' + nf(W, 2) + ' × ' + nf(hb, 2) + ' m (dimensões estimadas pelo espaçamento)'},
       {g: G[1], nome: 'Lastro de concreto magro sob os blocos, 5 cm', un: 'm²', q: lb * nb, cod: {sinapi: 'SC-96619'}, memo: nb + ' bloco(s)'},
       {g: g, nome: 'Fôrma para bloco de coroamento em ' + NOMEF[sol.form], un: 'm²', q: fb * nb, cod: {sinapi: FORMA.bloco[sol.form][0], sco: false}, memo: '2 × (C + L) × h por bloco. No SCO a fôrma já está na composição do concreto armado'},
-      {g: g, nome: 'Armação de bloco de coroamento, aço CA-50 (bitola de referência 10 mm)', un: 'kg', q: kg * nb, cod: {sinapi: 'SC-96546', sco: false}, memo: 'As ' + nf(As, 2) + ' cm² nas duas direções × 7.850 kg/m³ por bloco. No SCO o aço já está na composição'},
+      {g: g, nome: 'Armação de bloco de coroamento, aço CA-50 (bitola de referência 10 mm)', un: 'kg', q: kg * nb, cod: {sinapi: 'SC-96546', sco: false}, memo: 'As do tirante ' + nf(As, 2) + ' cm² (bielas-tirantes) nas duas direções × 7.850 kg/m³ por bloco, mais a armadura mínima/de pele não incluída. No SCO o aço já está na composição'},
       {g: g, nome: 'Concretagem de bloco de coroamento, fck 30 MPa, com bomba' + sco, un: 'm³', q: vb * nb, cod: {sinapi: 'SC-96557', sco: p.fck <= 20 ? 'SCO-ET 05.60.0150' : 'SCO-ET 05.60.0200'}, memo: nf(C, 2) + ' × ' + nf(W, 2) + ' × ' + nf(hb, 2) + ' m por bloco; altura recomendada do programa'}
     ];
     if (sol.imper) L.push({g: g, nome: 'Impermeabilização das faces enterradas dos blocos com emulsão asfáltica, 2 demãos', un: 'm²', q: (C * W + 2 * (C + W) * hb) * nb, cod: {sinapi: 'SC-98557'}, memo: 'Topo e faces laterais'});
