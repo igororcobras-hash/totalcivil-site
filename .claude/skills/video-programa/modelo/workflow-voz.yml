@@ -1,0 +1,33 @@
+name: Esgoto - gerar vozes do vídeo
+
+# Roda só na branch esgoto-video (não publica o site: a publicação é só na main).
+on:
+  push:
+    branches: [esgoto-video]
+    paths:
+      - 'scripts/esgoto/video/gerar_voz.py'
+      - '.github/workflows/esgoto-video-voz.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  vozes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install edge-tts
+      - name: Gerar as 10 narrações
+        working-directory: scripts/esgoto/video
+        run: python gerar_voz.py
+      - name: Guardar os áudios na branch
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add scripts/esgoto/video/audio
+          git commit -m "Esgoto: áudios da narração do vídeo (edge-tts)" || echo "nada novo"
+          git push origin HEAD:esgoto-video
