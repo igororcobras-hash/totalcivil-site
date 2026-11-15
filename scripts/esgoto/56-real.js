@@ -333,18 +333,14 @@ function rlInter(P1, d1, P2, d2) { const det = d1[0] * d2[1] - d1[1] * d2[0]; if
 function rlDentro(p, pl) { let c = false; for (let i = 0, j = pl.length - 1; i < pl.length; j = i++) { const a = pl[i], b = pl[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; }
 /* ruas do 3D: os trechos da rede + ligação curta entre nós colados (cabeceira a poucos metros do cruzamento) */
 function rlRuas() {
-  const c = R.c, w = c.largRua / 2, alin = w + c.largPas, S = [], nos = new Map(P.nos.map(n => [n.id, n])), zNo = id => (R.no[id] ? R.no[id].ct : (+(nos.get(id) || {}).ct || 0));
-  P.trechos.forEach(t => { const r = R.tr[t.id], a = nos.get(t.de), b = nos.get(t.para); if (!a || !b || Math.hypot(b.x - a.x, b.y - a.y) < 0.05) return;
-    S.push({id: t.id, a: t.de, b: t.para, A: [a.x, a.y], B: [b.x, b.y], za: r ? r.ctM : zNo(t.de), zb: r ? r.ctJ : zNo(t.para)}); });
-  const ln = P.nos.filter(n => S.some(s => s.a === n.id || s.b === n.id));
-  ln.forEach((n, i) => ln.slice(i + 1).forEach(m => { const d = Math.hypot(m.x - n.x, m.y - n.y); if (d < 0.05 || d > alin * 1.2) return; if (S.some(s => (s.a === n.id && s.b === m.id) || (s.a === m.id && s.b === n.id))) return;
-    S.push({id: 'v' + n.id + m.id, a: n.id, b: m.id, A: [n.x, n.y], B: [m.x, m.y], za: zNo(n.id), zb: zNo(m.id), virt: 1}); }));
-  S.forEach(s => { const l = Math.hypot(s.B[0] - s.A[0], s.B[1] - s.A[1]); s.l = l; s.u = [(s.B[0] - s.A[0]) / l, (s.B[1] - s.A[1]) / l]; s.n = [-s.u[1], s.u[0]]; });
-  /* estrela de cada nó: direções em ordem anti-horária */
-  const est = new Map(); S.forEach(s => { [[s.a, s.u, 'a'], [s.b, [-s.u[0], -s.u[1]], 'b']].forEach(([no, u, p]) => { if (!est.has(no)) est.set(no, []); est.get(no).push({s, u, p, ang: Math.atan2(u[1], u[0])}); }); });
-  est.forEach(l => l.sort((x, y) => x.ang - y.ang));
-  return {S, est, w, alin, nos, zNo};
+  const c = R.c, E = ESG.estrelas(P, R), w = E.w, alin = E.alin, nos = E.nos, zNo = id => (R.no[id] ? R.no[id].ct : (+(nos.get(id) || {}).ct || 0));
+  E.S.forEach(s => { const r = R.tr[s.id]; s.za = r && !s.virt ? r.ctM : zNo(s.a); s.zb = r && !s.virt ? r.ctJ : zNo(s.b); });
+  /* ES-05: raio do meio-fio (crit.raioMF) e raio do muro (raio − largura do passeio) em cada esquina de quadra */
+  const cantos = ESG.esquinas(P, R, E), stMax = new Map(); cantos.forEach(cn => stMax.set(cn.no, Math.max(stMax.get(cn.no) || 0, cn.st)));
+  return {S: E.S, est: E.est, w, alin, nos, zNo, cantos, stMax};
 }
+/* canto da esquina entre a rua k e a seguinte (anti-horária) no nó (memoriza) */
+function rlCantoK(RU, no, k) { const l = RU.est.get(no), key = no + '|' + k; if (!RU.cm) RU.cm = new Map(); if (!RU.cm.has(key)) { const N = RU.nos.get(no); RU.cm.set(key, ESG.canto([N.x, N.y], l[k], l[(k + 1) % l.length], {w: RU.w, alin: RU.alin, R: +R.c.raioMF}) || null); } return RU.cm.get(key); }
 /* cota da rua no ponto (projeção na rua mais próxima) e distância ao eixo; grade de busca */
 function rlIndice(RU) {
   const CEL = 30, gr = new Map(), k = (i, j) => i + ',' + j;
@@ -363,6 +359,8 @@ function rlCorte(RU, no, i, lado) {
   const j = lado === 'L' ? (i + 1) % n : (i - 1 + n) % n, e = l[j];
   let th = lado === 'L' ? e.ang - d.ang : d.ang - e.ang; while (th <= 0) th += 2 * Math.PI;
   if (th < Math.PI * 0.97) {                                               /* esquina: corta no alinhamento da rua vizinha (do lado desta quadra) */
+    const cn = rlCantoK(RU, no, lado === 'L' ? i : j);                    /* ES-05: com raio, corta na tangente do meio-fio (perpendicular à rua) */
+    if (cn) return {P: [cn.cc[0] + d.u[0] * cn.t, cn.cc[1] + d.u[1] * cn.t], d: [-d.u[1], d.u[0]], esq: true, arco: true};
     const ne = lado === 'L' ? [e.u[1], -e.u[0]] : [-e.u[1], e.u[0]];      /* normal da vizinha apontando para a quadra */
     return {P: [N[0] + ne[0] * RU.alin, N[1] + ne[1] * RU.alin], d: e.u, esq: true};
   }
@@ -384,7 +382,7 @@ function rlTerreno(RU, idx, ctx) {
   const pos = [], uv = [], col = [], at = [], ind = [];
   for (let k = 0; k < X.length; k++) { const p = P3(X[k], Y[k], H[k]); pos.push(p.x, p.y, p.z); uv.push(X[k] / 3, Y[k] / 3); col.push(1, 1, 1); at.push(terra[k]); }
   for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const a = j * W + i, b = a + 1, c = a + W, d = c + 1;
-    const tri = (p, q, r) => { if (dentro[p] && dentro[q] && dentro[r]) return; const cx = (X[p] + X[q] + X[r]) / 3, cy = (Y[p] + Y[q] + Y[r]) / 3, z = idx(cx, cy, RU.alin); if (z && z.d < RU.alin - 0.06) return; ind.push(p, q, r); };
+    const tri = (p, q, r) => { if (dentro[p] && dentro[q] && dentro[r]) return; const cx = (X[p] + X[q] + X[r]) / 3, cy = (Y[p] + Y[q] + Y[r]) / 3, z = idx(cx, cy, RU.alin); if (z && z.d < RU.alin - 0.06) return; if (rlPontaCanto(RU, cx, cy)) return; ind.push(p, q, r); };
     tri(a, c, b); tri(b, c, d); }
   const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new T.Float32BufferAttribute(col, 3)); g.setAttribute('aTerra', new T.Float32BufferAttribute(at, 1)); g.setIndex(ind); g.computeVertexNormals();
   { const nn = g.attributes.normal; let s = 0; for (let i = 0; i < nn.count; i++) s += nn.getY(i); if (s < 0) { for (let i = 0; i < ind.length; i += 3) { const t = ind[i]; ind[i] = ind[i + 1]; ind[i + 1] = t; } g.setIndex(ind); g.computeVertexNormals(); } }
@@ -394,6 +392,17 @@ function rlTerreno(RU, idx, ctx) {
   RL.grade = {x0, y0, cel, nx, ny, H, X, Y};
   return g;
 }
+/* ES-05: o ponto está na ponta da quadra cortada pelo arco do muro (vira calçada)? */
+function rlPontaCanto(RU, x, y) { for (const cn of RU.cantos) { if (!cn.Rm) continue; const dx = x - cn.C[0], dy = y - cn.C[1], d = Math.hypot(dx, dy); if (d < cn.Rm + 0.05 || d > cn.R) continue;
+  let rel = Math.atan2(dy, dx) - cn.a1; while (rel > Math.PI) rel -= 2 * Math.PI; while (rel < -Math.PI) rel += 2 * Math.PI; const sg = cn.dA < 0 ? -1 : 1; rel *= sg; if (rel >= -0.02 && rel <= Math.abs(cn.dA) + 0.02) return true; } return false; }
+/* ES-05: recorta o muro p0→p1 onde ele entraria na ponta cortada pelo arco (ao longo da linha do alinhamento, só vale depois da tangente) */
+function rlMuroRecorta(RU, p0, p1) { let a = p0, b = p1;
+  for (const cn of RU.cantos) { if (!cn.Rm) continue;
+    for (const r of [cn.a, cn.b]) { const u = r.u, nrm = [-u[1], u[0]], dd = q => Math.abs((q[0] - cn.aa[0]) * nrm[0] + (q[1] - cn.aa[1]) * nrm[1]);
+      if (dd(a) > 0.2 || dd(b) > 0.2) continue; const sa = (a[0] - cn.aa[0]) * u[0] + (a[1] - cn.aa[1]) * u[1], sb = (b[0] - cn.aa[0]) * u[0] + (b[1] - cn.aa[1]) * u[1]; if (Math.min(sa, sb) < -0.5) continue;
+      if (sa >= cn.tm - 0.01 && sb >= cn.tm - 0.01) continue; if (sa < cn.tm && sb < cn.tm) return null;
+      const f = (cn.tm - sa) / (sb - sa); if (sa < cn.tm) a = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f]; else b = [b[0] + (a[0] - b[0]) * (1 - f), b[1] + (a[1] - b[1]) * (1 - f)]; } }
+  return [a, b]; }
 /* cota do chão (m) num ponto do projeto, pela grade do terreno */
 function rlChao(x, y) { const m = RL.grade; if (!m) return null; const fx = (x - m.x0) / m.cel, fy = (y - m.y0) / m.cel; if (fx < 0 || fy < 0 || fx > m.nx || fy > m.ny) return null;
   const ix = Math.min(m.nx - 1, Math.floor(fx)), iy = Math.min(m.ny - 1, Math.floor(fy)), tx = fx - ix, ty = fy - iy, w = m.nx + 1, h = m.H, a = h[iy * w + ix], b = h[iy * w + ix + 1], c = h[(iy + 1) * w + ix], d = h[(iy + 1) * w + ix + 1];
@@ -412,7 +421,7 @@ function rlRua(RU, grp) {
     const a1 = lin(s.A, 0, w, s.n), a2 = lin(s.A, 0, -w, s.n), b1 = lin(s.B, 0, w, s.n), b2 = lin(s.B, 0, -w, s.n);
     uvq(W(a2, zA), W(b2, zB), W(b1, zB), W(a1, zA), up, B.pis);
     /* faixa central tracejada (3 m pintados, 3 m sem), longe dos cruzamentos */
-    if (RL.vis.faixa && !s.virt && R.c.pav !== 'terra') { const ea = RU.est.get(s.a).length > 2 ? al + 1 : 1, eb = RU.est.get(s.b).length > 2 ? al + 1 : 1;
+    if (RL.vis.faixa && !s.virt && R.c.pav !== 'terra') { const ea = RU.est.get(s.a).length > 2 ? Math.max(al + 1, (RU.stMax.get(s.a) || 0) + 0.8) : 1, eb = RU.est.get(s.b).length > 2 ? Math.max(al + 1, (RU.stMax.get(s.b) || 0) + 0.8) : 1;
       for (let x = ea; x + 3 <= s.l - eb; x += 6) { const p0 = [s.A[0] + s.u[0] * x, s.A[1] + s.u[1] * x], p1 = [p0[0] + s.u[0] * 3, p0[1] + s.u[1] * 3], o = 0.06;
         uvq(W(lin(p0, 0, -o, s.n), z(p0) + 0.004), W(lin(p1, 0, -o, s.n), z(p1) + 0.004), W(lin(p1, 0, o, s.n), z(p1) + 0.004), W(lin(p0, 0, o, s.n), z(p0) + 0.004), up, B.fx); } }
     if (!RL.vis.calcada) return;
@@ -436,6 +445,17 @@ function rlRua(RU, grp) {
     for (let i = 0; i < n; i++) { const d = l[i], e = l[(i + 1) % n]; let th = e.ang - d.ang; while (th <= 0) th += 2 * Math.PI;
       const nd = [-d.u[1], d.u[0]], ne = [e.u[1], -e.u[0]];
       const k = Math.abs(th - Math.PI) < 0.09 ? lin(N, 0, w, nd) : rlInter(lin(N, 0, w, nd), d.u, lin(N, 0, w, ne), e.u); if (k) cant.push(k);
+      const cn = th < Math.PI * 0.97 ? rlCantoK(RU, no, i) : null;
+      if (cn) {   /* ES-05: esquina com raio — meio-fio em arco de raio R e muro/alinhamento em arco de raio R − passeio (mesmo centro) */
+        cn.n = Math.max(cn.n, 6); const Pc = ESG.arco(cn, cn.R), Pt = ESG.arco(cn, Math.max(0.05, cn.R - bmf)), Pa = cn.Rm ? ESG.arco(cn, cn.Rm) : Pt.map(() => cn.aa);
+        if (k) cant.pop(); Pc.forEach(q => cant.push(q));
+        if (RL.vis.calcada) for (let k = 0; k < Pc.length - 1; k++) {
+          const g = cn.a1 + cn.dA * (k + 0.5) / (Pc.length - 1), rad = new T.Vector3(Math.cos(g), 0, -Math.sin(g)), zb = zN + mf;
+          uvq(W(Pc[k], zN), W(Pc[k + 1], zN), W(Pc[k + 1], zb), W(Pc[k], zb), rad, B.mf);                       /* espelho do meio-fio */
+          uvq(W(Pc[k], zb), W(Pc[k + 1], zb), W(Pt[k + 1], zb), W(Pt[k], zb), up, B.mf);                         /* topo */
+          uvq(W(Pt[k], zb), W(Pt[k + 1], zb), W(Pa[k + 1], zb), W(Pa[k], zb), up, B.cal);                        /* calçada */
+          if (cn.Rm) uvq(W(Pa[k], zb), W(Pa[k + 1], zb), W(Pa[k + 1], zN - 0.35), W(Pa[k], zN - 0.35), rad.clone().negate(), B.cal); }   /* saia */
+      } else
       if (th < Math.PI * 0.97 && RL.vis.calcada) {   /* canto de quadra: calçada entre os meios-fios e os alinhamentos */
         const cc = rlInter(lin(N, 0, w, nd), d.u, lin(N, 0, w, ne), e.u), c1 = rlInter(lin(N, 0, w, nd), d.u, lin(N, 0, al, ne), e.u), aa = rlInter(lin(N, 0, al, nd), d.u, lin(N, 0, al, ne), e.u), c2 = rlInter(lin(N, 0, al, nd), d.u, lin(N, 0, w, ne), e.u);
         if (cc && c1 && aa && c2 && Math.hypot(aa[0] - N[0], aa[1] - N[1]) < al * 6) {
@@ -461,7 +481,7 @@ function rlLotes(RU, idx, grp) {
   const feitos = new Map(), CEL = 4, kk = (x, y) => Math.floor(x / CEL) + ',' + Math.floor(y / CEL);
   const jaTem = (m, dir) => { const cx = Math.floor(m[0] / CEL), cy = Math.floor(m[1] / CEL); for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const o of (feitos.get((cx + i) + ',' + (cy + j)) || [])) if (Math.hypot(o[0] - m[0], o[1] - m[1]) < 0.5 && Math.abs(o[2] * dir[0] + o[3] * dir[1]) > 0.9) return true; return false; };
   const marca = (m, dir) => { const k = kk(m[0], m[1]); if (!feitos.has(k)) feitos.set(k, []); feitos.get(k).push([m[0], m[1], dir[0], dir[1]]); };
-  const muro = (p0, p1, h, cor, portao) => { const L = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]); if (L < 0.2) return; const d = [(p1[0] - p0[0]) / L, (p1[1] - p0[1]) / L], n = [-d[1], d[0]], e = 0.075, nS = Math.max(1, Math.round(L / 2));
+  const muro = (q0, q1, h, cor, portao, sr) => { const rc = sr ? [q0, q1] : rlMuroRecorta(RU, q0, q1); if (!rc) return; const p0 = rc[0], p1 = rc[1], L = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]); if (L < 0.2) return; const d = [(p1[0] - p0[0]) / L, (p1[1] - p0[1]) / L], n = [-d[1], d[0]], e = 0.075, nS = Math.max(1, Math.round(L / 2));
     for (let k = 0; k < nS; k++) { const a = [p0[0] + d[0] * L * k / nS, p0[1] + d[1] * L * k / nS], b = [p0[0] + d[0] * L * (k + 1) / nS, p0[1] + d[1] * L * (k + 1) / nS], m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
       if (!portao && jaTem(m, d)) continue; marca(m, d); const za = chao(a[0], a[1]), zb = chao(b[0], b[1]); if (za == null || zb == null) continue;
       const A = s => [a[0] + n[0] * e * s, a[1] + n[1] * e * s], Bp = s => [b[0] + n[0] * e * s, b[1] + n[1] * e * s], on = v3(n[0], n[1]), ln = (L / nS) / 2;
@@ -475,6 +495,7 @@ function rlLotes(RU, idx, grp) {
       if (k === nS - 1) B.mur.quad(W(Bp(-1), zb - 0.3), W(Bp(1), zb - 0.3), W(Bp(1), zb + h), W(Bp(-1), zb + h), v3(d[0], d[1]), 0.1, 1, cor); } };
   const arvPos = [], palPos = [], casas = [];
   const lotes = (R.ok ? ESG.ligacoes(P, R) : []).slice(0, 4000);
+  if (RL.vis.muros) RU.cantos.forEach(cn => { if (!cn.Rm) return; const arc = ESG.arco(cn, cn.Rm, Math.max(6, cn.n)); for (let k = 0; k < arc.length - 1; k++) muro(arc[k], arc[k + 1], 2.0, CMURO[0], null, 1); });   /* ES-05: muro curvo na esquina */
   lotes.forEach(o => { const l = o.lote, n = [o.nx, o.ny], e = [o.ex, o.ey], w = Math.hypot(l[1][0] - l[0][0], l[1][1] - l[0][1]), D = o.D;
     /* n vai de l[0] para l[1] */ const nn = [(l[1][0] - l[0][0]) / (w || 1), (l[1][1] - l[0][1]) / (w || 1)];
     const F = (a, u) => [l[0][0] + nn[0] * a + e[0] * u, l[0][1] + nn[1] * a + e[1] * u];

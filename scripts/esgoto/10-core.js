@@ -27,7 +27,7 @@ const ESG = (() => {
     profMax: 4.5, degTQ: 0.50, distPV: 80, distMax: 100, profTL: 1.45,
     remanso: true,          /* nível d'água de saída do PV nunca acima do de chegada */
     folga: 0.60, berco: 0.10, envolt: 0.30, pav: 'asfalto', espPav: 0.05,
-    largRua: 8, largPas: 2.5, testada: 12, fundoLote: 25, habLig: 3.0, ramal: 6, ligIm: 0.02, ligDN: 100, ligCob: 0.30, dmt: 5, empol: 1.30, folgaCava: 0.30, lastro: 0.10,
+    largRua: 8, largPas: 2.5, raioMF: 5, testada: 12, fundoLote: 25, habLig: 3.0, ramal: 6, ligIm: 0.02, ligDN: 100, ligCob: 0.30, dmt: 5, empol: 1.30, folgaCava: 0.30, lastro: 0.10,
     /* elevatória e recalque (NBR 12208) */
     eCiclo: 10, eDet: 30, eEta: 0.60, eFolgaMotor: 20, eVmin: 0.60, eVmax: 3.00, eKloc: 10, eSub: 0.50, eRecRec: 1.00, eMat: 'pvc',
     /* sifão invertido */
@@ -343,6 +343,43 @@ const ESG = (() => {
      s = distância desde o PV de montante, lado +1 = esquerda de quem anda de montante para jusante).
      Rede no passeio (`t.loc='passeio'`, lado `t.ladoPas`): o coletor fica deslocado do eixo da rua e o ramal fica mais curto. */
   function offsetTr(t, c) { return t && t.loc === 'passeio' ? (+t.ladoPas === -1 ? -1 : 1) * (c.largRua / 2 + c.largPas / 2) : 0; }
+  /* ══ ESQUINAS (ES-05): raio do meio-fio e raio do muro ══
+     Na esquina o meio-fio faz uma curva de raio R (`crit.raioMF`, padrão 5 m) tangente às duas guias; o alinhamento dos lotes (muro) é a
+     curva PARALELA deslocada pela largura do passeio: mesmo centro, raio R − largura do passeio (2º raio). Se R − passeio < 0,5 m o muro
+     fica em canto vivo. Em rua curta o raio é reduzido para as tangentes caberem no trecho (R mínimo 0,5 m). */
+  function estrelas(P, R) {
+    const c = R.c, alin = c.largRua / 2 + c.largPas, S = [], nos = new Map(P.nos.map(n => [n.id, n]));
+    (P.trechos || []).forEach(t => { const a = nos.get(t.de), b = nos.get(t.para); if (!a || !b || Math.hypot(b.x - a.x, b.y - a.y) < 0.05) return; S.push({id: t.id, a: t.de, b: t.para, A: [a.x, a.y], B: [b.x, b.y]}); });
+    const ln = P.nos.filter(n => S.some(s => s.a === n.id || s.b === n.id));
+    ln.forEach((n, i) => ln.slice(i + 1).forEach(m => { const d = Math.hypot(m.x - n.x, m.y - n.y); if (d < 0.05 || d > alin * 1.2) return; if (S.some(s => (s.a === n.id && s.b === m.id) || (s.a === m.id && s.b === n.id))) return;
+      S.push({id: 'v' + n.id + m.id, a: n.id, b: m.id, A: [n.x, n.y], B: [m.x, m.y], virt: 1}); }));
+    S.forEach(s => { const l = Math.hypot(s.B[0] - s.A[0], s.B[1] - s.A[1]); s.l = l; s.u = [(s.B[0] - s.A[0]) / l, (s.B[1] - s.A[1]) / l]; s.n = [-s.u[1], s.u[0]]; });
+    const est = new Map(); S.forEach(s => { [[s.a, s.u, 'a'], [s.b, [-s.u[0], -s.u[1]], 'b']].forEach(([no, u, p]) => { if (!est.has(no)) est.set(no, []); est.get(no).push({s, u, p, ang: Math.atan2(u[1], u[0])}); }); });
+    est.forEach(l => l.sort((x, y) => x.ang - y.ang));
+    return {S, est, nos, alin, w: c.largRua / 2};
+  }
+  /* canto entre as ruas a e b (b é a rua seguinte, no sentido anti-horário, a partir de a); null se não for esquina de quadra ou sem raio */
+  function canto(N, a, b, c) {
+    let th = b.ang - a.ang; while (th <= 0) th += 2 * Math.PI;
+    if (!(th < Math.PI * 0.97) || !(c.R >= 0.5)) return null;
+    const h = th / 2, sh = Math.sin(h), tg = Math.tan(h), w = c.w, alin = c.alin, bx = a.u[0] + b.u[0], by = a.u[1] + b.u[1], bl = Math.hypot(bx, by) || 1, bis = [bx / bl, by / bl];
+    const cc = [N[0] + bis[0] * w / sh, N[1] + bis[1] * w / sh], aa = [N[0] + bis[0] * alin / sh, N[1] + bis[1] * alin / sh];
+    let R = c.R; const lm = Math.min(a.s.virt ? Infinity : a.s.l, b.s.virt ? Infinity : b.s.l);
+    if (isFinite(lm)) R = Math.min(R, Math.max(0, 0.45 * lm - w / tg) * tg);
+    if (R < 0.5) return null;
+    const t = R / tg, C = [cc[0] + bis[0] * R / sh, cc[1] + bis[1] * R / sh], T1 = [cc[0] + a.u[0] * t, cc[1] + a.u[1] * t], T2 = [cc[0] + b.u[0] * t, cc[1] + b.u[1] * t];
+    const a1 = Math.atan2(T1[1] - C[1], T1[0] - C[0]); let dA = Math.atan2(T2[1] - C[1], T2[0] - C[0]) - a1; while (dA > Math.PI) dA -= 2 * Math.PI; while (dA < -Math.PI) dA += 2 * Math.PI;
+    const Rm = R - (alin - w), nn = Math.max(4, Math.ceil(Math.abs(dA) / (Math.PI / 12)));
+    return {N, a, b, th, h, cc, aa, C, R, Rm: Rm >= 0.5 ? Rm : 0, T1, T2, a1, dA, t, n: nn, st: w / tg + t, tm: Rm >= 0.5 ? Rm / tg : 0, w, alin};
+  }
+  /* pontos do arco de raio r do canto cn (do ponto de tangência da rua a até o da rua b) */
+  function arco(cn, r, n) { const out = [], m = n || cn.n; for (let k = 0; k <= m; k++) { const g = cn.a1 + cn.dA * k / m; out.push([cn.C[0] + r * Math.cos(g), cn.C[1] + r * Math.sin(g)]); } return out; }
+  function esquinas(P, R, E) {
+    E = E || estrelas(P, R); const out = [], c = {w: E.w, alin: E.alin, R: +R.c.raioMF};
+    E.est.forEach((l, no) => { const nd = E.nos.get(no), n = l.length; if (n < 2 || !nd) return;
+      for (let i = 0; i < n; i++) { const cn = canto([nd.x, nd.y], l[i], l[(i + 1) % n], c); if (cn) { cn.no = no; cn.i = i; out.push(cn); } } });
+    return out;
+  }
   function ligacoes(P, R) {
     const c = R.c, nos = new Map(P.nos.map(n => [n.id, n])), alin = c.largRua / 2 + c.largPas;   /* distância do eixo ao alinhamento dos lotes */
     /* direções das ruas que saem de cada nó (para cortar os lotes nas esquinas) */
@@ -460,6 +497,12 @@ const ESG = (() => {
       if (!q.man) { q.i = n - 1; q.id = q.tr + '#' + q.i; }
       const h = q.w / 2; q.lote = [[q.lx - q.nx * h, q.ly - q.ny * h], [q.lx + q.nx * h, q.ly + q.ny * h], [q.lx + q.nx * h + q.ex * q.D, q.ly + q.ny * h + q.ey * q.D], [q.lx - q.nx * h + q.ex * q.D, q.ly - q.ny * h + q.ey * q.D]];
       out.push(q); });
+    /* ES-05: o canto do lote que fica na esquina segue o raio do muro (polígono `pol`; `lote` continua sendo o retângulo) */
+    let esq = []; try { esq = esquinas(P, R).filter(x => x.Rm > 0); } catch (e) {}
+    out.forEach(q => { q.pol = q.lote; if (!esq.length) return;
+      for (const cn of esq) { const k = q.lote.findIndex(v => Math.hypot(v[0] - cn.aa[0], v[1] - cn.aa[1]) < 1.0); if (k < 0) continue;
+        const arc = arco(cn, cn.Rm), ant = q.lote[(k + 3) % 4], d0 = Math.hypot(arc[0][0] - ant[0], arc[0][1] - ant[1]), d1 = Math.hypot(arc[arc.length - 1][0] - ant[0], arc[arc.length - 1][1] - ant[1]);
+        if (d1 < d0) arc.reverse(); q.pol = q.lote.slice(0, k).concat(arc, q.lote.slice(k + 1)); break; } });
     return out;
   }
 
@@ -759,6 +802,6 @@ const ESG = (() => {
   }
   const novo = () => ({v: 1, nome: 'Projeto sem nome', local: '', autor: '', crit: Object.assign({}, CRIT0), ruas: [], topo: [], saida: null, nos: [], trechos: [], orc: {}});
 
-  return {ligacoes, offsetTr, G, GAMA, SERIE, CRIT0, crit, matDe, geo, qMan, lamina, hid, iMinTau, iMaxV, calc, geometria, quant, itens, SOL, GRUPOS, sugerirEEE, tuboGeo, TUBOS, RECALQUE, eeeCalc, gerar, exemplo, exemploMorro, novo, nomeNo, idw, r3, ff};
+  return {ligacoes, estrelas, canto, arco, esquinas, offsetTr, G, GAMA, SERIE, CRIT0, crit, matDe, geo, qMan, lamina, hid, iMinTau, iMaxV, calc, geometria, quant, itens, SOL, GRUPOS, sugerirEEE, tuboGeo, TUBOS, RECALQUE, eeeCalc, gerar, exemplo, exemploMorro, novo, nomeNo, idw, r3, ff};
 })();
 if (typeof module !== 'undefined') module.exports = ESG;

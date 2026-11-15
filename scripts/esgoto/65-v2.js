@@ -67,7 +67,7 @@ function eeeCards() {
 
 /* ══ EXPORTAÇÃO CAD: uma só "cena" (planta, quadro, perfis e carimbo) gravada em DXF ou DWG ══ */
 function cadCena() {
-  const E = [], LAY = [['ESG-RUA-EIXO', 8], ['ESG-RUA-NOME', 8], ['ESG-TOPOGRAFIA', 9], ['ESG-REDE', 5], ['ESG-REDE-TEXTO', 5], ['ESG-RECALQUE', 6], ['ESG-SIFAO', 4], ['ESG-LIGACAO', 40], ['ESG-LOTE', 41], ['ESG-PV', 3], ['ESG-PV-TEXTO', 3], ['ESG-EEE', 6], ['ESG-LANCAMENTO', 1],
+  const E = [], LAY = [['ESG-RUA-EIXO', 8], ['ESG-RUA-NOME', 8], ['ESG-TOPOGRAFIA', 9], ['ESG-REDE', 5], ['ESG-REDE-TEXTO', 5], ['ESG-RECALQUE', 6], ['ESG-SIFAO', 4], ['ESG-LIGACAO', 40], ['ESG-ESQUINA', 4], ['ESG-LOTE', 41], ['ESG-PV', 3], ['ESG-PV-TEXTO', 3], ['ESG-EEE', 6], ['ESG-LANCAMENTO', 1],
     ['ESG-PERFIL-TERRENO', 34], ['ESG-PERFIL-TUBO', 5], ['ESG-PERFIL-PV', 3], ['ESG-PERFIL-GRADE', 8], ['ESG-PERFIL-TEXTO', 7], ['ESG-QUADRO', 7], ['ESG-CARIMBO', 7]];
   const Ln = (l, x1, y1, x2, y2) => E.push({t: 'L', l, x1, y1, x2, y2}), Pl = (l, pts, c) => E.push({t: 'P', l, pts, c: !!c}), Ci = (l, x, y, r) => E.push({t: 'C', l, x, y, r});
   const Tx = (l, x, y, h, txt, ang, al) => { txt = String(txt); ang = ang || 0; if (al === 'C' || al === 'R') { const w = 0.62 * h * txt.length * (al === 'C' ? 0.5 : 1), a = ang * Math.PI / 180; x -= w * Math.cos(a); y -= w * Math.sin(a); } E.push({t: 'T', l, x, y, h, txt, ang}); };
@@ -76,7 +76,8 @@ function cadCena() {
   /* ── planta ── */
   P.ruas.forEach(r => { if (r.pts.length < 2) return; Pl('ESG-RUA-EIXO', r.pts.map(q => [q.x, q.y])); const a = r.pts[0], b = r.pts[1], l = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / l, uy = (b.y - a.y) / l, an = angT(ux, uy), k = an * Math.PI / 180;
     Tx('ESG-RUA-NOME', a.x + ux * l * 0.25 + Math.sin(k) * (P.crit.largRua / 2 + ht), a.y + uy * l * 0.25 - Math.cos(k) * (P.crit.largRua / 2 + ht * 2), ht * 1.2, r.nome.toUpperCase(), an, 'C'); });
-  if (R && R.ok) ESG.ligacoes(P, R).forEach(q => { Ln('ESG-LIGACAO', q.x, q.y, q.fx, q.fy); Ci('ESG-LIGACAO', q.fx, q.fy, 0.35); if (q.lote) q.lote.forEach((v, i) => { const w = q.lote[(i + 1) % 4]; Ln('ESG-LOTE', v[0], v[1], w[0], w[1]); }); });
+  if (R && R.ok) { try { ESG.esquinas(P, R).forEach(cn => { [cn.R, cn.Rm].forEach(r => { if (!r) return; const a = ESG.arco(cn, r, 12); for (let i = 0; i < a.length - 1; i++) Ln('ESG-ESQUINA', a[i][0], a[i][1], a[i + 1][0], a[i + 1][1]); }); }); } catch (e) {} }   /* ES-05: arcos do meio-fio e do muro */
+  if (R && R.ok) ESG.ligacoes(P, R).forEach(q => { Ln('ESG-LIGACAO', q.x, q.y, q.fx, q.fy); Ci('ESG-LIGACAO', q.fx, q.fy, 0.35); { const pl = q.pol || q.lote; if (pl) pl.forEach((v, i) => { const w = pl[(i + 1) % pl.length]; Ln('ESG-LOTE', v[0], v[1], w[0], w[1]); }); } });
   P.topo.forEach(q => { Ln('ESG-TOPOGRAFIA', q.x - ht / 3, q.y, q.x + ht / 3, q.y); Ln('ESG-TOPOGRAFIA', q.x, q.y - ht / 3, q.x, q.y + ht / 3); Tx('ESG-TOPOGRAFIA', q.x + ht / 2, q.y + ht / 2, ht * 0.7, f2(q.z)); });
   P.trechos.forEach(t => { const a = noDe(t.de), b = noDe(t.para), r = R.tr[t.id]; if (!a || !b || !r) return; const lay = r.recq ? 'ESG-RECALQUE' : r.sif ? 'ESG-SIFAO' : 'ESG-REDE', l = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / l, uy = (b.y - a.y) / l, mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2, an = angT(ux, uy), k = an * Math.PI / 180;
     { const of = ESG.offsetTr(t, P.crit), A0 = {x: a.x - uy * of, y: a.y + ux * of}, B0 = {x: b.x - uy * of, y: b.y + ux * of}; Ln(lay, A0.x, A0.y, B0.x, B0.y); if (of) { Ln(lay, a.x, a.y, A0.x, A0.y); Ln(lay, B0.x, B0.y, b.x, b.y); } } const s = ht * 0.9; Pl(lay, [[mx + ux * s, my + uy * s], [mx - ux * s - uy * s * 0.5, my - uy * s + ux * s * 0.5], [mx - ux * s + uy * s * 0.5, my - uy * s - ux * s * 0.5]], true);

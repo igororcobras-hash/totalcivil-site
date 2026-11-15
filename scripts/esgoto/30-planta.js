@@ -45,9 +45,11 @@ function plConteudo(px, o) {
       s += `<text transform="translate(${mx} ${-my}) rotate(${ang})" y="${-7 * px}" font-size="${10 * px}" fill="${cor}" text-anchor="middle" font-weight="650" paint-order="stroke" stroke="${halo}" stroke-width="${3 * px}" style="pointer-events:none">${esc(txt)}</text>`; }
   });
   /* lotes e ligações prediais */
+  if (PL.lotes && R && R.ok) { try { ESG.esquinas(P, R).forEach(cn => { [[cn.R, '#64748b'], [cn.Rm, '#b7791f']].forEach(([r, cor]) => { if (!r) return; const a = ESG.arco(cn, r, 10);
+    s += `<path d="M${a.map(v => v[0] + ' ' + (-v[1])).join('L')}" fill="none" stroke="${cor}" stroke-width="${1.1 * px}" style="pointer-events:none"><title>Esquina: ${r === cn.R ? 'meio-fio, raio ' + fm(cn.R, 1) : 'muro/alinhamento, raio ' + fm(cn.Rm, 1)} m</title></path>`; }); }); } catch (e) {} }
   if (PL.lotes && R && R.ok) { const LG = ESG.ligacoes(P, R), perto = LG.length < 3000, c = P.crit, alin = c.largRua / 2 + c.largPas;
     LG.forEach(q => { const t = trDe(q.tr), tst = t && t.testada > 0 ? +t.testada : c.testada, sel = SEL && SEL.tipo === 'tr' && SEL.id === q.tr;
-      if (perto && tst / px > 14 && q.lote) { const L4 = q.lote;   /* lote: frente × fundo (sem sobrepor o vizinho) */
+      if (perto && tst / px > 14 && q.lote) { const L4 = q.pol || q.lote;   /* lote: frente × fundo (sem sobrepor o vizinho) */
         s += `<path d="M${L4.map(v => v[0] + ' ' + (-v[1])).join('L')}Z" fill="#d6a04a" fill-opacity="${sel ? .16 : .07}" stroke="#b7791f" stroke-width="${.8 * px}" stroke-dasharray="${4 * px} ${3 * px}" style="pointer-events:none"/>`; }
       s += `<line x1="${q.x}" y1="${-q.y}" x2="${q.fx}" y2="${-q.fy}" stroke="${q.ok ? '#b7791f' : CORES.err}" stroke-width="${1.1 * px}" style="pointer-events:none"/>`;
       s += `<rect x="${q.fx - 3.2 * px}" y="${-q.fy - 3.2 * px}" width="${6.4 * px}" height="${6.4 * px}" fill="${q.man ? '#fff7e0' : '#d6a04a'}" stroke="${q.ok ? '#8a5a12' : CORES.err}" stroke-width="${1.2 * px}" data-lg="${q.tr}:${q.i}" style="cursor:${o.edit ? 'move' : 'default'}"><title>Ligação predial${q.man ? ' (posição ajustada)' : ''} · ramal ${fm(q.L, 1)} m${q.ok ? '' : ' · recobrimento baixo no lote'}</title></rect>`; }); }

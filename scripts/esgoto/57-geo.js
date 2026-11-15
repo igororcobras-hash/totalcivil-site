@@ -55,12 +55,16 @@ function geoFeicoes() {
   RU.est.forEach((l, no) => { const N = [RU.nos.get(no).x, RU.nos.get(no).y], n = l.length; if (n < 2) return; const cant = [];
     for (let i = 0; i < n; i++) { const d = l[i], e = l[(i + 1) % n]; let th = e.ang - d.ang; while (th <= 0) th += 2 * Math.PI; const nd = [-d.u[1], d.u[0]], ne = [e.u[1], -e.u[0]];
       const k = Math.abs(th - Math.PI) < 0.09 ? lin(N, w, nd) : rlInter(lin(N, w, nd), d.u, lin(N, w, ne), e.u); if (k) cant.push(k);
-      if (th < Math.PI * 0.97) { const q = [[w, w], [w, al], [al, al], [al, w]].map(([a, b]) => rlInter(lin(N, a, nd), d.u, lin(N, b, ne), e.u)); if (q.every(Boolean)) out.calc.push(q); } }
+      const cn = th < Math.PI * 0.97 ? rlCantoK(RU, no, i) : null;
+      if (cn) { /* ES-05: arco do meio-fio (R) e do muro (R − passeio) */
+        const Pc = ESG.arco(cn, cn.R), Pt = ESG.arco(cn, Math.max(0.05, cn.R - 0.15)), Pa = cn.Rm ? ESG.arco(cn, cn.Rm) : [cn.aa]; if (k) cant.pop(); Pc.forEach(q => cant.push(q));
+        out.mf.push(Pc.concat(Pt.slice().reverse())); out.calc.push(Pt.concat(Pa.slice().reverse())); }
+      else if (th < Math.PI * 0.97) { const q = [[w, w], [w, al], [al, al], [al, w]].map(([a, b]) => rlInter(lin(N, a, nd), d.u, lin(N, b, ne), e.u)); if (q.every(Boolean)) out.calc.push(q); } }
     if (cant.length > 2) out.pista.push(cant); });
   P.trechos.forEach(t => { const r = R.tr[t.id], a = noDe(t.de), b = noDe(t.para); if (!r || !a || !b) return; const of = ESG.offsetTr(t, R.c), l = Math.hypot(b.x - a.x, b.y - a.y) || 1, ox = -(b.y - a.y) / l * of, oy = (b.x - a.x) / l * of;
     out.rede.push({p: [[a.x + ox, a.y + oy], [b.x + ox, b.y + oy]], r, nome: r.nome || t.id}); });
   P.nos.forEach(n => { const x = R.no[n.id]; if (x) out.pvs.push({p: [n.x, n.y], nome: nomeNo(n), x}); });
-  try { ESG.ligacoes(P, R).forEach(q => out.lotes.push(q.lote)); } catch (e) {}
+  try { ESG.ligacoes(P, R).forEach(q => out.lotes.push(q.pol || q.lote)); } catch (e) {}
   return out;
 }
 /* ── janela do mapa ── */
