@@ -38,6 +38,7 @@ const AJ = {
   'crit.berco': '<b>Berço de areia</b> (m) sob o tubo. Usual 0,10 m. Entra no volume de areia e na profundidade da vala.',
   'crit.envolt': '<b>Envoltória acima do tubo</b> (m) de areia ou pó de pedra. Usual 0,30 m.',
   'crit.espPav': '<b>Espessura do asfalto reposto</b> (m) sobre a vala. Usual 0,05 m (CBUQ). A área reposta é largura da vala + 0,30 m × extensão.',
+  'crit.fundoLote': '<b>Fundo do lote</b> (m) — profundidade dos lotes desenhados na planta e no 3D. Padrão <b>25 m</b>. Na esquina, o lote da rua mais longa fica com o canto e a rua que cruza começa os lotes dela logo depois do fundo desse lote: os lotes encostam, sem corredor ou servidão entre eles. Não muda o número de ligações (que depende da testada).',
   'crit.testada': '<b>Testada padrão do lote</b> (m) — a largura da frente do lote. Cada trecho recebe <b>uma ligação predial por lote, de cada lado</b>: trecho de 60 m com testada 12 m = 5 lotes por lado. Padrão <b>12 m</b>. Muda um trecho só no painel dele, ou arraste cada ligação na planta.',
   'crit.largPas': '<b>Largura do passeio</b> (m), do meio-fio ao alinhamento do lote. Define o <b>comprimento do ramal predial</b> (meia rua + passeio) e a posição do coletor quando a rede passa no passeio. Usual 2,50 m.',
   'crit.habLig': '<b>Habitantes por ligação</b> (hab/lote). Só informativo: compare com a população do projeto (nº de lotes × hab/lote).',
@@ -122,6 +123,12 @@ const AJ = {
   't3.voo': '<b>✈ Percorrer</b> — voa ao longo do coletor tronco.',
   't3.redim': '<b>🛠 Redimensionar</b> — grava a vazão do cenário como vazão de projeto e recalcula os diâmetros.',
   't3.solo': '<b>🛣 Rua</b> — transparência da rua, para enxergar os tubos.',
+  't3.real': '<b>🏙 Realista</b> — 3D como no Pavimento Intertravado: céu com nuvens, sol e sombras, asfalto, meio-fio e calçada, terreno com grama, os LOTES da planta com muros, portões e casas, árvores e horizonte. Desligado = 3D técnico (só rede e ruas cinza). Só desenho: nenhum cálculo muda.',
+  't3.cen': '<b>🏘 Cenário</b> — painel com Qualidade, Sol, os níveis do cenário (calçada, terreno, casas, muros, árvores, grama, horizonte, satélite) e para locar árvores e postes.',
+  't3.rua': '<b>👁 Nível da rua</b> — põe a câmera em pé (1,70 m) no meio da rua mais longa, olhando ao longo dela.',
+  't3.andar': '<b>🚶 Andar</b> — anda pela rua: W/S ou ↑/↓ anda, A/D de lado, ←/→ gira, arraste para olhar, roda do mouse dá passos, Shift corre, Esc sai. No celular use os botões na tela.',
+  't3.png': '<b>🖼 Imagem PNG</b> — baixa a imagem do 3D exatamente como está na tela (use Qualidade Alta/Ultra para a melhor imagem).',
+  't3.geo': '<b>🛰 Georreferenciar</b> — abre o mapa com satélite para posicionar a rede (coordenadas, giro, pontos de controle ou projeto já em UTM), exportar KMZ para o Google Earth e pôr o satélite no chão do 3D.',
   't3.ev': '<b>↕ Exagero vertical</b> — estica as alturas para ver profundidades e degraus.',
   'pf': '<b>Perfil</b> — terreno, tubo e PVs ao longo do coletor escolhido. O exagero vertical só estica o desenho.'
 };
@@ -133,11 +140,11 @@ const AJ = {
     if (!el || !el.closest) return null;
     const bt = el.closest('button,[data-act],[data-plmodo],[data-t3]');
     if (bt) { const d = bt.dataset; if (d.act && AJ['act.' + d.act]) return 'act.' + d.act; if (d.plmodo && AJ['modo.' + d.plmodo]) return 'modo.' + d.plmodo; if (d.t3 && AJ['t3.' + d.t3]) return 't3.' + d.t3; }
-    const f = el.closest('.f'); if (!f) return null;
+    const f = el.closest('.f'); if (!f) return window.ajTexto ? ajTexto(el) : null;   /* ES-04: quadros, tabelas e textos (76-ajuda2.js) */
     const no = f.querySelector('[data-no][data-k]'); if (no && AJ['no.' + no.dataset.k]) return 'no.' + no.dataset.k;
     for (const [at, pre, fixo] of ATTR) { const c = f.querySelector('[' + at + ']'); if (c) { const k = fixo ? pre : pre + c.getAttribute(at); if (AJ[k]) return k; } }
     if (f.querySelector('#pf-col,#pf-ate,#pf-ev')) return 'pf';
-    return null;
+    return window.ajTexto ? ajTexto(el) : null;
   }
   let alvo = null, fixo = false, tm = 0;
   function mostrar(el, k) {
@@ -148,7 +155,7 @@ const AJ = {
   function esconder() { clearTimeout(tm); pop.hidden = true; alvo = null; fixo = false; }
   document.addEventListener('mouseover', e => { if (fixo) return; const k = chave(e.target);
     if (!k) { if (alvo && !e.target.closest('#aj-pop')) esconder(); return; }
-    const el = e.target.closest('button,.f') || e.target; if (el === alvo) return;
+    const el = (window._ajEl && window._ajEl.contains(e.target) ? window._ajEl : null) || e.target.closest('button,.f') || e.target; window._ajEl = null; if (el === alvo) return;
     if (el.tagName === 'BUTTON' && el.title) { el.dataset.t0 = el.title; el.removeAttribute('title'); }   /* o balão do programa substitui o title do navegador */
     clearTimeout(tm); tm = setTimeout(() => mostrar(el, k), 220); });
   document.addEventListener('mouseout', e => { if (!fixo && !e.relatedTarget) esconder(); });

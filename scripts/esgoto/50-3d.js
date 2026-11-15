@@ -6,7 +6,7 @@
    ════════════════════════════════════════════════════════════════════ */
 const T3 = {on: false, fator: 1, ev: 1, solo: 0.55, rot: true, vala: false, lig: true, terr: true, fluxo: true, voo: null, Rv: null,
   URL: ['https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js', 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js'],
-  parar() { this.on = false; cancelAnimationFrame(this.raf); if (this.ro) this.ro.disconnect(); if (this.ren) { this.ren.dispose(); this.ren = null; } this.voo = null; }
+  parar() { if (window.rlParar) rlParar(); this.on = false; cancelAnimationFrame(this.raf); if (this.ro) this.ro.disconnect(); if (this.ren) { this.ren.dispose(); this.ren = null; } this.voo = null; }
 };
 function vT3(m) {
   if (!R.ok) { m.innerHTML = `<div class="card">${listaVerif()}</div>`; return; }
@@ -14,7 +14,8 @@ function vT3(m) {
   const b = (a, t, on, tit) => `<button class="bt peq${on ? ' on' : ''}" data-t3="${a}" title="${tit || t}">${rotBt(t)}</button>`;
   m.innerHTML = `<div class="t3" id="t3"><canvas id="t3-c"></canvas><div class="t3-lab" id="t3-lab"></div>
     <div class="t3-bar">${b('fit', '⛶ Enquadrar')}${b('topo', '⬆ Topo')}${b('persp', '◢ Perspectiva')}${b('rot', '🏷 Rótulos', T3.rot)}${b('solo', '🛣 Rua ' + Math.round(T3.solo * 100) + ' %', false, 'Transparência da rua')}
-      ${b('terr', '⛰ Terreno', T3.terr, 'Superfície do terreno natural (cotas dos PVs e da topografia)')}${b('lig', '🏠 Ligações', T3.lig, 'Ramais prediais (um por lote, na posição da planta)')}${b('vala', '⛏ Vala', T3.vala)}${b('fluxo', '🌊 Fluxo', T3.fluxo)}${b('ev', '↕ ' + T3.ev + '×', false, 'Exagero vertical')}${b('voo', '✈ Percorrer', false, 'Voa ao longo do coletor tronco')}${b('cheia', '⤢')}</div>
+      ${b('terr', '⛰ Terreno', T3.terr, 'Superfície do terreno natural (cotas dos PVs e da topografia)')}${b('lig', '🏠 Ligações', T3.lig, 'Ramais prediais (um por lote, na posição da planta)')}${b('vala', '⛏ Vala', T3.vala)}${b('fluxo', '🌊 Fluxo', T3.fluxo)}${b('ev', '↕ ' + T3.ev + '×', false, 'Exagero vertical')}${b('voo', '✈ Percorrer', false, 'Voa ao longo do coletor tronco')}${b('cheia', '⤢')}
+      <span class="t3-sep"></span>${b('real', '🏙 Realista', RL.on, '3D realista: céu, sol, sombras, calçada, lotes com muros e casas, árvores (só desenho)')}${b('cen', '🏘 Cenário', RL.on && RL.pan, 'Níveis do cenário, Qualidade, Sol, locar árvores e postes')}${b('rua', '👁 Nível da rua', false, 'Câmera em pé no meio da rua (1,70 m)')}${b('andar', '🚶 Andar', false, 'Andar pela rua com o teclado (W/A/S/D) e o mouse')}${b('png', '🖼 Imagem PNG', false, 'Baixa a imagem do 3D como está na tela')}${b('geo', '🛰 Georreferenciar', false, 'Posiciona a rede sobre o satélite (mapa), exporta KML/KMZ')}</div>
     <div class="t3-sl" title="Quantidade de esgoto"><span>Esgoto</span><b id="t3-pct"></b><input type="range" id="t3-f" min="10" max="400" step="5" value="${Math.round(T3.fator * 100)}"/><span id="t3-q"></span></div>
     <div class="t3-inf" id="t3-inf">Carregando o 3D…</div></div>`;
   (async () => { try { if (!window.THREE) await carregarScript(T3.URL[0]); if (!THREE.OrbitControls) await carregarScript(T3.URL[1]); if (TAB === 't3' && $('t3-c')) t3Iniciar(); }
@@ -23,15 +24,16 @@ function vT3(m) {
 function t3Iniciar() {
   const box = $('t3'), cv = $('t3-c'); T3.on = true;
   const ren = T3.ren = new THREE.WebGLRenderer({canvas: cv, antialias: true, preserveDrawingBuffer: true}); ren.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-  const cena = T3.cena = new THREE.Scene(); cena.background = new THREE.Color(escuro() ? 0x0f1620 : 0xcfe3ee);
+  const cena = T3.cena = new THREE.Scene(); cena.background = new THREE.Color(escuro() ? 0x0f1620 : 0xcfe3ee);   /* no modo realista o céu substitui o fundo (rlIniciar) */
   const cam = T3.cam = new THREE.PerspectiveCamera(50, 1, 0.5, 20000), ctl = T3.ctl = new THREE.OrbitControls(cam, cv);
   ctl.enableDamping = true; ctl.dampingFactor = 0.12; ctl.mouseButtons = {LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN}; ctl.maxPolarAngle = Math.PI * 0.95;
   cena.add(new THREE.HemisphereLight(0xffffff, 0x8a7a66, 0.95)); const sol = new THREE.DirectionalLight(0xffffff, 0.75); sol.position.set(300, 600, 200); cena.add(sol);
+  if (window.rlIniciar) rlIniciar();   /* ES-04: 3D realista (céu, sol, sombras) */
   const tam = () => { const r = box.getBoundingClientRect(); ren.setSize(r.width, r.height, false); cam.aspect = r.width / Math.max(1, r.height); cam.updateProjectionMatrix(); };
   T3.ro = new ResizeObserver(tam); T3.ro.observe(box); tam();
-  t3Montar(); t3Vista('persp');
+  t3Montar(); t3Vista('persp'); if (window.rlEventos) { rlEventos(); rlPainel(); }
   let t0 = performance.now();
-  const loop = t => { if (!T3.on) return; T3.raf = requestAnimationFrame(loop); const dt = Math.min(0.1, (t - t0) / 1000); t0 = t; t3Anima(dt); ctl.update(); ren.render(cena, cam); t3Rotulos(); };
+  const loop = t => { if (!T3.on) return; T3.raf = requestAnimationFrame(loop); const dt = Math.min(0.1, (t - t0) / 1000); t0 = t; t3Anima(dt); if (RL.andar) rlAndarTick(dt); else ctl.update(); if (RL.t3) { rlTick(RL.t3); rlMede(dt); } ren.render(cena, cam); t3Rotulos(); };
   T3.raf = requestAnimationFrame(loop);
 }
 /* x,y do projeto e cota z → coordenadas do desenho (centrado na origem; Y para cima) */
@@ -88,6 +90,7 @@ function t3Montar() {
       G.terr.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({vertexColors: true, side: THREE.DoubleSide}))); } }
   G.vala.visible = T3.vala; G.lig.visible = T3.lig; G.terr.visible = T3.terr;
   T3.geom = ESG.geometria(R); t3Cenario(T3.fator);
+  if (RL.t3) { try { rlCena(); } catch (e) { console.warn('3D realista', e); } }   /* ES-04 */
 }
 /* recalcula só a hidráulica para o fator da barra e redesenha a água */
 function t3Cenario(f) {
@@ -136,7 +139,7 @@ function t3Vista(v) {
   const cx = new THREE.Box3().setFromObject(T3.G.tubos).union(new THREE.Box3().setFromObject(T3.G.pvs)), c = cx.getCenter(new THREE.Vector3()), s = cx.getSize(new THREE.Vector3()), raio = Math.max(15, Math.hypot(s.x, s.z) / 2);
   const dir = v === 'topo' ? new THREE.Vector3(0.001, 1, 0.001) : v === 'persp' ? new THREE.Vector3(0.55, 0.62, 0.85) : new THREE.Vector3().subVectors(T3.cam.position, T3.ctl.target);
   dir.normalize(); const dist = raio / Math.tan(T3.cam.fov * Math.PI / 360) * (T3.cam.aspect < 1 ? 1 / T3.cam.aspect : 1) * 1.05;
-  T3.ctl.target.copy(c); T3.cam.position.copy(c).addScaledVector(dir, dist); T3.cam.near = Math.max(0.2, dist / 2000); T3.cam.far = dist * 20; T3.cam.updateProjectionMatrix(); T3.ctl.update();
+  T3.ctl.target.copy(c); T3.cam.position.copy(c).addScaledVector(dir, dist); T3.cam.near = Math.max(0.2, dist / 2000); T3.cam.far = Math.max(dist * 20, RL.t3 && RL.t3.Rcena ? RL.t3.Rcena * 30 : 0); T3.cam.updateProjectionMatrix(); T3.ctl.update();
 }
 function t3Voo(liga) {
   const bt = document.querySelector('[data-t3="voo"]');
@@ -146,12 +149,13 @@ function t3Voo(liga) {
   toast('Percorrendo o coletor tronco, da cabeceira ao lançamento. Toque em ⏹ Parar para assumir a câmera.');
 }
 function t3Acao(a) {
+  if (window.rlAcao && rlAcao(a)) return;   /* ES-04: Realista, Cenário, Nível da rua, Andar, PNG, Georreferenciar */
   if (!T3.on && a !== 'cheia') return;
   if (a === 'fit') t3Vista('fit'); else if (a === 'topo' || a === 'persp') t3Vista(a);
-  else if (a === 'rot') { T3.rot = !T3.rot; } else if (a === 'vala') { T3.vala = !T3.vala; T3.G.vala.visible = T3.vala; } else if (a === 'lig') { T3.lig = !T3.lig; T3.G.lig.visible = T3.lig; } else if (a === 'terr') { T3.terr = !T3.terr; T3.G.terr.visible = T3.terr; }
+  else if (a === 'rot') { T3.rot = !T3.rot; } else if (a === 'vala') { T3.vala = !T3.vala; T3.G.vala.visible = T3.vala; } else if (a === 'lig') { T3.lig = !T3.lig; T3.G.lig.visible = T3.lig; } else if (a === 'terr') { T3.terr = !T3.terr; T3.G.terr.visible = T3.terr && !RL.t3; if (T3.G.rlTerr) T3.G.rlTerr.visible = !!(T3.terr && RL.vis.terreno); }
   else if (a === 'fluxo') { T3.fluxo = !T3.fluxo; T3.pontos.visible = T3.fluxo; }
-  else if (a === 'solo') { T3.solo = T3.solo > 0.8 ? 0 : T3.solo > 0.4 ? 1 : T3.solo > 0.1 ? 0.55 : 0.2; T3.M.asf.opacity = T3.M.pas.opacity = T3.solo; T3.G.solo.visible = T3.solo > 0; }
-  else if (a === 'ev') { T3.ev = T3.ev === 1 ? 2 : T3.ev === 2 ? 5 : 1; T3.raiz.scale.y = T3.ev; t3Vista('fit'); }
+  else if (a === 'solo') { RL.soloIni = 1; T3.solo = T3.solo > 0.8 ? 0 : T3.solo > 0.4 ? 1 : T3.solo > 0.1 ? 0.55 : 0.2; T3.M.asf.opacity = T3.M.pas.opacity = T3.solo; T3.G.solo.visible = T3.solo > 0 && !RL.t3; if (RL.t3) rlSolo(); }
+  else if (a === 'ev') { T3.ev = T3.ev === 1 ? 2 : T3.ev === 2 ? 5 : 1; T3.raiz.scale.y = T3.ev; if (RL.t3) rlReconstroi(); t3Vista('fit'); }
   else if (a === 'voo') return t3Voo(!T3.voo);
   else if (a === 'cheia') { const el = $('t3'); if (document.fullscreenElement) document.exitFullscreen(); else if (el.requestFullscreen) el.requestFullscreen(); return; }
   else if (a === 'volta') { $('t3-f').value = Math.round(R.fator * 100); return t3Cenario(R.fator); }

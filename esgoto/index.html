@@ -120,6 +120,24 @@ tfoot td{font-weight:800;background:var(--card2)}
 .x{border:0;background:none;cursor:pointer;color:var(--muted);font-size:1rem;padding:0 4px}.x:hover{color:var(--err)}
 
 /* 3D */
+/* ES-04 · 3D realista e georreferenciar */
+.t3-sep{width:1px;background:rgba(18,38,63,.25);margin:0 2px}
+.rl-pan{position:absolute;top:84px;right:72px;width:290px;max-height:calc(100% - 100px);overflow:auto;background:rgba(255,255,255,.96);color:#14202e;border-radius:12px;padding:10px 12px;box-shadow:var(--shadow);font-size:.8rem;z-index:5}
+.rl-h{display:flex;align-items:center;justify-content:space-between;gap:6px;margin-bottom:6px}
+.rl-t{font-weight:700;margin:9px 0 4px;font-size:.74rem;text-transform:uppercase;letter-spacing:.03em;color:#475569}
+.rl-g{display:flex;flex-wrap:wrap;gap:5px;align-items:center;margin:3px 0}.rl-g label{display:flex;gap:4px;align-items:center}
+.rl-c{display:flex;gap:6px;align-items:center;margin:2px 0;cursor:pointer}.rl-s,.geo-s{color:#475569;font-size:.74rem;margin:4px 0}
+.rl-andar{position:absolute;left:50%;transform:translateX(-50%);bottom:10px;background:rgba(18,38,63,.9);color:#fff;border-radius:10px;padding:7px 12px;font-size:.78rem;text-align:center;z-index:6}
+.rl-and-bt{display:flex;gap:6px;justify-content:center;margin-top:6px}
+.geo-ov{position:fixed;inset:0;z-index:9000;display:flex;background:#0f1620}
+.geo-map{flex:1;position:relative;min-width:0;overflow:hidden}.geo-carr{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff}.geo-carr.er{color:#fca5a5}
+.geo-pan{width:340px;max-width:46vw;overflow:auto;background:#fff;color:#14202e;padding:10px 12px;font-size:.8rem}
+.geo-res{max-height:150px;overflow:auto;font-size:.74rem;margin:3px 0}.geo-res div{margin:2px 0}
+.geo-h{font-size:20px;line-height:22px;text-align:center;text-shadow:0 0 3px #fff;cursor:grab}.geo-hm{color:#dc2626}.geo-hr{color:#2563eb}
+.geo-tt{font-size:.66rem;padding:1px 4px}
+body.geo-on #tc-fab,body.geo-on #tc-aa{display:none!important}
+body #aj-pop,body #toast{z-index:9600}
+body.cel .geo-ov{flex-direction:column}body.cel .geo-pan{width:auto;max-width:none;height:42vh}body.cel .rl-pan{right:8px;left:8px;width:auto;top:auto;bottom:8px;max-height:52%}
 .t3{position:relative;height:calc(100vh - 190px);min-height:440px;border-radius:14px;overflow:hidden;border:1px solid var(--line);background:#cfe3ee}
 .t3 canvas{display:block;width:100%;height:100%}
 .t3-bar{position:absolute;top:8px;left:8px;right:70px;display:flex;gap:5px;flex-wrap:wrap}
@@ -229,7 +247,7 @@ const ESG = (() => {
     profMax: 4.5, degTQ: 0.50, distPV: 80, distMax: 100, profTL: 1.45,
     remanso: true,          /* nível d'água de saída do PV nunca acima do de chegada */
     folga: 0.60, berco: 0.10, envolt: 0.30, pav: 'asfalto', espPav: 0.05,
-    largRua: 8, largPas: 2.5, testada: 12, habLig: 3.0, ramal: 6, ligIm: 0.02, ligDN: 100, ligCob: 0.30, dmt: 5, empol: 1.30, folgaCava: 0.30, lastro: 0.10,
+    largRua: 8, largPas: 2.5, testada: 12, fundoLote: 25, habLig: 3.0, ramal: 6, ligIm: 0.02, ligDN: 100, ligCob: 0.30, dmt: 5, empol: 1.30, folgaCava: 0.30, lastro: 0.10,
     /* elevatória e recalque (NBR 12208) */
     eCiclo: 10, eDet: 30, eEta: 0.60, eFolgaMotor: 20, eVmin: 0.60, eVmax: 3.00, eKloc: 10, eSub: 0.50, eRecRec: 1.00, eMat: 'pvc',
     /* sifão invertido */
@@ -548,34 +566,83 @@ const ESG = (() => {
   function ligacoes(P, R) {
     const c = R.c, nos = new Map(P.nos.map(n => [n.id, n])), alin = c.largRua / 2 + c.largPas;   /* distância do eixo ao alinhamento dos lotes */
     /* direções das ruas que saem de cada nó (para cortar os lotes nas esquinas) */
-    const dirs = new Map();
+    const dirs = new Map(), trP = new Map((P.trechos || []).map(t => [t.id, t]));
     (P.trechos || []).forEach(t => { const r = R.tr[t.id]; if (r && r.recq) return; const a = nos.get(t.de), b = nos.get(t.para); if (!a || !b) return;
       const l = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / l, uy = (b.y - a.y) / l;
       if (!dirs.has(a.id)) dirs.set(a.id, []); if (!dirs.has(b.id)) dirs.set(b.id, []);
-      dirs.get(a.id).push({tr: t.id, x: ux, y: uy}); dirs.get(b.id).push({tr: t.id, x: -ux, y: -uy}); });
+      dirs.get(a.id).push({tr: t.id, x: ux, y: uy, no: a.id}); dirs.get(b.id).push({tr: t.id, x: -ux, y: -uy, no: b.id}); });
     /* nós a menos de um alinhamento um do outro (ex.: cabeceira a 3 m do cruzamento) formam a mesma esquina */
     const lnos = P.nos.filter(n => dirs.has(n.id)), extra = new Map();
     lnos.forEach(n => lnos.forEach(m => { if (m === n || Math.hypot(m.x - n.x, m.y - n.y) > alin) return; if (!extra.has(n.id)) extra.set(n.id, []); dirs.get(m.id).forEach(d => extra.get(n.id).push(d)); }));
     extra.forEach((l, id) => l.forEach(d => { if (!dirs.get(id).some(e => e.tr === d.tr)) dirs.get(id).push(d); }));
-    /* recuo, em cada ponta e de cada lado, até o alinhamento da rua que cruza (esquina) */
-    const recuo = (noId, tid, ux, uy, lado) => { let m = 0; (dirs.get(noId) || []).forEach(d => { if (d.tr === tid) return;
-      const cr = ux * d.y - uy * d.x, co = ux * d.x + uy * d.y; if (Math.abs(cr) < 0.34 || co < -0.94) return;   /* rua em frente (continuação) não corta */
-      if (Math.sign(cr) !== lado) return; m = Math.max(m, Math.min(3 * alin, alin / Math.abs(cr) + Math.max(0, co) * alin)); }); return m; };
+    /* recuo, em cada ponta e de cada lado, até o alinhamento da rua que cruza (esquina); devolve também a rua que faz a esquina */
+    /* interseção da linha de frente dos lotes (alinhamento do lado `lado`, a partir do nó N, direção u) com o alinhamento da rua d
+       do lado `ld` dela (+1: do lado para onde u aponta; −1: do lado de trás) → distância s ao longo de u (pode ser negativa) */
+    const corta = (N, ux, uy, lado, d, ld) => { const M = nos.get(d.no) || N, nl = [-uy * lado, ux * lado], nd = [-d.y, d.x], sg = (Math.sign(ux * nd[0] + uy * nd[1]) || 1) * ld;
+      const px = N.x + nl[0] * alin - (M.x + nd[0] * sg * alin), py = N.y + nl[1] * alin - (M.y + nd[1] * sg * alin);
+      const det = ux * (-d.y) - uy * (-d.x); if (Math.abs(det) < 1e-6) return null; return (-px * (-d.y) + py * (-d.x)) / det; };
+    /* lado (convenção do trecho tc: +1 = esquerda de quem anda de montante para jusante) em que fica o ponto Z */
+    const ladoDe = (tid, Z) => { const tc = trP.get(tid), A = tc && nos.get(tc.de), B = tc && nos.get(tc.para); if (!A || !B) return 1; return ((B.x - A.x) * (Z[1] - A.y) - (B.y - A.y) * (Z[0] - A.x)) >= 0 ? 1 : -1; };
+    const recuo = (noId, tid, ux, uy, lado) => { let m = 0, dm = null, ext = 0, dOut = null, cont = 0, segue = false; const N = nos.get(noId);
+      (dirs.get(noId) || []).forEach(d => { if (d.tr === tid) return;
+        const cr = ux * d.y - uy * d.x, co = ux * d.x + uy * d.y;
+        if (co < -0.94) { if (d.no === noId) segue = true; else { const M = nos.get(d.no), pr = M ? (M.x - N.x) * ux + (M.y - N.y) * uy : 0; if (pr < 0) cont = Math.min(cont, pr / 2); } return; }   /* continuação (a meia distância do vão da cabeceira) */
+        if (Math.abs(cr) < 0.34) return;
+        if (Math.sign(cr) === lado) {   /* ES-04: esquina do lado de dentro — recua até o alinhamento da rua que cruza (interseção exata) */
+          const sv = corta(N, ux, uy, lado, d, 1); if (sv == null) return; const v = Math.min(3 * alin + Math.hypot((nos.get(d.no) || N).x - N.x, (nos.get(d.no) || N).y - N.y), Math.max(0, sv)); if (v > m) { m = v; dm = d; } }
+        else {                          /* esquina do lado de fora (canto convexo da rede): avança até o alinhamento de trás da rua que cruza */
+          const sv = corta(N, ux, uy, lado, d, -1); if (sv == null || sv > 0 || sv < -3 * alin) return; if (sv < ext) { ext = sv; dOut = d; } } });
+      if (m > 0) return {m, d: dm, ext: 0, dOut: null}; if (segue) return {m: 0, d: null, ext: 0, dOut: null}; if (cont < 0) return {m: 0, d: null, ext: cont, dOut: null}; return {m: 0, d: null, ext: dOut ? ext : 0, dOut}; };
+    /* ES-04 · ESQUINA SEM CORREDOR: na esquina, UM lote fica com o canto (o da rua mais longa); a rua que cruza começa os
+       lotes dela logo depois do fundo desse lote de esquina. Assim os lotes encostam (sem corredor ou servidão entre eles). */
+    const fundo = Math.max(6, c.fundoLote > 0 ? +c.fundoLote : 25);
+    const fazLotes = (tid, lado) => { const t = trP.get(tid), r = R.tr[tid]; if (!t || !r || r.recq || r.sif || Array.isArray(t.lig)) return false;
+      const lados = t.lados == null ? 2 : +t.lados; if (lados === 0) return false; if (lados === 1) return (+t.ladoLote === -1 ? -1 : 1) === lado; return true; };
+    const comp = tid => { const r = R.tr[tid], t = trP.get(tid), a = t && nos.get(t.de), b = t && nos.get(t.para); return (r && r.L) || (a && b ? Math.hypot(b.x - a.x, b.y - a.y) : 0); };
+    const dono = (t1, t2) => { const l1 = comp(t1), l2 = comp(t2); return Math.abs(l1 - l2) > 0.01 ? (l1 > l2 ? t1 : t2) : (String(t1) < String(t2) ? t1 : t2); };
+    /* 1ª passada: trecho livre de cada lado e quem faz a esquina em cada ponta */
+    const lados0 = new Map();
+    R.ordem.forEach(id => {
+      const t = trP.get(id), r = R.tr[id]; if (!t || !r || r.recq || r.sif || Array.isArray(t.lig)) return;
+      const a = nos.get(t.de), b = nos.get(t.para); if (!a || !b) return;
+      const lh = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / lh, uy = (b.y - a.y) / lh, L = r.L || lh, kL = L / lh;
+      [1, -1].forEach(lado => { const ra = recuo(a.id, id, ux, uy, lado), rb = recuo(b.id, id, -ux, -uy, -lado);
+        /* lado da rua que cruza voltado para este canto, na convenção dela: ponto de amostra dentro do canto */
+        const nl = [-uy * lado, ux * lado];
+        const lc = (q, N, sx, sy, dd) => { if (!dd) return null; const sp = q.m > 0 ? q.m + 1 : q.ext - 1, Z = [N.x + sx * sp + nl[0] * (alin + 1), N.y + sy * sp + nl[1] * (alin + 1)]; return {tr: dd.tr, lado: ladoDe(dd.tr, Z)}; };
+        lados0.set(id + '|' + lado, {s0: ra.m * kL, s1: L - rb.m * kL, kL, ini: lc(ra, a, ux, uy, ra.d), fim: lc(rb, b, -ux, -uy, rb.d),
+          eIni: ra.ext, eFim: rb.ext, oIni: lc(ra, a, ux, uy, ra.dOut), oFim: lc(rb, b, -ux, -uy, rb.dOut)}); });
+    });
+    /* 2ª passada: quem não é dono da esquina recua o fundo do lote de esquina; o dono guarda esse fundo no lote do canto */
+    const fundoCanto = new Map(), fundoLado = new Map();   /* fundoLado: o lado inteiro acompanha o fundo do lote de esquina (fundo alinhado) */   /* 'trecho|lado|ini' ou '|fim' → fundo do lote de esquina (m, em planta) */
+    lados0.forEach((o, k) => { const [id, ls] = k.split('|'), lado = +ls; o.off0 = 0; o.off1 = 0;
+      ['ini', 'fim'].forEach(p => { const x = o[p]; if (!x || !fazLotes(x.tr, x.lado) || dono(id, x.tr) === id) return;
+        const livre = (o.s1 - o.s0) / o.kL, dep = Math.max(0, Math.min(fundo, livre * 0.5)); if (dep < 0.5) return;
+        if (p === 'ini') o.off0 = dep * o.kL; else o.off1 = dep * o.kL;
+        /* ponta da rua dona voltada para este canto: a que tem esta rua como esquina */
+        const ol = lados0.get(x.tr + '|' + x.lado); if (!ol) return; const pd = ol.ini && ol.ini.tr === id ? 'ini' : ol.fim && ol.fim.tr === id ? 'fim' : null;
+        if (pd) { fundoCanto.set(x.tr + '|' + x.lado + '|' + pd, dep); const k2 = x.tr + '|' + x.lado; fundoLado.set(k2, Math.min(fundoLado.get(k2) || fundo, dep)); } });
+      /* canto convexo (fora da quadra): os dois lados avançam até o alinhamento da outra rua e o dono fica também com o quadrado do canto */
+      [['ini', 'eIni', 'oIni'], ['fim', 'eFim', 'oFim']].forEach(([p, e, oo]) => { if (!(o[e] < 0)) return; const x = o[oo];
+        let ext = -o[e]; if (x && (!fazLotes(x.tr, x.lado) || dono(id, x.tr) === id)) ext += fundo;
+        if (p === 'ini') o.off0 -= ext * o.kL; else o.off1 -= ext * o.kL; }); });
     const cand = [];
     R.ordem.forEach(id => {
       const t = P.trechos.find(q => q.id === id), r = R.tr[id]; if (!t || !r || r.recq || r.sif) return;
       const a = nos.get(t.de), b = nos.get(t.para); if (!a || !b) return;
       const lh = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / lh, uy = (b.y - a.y) / lh, off = offsetTr(t, c), L = r.L || lh, kL = L / lh;
-      const tst = t.testada > 0 ? +t.testada : c.testada, D = Math.min(18, tst * 1.5);
+      const tst = t.testada > 0 ? +t.testada : c.testada, D = fundo;
       let lista;
       if (Array.isArray(t.lig)) lista = t.lig.map(q => ({s: +q.s, lado: +q.lado >= 0 ? 1 : -1, man: true, w: +q.w > 0 ? +q.w : tst}));
       else {
         lista = []; const lados = t.lados == null ? 2 : +t.lados; if (lados === 0) return;
         const lad = lados === 1 ? [+t.ladoLote === -1 ? -1 : 1] : [1, -1];
-        lad.forEach(lado => {   /* lotes só entre as esquinas (a frente da esquina fica com um lote só) */
-          const s0 = recuo(a.id, id, ux, uy, lado) * kL, s1 = L - recuo(b.id, id, -ux, -uy, -lado) * kL, livre = s1 - s0;
+        lad.forEach(lado => {   /* lotes só entre as esquinas (o canto fica com o lote da rua dona da esquina) */
+          const o = lados0.get(id + '|' + lado); if (!o) return;
+          const s0 = o.s0 + o.off0, s1 = o.s1 - o.off1, livre = s1 - s0;
           if (livre < tst * 0.5) return; const n = Math.max(1, Math.round(livre / tst)), w = livre / n;
-          for (let i = 0; i < n; i++) lista.push({s: s0 + (i + 0.5) * w, lado, man: false, w});
+          const fi = fundoCanto.get(id + '|' + lado + '|ini'), ff = fundoCanto.get(id + '|' + lado + '|fim'), fl = fundoLado.get(id + '|' + lado);
+          for (let i = 0; i < n; i++) lista.push({s: s0 + (i + 0.5) * w, lado, man: false, w, D0: fl, Dfix: n === 1 && (fi != null || ff != null) ? Math.max(fi || 0, ff || 0) : i === 0 && fi != null ? fi : i === n - 1 && ff != null ? ff : null});
         });
       }
       lista.forEach((q, i) => {
@@ -586,30 +653,32 @@ const ESG = (() => {
         const ct = r.ctM + (r.ctJ - r.ctM) * k, ci = r.ciM + (r.ciJ - r.ciM) * k, topo = ci + r.d;       /* geratriz superior do coletor */
         const cl = ct;                                                                                      /* terreno no alinhamento ≈ terreno do trecho */
         const cfRamal = topo + 0.10 + Lr * c.ligIm, profLote = cl - cfRamal, ok = profLote >= c.ligCob - 1e-9;
-        cand.push({id: id + '#' + i, tr: id, i, s, lado: q.lado, man: q.man, x: px, y: py, fx, fy, L: Lr, ct, ci, cfRamal, prof: profLote, ok,
-          w: q.w / kL, ws: q.w, D, ex, ey, nx: -ey, ny: ex});
+        const shU = q.s / kL, lx = a.x + ux * shU + ex * alin, ly = a.y + uy * shU + ey * alin;   /* frente do lote no alinhamento (pode passar do PV, no canto convexo) */
+        cand.push({id: id + '#' + i, tr: id, i, s, lado: q.lado, man: q.man, x: px, y: py, fx, fy, lx, ly, L: Lr, ct, ci, cfRamal, prof: profLote, ok,
+          w: q.w / kL, ws: q.w, D: q.Dfix != null ? q.Dfix : q.D0 || D, Dfix: q.Dfix != null ? q.Dfix : null, ex, ey, nx: -ey, ny: ex});
       });
     });
     /* um lote por lugar: lote que se sobrepõe a outro já aceito (esquina, rua oblíqua) sai, com a sua ligação.
        Os ajustados à mão entram primeiro e nunca saem. Depois cada lote recebe o fundo que cabe sem invadir o vizinho. */
-    const ret = (q, d, f) => { const h = q.w / 2 * (f || 0.97), a0 = 0.05; return [[q.fx - q.nx * h + q.ex * a0, q.fy - q.ny * h + q.ey * a0], [q.fx + q.nx * h + q.ex * a0, q.fy + q.ny * h + q.ey * a0],
-      [q.fx + q.nx * h + q.ex * d, q.fy + q.ny * h + q.ey * d], [q.fx - q.nx * h + q.ex * d, q.fy - q.ny * h + q.ey * d]]; };
+    const ret = (q, d, f) => { const h = q.w / 2 * (f || 0.97), a0 = 0.05; return [[q.lx - q.nx * h + q.ex * a0, q.ly - q.ny * h + q.ey * a0], [q.lx + q.nx * h + q.ex * a0, q.ly + q.ny * h + q.ey * a0],
+      [q.lx + q.nx * h + q.ex * d, q.ly + q.ny * h + q.ey * d], [q.lx - q.nx * h + q.ex * d, q.ly - q.ny * h + q.ey * d]]; };
     const sep = (A, B) => { for (const P0 of [A, B]) for (let i = 0; i < 4; i++) { const p = P0[i], q = P0[(i + 1) % 4], nx = q[1] - p[1], ny = p[0] - q[0];
       let a1 = Infinity, a2 = -Infinity, b1 = Infinity, b2 = -Infinity; A.forEach(v => { const z = v[0] * nx + v[1] * ny; a1 = Math.min(a1, z); a2 = Math.max(a2, z); });
       B.forEach(v => { const z = v[0] * nx + v[1] * ny; b1 = Math.min(b1, z); b2 = Math.max(b2, z); }); if (a2 <= b1 || b2 <= a1) return true; } return false; };
     const CEL = 40, grade = new Map(), chave = (x, y) => Math.floor(x / CEL) + ',' + Math.floor(y / CEL);
-    const vizinhos = q => { const out = [], cx = Math.floor(q.fx / CEL), cy = Math.floor(q.fy / CEL); for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) (grade.get((cx + i) + ',' + (cy + j)) || []).forEach(o => out.push(o)); return out; };
+    const vizinhos = q => { const out = [], cx = Math.floor(q.lx / CEL), cy = Math.floor(q.ly / CEL); for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) (grade.get((cx + i) + ',' + (cy + j)) || []).forEach(o => out.push(o)); return out; };
     const aceitos = [], DTESTE = 6;
     cand.filter(q => q.man).concat(cand.filter(q => !q.man)).forEach(q => {
       const A = ret(q, Math.min(DTESTE, q.D));
       if (!q.man && vizinhos(q).some(o => sep(A, ret(o, Math.min(DTESTE, o.D))) === false)) return;
-      aceitos.push(q); const k = chave(q.fx, q.fy); if (!grade.has(k)) grade.set(k, []); grade.get(k).push(q); });
-    aceitos.forEach(q => { const vz = vizinhos(q).filter(o => o !== q);   /* fundo: 18 m (ou 1,5 × testada) até onde não invade */
+      aceitos.push(q); const k = chave(q.lx, q.ly); if (!grade.has(k)) grade.set(k, []); grade.get(k).push(q); });
+    aceitos.forEach(q => { if (q.Dfix != null) { q.D = q.Dfix; q.fin = 1; } });
+    aceitos.forEach(q => { if (q.fin) return; const vz = vizinhos(q).filter(o => o !== q);   /* fundo (crit.fundoLote) até onde não invade; o lote de esquina guarda o dele */
       for (const d of [q.D, q.D * 0.75, q.D * 0.6, q.D * 0.45, DTESTE]) { const A = ret(q, d, 0.995); if (!vz.some(o => !sep(A, ret(o, o.fin ? o.D : Math.min(o.D, d), 0.995)))) { q.D = d; q.fin = 1; return; } } q.D = Math.min(DTESTE, q.D); q.fin = 1; });
     /* numeração por trecho na ordem final (é a que o arrastar/excluir usa) */
-    const out = [], cont = {}, ok = new Set(aceitos); cand.forEach(q => { if (!ok.has(q)) return; delete q.fin; const n = cont[q.tr] = (cont[q.tr] || 0) + 1;
+    const out = [], cont = {}, ok = new Set(aceitos); cand.forEach(q => { if (!ok.has(q)) return; delete q.fin; delete q.Dfix; const n = cont[q.tr] = (cont[q.tr] || 0) + 1;
       if (!q.man) { q.i = n - 1; q.id = q.tr + '#' + q.i; }
-      const h = q.w / 2; q.lote = [[q.fx - q.nx * h, q.fy - q.ny * h], [q.fx + q.nx * h, q.fy + q.ny * h], [q.fx + q.nx * h + q.ex * q.D, q.fy + q.ny * h + q.ey * q.D], [q.fx - q.nx * h + q.ex * q.D, q.fy - q.ny * h + q.ey * q.D]];
+      const h = q.w / 2; q.lote = [[q.lx - q.nx * h, q.ly - q.ny * h], [q.lx + q.nx * h, q.ly + q.ny * h], [q.lx + q.nx * h + q.ex * q.D, q.ly + q.ny * h + q.ey * q.D], [q.lx - q.nx * h + q.ex * q.D, q.ly - q.ny * h + q.ey * q.D]];
       out.push(q); });
     return out;
   }
@@ -977,7 +1046,7 @@ const CAMPOS = {
   taxa: [['txI', 'Taxa linear inicial', 'L/s·km', 3], ['txF', 'Taxa linear final', 'L/s·km', 3]],
   hid: [['n', 'Manning n', '', 3], ['tau', 'Tensão trativa mínima', 'Pa', 2], ['dMin', 'Diâmetro mínimo', 'mm', 0, 'Norma admite DN 100; usual DN 150'], ['yD', 'Lâmina máxima y/D', '', 2, 'NBR 9649: 0,75'], ['yDvc', 'y/D se V > V crítica', '', 2, 'NBR 9649: 0,50'], ['vMax', 'Velocidade máxima', 'm/s', 1, 'NBR 9649: 5 m/s']],
   rede: [['rec', 'Recobrimento mínimo na via', 'm', 2, 'NBR 9649: 0,90 m no leito da via'], ['recPas', 'Recobrimento mínimo no passeio', 'm', 2, 'NBR 9649: 0,65 m — marque o trecho como “passeio” no Traçado'], ['profMax', 'Profundidade para alerta', 'm', 1], ['degTQ', 'Degrau que pede tubo de queda', 'm', 2, 'NBR 9649: a partir de 0,50 m'], ['distPV', 'Distância entre PVs ao gerar', 'm', 0], ['distMax', 'Distância máxima entre PVs', 'm', 0, 'Alcance da limpeza: 100 m'], ['profTL', 'Cabeceira com TL até', 'm', 2, 'Mais fundo que isso vira PV']],
-  vala: [['folga', 'Folga da vala (largura = DN + folga)', 'm', 2], ['berco', 'Berço de areia', 'm', 2], ['envolt', 'Envoltória acima do tubo', 'm', 2], ['espPav', 'Espessura do asfalto reposto', 'm', 2], ['testada', 'Testada padrão do lote', 'm', 1, 'Largura do lote na frente da rua: define quantas ligações cada trecho recebe'], ['largPas', 'Largura do passeio', 'm', 1], ['habLig', 'Habitantes por ligação', 'hab', 1], ['ramal', 'Comprimento do ramal (só com nº de ligações informado)', 'm', 1], ['dmt', 'DMT do bota-fora', 'km', 1], ['largRua', 'Largura da rua (desenho)', 'm', 1], ['folgaCava', 'Folga da cava do PV (cada lado)', 'm', 2, 'Espaço de trabalho em volta do PV'], ['lastro', 'Lastro de brita sob o PV', 'm', 2], ['empol', 'Empolamento do solo', '', 2]],
+  vala: [['folga', 'Folga da vala (largura = DN + folga)', 'm', 2], ['berco', 'Berço de areia', 'm', 2], ['envolt', 'Envoltória acima do tubo', 'm', 2], ['espPav', 'Espessura do asfalto reposto', 'm', 2], ['testada', 'Testada padrão do lote', 'm', 1, 'Largura do lote na frente da rua: define quantas ligações cada trecho recebe'], ['fundoLote', 'Fundo (profundidade) do lote', 'm', 1, 'Desenho, planta e 3D: o lote de esquina ocupa o canto e a rua que cruza começa depois dele'], ['largPas', 'Largura do passeio', 'm', 1], ['habLig', 'Habitantes por ligação', 'hab', 1], ['ramal', 'Comprimento do ramal (só com nº de ligações informado)', 'm', 1], ['dmt', 'DMT do bota-fora', 'km', 1], ['largRua', 'Largura da rua (desenho)', 'm', 1], ['folgaCava', 'Folga da cava do PV (cada lado)', 'm', 2, 'Espaço de trabalho em volta do PV'], ['lastro', 'Lastro de brita sob o PV', 'm', 2], ['empol', 'Empolamento do solo', '', 2]],
   eee: [['eCiclo', 'Ciclo mínimo das bombas', 'min', 0, 'Define o volume útil: V = Q·T/4'], ['eDet', 'Detenção máxima no poço', 'min', 0, 'NBR 12208: 30 min'], ['eEta', 'Rendimento do conjunto', '', 2], ['eFolgaMotor', 'Folga do motor', '%', 0], ['eVmin', 'Velocidade mínima no recalque', 'm/s', 2], ['eVmax', 'Velocidade máxima no recalque', 'm/s', 2], ['eKloc', 'Σ K das perdas localizadas', '', 1], ['eSub', 'Submergência mínima da bomba', 'm', 2], ['eRecRec', 'Recobrimento do recalque', 'm', 2], ['K3', 'K3 — hora de menor consumo', '', 2]],
   sif: [['sVmin', 'Velocidade mínima (autolimpeza)', 'm/s', 2], ['sDmin', 'Diâmetro mínimo', 'mm', 0], ['sLinhas', 'Número de linhas', '', 0, '2 = uma para a vazão inicial e outra de reforço'], ['sProt', 'Proteção sob o obstáculo', 'm', 2]]
 };
@@ -1442,7 +1511,7 @@ function vPerfil(m) {
    ════════════════════════════════════════════════════════════════════ */
 const T3 = {on: false, fator: 1, ev: 1, solo: 0.55, rot: true, vala: false, lig: true, terr: true, fluxo: true, voo: null, Rv: null,
   URL: ['https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js', 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js'],
-  parar() { this.on = false; cancelAnimationFrame(this.raf); if (this.ro) this.ro.disconnect(); if (this.ren) { this.ren.dispose(); this.ren = null; } this.voo = null; }
+  parar() { if (window.rlParar) rlParar(); this.on = false; cancelAnimationFrame(this.raf); if (this.ro) this.ro.disconnect(); if (this.ren) { this.ren.dispose(); this.ren = null; } this.voo = null; }
 };
 function vT3(m) {
   if (!R.ok) { m.innerHTML = `<div class="card">${listaVerif()}</div>`; return; }
@@ -1450,7 +1519,8 @@ function vT3(m) {
   const b = (a, t, on, tit) => `<button class="bt peq${on ? ' on' : ''}" data-t3="${a}" title="${tit || t}">${rotBt(t)}</button>`;
   m.innerHTML = `<div class="t3" id="t3"><canvas id="t3-c"></canvas><div class="t3-lab" id="t3-lab"></div>
     <div class="t3-bar">${b('fit', '⛶ Enquadrar')}${b('topo', '⬆ Topo')}${b('persp', '◢ Perspectiva')}${b('rot', '🏷 Rótulos', T3.rot)}${b('solo', '🛣 Rua ' + Math.round(T3.solo * 100) + ' %', false, 'Transparência da rua')}
-      ${b('terr', '⛰ Terreno', T3.terr, 'Superfície do terreno natural (cotas dos PVs e da topografia)')}${b('lig', '🏠 Ligações', T3.lig, 'Ramais prediais (um por lote, na posição da planta)')}${b('vala', '⛏ Vala', T3.vala)}${b('fluxo', '🌊 Fluxo', T3.fluxo)}${b('ev', '↕ ' + T3.ev + '×', false, 'Exagero vertical')}${b('voo', '✈ Percorrer', false, 'Voa ao longo do coletor tronco')}${b('cheia', '⤢')}</div>
+      ${b('terr', '⛰ Terreno', T3.terr, 'Superfície do terreno natural (cotas dos PVs e da topografia)')}${b('lig', '🏠 Ligações', T3.lig, 'Ramais prediais (um por lote, na posição da planta)')}${b('vala', '⛏ Vala', T3.vala)}${b('fluxo', '🌊 Fluxo', T3.fluxo)}${b('ev', '↕ ' + T3.ev + '×', false, 'Exagero vertical')}${b('voo', '✈ Percorrer', false, 'Voa ao longo do coletor tronco')}${b('cheia', '⤢')}
+      <span class="t3-sep"></span>${b('real', '🏙 Realista', RL.on, '3D realista: céu, sol, sombras, calçada, lotes com muros e casas, árvores (só desenho)')}${b('cen', '🏘 Cenário', RL.on && RL.pan, 'Níveis do cenário, Qualidade, Sol, locar árvores e postes')}${b('rua', '👁 Nível da rua', false, 'Câmera em pé no meio da rua (1,70 m)')}${b('andar', '🚶 Andar', false, 'Andar pela rua com o teclado (W/A/S/D) e o mouse')}${b('png', '🖼 Imagem PNG', false, 'Baixa a imagem do 3D como está na tela')}${b('geo', '🛰 Georreferenciar', false, 'Posiciona a rede sobre o satélite (mapa), exporta KML/KMZ')}</div>
     <div class="t3-sl" title="Quantidade de esgoto"><span>Esgoto</span><b id="t3-pct"></b><input type="range" id="t3-f" min="10" max="400" step="5" value="${Math.round(T3.fator * 100)}"/><span id="t3-q"></span></div>
     <div class="t3-inf" id="t3-inf">Carregando o 3D…</div></div>`;
   (async () => { try { if (!window.THREE) await carregarScript(T3.URL[0]); if (!THREE.OrbitControls) await carregarScript(T3.URL[1]); if (TAB === 't3' && $('t3-c')) t3Iniciar(); }
@@ -1459,15 +1529,16 @@ function vT3(m) {
 function t3Iniciar() {
   const box = $('t3'), cv = $('t3-c'); T3.on = true;
   const ren = T3.ren = new THREE.WebGLRenderer({canvas: cv, antialias: true, preserveDrawingBuffer: true}); ren.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
-  const cena = T3.cena = new THREE.Scene(); cena.background = new THREE.Color(escuro() ? 0x0f1620 : 0xcfe3ee);
+  const cena = T3.cena = new THREE.Scene(); cena.background = new THREE.Color(escuro() ? 0x0f1620 : 0xcfe3ee);   /* no modo realista o céu substitui o fundo (rlIniciar) */
   const cam = T3.cam = new THREE.PerspectiveCamera(50, 1, 0.5, 20000), ctl = T3.ctl = new THREE.OrbitControls(cam, cv);
   ctl.enableDamping = true; ctl.dampingFactor = 0.12; ctl.mouseButtons = {LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.PAN}; ctl.maxPolarAngle = Math.PI * 0.95;
   cena.add(new THREE.HemisphereLight(0xffffff, 0x8a7a66, 0.95)); const sol = new THREE.DirectionalLight(0xffffff, 0.75); sol.position.set(300, 600, 200); cena.add(sol);
+  if (window.rlIniciar) rlIniciar();   /* ES-04: 3D realista (céu, sol, sombras) */
   const tam = () => { const r = box.getBoundingClientRect(); ren.setSize(r.width, r.height, false); cam.aspect = r.width / Math.max(1, r.height); cam.updateProjectionMatrix(); };
   T3.ro = new ResizeObserver(tam); T3.ro.observe(box); tam();
-  t3Montar(); t3Vista('persp');
+  t3Montar(); t3Vista('persp'); if (window.rlEventos) { rlEventos(); rlPainel(); }
   let t0 = performance.now();
-  const loop = t => { if (!T3.on) return; T3.raf = requestAnimationFrame(loop); const dt = Math.min(0.1, (t - t0) / 1000); t0 = t; t3Anima(dt); ctl.update(); ren.render(cena, cam); t3Rotulos(); };
+  const loop = t => { if (!T3.on) return; T3.raf = requestAnimationFrame(loop); const dt = Math.min(0.1, (t - t0) / 1000); t0 = t; t3Anima(dt); if (RL.andar) rlAndarTick(dt); else ctl.update(); if (RL.t3) { rlTick(RL.t3); rlMede(dt); } ren.render(cena, cam); t3Rotulos(); };
   T3.raf = requestAnimationFrame(loop);
 }
 /* x,y do projeto e cota z → coordenadas do desenho (centrado na origem; Y para cima) */
@@ -1524,6 +1595,7 @@ function t3Montar() {
       G.terr.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({vertexColors: true, side: THREE.DoubleSide}))); } }
   G.vala.visible = T3.vala; G.lig.visible = T3.lig; G.terr.visible = T3.terr;
   T3.geom = ESG.geometria(R); t3Cenario(T3.fator);
+  if (RL.t3) { try { rlCena(); } catch (e) { console.warn('3D realista', e); } }   /* ES-04 */
 }
 /* recalcula só a hidráulica para o fator da barra e redesenha a água */
 function t3Cenario(f) {
@@ -1572,7 +1644,7 @@ function t3Vista(v) {
   const cx = new THREE.Box3().setFromObject(T3.G.tubos).union(new THREE.Box3().setFromObject(T3.G.pvs)), c = cx.getCenter(new THREE.Vector3()), s = cx.getSize(new THREE.Vector3()), raio = Math.max(15, Math.hypot(s.x, s.z) / 2);
   const dir = v === 'topo' ? new THREE.Vector3(0.001, 1, 0.001) : v === 'persp' ? new THREE.Vector3(0.55, 0.62, 0.85) : new THREE.Vector3().subVectors(T3.cam.position, T3.ctl.target);
   dir.normalize(); const dist = raio / Math.tan(T3.cam.fov * Math.PI / 360) * (T3.cam.aspect < 1 ? 1 / T3.cam.aspect : 1) * 1.05;
-  T3.ctl.target.copy(c); T3.cam.position.copy(c).addScaledVector(dir, dist); T3.cam.near = Math.max(0.2, dist / 2000); T3.cam.far = dist * 20; T3.cam.updateProjectionMatrix(); T3.ctl.update();
+  T3.ctl.target.copy(c); T3.cam.position.copy(c).addScaledVector(dir, dist); T3.cam.near = Math.max(0.2, dist / 2000); T3.cam.far = Math.max(dist * 20, RL.t3 && RL.t3.Rcena ? RL.t3.Rcena * 30 : 0); T3.cam.updateProjectionMatrix(); T3.ctl.update();
 }
 function t3Voo(liga) {
   const bt = document.querySelector('[data-t3="voo"]');
@@ -1582,12 +1654,13 @@ function t3Voo(liga) {
   toast('Percorrendo o coletor tronco, da cabeceira ao lançamento. Toque em ⏹ Parar para assumir a câmera.');
 }
 function t3Acao(a) {
+  if (window.rlAcao && rlAcao(a)) return;   /* ES-04: Realista, Cenário, Nível da rua, Andar, PNG, Georreferenciar */
   if (!T3.on && a !== 'cheia') return;
   if (a === 'fit') t3Vista('fit'); else if (a === 'topo' || a === 'persp') t3Vista(a);
-  else if (a === 'rot') { T3.rot = !T3.rot; } else if (a === 'vala') { T3.vala = !T3.vala; T3.G.vala.visible = T3.vala; } else if (a === 'lig') { T3.lig = !T3.lig; T3.G.lig.visible = T3.lig; } else if (a === 'terr') { T3.terr = !T3.terr; T3.G.terr.visible = T3.terr; }
+  else if (a === 'rot') { T3.rot = !T3.rot; } else if (a === 'vala') { T3.vala = !T3.vala; T3.G.vala.visible = T3.vala; } else if (a === 'lig') { T3.lig = !T3.lig; T3.G.lig.visible = T3.lig; } else if (a === 'terr') { T3.terr = !T3.terr; T3.G.terr.visible = T3.terr && !RL.t3; if (T3.G.rlTerr) T3.G.rlTerr.visible = !!(T3.terr && RL.vis.terreno); }
   else if (a === 'fluxo') { T3.fluxo = !T3.fluxo; T3.pontos.visible = T3.fluxo; }
-  else if (a === 'solo') { T3.solo = T3.solo > 0.8 ? 0 : T3.solo > 0.4 ? 1 : T3.solo > 0.1 ? 0.55 : 0.2; T3.M.asf.opacity = T3.M.pas.opacity = T3.solo; T3.G.solo.visible = T3.solo > 0; }
-  else if (a === 'ev') { T3.ev = T3.ev === 1 ? 2 : T3.ev === 2 ? 5 : 1; T3.raiz.scale.y = T3.ev; t3Vista('fit'); }
+  else if (a === 'solo') { RL.soloIni = 1; T3.solo = T3.solo > 0.8 ? 0 : T3.solo > 0.4 ? 1 : T3.solo > 0.1 ? 0.55 : 0.2; T3.M.asf.opacity = T3.M.pas.opacity = T3.solo; T3.G.solo.visible = T3.solo > 0 && !RL.t3; if (RL.t3) rlSolo(); }
+  else if (a === 'ev') { T3.ev = T3.ev === 1 ? 2 : T3.ev === 2 ? 5 : 1; T3.raiz.scale.y = T3.ev; if (RL.t3) rlReconstroi(); t3Vista('fit'); }
   else if (a === 'voo') return t3Voo(!T3.voo);
   else if (a === 'cheia') { const el = $('t3'); if (document.fullscreenElement) document.exitFullscreen(); else if (el.requestFullscreen) el.requestFullscreen(); return; }
   else if (a === 'volta') { $('t3-f').value = Math.round(R.fator * 100); return t3Cenario(R.fator); }
@@ -1595,6 +1668,943 @@ function t3Acao(a) {
     t3Montar(); T3.cam.position.copy(cam); T3.ctl.target.copy(alvo); $('t3-f').value = Math.round(R.fator * 100);
     return toast('Rede redimensionada para ' + Math.round(f * 100) + ' % da vazão: ' + R.nErr + ' erro(s), ' + R.nWarn + ' alerta(s). ↶ desfaz.', 6000); }
   const bt = document.querySelector('[data-t3="' + a + '"]'); if (bt) { if (['rot', 'vala', 'lig', 'fluxo', 'terr'].includes(a)) bt.classList.toggle('on', T3[a]); if (a === 'solo') bt.innerHTML = rotBt('🛣 Rua ' + Math.round(T3.solo * 100) + ' %'); if (a === 'ev') bt.innerHTML = rotBt('↕ ' + T3.ev + '×'); }
+}
+/* ════════════════════════════════════════════════════════════════════
+   ES-04 · 3D REALISTA (as mesmas ferramentas do 3D do Pavimento Intertravado) — só desenho, nenhum cálculo muda.
+   Céu com nuvens e reflexos, Sol (Manhã/Meio-dia/Tarde/Fim de tarde), Qualidade (Baixa…Ultra), texturas com relevo,
+   rua com asfalto e faixa, meio-fio e calçada, terreno com grama, LOTES da planta (os mesmos das ligações) com muros,
+   portões e casas, árvores e coqueiros, grama 3D com vento, horizonte com morros, árvores e postes locados pelo usuário,
+   🚶 andar na rua, vista “nível da rua”, imagem PNG e satélite no chão (com o projeto georreferenciado).
+   O kit (rlCeu*, rlTex2, rlShader, rlMat11, rlBuild, rlMerge, rlModelos, rlHorizonte, rlTick) é cópia do PI-11 do
+   intertravado/index.html com os nomes trocados (pl → rl, _pl → RL) e as preferências em tc_esg_3d_qual / tc_esg_3d_hora.
+   ════════════════════════════════════════════════════════════════════ */
+const RL = {on: (() => { try { return localStorage.getItem('tc_esg_3d_real') !== '0'; } catch (e) { return true; } })(), t3: null, modo: null, sel: null, pan: false, andar: null,
+  vis: Object.assign({calcada: 1, terreno: 1, casas: 1, muros: 1, arvc: 1, grama: 1, horiz: 1, objArv: 1, objPoste: 1, sat: 0, faixa: 1},
+    (() => { try { return JSON.parse(localStorage.getItem('tc_esg_3d_vis') || '{}'); } catch (e) { return {}; } })())};
+function rlSalvaVis() { try { localStorage.setItem('tc_esg_3d_vis', JSON.stringify(RL.vis)); } catch (e) {} }
+const RL_QUAL={baixa:{n:'Baixa',pr:1,sh:0,grama:0,tex:512,env:64,casas:1,arvq:0.4},media:{n:'Média',pr:1.25,sh:1024,grama:9000,tex:1024,env:128,casas:1,arvq:0.7},
+  alta:{n:'Alta',pr:1.75,sh:2048,grama:26000,tex:1024,env:256,casas:1,arvq:1},ultra:{n:'Ultra',pr:2.5,sh:4096,grama:60000,tex:2048,env:256,casas:1,arvq:1.3}};
+const RL_HORAS={manha:{n:'Manhã',el:24,az:80,sol:'#ffe3bf',si:2.0,zen:'#3b74c2',hor:'#d3e2ee',nuv:'#f4f1ec',exp:0.78},
+  dia:{n:'Meio-dia',el:66,az:15,sol:'#fff7ea',si:2.3,zen:'#2c6bc6',hor:'#c6ddf1',nuv:'#ffffff',exp:0.72},
+  tarde:{n:'Tarde',el:34,az:290,sol:'#fff0d9',si:2.15,zen:'#3570c0',hor:'#d0e0ee',nuv:'#fbf6ef',exp:0.76},
+  por:{n:'Fim de tarde',el:8,az:285,sol:'#ffb36e',si:1.75,zen:'#5d86bf',hor:'#f3cfa4',nuv:'#ffe0bf',exp:0.9}};
+function rlMovel(){ try{ return (typeof CFG!=='undefined'&&CFG.device&&/android|iphone/i.test(CFG.device))||('ontouchstart' in window&&Math.min(screen.width,screen.height)<760); }catch(e){ return false; } }
+function rlQualK(){ let k=null; try{ k=localStorage.getItem('tc_esg_3d_qual'); }catch(e){} return RL_QUAL[k]?k:(rlMovel()?'media':'alta'); }
+function rlHoraK(){ let k=null; try{ k=localStorage.getItem('tc_esg_3d_hora'); }catch(e){} return RL_HORAS[k]?k:'manha'; }
+function rlSetQual(k){ try{ localStorage.setItem('tc_esg_3d_qual',k); }catch(e){} RL.tex2={}; if(RL.t3){ RL.t3.qualAplicada=null; } rl3D(true); }
+function rlSetHora(k){ try{ localStorage.setItem('tc_esg_3d_hora',k); }catch(e){} if(RL.t3){ rlCeuAplicar(RL.t3); } }
+function rlLin(c){ return new window.THREE.Color(c).convertSRGBToLinear(); }
+function rlSolDir(h){ const T=window.THREE, el=h.el*Math.PI/180, az=h.az*Math.PI/180; return new T.Vector3(Math.sin(az)*Math.cos(el),Math.sin(el),-Math.cos(az)*Math.cos(el)).normalize(); }
+/* ── céu (shader): degradê, sol, nuvens animadas; o mesmo céu gera o mapa de reflexos ── */
+function rlCeuMat(){
+  const T=window.THREE;
+  return new T.ShaderMaterial({side:T.BackSide,depthWrite:false,depthTest:true,fog:false,
+    uniforms:{uSun:{value:new T.Vector3(0,1,0)},uT:{value:0},uZen:{value:new T.Color()},uHor:{value:new T.Color()},uSol:{value:new T.Color()},uNuv:{value:new T.Color()},uChao:{value:new T.Color()},uDisco:{value:1}},
+    vertexShader:'varying vec3 vD; void main(){ vD=position; vec4 p=projectionMatrix*modelViewMatrix*vec4(position,1.0); gl_Position=p; gl_Position.z=p.w*0.99999; }',
+    fragmentShader:[
+      'uniform vec3 uSun,uZen,uHor,uSol,uNuv,uChao; uniform float uT,uDisco; varying vec3 vD;',
+      'float h2(vec2 p){ return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453); }',
+      'float vn(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.0-2.0*f); return mix(mix(h2(i),h2(i+vec2(1,0)),f.x),mix(h2(i+vec2(0,1)),h2(i+vec2(1,1)),f.x),f.y); }',
+      'float fbm(vec2 p){ float s=0.0,a=0.5; for(int i=0;i<6;i++){ s+=a*vn(p); p=p*2.03+vec2(1.7,9.2); a*=0.5; } return s; }',
+      'void main(){ vec3 d=normalize(vD); float y=d.y; float sd=max(dot(d,uSun),0.0);',
+      ' vec3 c=mix(uHor,uZen,pow(clamp(y,0.0,1.0),0.5));',
+      ' c+=uSol*(pow(sd,6.0)*0.22+pow(sd,48.0)*0.35);',
+      ' c=mix(c,uHor*1.05,exp(-max(y,0.0)*9.0)*0.55);',
+      ' if(y>0.0){ vec2 uv=d.xz/(y+0.18)*1.35+vec2(uT*0.006,uT*0.0025); float n=fbm(uv); float cl=smoothstep(0.52,0.80,n)*smoothstep(0.0,0.18,y);',
+      '   float sh=fbm(uv+uSun.xz*0.06); vec3 cc=uNuv*mix(0.62,1.05,smoothstep(0.35,0.9,1.0-sh+0.3))+uSol*pow(sd,5.0)*0.25; c=mix(c,cc,cl*0.88); }',
+      ' else { c=mix(uHor*0.92,uChao,smoothstep(0.0,0.25,-y)); }',
+      ' c+=uSol*smoothstep(0.99955,0.99975,sd)*12.0*uDisco;',
+      ' gl_FragColor=vec4(c,1.0);',
+      ' #include <tonemapping_fragment>',
+      ' #include <encodings_fragment>',
+      '}'].join('\n')});
+}
+function rlCeuInit(t){
+  const T=window.THREE;
+  t.ceuMat=rlCeuMat(); t.ceu=new T.Mesh(new T.SphereGeometry(10,48,24),t.ceuMat); t.ceu.frustumCulled=false; t.ceu.renderOrder=-10; t.sc.add(t.ceu);
+  t.hemi=new T.HemisphereLight(0xdfefff,0x4f6338,0.12); t.sc.add(t.hemi);
+  t.uT={value:0}; t.relogio=new T.Clock();
+}
+function rlCeuAplicar(t){
+  const T=window.THREE, h=RL_HORAS[rlHoraK()], q=RL_QUAL[rlQualK()], dir=rlSolDir(h);
+  const U=t.ceuMat.uniforms; U.uSun.value.copy(dir); U.uZen.value.copy(rlLin(h.zen)); U.uHor.value.copy(rlLin(h.hor)); U.uSol.value.copy(rlLin(h.sol)); U.uNuv.value.copy(rlLin(h.nuv)); U.uChao.value.copy(rlLin('#6f7a64'));
+  t.solDir=dir; t.sun.color.set(h.sol); t.sun.intensity=h.si; t.rd.toneMappingExposure=h.exp;
+  t.hemi.color.set(h.hor); t.hemi.groundColor.set('#55683f');
+  if(t.sc.fog) t.sc.fog.color.copy(U.uHor.value);
+  /* mapa de reflexos (IBL) a partir do mesmo céu */
+  try{
+    const es=new T.Scene(), m2=t.ceuMat.clone(); m2.uniforms=T.UniformsUtils.clone(t.ceuMat.uniforms); m2.uniforms.uDisco.value=0.35; m2.uniforms.uT.value=0;
+    const sm=new T.Mesh(new T.SphereGeometry(10,32,16),m2); es.add(sm);
+    const pm=t.pmrem||(t.pmrem=new T.PMREMGenerator(t.rd)); const rt=pm.fromScene(es,0.02,0.1,100);
+    if(t.envRT) t.envRT.dispose(); t.envRT=rt; t.sc.environment=rt.texture; sm.geometry.dispose(); m2.dispose();
+  }catch(e){ t.sc.environment=null; }
+  t.precisaSombra=true;
+}
+/* ── texturas com relevo (cor + normal + rugosidade), geradas no programa ── */
+function rlCanvas(N){ const c=document.createElement('canvas'); c.width=c.height=N; return c; }
+function rlRnd(seed){ let s=seed>>>0||1; return ()=>{ s=(s*16807)%2147483647; return s/2147483647; }; }
+function rlNormal(hc,forca){
+  const N=hc.width, src=hc.getContext('2d').getImageData(0,0,N,N).data, out=rlCanvas(N), go=out.getContext('2d'), im=go.createImageData(N,N), o=im.data;
+  const H=(x,y)=>src[((((y%N)+N)%N)*N+(((x%N)+N)%N))*4]/255;
+  for(let y=0;y<N;y++) for(let x=0;x<N;x++){ const dx=(H(x+1,y)-H(x-1,y))*forca, dy=(H(x,y+1)-H(x,y-1))*forca, l=Math.hypot(dx,dy,1), i=(y*N+x)*4;
+    o[i]=(-dx/l*0.5+0.5)*255; o[i+1]=(dy/l*0.5+0.5)*255; o[i+2]=(1/l*0.5+0.5)*255; o[i+3]=255; }
+  go.putImageData(im,0,0); return out;
+}
+function rlTexDe(cv,srgb,aniso){ const T=window.THREE, t=new T.CanvasTexture(cv); t.wrapS=t.wrapT=T.RepeatWrapping; if(srgb) t.encoding=T.sRGBEncoding; t.anisotropy=aniso||1; t.needsUpdate=true; return t; }
+function rlTex2(nome){
+  const cache=RL.tex2||(RL.tex2={}); if(cache[nome]) return cache[nome];
+  const q=RL_QUAL[rlQualK()], an=RL.t3?Math.min(16,RL.t3.rd.capabilities.getMaxAnisotropy()):4;
+  let N=q.tex, cor, alt, rug=null, fn=4, extra={};
+  const R=rlRnd(nome.length*977+13), pon=(g,n,cor1,cor2,smin,smax,W,H,x0,y0)=>{ for(let k=0;k<n;k++){ g.fillStyle=R()<0.5?cor1:cor2; const s=smin+R()*(smax-smin); g.fillRect((x0||0)+R()*(W||N),(y0||0)+R()*(H||N),s,s); } };
+  if(nome==='pav'||nome==='pavCal'){ /* blocos 20×10 cm em fiada: textura = 0,80 × 0,80 m (4 × 8 blocos) */
+    cor=rlCanvas(N); alt=rlCanvas(N); rug=rlCanvas(N); const g=cor.getContext('2d'), ga=alt.getContext('2d'), gr=rug.getContext('2d'), k=N/1024;
+    const rows=8, rh=N/rows, bl=N/4, j=Math.max(2,3*k), ch=Math.max(3,8*k);
+    g.fillStyle=nome==='pav'?'#8a7f6c':'#8f8168'; g.fillRect(0,0,N,N); pon(g,N*N/40,'rgba(60,50,35,.35)','rgba(190,175,140,.35)',1,2.2*k);
+    ga.fillStyle='#000'; ga.fillRect(0,0,N,N); gr.fillStyle='#fff'; gr.fillRect(0,0,N,N);
+    for(let r=0;r<rows;r++){ const off=(r%2)?bl/2:0; for(let c=-1;c<5;c++){ const x=c*bl+off+j, y=r*rh+j, w=bl-2*j, h=rh-2*j;
+      const base=nome==='pav'?(108+R()*30):(140+R()*26), wm=R()<0.12?-14:0, tr=Math.round(base+wm), tint=nome==='pav'?[4,2,-3]:[22,8,-12];
+      g.fillStyle='rgb('+(tr+tint[0])+','+(tr+tint[1])+','+(tr+tint[2])+')'; g.fillRect(x,y,w,h);
+      pon(g,Math.round(w*h/14),'rgba(0,0,0,.10)','rgba(255,255,255,.11)',1,1.8*k,w,h,x,y);
+      pon(g,Math.round(w*h/260),'rgba(40,36,30,.28)','rgba(230,225,215,.22)',1.5*k,3.2*k,w,h,x,y);
+      const gd=g.createLinearGradient(x,y,x+w,y+h); gd.addColorStop(0,'rgba(255,255,255,.05)'); gd.addColorStop(1,'rgba(0,0,0,.07)'); g.fillStyle=gd; g.fillRect(x,y,w,h);
+      for(let s=0;s<ch;s++){ const v=Math.round(90+165*Math.pow((s+1)/ch,0.7)); ga.fillStyle='rgb('+v+','+v+','+v+')'; ga.fillRect(x+s,y+s,w-2*s,h-2*s); }
+      pon(ga,Math.round(w*h/30),'rgba(0,0,0,.08)','rgba(255,255,255,.06)',1,2*k,w-2*ch,h-2*ch,x+ch,y+ch);
+      const rv=Math.round(170+R()*40); gr.fillStyle='rgb('+rv+','+rv+','+rv+')'; gr.fillRect(x+ch*0.5,y+ch*0.5,w-ch,h-ch);
+      g.fillStyle='rgba(0,0,0,.16)'; g.fillRect(x,y+h-1.5*k,w,1.5*k); g.fillRect(x+w-1.5*k,y,1.5*k,h); } }
+    fn=6;
+  }else if(nome==='concreto'||nome==='sarjeta'||nome==='calcConc'){
+    N=Math.min(N,1024); cor=rlCanvas(N); alt=rlCanvas(N); const g=cor.getContext('2d'), ga=alt.getContext('2d');
+    const base={concreto:'#bdbab1',sarjeta:'#a3a39d',calcConc:'#c4c0b6'}[nome]; g.fillStyle=base; g.fillRect(0,0,N,N);
+    for(let k=0;k<40;k++){ const x=R()*N,y=R()*N,r=N*(0.05+R()*0.18), gd=g.createRadialGradient(x,y,0,x,y,r); gd.addColorStop(0,R()<0.5?'rgba(0,0,0,.06)':'rgba(255,255,255,.06)'); gd.addColorStop(1,'rgba(0,0,0,0)'); g.fillStyle=gd; g.fillRect(x-r,y-r,2*r,2*r); }
+    pon(g,N*N/6,'rgba(0,0,0,.07)','rgba(255,255,255,.09)',1,1.6); ga.fillStyle='#808080'; ga.fillRect(0,0,N,N); pon(ga,N*N/5,'rgba(0,0,0,.18)','rgba(255,255,255,.16)',1,2);
+    for(let k=0;k<N*N/900;k++){ const x=R()*N,y=R()*N,s=1+R()*2.5; g.fillStyle='rgba(40,40,40,.35)'; g.fillRect(x,y,s,s); ga.fillStyle='#202020'; ga.fillRect(x,y,s,s); }
+    if(nome==='sarjeta'){ const gd=g.createLinearGradient(0,0,0,N); gd.addColorStop(0,'rgba(60,55,45,.0)'); gd.addColorStop(0.15,'rgba(60,55,45,.22)'); gd.addColorStop(0.45,'rgba(60,55,45,.05)'); g.fillStyle=gd; g.fillRect(0,0,N,N); }
+    g.fillStyle='rgba(30,30,30,.55)'; g.fillRect(0,0,Math.max(2,N/300),N); ga.fillStyle='#000'; ga.fillRect(0,0,Math.max(2,N/300),N); /* junta a cada peça */
+    fn=2.5;
+  }else if(nome==='grama'){
+    N=Math.min(N,1024); cor=rlCanvas(N); alt=rlCanvas(N); const g=cor.getContext('2d'), ga=alt.getContext('2d');
+    g.fillStyle='#4c6f2a'; g.fillRect(0,0,N,N); ga.fillStyle='#000'; ga.fillRect(0,0,N,N);
+    const cores=['#3d5f22','#56792f','#6a8a38','#7d9a45','#8c9a52','#46682a','#5d7d33','#9aa463'];
+    for(let k=0;k<N*N/9;k++){ const x=R()*N,y=R()*N,l=(3+R()*9)*N/1024*2,a=-Math.PI/2+(R()-0.5)*1.2; g.strokeStyle=cores[(R()*cores.length)|0]; g.lineWidth=0.8+R()*1.2; g.beginPath(); g.moveTo(x,y); g.lineTo(x+Math.cos(a)*l,y+Math.sin(a)*l); g.stroke();
+      const v=(80+R()*175)|0; ga.strokeStyle='rgb('+v+','+v+','+v+')'; ga.lineWidth=1; ga.beginPath(); ga.moveTo(x,y); ga.lineTo(x+Math.cos(a)*l,y+Math.sin(a)*l); ga.stroke(); }
+    fn=3;
+  }else if(nome==='terra'){
+    N=Math.min(N,1024); cor=rlCanvas(N); alt=rlCanvas(N); const g=cor.getContext('2d'), ga=alt.getContext('2d');
+    g.fillStyle='#8a6a48'; g.fillRect(0,0,N,N); ga.fillStyle='#707070'; ga.fillRect(0,0,N,N);
+    pon(g,N*N/4,'rgba(60,40,25,.25)','rgba(170,140,105,.22)',1,2.5); pon(ga,N*N/4,'rgba(0,0,0,.2)','rgba(255,255,255,.2)',1,2.5);
+    for(let k=0;k<N*N/350;k++){ const x=R()*N,y=R()*N,r=1.5+R()*4.5, v=(110+R()*90)|0; g.fillStyle='rgb('+(v+20)+','+(v+5)+','+(v-15)+')'; g.beginPath(); g.ellipse(x,y,r,r*0.75,R()*3,0,7); g.fill(); ga.fillStyle='#fff'; ga.beginPath(); ga.ellipse(x,y,r,r*0.75,0,0,7); ga.fill(); }
+    fn=4;
+  }else if(nome==='reboco'){
+    N=512; cor=rlCanvas(N); alt=rlCanvas(N); const g=cor.getContext('2d'), ga=alt.getContext('2d');
+    g.fillStyle='#f2efe8'; g.fillRect(0,0,N,N); pon(g,N*N/3,'rgba(0,0,0,.05)','rgba(255,255,255,.06)',1,2.2);
+    for(let k=0;k<26;k++){ const x=R()*N,y=R()*N,r=N*(0.05+R()*0.2), gd=g.createRadialGradient(x,y,0,x,y,r); gd.addColorStop(0,'rgba(90,80,60,.05)'); gd.addColorStop(1,'rgba(0,0,0,0)'); g.fillStyle=gd; g.fillRect(x-r,y-r,2*r,2*r); }
+    const gd=g.createLinearGradient(0,N,0,N*0.82); gd.addColorStop(0,'rgba(70,60,45,.22)'); gd.addColorStop(1,'rgba(0,0,0,0)'); g.fillStyle=gd; g.fillRect(0,N*0.8,N,N*0.2); /* sujeira de respingo embaixo */
+    ga.fillStyle='#808080'; ga.fillRect(0,0,N,N); pon(ga,N*N/2.5,'rgba(0,0,0,.2)','rgba(255,255,255,.2)',1,3);
+    fn=2.2;
+  }else if(nome==='telha'){
+    N=512; cor=rlCanvas(N); alt=rlCanvas(N); const g=cor.getContext('2d'), ga=alt.getContext('2d'), rows=12, rh=N/rows, tw=N/8;
+    for(let r=0;r<rows;r++) for(let c=0;c<9;c++){ const x=c*tw-(r%2?tw/2:0), y=r*rh, v=0.85+R()*0.3, gd=g.createLinearGradient(x,0,x+tw,0);
+      gd.addColorStop(0,'rgb('+(140*v|0)+','+(62*v|0)+','+(38*v|0)+')'); gd.addColorStop(0.5,'rgb('+(196*v|0)+','+(98*v|0)+','+(60*v|0)+')'); gd.addColorStop(1,'rgb('+(120*v|0)+','+(52*v|0)+','+(32*v|0)+')');
+      g.fillStyle=gd; g.fillRect(x,y,tw,rh); const ha=ga.createLinearGradient(x,0,x+tw,0); ha.addColorStop(0,'#303030'); ha.addColorStop(0.5,'#ffffff'); ha.addColorStop(1,'#303030'); ga.fillStyle=ha; ga.fillRect(x,y,tw,rh);
+      g.fillStyle='rgba(0,0,0,.35)'; g.fillRect(x,y+rh-3,tw,3); ga.fillStyle='#000'; ga.fillRect(x,y+rh-2,tw,2); }
+    pon(g,N*N/5,'rgba(0,0,0,.08)','rgba(255,230,200,.08)',1,1.6);
+    for(let k=0;k<30;k++){ const x=R()*N,y=R()*N,r=N*(0.04+R()*0.12), gd=g.createRadialGradient(x,y,0,x,y,r); gd.addColorStop(0,'rgba(40,40,30,.18)'); gd.addColorStop(1,'rgba(0,0,0,0)'); g.fillStyle=gd; g.fillRect(x-r,y-r,2*r,2*r); }
+    fn=5;
+  }else if(nome==='portao'){
+    N=256; cor=rlCanvas(N); alt=rlCanvas(N); const g=cor.getContext('2d'), ga=alt.getContext('2d');
+    g.fillStyle='#3b3f44'; g.fillRect(0,0,N,N); ga.fillStyle='#000'; ga.fillRect(0,0,N,N);
+    for(let x=0;x<N;x+=16){ g.fillStyle='#585e65'; g.fillRect(x+2,0,9,N); g.fillStyle='rgba(255,255,255,.12)'; g.fillRect(x+2,0,2,N); ga.fillStyle='#fff'; ga.fillRect(x+3,0,7,N); }
+    fn=3;
+  }else if(nome==='casca'){
+    N=256; cor=rlCanvas(N); alt=rlCanvas(N); const g=cor.getContext('2d'), ga=alt.getContext('2d');
+    g.fillStyle='#5a4532'; g.fillRect(0,0,N,N); ga.fillStyle='#777'; ga.fillRect(0,0,N,N);
+    for(let k=0;k<700;k++){ const x=R()*N,y=R()*N,l=10+R()*40,v=(50+R()*70)|0; g.fillStyle='rgb('+(v+25)+','+(v+12)+','+v+')'; g.fillRect(x,y,1.5+R()*2.5,l); ga.fillStyle=R()<0.5?'#222':'#ddd'; ga.fillRect(x,y,2,l); }
+    fn=4;
+  }else if(nome==='folhas'||nome==='palma'){ /* cachos de folhas com transparência (alphaTest) */
+    N=nome==='palma'?512:256; cor=rlCanvas(N); const g=cor.getContext('2d'); g.clearRect(0,0,N,N);
+    if(nome==='folhas'){ for(let k=0;k<170;k++){ const a=R()*Math.PI*2, rr=Math.pow(R(),0.6)*N*0.42, x=N/2+Math.cos(a)*rr, y=N/2+Math.sin(a)*rr, s=N*(0.035+R()*0.03), v=R();
+        g.save(); g.translate(x,y); g.rotate(R()*7); g.fillStyle=v<0.33?'#2f5a1f':v<0.66?'#3f7128':'#5b8a33'; g.beginPath(); g.ellipse(0,0,s,s*0.45,0,0,7); g.fill(); g.strokeStyle='rgba(20,40,10,.5)'; g.lineWidth=0.8; g.beginPath(); g.moveTo(-s,0); g.lineTo(s,0); g.stroke(); g.restore(); } }
+    else { g.strokeStyle='#6b6a2e'; g.lineWidth=N/90; g.beginPath(); g.moveTo(0,N/2); g.quadraticCurveTo(N/2,N/2-N*0.04,N,N/2); g.stroke();
+      for(let k=0;k<56;k++){ const t=k/56, x=t*N, y=N/2-N*0.04*4*t*(1-t), l=N*0.42*Math.sin(Math.PI*Math.min(1,t*1.1+0.08)); [1,-1].forEach(sg=>{ g.strokeStyle=(k%3)?'#4d7a2c':'#3c6824'; g.lineWidth=N/110; g.beginPath(); g.moveTo(x,y); g.lineTo(x+N*0.05,y+sg*l); g.stroke(); }); } }
+    const t=rlTexDe(cor,true,an); return cache[nome]={map:t};
+  }else if(nome==='macro'){
+    N=256; cor=rlCanvas(N); const g=cor.getContext('2d'), im=g.createImageData(N,N);
+    for(let y=0;y<N;y++) for(let x=0;x<N;x++){ let s=0,a=0.5,f=4; for(let o=0;o<5;o++){ s+=a*rlRuido((x/N)*f+o*13.1,(y/N)*f+o*7.7)*1; a*=0.5; f*=2; } /* não é periódico de verdade; borda suavizada abaixo */
+      const v=Math.round(Math.max(0,Math.min(1,s))*255), i=(y*N+x)*4; im.data[i]=im.data[i+1]=im.data[i+2]=v; im.data[i+3]=255; }
+    g.putImageData(im,0,0); const t=rlTexDe(cor,false,1); return cache[nome]={map:t};
+  }
+  const out={map:rlTexDe(cor,true,an),normalMap:alt?rlTexDe(rlNormal(alt,fn),false,an):null,roughnessMap:rug?rlTexDe(rug,false,an):null};
+  return cache[nome]=Object.assign(out,extra);
+}
+/* shader extra: variação de cor em escala grande (quebra a repetição da textura), mistura terra × grama, vento */
+function rlShader(mm,op){
+  const T=window.THREE, t=RL.t3; op=op||{};
+  mm.onBeforeCompile=sh=>{
+    sh.uniforms.uMacro={value:rlTex2('macro').map}; sh.uniforms.uMacS={value:op.macro||40}; sh.uniforms.uMacA={value:op.macA==null?0.35:op.macA}; sh.uniforms.uT=t.uT;
+    if(op.terra){ const tt=rlTex2('terra'); sh.uniforms.uTerra={value:tt.map}; sh.uniforms.uTerraN={value:tt.normalMap}; }
+    sh.vertexShader='varying vec3 vPlW;\n'+(op.terra?'attribute float aTerra; varying float vTerra;\n':'')+(op.vento?'uniform float uT;\n':'')+sh.vertexShader
+      .replace('#include <begin_vertex>','#include <begin_vertex>\n'+(op.vento?
+        '{ vec3 bp=vec3(0.0);\n#ifdef USE_INSTANCING\n bp=vec3(instanceMatrix[3][0],0.0,instanceMatrix[3][2]);\n#endif\n float hgt=max(position.y,0.0)/'+(op.vento.h||1).toFixed(2)+'; float w=sin(uT*1.7+bp.x*0.35+bp.z*0.27)*0.6+sin(uT*3.1+bp.x*0.9)*0.25; transformed.x+=w*hgt*hgt*'+(op.vento.a||0.1).toFixed(3)+'; transformed.z+=w*0.6*hgt*hgt*'+(op.vento.a||0.1).toFixed(3)+'; }':''))
+      .replace('#include <project_vertex>','#include <project_vertex>\n{ vec4 plw=vec4(transformed,1.0);\n#ifdef USE_INSTANCING\n plw=instanceMatrix*plw;\n#endif\n vPlW=(modelMatrix*plw).xyz; }'+(op.terra?' vTerra=aTerra;':''));
+    sh.fragmentShader='varying vec3 vPlW; uniform sampler2D uMacro; uniform float uMacS,uMacA;\n'+(op.terra?'varying float vTerra; uniform sampler2D uTerra; uniform sampler2D uTerraN;\n':'')+sh.fragmentShader
+      .replace('#include <map_fragment>','#include <map_fragment>\n'+(op.terra?'{ vec4 tc=mapTexelToLinear(texture2D(uTerra,vUv*1.3)); float m2=smoothstep(0.15,0.85,vTerra+(texture2D(uMacro,vPlW.xz/9.0).r-0.5)*0.5); diffuseColor.rgb=mix(diffuseColor.rgb,tc.rgb,m2); }\n':'')+
+        '{ float mc=texture2D(uMacro,vPlW.xz/uMacS).r*0.7+texture2D(uMacro,vPlW.xz/(uMacS*0.23)).r*0.3; diffuseColor.rgb*=1.0+(mc-0.5)*uMacA*2.0; }');
+  };
+  mm.customProgramCacheKey=()=>'rl11'+JSON.stringify(op);
+  return mm;
+}
+function rlSombraFolha(k){ const T=window.THREE, c=RL.sf11||(RL.sf11={}); if(c[k]) return c[k]; return c[k]=new T.MeshDepthMaterial({depthPacking:T.RGBADepthPacking,map:rlTex2(k).map,alphaTest:0.42}); }
+function rlMat11(k){
+  const T=window.THREE, c=RL.mat11||(RL.mat11={}); if(c[k]) return c[k];
+  const S=(o)=>{ const m=new T.MeshStandardMaterial(Object.assign({color:0xffffff,roughness:0.9,metalness:0},o)); m.userData.keep=1; return m; };
+  let m;
+  if(k==='pav'||k==='pavCal'){ const t=rlTex2(k); m=rlShader(S({map:t.map,normalMap:t.normalMap,roughnessMap:t.roughnessMap,roughness:1,envMapIntensity:0.7,normalScale:new T.Vector2(1.1,1.1),polygonOffset:true,polygonOffsetFactor:-2,polygonOffsetUnits:-2}),{macro:22,macA:0.03}); }
+  else if(k==='concreto'||k==='sarjeta'||k==='calcConc'){ const t=rlTex2(k); m=rlShader(S({map:t.map,normalMap:t.normalMap,roughness:0.88,envMapIntensity:0.6,normalScale:new T.Vector2(0.6,0.6)}),{macro:18,macA:0.14}); }
+  else if(k==='terreno'){ const t=rlTex2('grama'); m=rlShader(S({map:t.map,normalMap:t.normalMap,vertexColors:true,roughness:1,envMapIntensity:0.45,normalScale:new T.Vector2(0.8,0.8)}),{macro:35,macA:0.32,terra:true}); }
+  else if(k==='terrenoLonge'){ const t=rlTex2('grama'); m=rlShader(S({map:t.map,roughness:1,envMapIntensity:0.4}),{macro:60,macA:0.35}); }
+  else if(k==='parede'){ const t=rlTex2('reboco'); m=S({map:t.map,normalMap:t.normalMap,vertexColors:true,roughness:0.95,side:T.DoubleSide,envMapIntensity:0.5,normalScale:new T.Vector2(0.5,0.5)}); }
+  else if(k==='telha'){ const t=rlTex2('telha'); m=rlShader(S({map:t.map,normalMap:t.normalMap,roughness:0.75,side:T.DoubleSide,envMapIntensity:0.6}),{macro:14,macA:0.2}); }
+  else if(k==='laje'){ const t=rlTex2('concreto'); m=S({map:t.map,color:0x9a9890,roughness:0.95,side:T.DoubleSide}); }
+  else if(k==='vidro') m=S({color:0x23313b,roughness:0.06,metalness:0.1,envMapIntensity:1.8});
+  else if(k==='caixilho') m=S({color:0xe9e9e6,roughness:0.5,metalness:0.2});
+  else if(k==='porta') m=S({color:0x6b4a32,roughness:0.65});
+  else if(k==='portao'){ const t=rlTex2('portao'); m=S({map:t.map,normalMap:t.normalMap,roughness:0.45,metalness:0.55,envMapIntensity:1}); }
+  else if(k==='casca'){ const t=rlTex2('casca'); m=S({map:t.map,normalMap:t.normalMap,roughness:0.95}); }
+  else if(k==='folhas'||k==='palma'){ const t=rlTex2(k); m=rlShader(S({map:t.map,alphaTest:0.42,side:T.DoubleSide,vertexColors:true,roughness:0.78,envMapIntensity:0.5}),{macro:30,macA:0.12,vento:{h:k==='palma'?9:7,a:k==='palma'?0.35:0.22}}); }
+  else if(k==='grama3d') m=rlShader(S({vertexColors:true,side:T.DoubleSide,roughness:0.85,envMapIntensity:0.4}),{macro:30,macA:0.3,vento:{h:0.45,a:0.12}});
+  else if(k==='posteConc'){ const t=rlTex2('concreto'); m=S({map:t.map,color:0xbdbdb6,roughness:0.85}); }
+  else if(k==='metal') m=S({color:0x5b6168,roughness:0.4,metalness:0.7,envMapIntensity:1.1});
+  else if(k==='lente') m=S({color:0xfff6d8,emissive:0xfff0c8,emissiveIntensity:0.35,roughness:0.2});
+  else if(k==='canteiro'){ const t=rlTex2('terra'); m=S({map:t.map,normalMap:t.normalMap,color:0x9a8a78,roughness:1}); }
+  else if(k==='morro') m=new T.MeshBasicMaterial({vertexColors:true,fog:false});
+  else if(k==='sel') m=new T.MeshBasicMaterial({color:0xf59e0b,transparent:true,opacity:0.85,depthTest:false});
+  if(m) m.userData.keep=1;
+  return c[k]=m;
+}
+/* ── construtor de malhas (triângulos soltos → normais por face) ── */
+function rlBuild(){
+  const T=window.THREE, P=[], U=[], C=[], V=new T.Vector3(), V2=new T.Vector3();
+  const api={P,U,C,
+    tri(a,b,c,ua,ub,uc,col){ [a,b,c].forEach(p=>P.push(p.x,p.y,p.z)); U.push(ua[0],ua[1],ub[0],ub[1],uc[0],uc[1]); for(let i=0;i<3;i++) C.push(col.r,col.g,col.b); },
+    /* quad a-b-c-d; out = direção para fora (corrige a ordem); uv em metros/escala */
+    quad(a,b,c,d,out,sx,sy,col){ V.subVectors(b,a); V2.subVectors(c,a); const n=V.clone().cross(V2); let A=a,B=b,Cc=c,Dd=d, ua=[0,0],ub=[sx,0],uc=[sx,sy],ud=[0,sy];
+      if(out&&n.dot(out)<0){ A=a;B=d;Cc=c;Dd=b; ub=[0,sy]; ud=[sx,0]; }
+      api.tri(A,B,Cc,ua,ub,uc,col); api.tri(A,Cc,Dd,ua,uc,ud,col); },
+    geo(){ const g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(P,3)); g.setAttribute('uv',new T.Float32BufferAttribute(U,2)); g.setAttribute('color',new T.Float32BufferAttribute(C,3)); g.computeVertexNormals(); return g; }};
+  return api;
+}
+function rlMerge(lista){
+  const T=window.THREE, P=[], N=[], U=[], C=[];
+  lista.forEach(it=>{ const g=(it.g.index?it.g.toNonIndexed():it.g.clone()); if(it.m) g.applyMatrix4(it.m); const p=g.attributes.position, n=g.attributes.normal, u=g.attributes.uv, c=it.c||{r:1,g:1,b:1};
+    for(let i=0;i<p.count;i++){ P.push(p.getX(i),p.getY(i),p.getZ(i)); if(it.nc){ const q=new T.Vector3(p.getX(i),p.getY(i),p.getZ(i)).sub(it.nc).normalize(); N.push(q.x,q.y,q.z); } else N.push(n?n.getX(i):0,n?n.getY(i):1,n?n.getZ(i):0); U.push(u?u.getX(i):0,u?u.getY(i):0); const f=it.cf?it.cf(p.getY(i)):1; C.push(c.r*f,c.g*f,c.b*f); }
+    g.dispose(); });
+  const g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(P,3)); g.setAttribute('normal',new T.Float32BufferAttribute(N,3)); g.setAttribute('uv',new T.Float32BufferAttribute(U,2)); g.setAttribute('color',new T.Float32BufferAttribute(C,3)); return g;
+}
+/* ── modelos: árvores (3 tipos), palmeira, poste ── */
+function rlModelos(){
+  if(RL.mod11) return RL.mod11;
+  const T=window.THREE, R=rlRnd(4242), M4=()=>new T.Matrix4(), out={};
+  const copa=(cx,cy,cz,rx,ry,n,cores)=>{ const L=[]; for(let k=0;k<n;k++){ const a=R()*Math.PI*2, b=Math.acos(2*R()-1), rr=Math.pow(R(),0.45), x=cx+Math.sin(b)*Math.cos(a)*rx*rr, y=cy+Math.cos(b)*ry*rr, z=cz+Math.sin(b)*Math.sin(a)*rx*rr, s=rx*(0.55+R()*0.35);
+      const m=M4().compose(new T.Vector3(x,y,z),new T.Quaternion().setFromEuler(new T.Euler(R()*3,R()*3,R()*3)),new T.Vector3(s,s,s)); const c=new T.Color(cores[(R()*cores.length)|0]);
+      L.push({g:new T.PlaneGeometry(1,1),m,c,nc:new T.Vector3(cx,cy-ry*0.3,cz)}); } return L; };
+  const tronco=(h,r0,r1,galhos,altG)=>{ const L=[{g:new T.CylinderGeometry(r1,r0,h,9,4),m:M4().makeTranslation(0,h/2,0)}];
+    for(let k=0;k<galhos;k++){ const a=k/galhos*Math.PI*2+R(), l=altG*(0.5+R()*0.4), ang=0.7+R()*0.35, g=new T.CylinderGeometry(r1*0.35,r1*0.6,l,6);
+      const m=M4().compose(new T.Vector3(Math.cos(a)*Math.sin(ang)*l/2,h*0.82+Math.cos(ang)*l/2,Math.sin(a)*Math.sin(ang)*l/2),new T.Quaternion().setFromUnitVectors(new T.Vector3(0,1,0),new T.Vector3(Math.cos(a)*Math.sin(ang),Math.cos(ang),Math.sin(a)*Math.sin(ang))),new T.Vector3(1,1,1)); L.push({g,m}); }
+    return rlMerge(L); };
+  const verdes=['#ffffff','#e9f2dc','#cfe0b5','#f4f0d6','#dfead0'];
+  /* 0: árvore de calçada (oiti), 6,5 m, copa 5 m */
+  out.arv=[{tr:tronco(3.2,0.17,0.12,4,2.6),co:rlMerge(copa(0,4.6,0,2.5,1.8,70,verdes))},
+           {tr:tronco(4.0,0.2,0.14,5,3.0),co:rlMerge(copa(0,5.6,0,3.1,2.2,90,verdes))},
+           {tr:tronco(2.4,0.12,0.09,3,1.8),co:rlMerge(copa(0,3.4,0,1.8,1.5,45,['#ffffff','#dcebc8','#f5f5e0']))}];
+  /* palmeira (coqueiro): tronco curvo + folhas em leque */
+  { const L=[], h=8.5; for(let k=0;k<10;k++){ const y0=k/10*h, y1=(k+1)/10*h, x0=Math.pow(k/10,2)*0.9, x1=Math.pow((k+1)/10,2)*0.9, g=new T.CylinderGeometry(0.13-0.004*(k+1),0.15-0.004*k,y1-y0,8);
+      const dir=new T.Vector3(x1-x0,y1-y0,0).normalize(); L.push({g,m:M4().compose(new T.Vector3((x0+x1)/2,(y0+y1)/2,0),new T.Quaternion().setFromUnitVectors(new T.Vector3(0,1,0),dir),new T.Vector3(1,1,1))}); }
+    const tr=rlMerge(L), F=[];
+    for(let k=0;k<14;k++){ const a=k/14*Math.PI*2+R()*0.3, inc=-0.15-R()*0.65, comp=3.6+R()*1.2, g=new T.PlaneGeometry(comp,1.1); g.translate(comp/2,0,0);
+      const q=new T.Quaternion().setFromEuler(new T.Euler(R()*0.6-0.3+Math.PI/2*0.2,a,inc,'YXZ')); F.push({g,m:M4().compose(new T.Vector3(0.9,h,0),q,new T.Vector3(1,1,1)),c:new T.Color(['#ffffff','#e8efcf','#d7e4b8'][k%3])}); }
+    out.palma={tr,co:rlMerge(F)}; }
+  /* poste de concreto 9 m com braço e luminária LED (braço no +x local) */
+  { const conc=rlMerge([{g:new T.CylinderGeometry(0.085,0.15,9,10),m:M4().makeTranslation(0,4.5,0)},{g:new T.CylinderGeometry(0.2,0.22,0.35,10),m:M4().makeTranslation(0,0.12,0)}]);
+    const q=new T.Quaternion().setFromUnitVectors(new T.Vector3(0,1,0),new T.Vector3(1,0.18,0).normalize());
+    const met=rlMerge([{g:new T.CylinderGeometry(0.035,0.04,2.2,8),m:M4().compose(new T.Vector3(1.05,8.55,0),q,new T.Vector3(1,1,1))},{g:new T.BoxGeometry(0.72,0.11,0.30),m:M4().makeTranslation(2.25,8.78,0)},{g:new T.BoxGeometry(0.1,0.25,0.25),m:M4().makeTranslation(0.05,8.4,0)}]);
+    const len=rlMerge([{g:new T.PlaneGeometry(0.6,0.24),m:M4().compose(new T.Vector3(2.25,8.722,0),new T.Quaternion().setFromEuler(new T.Euler(Math.PI/2,0,0)),new T.Vector3(1,1,1))}]);
+    out.poste={conc,met,len}; }
+  /* grama 3D: tufo de folhas finas (cor da base escura → ponta clara) */
+  { const P=[], C=[], N=[]; for(let k=0;k<9;k++){ const a=R()*Math.PI*2, r=R()*0.09, x=Math.cos(a)*r, z=Math.sin(a)*r, h=0.18+R()*0.3, w=0.012+R()*0.012, b=a+Math.PI/2, bx=Math.cos(b)*w, bz=Math.sin(b)*w, inc=(R()-0.5)*0.25, tx=x+Math.cos(a)*inc*h, tz=z+Math.sin(a)*inc*h;
+      P.push(x-bx,0,z-bz, x+bx,0,z+bz, tx,h,tz); const c0=new T.Color('#2d4a19'), c1=new T.Color(['#7c9a3e','#94a94f','#6d8d34','#a3ad5c'][k%4]); C.push(c0.r,c0.g,c0.b,c0.r,c0.g,c0.b,c1.r,c1.g,c1.b); N.push(0,1,0,0,1,0,0,1,0); }
+    const g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(P,3)); g.setAttribute('color',new T.Float32BufferAttribute(C,3)); g.setAttribute('normal',new T.Float32BufferAttribute(N,3)); out.grama=g; }
+  return RL.mod11=out;
+}
+/* altura do chão (malha do terreno, bilinear) */
+function rlChaoY(t,p){ const m=t.terr; if(!m) return null; const fx=(p[0]-m.x0)/m.cel, fy=(p[1]-m.y0)/m.cel; if(fx<0||fy<0||fx>m.nx||fy>m.ny) return null;
+  const ix=Math.min(m.nx-1,Math.floor(fx)), iy=Math.min(m.ny-1,Math.floor(fy)), tx=fx-ix, ty=fy-iy, w=m.nx+1, h=m.h, a=h[iy*w+ix], b=h[iy*w+ix+1], c=h[(iy+1)*w+ix], d=h[(iy+1)*w+ix+1];
+  /* PI-12: mesma divisão em triângulos da malha desenhada (a,b,c / b,d,c): o que assenta aqui encosta na malha */
+  return (tx+ty<=1)?(a+(b-a)*tx+(c-a)*ty):(d+(c-d)*(1-tx)+(b-d)*(1-ty)); }
+function rlChaoTerra(t,p){ const m=t.terr; if(!m||!m.c) return 0; const ix=Math.round((p[0]-m.x0)/m.cel), iy=Math.round((p[1]-m.y0)/m.cel); if(ix<0||iy<0||ix>m.nx||iy>m.ny) return 0; return m.c[iy*(m.nx+1)+ix]; }
+function rlHorizonte(ctx){
+  const T=window.THREE, t=RL.t3, m=t.terr, grp=ctx.grp, R=ctx.R; if(!m) return;
+  const w=m.nx+1, borda=[]; for(let ix=0;ix<=m.nx;ix++) borda.push([ix,0]); for(let iy=1;iy<=m.ny;iy++) borda.push([m.nx,iy]); for(let ix=m.nx-1;ix>=0;ix--) borda.push([ix,m.ny]); for(let iy=m.ny-1;iy>0;iy--) borda.push([0,iy]);
+  const cx=m.x0+m.nx*m.cel/2, cy=m.y0+m.ny*m.cel/2, hm=borda.reduce((s,b)=>s+m.h[b[1]*w+b[0]],0)/borda.length;
+  const anel=[0,0.35,1.2,4,12].map(f=>f*R+0.0), P=[], U=[], C=[], I=[];
+  borda.forEach(b=>{ const x=m.x0+b[0]*m.cel, y=m.y0+b[1]*m.cel, dx=x-cx, dy=y-cy, l=Math.hypot(dx,dy)||1, h0=m.h[b[1]*w+b[0]];
+    anel.forEach((dd,k)=>{ const px=x+dx/l*dd, py=y+dy/l*dd, f=Math.min(1,k/2), hh=h0+(hm-h0)*f-(k>=3?0.4*k:0); P.push(px,hh,-py); U.push(px/3,py/3); C.push(1,1,1); }); });
+  const na=anel.length; for(let i=0;i<borda.length;i++){ const i2=(i+1)%borda.length; for(let k=0;k<na-1;k++){ const a=i*na+k, b=i2*na+k, c=i*na+k+1, d2=i2*na+k+1; I.push(a,c,b,b,c,d2); } }
+  const g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(P,3)); g.setAttribute('uv',new T.Float32BufferAttribute(U,2)); g.setIndex(I); g.computeVertexNormals();
+  if(g.attributes.normal){ const n=g.attributes.normal; let ny=0; for(let i=0;i<n.count;i++) ny+=n.getY(i); if(ny<0){ I.reverse(); g.setIndex(I); g.computeVertexNormals(); } }
+  const me=new T.Mesh(g,rlMat11('terrenoLonge')); me.receiveShadow=true; grp.add(me); t.chao.push(me);
+  /* morros */
+  const hz=t.ceuMat.uniforms.uHor.value, base=new T.Color('#3f5a35').convertSRGBToLinear(), seg=96, P2=[], C2=[], I2=[], r0=R*9, rnd=rlRnd(77);
+  for(let i=0;i<=seg;i++){ const a=i/seg*Math.PI*2, hh=(rlRuido(i*0.18,3.3)*0.7+rlRuido(i*0.05,9.1)*0.9)*R*0.55+R*0.05, rr=r0*(0.9+rlRuido(i*0.1,5)*0.25);
+    P2.push(cx+Math.cos(a)*rr,hm-2,-(cy+Math.sin(a)*rr), cx+Math.cos(a)*rr,hm+hh,-(cy+Math.sin(a)*rr));
+    const c1=base.clone().lerp(hz,0.72), c2=base.clone().lerp(hz,0.55); C2.push(c1.r,c1.g,c1.b,c2.r,c2.g,c2.b); }
+  for(let i=0;i<seg;i++){ const a=i*2; I2.push(a,a+2,a+1,a+1,a+2,a+3); }
+  const g2=new T.BufferGeometry(); g2.setAttribute('position',new T.Float32BufferAttribute(P2,3)); g2.setAttribute('color',new T.Float32BufferAttribute(C2,3)); g2.setIndex(I2); g2.computeVertexNormals();
+  const mm=rlMat11('morro'); mm.side=T.DoubleSide; const morro=new T.Mesh(g2,mm); morro.renderOrder=-5; grp.add(morro);
+}
+function rlTick(t){
+  if(!t.ceu) return; const dt=t.relogio.getDelta(); t.uT.value+=Math.min(dt,0.1); t.ceuMat.uniforms.uT.value=t.uT.value;
+  t.ceu.position.copy(t.cam.position);
+  const tg=t.ctl.target, dist=t.cam.position.distanceTo(tg), S=Math.max(14,Math.min(t.Rcena*0.9||200,dist*0.95));
+  if(t.solDir&&(t.precisaSombra||!t.sTg||t.sTg.distanceTo(tg)>S*0.08||Math.abs(S-t.sS)/t.sS>0.12)){
+    t.precisaSombra=false; t.sTg=tg.clone(); t.sS=S; const sun=t.sun; sun.position.copy(tg).addScaledVector(t.solDir,S*3); sun.target.position.copy(tg); sun.target.updateMatrixWorld();
+    const c=sun.shadow.camera; c.left=-S; c.right=S; c.top=S; c.bottom=-S; c.near=0.5; c.far=S*7; c.updateProjectionMatrix(); }
+}
+function rlRuido(x,y){ const h=(i,j)=>{ const n=Math.sin(i*127.1+j*311.7)*43758.5453; return n-Math.floor(n); }; const i=Math.floor(x),j=Math.floor(y),fx=x-i,fy=y-j,sx=fx*fx*(3-2*fx),sy=fy*fy*(3-2*fy);
+  const a=h(i,j),b=h(i+1,j),c=h(i,j+1),d=h(i+1,j+1); return a+(b-a)*sx+(c-a)*sy+(a-b-c+d)*sx*sy; }
+/* ══ ES-04 · parte própria do Esgoto ══ */
+/* textura de asfalto (cor + relevo), no mesmo padrão do rlTex2 */
+function rlTexAsf() {
+  const c = RL.tex2 || (RL.tex2 = {}); if (c.asf) return c.asf;
+  const q = RL_QUAL[rlQualK()], N = Math.min(1024, q.tex), cor = rlCanvas(N), alt = rlCanvas(N), g = cor.getContext('2d'), ga = alt.getContext('2d'), R0 = rlRnd(31337);
+  g.fillStyle = '#4b4d50'; g.fillRect(0, 0, N, N); ga.fillStyle = '#707070'; ga.fillRect(0, 0, N, N);
+  for (let k = 0; k < N * N / 3; k++) { const x = R0() * N, y = R0() * N, s = 0.8 + R0() * 1.8, v = (40 + R0() * 90) | 0; g.fillStyle = 'rgba(' + v + ',' + v + ',' + (v + 4) + ',.55)'; g.fillRect(x, y, s, s); ga.fillStyle = R0() < 0.5 ? '#3a3a3a' : '#bdbdbd'; ga.fillRect(x, y, s, s); }
+  for (let k = 0; k < 30; k++) { const x = R0() * N, y = R0() * N, r = N * (0.05 + R0() * 0.2), gd = g.createRadialGradient(x, y, 0, x, y, r); gd.addColorStop(0, R0() < 0.5 ? 'rgba(0,0,0,.10)' : 'rgba(255,255,255,.06)'); gd.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = gd; g.fillRect(x - r, y - r, 2 * r, 2 * r); }
+  const an = RL.t3 ? Math.min(16, RL.t3.rd.capabilities.getMaxAnisotropy()) : 4;
+  return c.asf = {map: rlTexDe(cor, true, an), normalMap: rlTexDe(rlNormal(alt, 3), false, an)};
+}
+/* materiais próprios (não compartilhados com o kit, para a transparência da “Rua %” não mexer nas casas) */
+function rlMatE(k) {
+  const T = THREE, c = RL.matE || (RL.matE = {}); if (c[k]) return c[k];
+  const S = o => { const m = new T.MeshStandardMaterial(Object.assign({color: 0xffffff, roughness: 0.9, metalness: 0}, o)); return m; };
+  let m;
+  if (k === 'asf') { const t = rlTexAsf(); m = rlShader(S({map: t.map, normalMap: t.normalMap, roughness: 0.93, envMapIntensity: 0.5, normalScale: new T.Vector2(0.7, 0.7)}), {macro: 30, macA: 0.12}); }
+  else if (k === 'bloco') { const t = rlTex2('pav'); m = rlShader(S({map: t.map, normalMap: t.normalMap, roughnessMap: t.roughnessMap, roughness: 1, envMapIntensity: 0.7}), {macro: 22, macA: 0.03}); }
+  else if (k === 'terraRua') { const t = rlTex2('terra'); m = S({map: t.map, normalMap: t.normalMap, roughness: 1}); }
+  else if (k === 'calc') { const t = rlTex2('calcConc'); m = rlShader(S({map: t.map, normalMap: t.normalMap, roughness: 0.88, envMapIntensity: 0.6}), {macro: 18, macA: 0.12}); }
+  else if (k === 'mf') { const t = rlTex2('concreto'); m = rlShader(S({map: t.map, normalMap: t.normalMap, color: 0xe4e2dc, roughness: 0.85, envMapIntensity: 0.6}), {macro: 18, macA: 0.1}); }
+  else if (k === 'terr') { const t = rlTex2('grama'); m = rlShader(S({map: t.map, normalMap: t.normalMap, vertexColors: true, roughness: 1, envMapIntensity: 0.45, normalScale: new T.Vector2(0.8, 0.8)}), {macro: 35, macA: 0.32, terra: true}); }
+  else if (k === 'faixa') m = S({color: 0xf1f1ea, roughness: 0.6, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -4});
+  m.side = THREE.DoubleSide; m.userData.solo = 1; return c[k] = m;
+}
+/* transparência da rua/calçada/terreno (botão 🛣 Rua %), para enxergar a rede enterrada */
+function rlSolo() { const o = T3.solo; Object.values(RL.matE || {}).forEach(m => { if (!m.userData.solo) return; m.transparent = o < 0.999; m.opacity = o; m.depthWrite = o >= 0.999; m.needsUpdate = true; });
+  if (RL.terrSat) { const m = RL.terrSat; m.transparent = o < 0.999; m.opacity = o; m.depthWrite = o >= 0.999; m.needsUpdate = true; } }
+/* geometria plana: interseção de retas P1 + d1·s e P2 + d2·t → ponto */
+function rlInter(P1, d1, P2, d2) { const det = d1[0] * d2[1] - d1[1] * d2[0]; if (Math.abs(det) < 1e-9) return null; const s = ((P2[0] - P1[0]) * d2[1] - (P2[1] - P1[1]) * d2[0]) / det; return [P1[0] + d1[0] * s, P1[1] + d1[1] * s]; }
+function rlDentro(p, pl) { let c = false; for (let i = 0, j = pl.length - 1; i < pl.length; j = i++) { const a = pl[i], b = pl[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; }
+/* ruas do 3D: os trechos da rede + ligação curta entre nós colados (cabeceira a poucos metros do cruzamento) */
+function rlRuas() {
+  const c = R.c, w = c.largRua / 2, alin = w + c.largPas, S = [], nos = new Map(P.nos.map(n => [n.id, n])), zNo = id => (R.no[id] ? R.no[id].ct : (+(nos.get(id) || {}).ct || 0));
+  P.trechos.forEach(t => { const r = R.tr[t.id], a = nos.get(t.de), b = nos.get(t.para); if (!a || !b || Math.hypot(b.x - a.x, b.y - a.y) < 0.05) return;
+    S.push({id: t.id, a: t.de, b: t.para, A: [a.x, a.y], B: [b.x, b.y], za: r ? r.ctM : zNo(t.de), zb: r ? r.ctJ : zNo(t.para)}); });
+  const ln = P.nos.filter(n => S.some(s => s.a === n.id || s.b === n.id));
+  ln.forEach((n, i) => ln.slice(i + 1).forEach(m => { const d = Math.hypot(m.x - n.x, m.y - n.y); if (d < 0.05 || d > alin * 1.2) return; if (S.some(s => (s.a === n.id && s.b === m.id) || (s.a === m.id && s.b === n.id))) return;
+    S.push({id: 'v' + n.id + m.id, a: n.id, b: m.id, A: [n.x, n.y], B: [m.x, m.y], za: zNo(n.id), zb: zNo(m.id), virt: 1}); }));
+  S.forEach(s => { const l = Math.hypot(s.B[0] - s.A[0], s.B[1] - s.A[1]); s.l = l; s.u = [(s.B[0] - s.A[0]) / l, (s.B[1] - s.A[1]) / l]; s.n = [-s.u[1], s.u[0]]; });
+  /* estrela de cada nó: direções em ordem anti-horária */
+  const est = new Map(); S.forEach(s => { [[s.a, s.u, 'a'], [s.b, [-s.u[0], -s.u[1]], 'b']].forEach(([no, u, p]) => { if (!est.has(no)) est.set(no, []); est.get(no).push({s, u, p, ang: Math.atan2(u[1], u[0])}); }); });
+  est.forEach(l => l.sort((x, y) => x.ang - y.ang));
+  return {S, est, w, alin, nos, zNo};
+}
+/* cota da rua no ponto (projeção na rua mais próxima) e distância ao eixo; grade de busca */
+function rlIndice(RU) {
+  const CEL = 30, gr = new Map(), k = (i, j) => i + ',' + j;
+  RU.S.forEach(s => { const x0 = Math.min(s.A[0], s.B[0]) - RU.alin, x1 = Math.max(s.A[0], s.B[0]) + RU.alin, y0 = Math.min(s.A[1], s.B[1]) - RU.alin, y1 = Math.max(s.A[1], s.B[1]) + RU.alin;
+    for (let i = Math.floor(x0 / CEL); i <= Math.floor(x1 / CEL); i++) for (let j = Math.floor(y0 / CEL); j <= Math.floor(y1 / CEL); j++) { const q = k(i, j); if (!gr.has(q)) gr.set(q, []); gr.get(q).push(s); } });
+  return (x, y, raio) => { let best = null; const r = raio || 0; const li = new Set();
+    for (let i = Math.floor((x - r) / CEL); i <= Math.floor((x + r) / CEL); i++) for (let j = Math.floor((y - r) / CEL); j <= Math.floor((y + r) / CEL); j++) (gr.get(k(i, j)) || []).forEach(s => li.add(s));
+    li.forEach(s => { const ex = s.B[0] - s.A[0], ey = s.B[1] - s.A[1], l2 = ex * ex + ey * ey || 1e-9; let t = ((x - s.A[0]) * ex + (y - s.A[1]) * ey) / l2; t = Math.max(0, Math.min(1, t));
+      const px = s.A[0] + t * ex, py = s.A[1] + t * ey, d = Math.hypot(x - px, y - py); if (!best || d < best.d) best = {d, s, t, px, py, z: s.za + (s.zb - s.za) * t}; });
+    return best; };
+}
+/* linha de corte da calçada na ponta de uma rua (nó, direção de saída i, lado 'L' esquerda / 'R' direita) */
+function rlCorte(RU, no, i, lado) {
+  const l = RU.est.get(no), N = [RU.nos.get(no).x, RU.nos.get(no).y], d = l[i], n = l.length;
+  if (n === 1) return {P: N, d: [-d.u[1], d.u[0]]};                       /* ponta morta: corte reto */
+  const j = lado === 'L' ? (i + 1) % n : (i - 1 + n) % n, e = l[j];
+  let th = lado === 'L' ? e.ang - d.ang : d.ang - e.ang; while (th <= 0) th += 2 * Math.PI;
+  if (th < Math.PI * 0.97) {                                               /* esquina: corta no alinhamento da rua vizinha (do lado desta quadra) */
+    const ne = lado === 'L' ? [e.u[1], -e.u[0]] : [-e.u[1], e.u[0]];      /* normal da vizinha apontando para a quadra */
+    return {P: [N[0] + ne[0] * RU.alin, N[1] + ne[1] * RU.alin], d: e.u, esq: true};
+  }
+  /* continuação ou canto convexo: corte na bissetriz (as duas calçadas se encontram em meia-esquadria) */
+  const a = (lado === 'L' ? d.ang + th / 2 : d.ang - th / 2); return {P: N, d: [Math.cos(a), Math.sin(a)]};
+}
+/* terreno: grade com cota interpolada (IDW) que encosta no fim da calçada; buracos onde está a rua */
+function rlTerreno(RU, idx, ctx) {
+  const T = THREE, L = ctx.L, M = ctx.M, cel = Math.max(1.5, Math.min(4, Math.sqrt((L.w + 2 * M) * (L.h + 2 * M) / 40000))), nx = Math.ceil((L.w + 2 * M) / cel), ny = Math.ceil((L.h + 2 * M) / cel), x0 = L.x - M, y0 = L.y - M;
+  const pts = P.nos.map(n => ({x: n.x, y: n.y, z: R.no[n.id] ? R.no[n.id].ct : +n.ct || 0})).concat(P.topo.map(q => ({x: q.x, y: q.y, z: +q.z || 0})));
+  P.ruas.forEach(r => r.pts.forEach(q => { if (q.z != null && q.z !== '') pts.push({x: q.x, y: q.y, z: +q.z}); }));
+  const W = nx + 1, X = new Float32Array((nx + 1) * (ny + 1)), Y = new Float32Array(X.length), H = new Float32Array(X.length), dentro = new Uint8Array(X.length), terra = new Float32Array(X.length);
+  for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) { const k = j * W + i; let x = x0 + i * cel, y = y0 + j * cel; let z = pts.length ? ESG.idw(pts, x, y) : 0;
+    const q = idx(x, y, RU.alin + 12);
+    if (q) { if (q.d < RU.alin) { dentro[k] = q.d < RU.alin - 0.05 ? 1 : 0; const f = q.d > 0.01 ? RU.alin / q.d : 0; if (f) { x = q.px + (x - q.px) * f; y = q.py + (y - q.py) * f; } z = q.z + 0.15; }
+      else if (q.d < RU.alin + 12) { const f = (q.d - RU.alin) / 12, s = f * f * (3 - 2 * f); z = (q.z + 0.15) * (1 - s) + z * s; } }
+    X[k] = x; Y[k] = y; H[k] = z; }
+  for (let j = 0; j <= ny; j++) for (let i = 0; i <= nx; i++) { const k = j * W + i, a = H[j * W + Math.min(nx, i + 1)] - H[j * W + Math.max(0, i - 1)], b = H[Math.min(ny, j + 1) * W + i] - H[Math.max(0, j - 1) * W + i]; terra[k] = Math.max(0, Math.min(1, Math.hypot(a, b) / (2 * cel) * 2.2 - 0.35)); }
+  const pos = [], uv = [], col = [], at = [], ind = [];
+  for (let k = 0; k < X.length; k++) { const p = P3(X[k], Y[k], H[k]); pos.push(p.x, p.y, p.z); uv.push(X[k] / 3, Y[k] / 3); col.push(1, 1, 1); at.push(terra[k]); }
+  for (let j = 0; j < ny; j++) for (let i = 0; i < nx; i++) { const a = j * W + i, b = a + 1, c = a + W, d = c + 1;
+    const tri = (p, q, r) => { if (dentro[p] && dentro[q] && dentro[r]) return; const cx = (X[p] + X[q] + X[r]) / 3, cy = (Y[p] + Y[q] + Y[r]) / 3, z = idx(cx, cy, RU.alin); if (z && z.d < RU.alin - 0.06) return; ind.push(p, q, r); };
+    tri(a, c, b); tri(b, c, d); }
+  const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); g.setAttribute('color', new T.Float32BufferAttribute(col, 3)); g.setAttribute('aTerra', new T.Float32BufferAttribute(at, 1)); g.setIndex(ind); g.computeVertexNormals();
+  { const nn = g.attributes.normal; let s = 0; for (let i = 0; i < nn.count; i++) s += nn.getY(i); if (s < 0) { for (let i = 0; i < ind.length; i += 3) { const t = ind[i]; ind[i] = ind[i + 1]; ind[i + 1] = t; } g.setIndex(ind); g.computeVertexNormals(); } }
+  /* t.terr no formato do kit (para o horizonte): local, cotas − z0 */
+  const hl = new Float32Array(H.length); for (let k = 0; k < H.length; k++) hl[k] = H[k] - T3.z0;
+  RL.t3.terr = {x0: x0 - T3.cx, y0: y0 - T3.cy, cel, nx, ny, h: hl};
+  RL.grade = {x0, y0, cel, nx, ny, H, X, Y};
+  return g;
+}
+/* cota do chão (m) num ponto do projeto, pela grade do terreno */
+function rlChao(x, y) { const m = RL.grade; if (!m) return null; const fx = (x - m.x0) / m.cel, fy = (y - m.y0) / m.cel; if (fx < 0 || fy < 0 || fx > m.nx || fy > m.ny) return null;
+  const ix = Math.min(m.nx - 1, Math.floor(fx)), iy = Math.min(m.ny - 1, Math.floor(fy)), tx = fx - ix, ty = fy - iy, w = m.nx + 1, h = m.H, a = h[iy * w + ix], b = h[iy * w + ix + 1], c = h[(iy + 1) * w + ix], d = h[(iy + 1) * w + ix + 1];
+  return (tx + ty <= 1) ? (a + (b - a) * tx + (c - a) * ty) : (d + (c - d) * (1 - tx) + (b - d) * (1 - ty)); }
+/* rua (pista, nós), calçada, meio-fio e faixa central */
+function rlRua(RU, grp) {
+  const T = THREE, w = RU.w, al = RU.alin, mf = 0.15, bmf = 0.13, B = {pis: rlBuild(), cal: rlBuild(), mf: rlBuild(), fx: rlBuild()}, br = new T.Color(1, 1, 1), up = new T.Vector3(0, 1, 0);
+  const W = (p, z) => P3(p[0], p[1], z), pav = R.c.pav === 'intertravado' || R.c.pav === 'paralelo' ? 'bloco' : R.c.pav === 'terra' ? 'terraRua' : 'asf';
+  const uvq = (a, b, c, d, out, bld) => { /* quad com UV no mundo (as texturas casam entre peças vizinhas) */
+    const V = [a, b, c, d], U = V.map(v => [(v.x + T3.cx) / 4, (-v.z + T3.cy) / 4]); const n = new T.Vector3().subVectors(b, a).cross(new T.Vector3().subVectors(c, a));
+    if (n.dot(out) < 0) { bld.tri(a, d, c, U[0], U[3], U[2], br); bld.tri(a, c, b, U[0], U[2], U[1], br); } else { bld.tri(a, b, c, U[0], U[1], U[2], br); bld.tri(a, c, d, U[0], U[2], U[3], br); } };
+  const lin = (P0, d, o, n) => [P0[0] + n[0] * o, P0[1] + n[1] * o];   /* ponto da reta deslocada */
+  RU.S.forEach(s => {
+    const zA = s.za, zB = s.zb, z = p => { const t = Math.max(0, Math.min(1, ((p[0] - s.A[0]) * s.u[0] + (p[1] - s.A[1]) * s.u[1]) / s.l)); return zA + (zB - zA) * t; };
+    /* pista inteira de nó a nó (no cruzamento as pistas se sobrepõem com a mesma textura no mundo) */
+    const a1 = lin(s.A, 0, w, s.n), a2 = lin(s.A, 0, -w, s.n), b1 = lin(s.B, 0, w, s.n), b2 = lin(s.B, 0, -w, s.n);
+    uvq(W(a2, zA), W(b2, zB), W(b1, zB), W(a1, zA), up, B.pis);
+    /* faixa central tracejada (3 m pintados, 3 m sem), longe dos cruzamentos */
+    if (RL.vis.faixa && !s.virt && R.c.pav !== 'terra') { const ea = RU.est.get(s.a).length > 2 ? al + 1 : 1, eb = RU.est.get(s.b).length > 2 ? al + 1 : 1;
+      for (let x = ea; x + 3 <= s.l - eb; x += 6) { const p0 = [s.A[0] + s.u[0] * x, s.A[1] + s.u[1] * x], p1 = [p0[0] + s.u[0] * 3, p0[1] + s.u[1] * 3], o = 0.06;
+        uvq(W(lin(p0, 0, -o, s.n), z(p0) + 0.004), W(lin(p1, 0, -o, s.n), z(p1) + 0.004), W(lin(p1, 0, o, s.n), z(p1) + 0.004), W(lin(p0, 0, o, s.n), z(p0) + 0.004), up, B.fx); } }
+    if (!RL.vis.calcada) return;
+    /* calçada e meio-fio dos dois lados, cortados nas pontas */
+    const iA = RU.est.get(s.a).findIndex(e => e.s === s && e.p === 'a'), iB = RU.est.get(s.b).findIndex(e => e.s === s && e.p === 'b');
+    [['L', 1], ['R', -1]].forEach(([lado, sg]) => {
+      const cA = rlCorte(RU, s.a, iA, lado), cB = rlCorte(RU, s.b, iB, lado === 'L' ? 'R' : 'L'), nn = [s.n[0] * sg, s.n[1] * sg];
+      const pt = (o, c) => rlInter(lin(s.A, 0, o, nn), s.u, c.P, c.d) || lin(c.P, 0, o, nn);
+      const i0 = pt(w, cA), i1 = pt(w, cB), m0 = pt(w + bmf, cA), m1 = pt(w + bmf, cB), o0 = pt(al, cA), o1 = pt(al, cB);
+      if (((i1[0] - i0[0]) * s.u[0] + (i1[1] - i0[1]) * s.u[1]) < 0.05) return;
+      const out3 = new T.Vector3(-nn[0], 0, nn[1]);   /* face do meio-fio olha para a pista */
+      uvq(W(i0, z(i0)), W(i1, z(i1)), W(i1, z(i1) + mf), W(i0, z(i0) + mf), out3, B.mf);                  /* espelho do meio-fio */
+      uvq(W(i0, z(i0) + mf), W(i1, z(i1) + mf), W(m1, z(m1) + mf), W(m0, z(m0) + mf), up, B.mf);          /* topo do meio-fio */
+      uvq(W(m0, z(m0) + mf), W(m1, z(m1) + mf), W(o1, z(o1) + mf), W(o0, z(o0) + mf), up, B.cal);         /* calçada */
+      uvq(W(o0, z(o0) + mf), W(o1, z(o1) + mf), W(o1, z(o1) - 0.35), W(o0, z(o0) - 0.35), out3.clone().negate(), B.cal);   /* saia (esconde frestas) */
+    });
+  });
+  /* nós: pista no cruzamento (polígono dos cantos do meio-fio) e calçada do canto */
+  RU.est.forEach((l, no) => { const N = [RU.nos.get(no).x, RU.nos.get(no).y], zN = RU.zNo(no), n = l.length; if (n < 2) return;
+    const cant = [];
+    for (let i = 0; i < n; i++) { const d = l[i], e = l[(i + 1) % n]; let th = e.ang - d.ang; while (th <= 0) th += 2 * Math.PI;
+      const nd = [-d.u[1], d.u[0]], ne = [e.u[1], -e.u[0]];
+      const k = Math.abs(th - Math.PI) < 0.09 ? lin(N, 0, w, nd) : rlInter(lin(N, 0, w, nd), d.u, lin(N, 0, w, ne), e.u); if (k) cant.push(k);
+      if (th < Math.PI * 0.97 && RL.vis.calcada) {   /* canto de quadra: calçada entre os meios-fios e os alinhamentos */
+        const cc = rlInter(lin(N, 0, w, nd), d.u, lin(N, 0, w, ne), e.u), c1 = rlInter(lin(N, 0, w, nd), d.u, lin(N, 0, al, ne), e.u), aa = rlInter(lin(N, 0, al, nd), d.u, lin(N, 0, al, ne), e.u), c2 = rlInter(lin(N, 0, al, nd), d.u, lin(N, 0, w, ne), e.u);
+        if (cc && c1 && aa && c2 && Math.hypot(aa[0] - N[0], aa[1] - N[1]) < al * 6) {
+          const m1 = rlInter(lin(N, 0, w + bmf, nd), d.u, lin(N, 0, w + bmf, ne), e.u), q1 = rlInter(lin(N, 0, w + bmf, nd), d.u, lin(N, 0, al, ne), e.u), q2 = rlInter(lin(N, 0, al, nd), d.u, lin(N, 0, w + bmf, ne), e.u);
+          uvq(W(m1, zN + mf), W(q1, zN + mf), W(aa, zN + mf), W(q2, zN + mf), up, B.cal);
+          uvq(W(cc, zN + mf), W(c1, zN + mf), W(q1, zN + mf), W(m1, zN + mf), up, B.mf); uvq(W(cc, zN + mf), W(m1, zN + mf), W(q2, zN + mf), W(c2, zN + mf), up, B.mf);
+          const o1 = new T.Vector3(-nd[0], 0, nd[1]), o2 = new T.Vector3(-ne[0], 0, ne[1]);
+          uvq(W(c1, zN), W(cc, zN), W(cc, zN + mf), W(c1, zN + mf), o1, B.mf); uvq(W(cc, zN), W(c2, zN), W(c2, zN + mf), W(cc, zN + mf), o2, B.mf); } } }
+    if (cant.length > 2) for (let i = 0; i < cant.length; i++) { const a = cant[i], b = cant[(i + 1) % cant.length]; const pa = W(N, zN - 0.003), pb = W(a, zN - 0.003), pc = W(b, zN - 0.003);
+      const U = [pa, pb, pc].map(v => [(v.x + T3.cx) / 4, (-v.z + T3.cy) / 4]); const nrm = new T.Vector3().subVectors(pb, pa).cross(new T.Vector3().subVectors(pc, pa));
+      if (nrm.y > 0) B.pis.tri(pa, pb, pc, U[0], U[1], U[2], br); else B.pis.tri(pa, pc, pb, U[0], U[2], U[1], br); } });
+  const mk = (b, k, sombra) => { if (!b.P.length) return; const me = new T.Mesh(b.geo(), rlMatE(k)); me.receiveShadow = true; me.castShadow = !!sombra; grp.add(me); RL.t3.chao.push(me); return me; };
+  mk(B.pis, pav); mk(B.cal, 'calc', true); mk(B.mf, 'mf', true); mk(B.fx, 'faixa');
+}
+/* lotes da planta (os mesmos das ligações prediais): muros com portão, casas, quintais com árvores */
+function rlLotes(RU, idx, grp) {
+  const T = THREE, q = RL_QUAL[rlQualK()], rnd = rlRnd(9173), B = {par: rlBuild(), mur: rlBuild(), tel: rlBuild(), laj: rlBuild(), vid: rlBuild(), cx: rlBuild(), por: rlBuild(), pto: rlBuild()};
+  const br = new T.Color(1, 1, 1), up = new T.Vector3(0, 1, 0), v3 = (x, y) => new T.Vector3(x, 0, -y), W = (p, z) => P3(p[0], p[1], z);
+  const CORES = ['#f1ece2', '#e9dcc2', '#f3e4b8', '#e8c9a8', '#dfe6e1', '#f0d9c9', '#d9e1ea', '#efe8d0', '#e4d4b4', '#c9d6c2', '#f5f1ea', '#e6c8b0'].map(c => new T.Color(c).convertSRGBToLinear());
+  const CMURO = ['#e6e1d6', '#d8cfbf', '#cfc6b4', '#e9e4da', '#c7c0b2', '#ddd2bd'].map(c => new T.Color(c).convertSRGBToLinear());
+  const chao = (x, y) => { const z = rlChao(x, y); if (z != null) return z; const r = idx(x, y, 60); return r ? r.z + 0.15 : null; };
+  /* muros: cada divisa só uma vez (pedaços de ~2 m; pedaço já feito a menos de 0,5 m é pulado) */
+  const feitos = new Map(), CEL = 4, kk = (x, y) => Math.floor(x / CEL) + ',' + Math.floor(y / CEL);
+  const jaTem = (m, dir) => { const cx = Math.floor(m[0] / CEL), cy = Math.floor(m[1] / CEL); for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const o of (feitos.get((cx + i) + ',' + (cy + j)) || [])) if (Math.hypot(o[0] - m[0], o[1] - m[1]) < 0.5 && Math.abs(o[2] * dir[0] + o[3] * dir[1]) > 0.9) return true; return false; };
+  const marca = (m, dir) => { const k = kk(m[0], m[1]); if (!feitos.has(k)) feitos.set(k, []); feitos.get(k).push([m[0], m[1], dir[0], dir[1]]); };
+  const muro = (p0, p1, h, cor, portao) => { const L = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]); if (L < 0.2) return; const d = [(p1[0] - p0[0]) / L, (p1[1] - p0[1]) / L], n = [-d[1], d[0]], e = 0.075, nS = Math.max(1, Math.round(L / 2));
+    for (let k = 0; k < nS; k++) { const a = [p0[0] + d[0] * L * k / nS, p0[1] + d[1] * L * k / nS], b = [p0[0] + d[0] * L * (k + 1) / nS, p0[1] + d[1] * L * (k + 1) / nS], m = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      if (!portao && jaTem(m, d)) continue; marca(m, d); const za = chao(a[0], a[1]), zb = chao(b[0], b[1]); if (za == null || zb == null) continue;
+      const A = s => [a[0] + n[0] * e * s, a[1] + n[1] * e * s], Bp = s => [b[0] + n[0] * e * s, b[1] + n[1] * e * s], on = v3(n[0], n[1]), ln = (L / nS) / 2;
+      const gate = portao && portao(m);
+      if (gate) { B.pto.quad(W(A(-1.05), za + 0.02), W(Bp(-1.05), zb + 0.02), W(Bp(-1.05), zb + h - 0.1), W(A(-1.05), za + h - 0.1), on.clone().negate(), ln / 0.6, (h - 0.1) / 1.2, br);
+        B.mur.quad(W(A(-1), za + h - 0.1), W(Bp(-1), zb + h - 0.1), W(Bp(1), zb + h), W(A(1), za + h), up, ln, 0.1, cor); continue; }
+      B.mur.quad(W(A(1), za - 0.3), W(Bp(1), zb - 0.3), W(Bp(1), zb + h), W(A(1), za + h), on, ln, (h + 0.3) / 2, cor);
+      B.mur.quad(W(A(-1), za - 0.3), W(Bp(-1), zb - 0.3), W(Bp(-1), zb + h), W(A(-1), za + h), on.clone().negate(), ln, (h + 0.3) / 2, cor);
+      B.mur.quad(W(A(-1), za + h), W(Bp(-1), zb + h), W(Bp(1), zb + h), W(A(1), za + h), up, ln, 0.1, cor);
+      if (k === 0) B.mur.quad(W(A(-1), za - 0.3), W(A(1), za - 0.3), W(A(1), za + h), W(A(-1), za + h), v3(-d[0], -d[1]), 0.1, 1, cor);
+      if (k === nS - 1) B.mur.quad(W(Bp(-1), zb - 0.3), W(Bp(1), zb - 0.3), W(Bp(1), zb + h), W(Bp(-1), zb + h), v3(d[0], d[1]), 0.1, 1, cor); } };
+  const arvPos = [], palPos = [], casas = [];
+  const lotes = (R.ok ? ESG.ligacoes(P, R) : []).slice(0, 4000);
+  lotes.forEach(o => { const l = o.lote, n = [o.nx, o.ny], e = [o.ex, o.ey], w = Math.hypot(l[1][0] - l[0][0], l[1][1] - l[0][1]), D = o.D;
+    /* n vai de l[0] para l[1] */ const nn = [(l[1][0] - l[0][0]) / (w || 1), (l[1][1] - l[0][1]) / (w || 1)];
+    const F = (a, u) => [l[0][0] + nn[0] * a + e[0] * u, l[0][1] + nn[1] * a + e[1] * u];
+    const cm = CMURO[(rnd() * CMURO.length) | 0], hm = 1.9 + rnd() * 0.4;
+    if (RL.vis.muros) {
+      const g0 = w * (rnd() < 0.5 ? 0.12 : 0.62), g1 = g0 + Math.min(3.2, w * 0.28);
+      muro(F(0, 0.08), F(w, 0.08), hm, cm, m => { const a = (m[0] - l[0][0]) * nn[0] + (m[1] - l[0][1]) * nn[1]; return a > g0 && a < g1; });
+      muro(F(w, 0), F(w, D), 2.0, cm); muro(F(0, 0), F(0, D), 2.0, cm); muro(F(0, D), F(w, D), 2.0, cm);
+    }
+    /* casa */
+    let casa = null;
+    if (RL.vis.casas && w >= 6.5 && D >= 11 && rnd() < 0.9) {
+      const larg = Math.min(w - 2.6, 7 + rnd() * 3), aA = (w - larg) / 2 + (rnd() - 0.5) * 0.8, aB = aA + larg, u0 = 3 + rnd() * 2.5, pr = Math.min(8 + rnd() * 4, D - u0 - 2), u1 = u0 + pr;
+      if (pr >= 5.5) { const amos = [0, 0.5, 1].flatMap(fa => [0, 0.5, 1].map(fb => { const p = F(aA + (aB - aA) * fa, u0 + (u1 - u0) * fb); return chao(p[0], p[1]); }));
+        if (amos.every(z => z != null)) {
+          const V = (a, u, z) => W(F(a, u), z), zb = Math.max(...amos) + 0.12, zf = Math.min(...amos) - 0.4, and = rnd() < 0.25 ? 2 : 1, hp = 2.9, zt = zb + hp * and, cor = CORES[(rnd() * CORES.length) | 0], tipo = rnd(), ov = 0.55;
+          const pfr = v3(-e[0], -e[1]), pfu = v3(e[0], e[1]), pa = v3(-nn[0], -nn[1]), pb = v3(nn[0], nn[1]);
+          const parede = zTop => { B.par.quad(V(aA, u0, zf), V(aB, u0, zf), V(aB, u0, zTop), V(aA, u0, zTop), pfr, larg / 2, (zTop - zf) / 2, cor); B.par.quad(V(aA, u1, zf), V(aB, u1, zf), V(aB, u1, zTop), V(aA, u1, zTop), pfu, larg / 2, (zTop - zf) / 2, cor);
+            B.par.quad(V(aA, u0, zf), V(aA, u1, zf), V(aA, u1, zTop), V(aA, u0, zTop), pa, pr / 2, (zTop - zf) / 2, cor); B.par.quad(V(aB, u0, zf), V(aB, u1, zf), V(aB, u1, zTop), V(aB, u0, zTop), pb, pr / 2, (zTop - zf) / 2, cor); };
+          if (tipo < 0.28) { parede(zt + 0.8); B.laj.quad(V(aA, u0, zt + 0.55), V(aB, u0, zt + 0.55), V(aB, u1, zt + 0.55), V(aA, u1, zt + 0.55), up, larg / 2, pr / 2, br);
+            B.par.quad(V(aA, u0, zt + 0.8), V(aB, u0, zt + 0.8), V(aB, u0 + 0.15, zt + 0.8), V(aA, u0 + 0.15, zt + 0.8), up, 1, 0.1, cor); B.par.quad(V(aA, u1 - 0.15, zt + 0.8), V(aB, u1 - 0.15, zt + 0.8), V(aB, u1, zt + 0.8), V(aA, u1, zt + 0.8), up, 1, 0.1, cor); }
+          else { parede(zt); const p0 = [aA - ov, u0 - ov], p1 = [aB + ov, u1 + ov], zE = zt - 0.05, pit = 0.32 + rnd() * 0.12, um = (u0 + u1) / 2;
+            if (tipo < 0.62) { const zR = zE + (um - p0[1]) * pit;
+              B.tel.quad(V(p0[0], p0[1], zE), V(p1[0], p0[1], zE), V(p1[0], um, zR), V(p0[0], um, zR), pfr.clone().add(up), (p1[0] - p0[0]) / 2, (um - p0[1]) / 2, br);
+              B.tel.quad(V(p0[0], um, zR), V(p1[0], um, zR), V(p1[0], p1[1], zE), V(p0[0], p1[1], zE), pfu.clone().add(up), (p1[0] - p0[0]) / 2, (p1[1] - um) / 2, br);
+              [aA, aB].forEach(a => B.par.tri(V(a, u0, zt), V(a, u1, zt), V(a, um, zt + (um - u0) * pit), [0, 0], [1, 0], [0.5, 0.5], cor)); }
+            else { const hw = (p1[1] - p0[1]) / 2, zR = zE + hw * pit, ea2 = Math.min((p0[0] + p1[0]) / 2, p0[0] + hw), eb2 = Math.max((p0[0] + p1[0]) / 2, p1[0] - hw);
+              B.tel.quad(V(p0[0], p0[1], zE), V(p1[0], p0[1], zE), V(eb2, um, zR), V(ea2, um, zR), pfr.clone().add(up), (p1[0] - p0[0]) / 2, hw / 2, br);
+              B.tel.quad(V(ea2, um, zR), V(eb2, um, zR), V(p1[0], p1[1], zE), V(p0[0], p1[1], zE), pfu.clone().add(up), (p1[0] - p0[0]) / 2, hw / 2, br);
+              const tA = [V(p0[0], p0[1], zE), V(ea2, um, zR), V(p0[0], p1[1], zE)], tB = [V(p1[0], p1[1], zE), V(eb2, um, zR), V(p1[0], p0[1], zE)];
+              const tri = (x, y, z, o) => { const nr = new T.Vector3().subVectors(y, x).cross(new T.Vector3().subVectors(z, x)); if (nr.dot(o) < 0) B.tel.tri(x, z, y, [0, 0], [hw, 0], [hw / 2, hw / 2], br); else B.tel.tri(x, y, z, [0, 0], [hw / 2, hw / 2], [hw, 0], br); };
+              tri(tA[0], tA[1], tA[2], pa.clone().add(up)); tri(tB[0], tB[1], tB[2], pb.clone().add(up)); }
+            B.laj.quad(V(p0[0], p0[1], zE - 0.02), V(p1[0], p0[1], zE - 0.02), V(p1[0], p1[1], zE - 0.02), V(p0[0], p1[1], zE - 0.02), new T.Vector3(0, -1, 0), 1, 1, br); }
+          /* janelas e porta (fachada voltada para a rua) e janelas nas laterais */
+          const jan = (a0, a1, za, zb2, uu, o) => { B.cx.quad(V(a0 - 0.07, uu - 0.012, za - 0.07), V(a1 + 0.07, uu - 0.012, za - 0.07), V(a1 + 0.07, uu - 0.012, zb2 + 0.07), V(a0 - 0.07, uu - 0.012, zb2 + 0.07), o, 1, 1, br);
+            B.vid.quad(V(a0, uu - 0.03, za), V(a1, uu - 0.03, za), V(a1, uu - 0.03, zb2), V(a0, uu - 0.03, zb2), o, 1, 1, br); };
+          for (let f = 0; f < and; f++) { const zz = zb + f * hp, nj = larg > 8.5 ? 3 : 2; for (let k = 0; k < nj; k++) { const c = aA + larg * (k + 0.5) / nj, ww = 1.3;
+              if (f === 0 && k === nj - 1) { B.por.quad(V(c - 0.45, u0 - 0.03, zb), V(c + 0.45, u0 - 0.03, zb), V(c + 0.45, u0 - 0.03, zb + 2.1), V(c - 0.45, u0 - 0.03, zb + 2.1), pfr, 1, 1, br); continue; }
+              jan(c - ww / 2, c + ww / 2, zz + 0.95, zz + 2.15, u0, pfr); }
+            [[aA, pa, -1], [aB, pb, 1]].forEach(([a, o, sg]) => { for (let k = 0; k < 2; k++) { const uc = u0 + pr * (k + 0.5) / 2, a1 = a + sg * 0.012, a2 = a + sg * 0.03;
+              B.cx.quad(V(a1, uc - 0.6, zz + 1.0), V(a1, uc + 0.6, zz + 1.0), V(a1, uc + 0.6, zz + 2.1), V(a1, uc - 0.6, zz + 2.1), o, 1, 1, br);
+              B.vid.quad(V(a2, uc - 0.53, zz + 1.07), V(a2, uc + 0.53, zz + 1.07), V(a2, uc + 0.53, zz + 2.03), V(a2, uc - 0.53, zz + 2.03), o, 1, 1, br); } }); }
+          casa = [F(aA - ov, u0 - ov), F(aB + ov, u0 - ov), F(aB + ov, u1 + ov), F(aA - ov, u1 + ov)]; casas.push(casa);
+        } } }
+    /* árvores e coqueiros do quintal */
+    if (RL.vis.arvc) { const na = rnd() < 0.7 ? (1 + (rnd() < 0.4 ? 1 : 0)) : 0;
+      for (let k = 0; k < na; k++) { const p = F(1.5 + rnd() * Math.max(0.5, w - 3), rnd() < 0.4 ? 1.2 + rnd() * 1.4 : D - 4 + rnd() * 2.5), z = chao(p[0], p[1]); if (z == null || (casa && rlDentro(p, casa))) continue; (rnd() < 0.22 ? palPos : arvPos).push([p, z, rnd()]); } }
+  });
+  const mk = (b, k, cast) => { if (!b.P.length) return; const me = new T.Mesh(b.geo(), rlMat11(k)); me.castShadow = cast !== false; me.receiveShadow = true; grp.add(me); };
+  mk(B.par, 'parede'); mk(B.tel, 'telha'); mk(B.laj, 'laje'); mk(B.vid, 'vidro', false); mk(B.cx, 'caixilho', false); mk(B.por, 'porta', false); mk(B.mur, 'parede'); mk(B.pto, 'portao');
+  RL.casas = casas; RL.lotes = lotes;
+  return {arvPos, palPos, casas, lotes};
+}
+/* árvores soltas no campo (fora dos lotes e das ruas) e grama 3D com vento perto das ruas */
+function rlVegetacao(RU, idx, grp, V) {
+  const T = THREE, q = RL_QUAL[rlQualK()], rnd = rlRnd(424242), MOD = rlModelos(), g = RL.grade; if (!g) return;
+  const dentroLote = p => V.lotes.some(o => rlDentro(p, o.lote)), naCasa = p => V.casas.some(c => rlDentro(p, c));
+  const W = (p, z) => P3(p[0], p[1], z);
+  if (RL.vis.arvc) { const nCampo = Math.round(90 * q.arvq); let tent = 0;
+    while (V.arvPos.length + V.palPos.length < nCampo + V.lotes.length * 1.1 && tent++ < nCampo * 12) { const p = [g.x0 + rnd() * g.nx * g.cel, g.y0 + rnd() * g.ny * g.cel], r = idx(p[0], p[1], RU.alin + 6);
+      if (r && r.d < RU.alin + 4) continue; if (dentroLote(p)) continue; const z = rlChao(p[0], p[1]); if (z == null) continue; (rnd() < 0.15 ? V.palPos : V.arvPos).push([p, z, rnd()]); } }
+  const inst = (geo, mat, lista, esc) => { if (!lista.length) return; const im = new T.InstancedMesh(geo, mat, lista.length), m = new T.Matrix4(), qq = new T.Quaternion();
+    lista.forEach((x, i) => { const s = esc(x[2]); qq.setFromEuler(new T.Euler(0, x[2] * Math.PI * 14, 0)); m.compose(W(x[0], x[1] - 0.05), qq, new T.Vector3(s, s * (0.9 + ((x[2] * 13) % 0.2)), s)); im.setMatrixAt(i, m); });
+    im.castShadow = true; im.receiveShadow = true; im.frustumCulled = false; if (mat.alphaTest > 0) im.customDepthMaterial = rlSombraFolha(mat === rlMat11('palma') ? 'palma' : 'folhas'); grp.add(im); };
+  if (RL.vis.arvc) { [0, 1, 2].forEach(v => { const L = V.arvPos.filter(x => ((x[2] * 3) | 0) === v); inst(MOD.arv[v].tr, rlMat11('casca'), L, r => 0.8 + r * 0.5); inst(MOD.arv[v].co, rlMat11('folhas'), L, r => 0.8 + r * 0.5); });
+    inst(MOD.palma.tr, rlMat11('casca'), V.palPos, r => 0.85 + r * 0.3); inst(MOD.palma.co, rlMat11('palma'), V.palPos, r => 0.85 + r * 0.3); }
+  if (RL.vis.grama && q.grama > 0) { const pos = []; let tent = 0;
+    while (pos.length < q.grama && tent++ < q.grama * 5) { const s = RU.S[(rnd() * RU.S.length) | 0], t = rnd(), sg = rnd() < 0.5 ? 1 : -1, u = RU.alin + 0.1 + Math.pow(rnd(), 1.6) * 30;
+      const p = [s.A[0] + (s.B[0] - s.A[0]) * t + s.n[0] * sg * u, s.A[1] + (s.B[1] - s.A[1]) * t + s.n[1] * sg * u], r = idx(p[0], p[1], RU.alin + 1);
+      if (r && r.d < RU.alin + 0.08) continue; if (naCasa(p)) continue; const z = rlChao(p[0], p[1]); if (z == null) continue; pos.push([p, z, rnd()]); }
+    if (pos.length) { const im = new T.InstancedMesh(MOD.grama, rlMat11('grama3d'), pos.length), m = new T.Matrix4(), qq = new T.Quaternion();
+      pos.forEach((x, i) => { const s = 0.7 + x[2] * 0.9; qq.setFromEuler(new T.Euler(0, x[2] * 40, 0)); m.compose(W(x[0], x[1] - 0.01), qq, new T.Vector3(s, s, s)); im.setMatrixAt(i, m); });
+      im.receiveShadow = true; im.frustumCulled = false; grp.add(im); } }
+}
+/* ── montagem: chamada no fim do t3Montar ── */
+function rlIniciar() {
+  const T = THREE; RL.t3 = null; if (!RL.on || !T3.ren) return;
+  if (!RL.soloIni) { RL.soloIni = 1; T3.solo = 1; }   /* realista começa com a rua opaca; 🛣 Rua % deixa transparente para ver a rede */
+  const ren = T3.ren, cena = T3.cena;
+  ren.outputEncoding = T.sRGBEncoding; ren.toneMapping = T.ACESFilmicToneMapping; ren.toneMappingExposure = 0.92; ren.shadowMap.enabled = RL_QUAL[rlQualK()].sh > 0; ren.shadowMap.type = T.PCFSoftShadowMap;
+  cena.children.filter(o => o.isLight).forEach(o => cena.remove(o)); cena.background = null;
+  const sun = new T.DirectionalLight(0xfff1d8, 1.05); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048); cena.add(sun); cena.add(sun.target);
+  const t = RL.t3 = {rd: ren, sc: cena, cam: T3.cam, ctl: T3.ctl, sun, chao: [], terr: null};
+  rlCeuInit(t); rlCeuAplicar(t); rlQualAplicar(t);
+}
+function rlQualAplicar(t) {
+  const q = RL_QUAL[rlQualK()], k = rlQualK(); if (t.qualAplicada === k) return; t.qualAplicada = k;
+  t.rd.setPixelRatio(q.pr > 2 ? Math.min(2.5, (window.devicePixelRatio || 1) * 1.5) : Math.min(q.pr, window.devicePixelRatio || 1));
+  const sz = q.sh || 512; if (t.sun.shadow.mapSize.x !== sz) { t.sun.shadow.mapSize.set(sz, sz); if (t.sun.shadow.map) { t.sun.shadow.map.dispose(); t.sun.shadow.map = null; } }
+  t.sun.shadow.radius = q.sh >= 2048 ? 2 : 1.5; t.sun.shadow.bias = -0.00025; t.sun.shadow.normalBias = 0.03; t.rd.shadowMap.enabled = q.sh > 0;
+  RL.mat11 = null; RL.sf11 = null; RL.matE = null; RL.tex2 = {};
+  const cv = t.rd.domElement; t.rd.setSize(cv.clientWidth || 800, cv.clientHeight || 500, false);
+}
+function rlCena() {
+  const T = THREE, t = RL.t3; if (!t || !T3.raiz) return; const G = T3.G;
+  rlQualAplicar(t); t.chao = []; t.terr = null; RL.grade = null;
+  const grp = G.real = new T.Group(), cen = G.cen = new T.Group(); T3.raiz.add(grp); grp.add(cen);
+  G.solo.visible = false; G.terr.visible = false;              /* a rua e o terreno do modo técnico dão lugar aos realistas */
+  const L = limites(), c = R.c, RU = rlRuas(), idx = rlIndice(RU), M = Math.max(45, (c.fundoLote || 25) + RU.alin + 25), ctx = {L, M};
+  const Rc = Math.max(L.w, L.h) / 2 + M; t.Rcena = Rc;
+  t.sc.fog = new T.Fog(t.ceuMat.uniforms.uHor.value.getHex(), Rc * 2.2, Rc * 11);
+  let terr = null;
+  try { const g = rlTerreno(RU, idx, ctx); terr = new T.Mesh(g, rlMatE('terr')); terr.receiveShadow = true; terr.visible = !!(RL.vis.terreno && T3.terr); grp.add(terr); t.chao.push(terr); G.rlTerr = terr; } catch (e) { console.warn('terreno 3D', e); }
+  rlRua(RU, grp);
+  const semCenario = T3.ev > 1;   /* com exagero vertical as casas e árvores ficariam esticadas: só a rua e a rede */
+  if (!semCenario) { const V = rlLotes(RU, idx, cen); rlVegetacao(RU, idx, cen, V); }
+  if (RL.vis.horiz && t.terr) { try { rlHorizonte({grp, R: Rc}); } catch (e) { console.warn('horizonte', e); } }
+  rlObj(); rlSolo(); if (RL.vis.sat && window.geoSatChao && terr) geoSatChao(terr);
+  rlCeuAplicar(t); t.precisaSombra = true;
+}
+function rlParar() { const t = RL.t3; if (t) { if (t.envRT) t.envRT.dispose(); if (t.pmrem) t.pmrem.dispose(); } RL.t3 = null; RL.andar = null; RL.grade = null; }
+/* ── árvores e postes locados pelo usuário (P.obj3d = [{id, t:'arv'|'poste', x, y}]) ── */
+function rlObj() {
+  const T = THREE, t = RL.t3; if (!t || !T3.G || !T3.G.real) return; const MOD = rlModelos(), G = T3.G;
+  if (G.obj) { G.real.remove(G.obj); G.obj.traverse(o => { if (o.geometry && o.userData.proprio) o.geometry.dispose(); }); }
+  const g0 = G.obj = new T.Group(); G.real.add(g0); const RU = rlRuas(), idx = rlIndice(RU);
+  (P.obj3d || []).forEach(o => { if (o.t === 'arv' ? !RL.vis.objArv : !RL.vis.objPoste) return; const z = rlChao(o.x, o.y) != null ? rlChao(o.x, o.y) : (idx(o.x, o.y, 80) || {z: 0}).z + 0.15, w = P3(o.x, o.y, z);
+    const g = new T.Group(); g.position.copy(w); g.userData.obj = o.id;
+    if (o.t === 'arv') { const m = MOD.arv[0], a = new T.Mesh(m.tr, rlMat11('casca')), b = new T.Mesh(m.co, rlMat11('folhas')); [a, b].forEach(q => { q.castShadow = true; q.receiveShadow = true; q.userData.obj = o.id; g.add(q); }); b.customDepthMaterial = rlSombraFolha('folhas'); g.rotation.y = (o.id.charCodeAt(o.id.length - 1) || 0) * 0.7;
+      const cant = new T.Mesh(new T.BoxGeometry(1.0, 0.06, 1.0), rlMat11('canteiro')); cant.position.y = -0.025; cant.receiveShadow = true; cant.userData.proprio = 1; cant.userData.obj = o.id; g.add(cant); }
+    else { [['conc', 'posteConc'], ['met', 'metal'], ['len', 'lente']].forEach(k => { const q = new T.Mesh(MOD.poste[k[0]], rlMat11(k[1])); q.castShadow = k[0] !== 'len'; q.receiveShadow = true; q.userData.obj = o.id; g.add(q); });
+      const r = idx(o.x, o.y, 60); if (r) g.rotation.y = Math.atan2(r.py - o.y, r.px - o.x);   /* braço (eixo +x local) virado para a rua */ }
+    if (RL.sel === o.id) { const r = new T.Mesh(new T.RingGeometry(o.t === 'arv' ? 1.1 : 0.45, o.t === 'arv' ? 1.35 : 0.6, 40), rlMat11('sel')); r.rotation.x = -Math.PI / 2; r.position.y = 0.06; r.renderOrder = 20; r.userData.proprio = 1; g.add(r); }
+    g0.add(g); });
+  t.precisaSombra = true;
+}
+function rlObjNovo(tipo, x, y) { if (!P.obj3d) P.obj3d = []; const id = 'o' + Date.now().toString(36) + Math.floor(Math.random() * 99); P.obj3d.push({id, t: tipo, x: +x.toFixed(2), y: +y.toFixed(2)}); RL.sel = id; salvar(); rlObj(); rlPainel(); }
+function rlObjExcluir() { if (!RL.sel || !P.obj3d) return; P.obj3d = P.obj3d.filter(o => o.id !== RL.sel); RL.sel = null; salvar(); rlObj(); rlPainel(); }
+/* clique / arrastar no 3D: locar, selecionar e mover */
+function rlEventos() {
+  const cv = $('t3-c'); if (!cv || cv.dataset.rl) return; cv.dataset.rl = '1';
+  const T = THREE, rc = new T.Raycaster(), mv = new T.Vector2();
+  const ray = (e, lista) => { const r = cv.getBoundingClientRect(); mv.set((e.clientX - r.left) / r.width * 2 - 1, -(e.clientY - r.top) / r.height * 2 + 1); rc.setFromCamera(mv, T3.cam); return rc.intersectObjects(lista, true); };
+  const objDe = h => { for (const x of h) { let o = x.object; while (o) { if (o.userData && o.userData.obj) return o.userData.obj; o = o.parent; } } return null; };
+  const plano = p => [p.x + T3.cx, -p.z + T3.cy];
+  let arr = null;
+  cv.addEventListener('pointerdown', e => { const t = RL.t3; if (!t || RL.andar) return; if (e.button !== 0 && e.pointerType === 'mouse') return;
+    if (RL.modo) { const h = ray(e, t.chao); if (h.length) { const p = plano(h[0].point); rlObjNovo(RL.modo, p[0], p[1]); RL.modo = null; rlPainel(); } e.stopPropagation(); e.preventDefault(); return; }
+    if (!T3.G.obj) return; const id = objDe(ray(e, [T3.G.obj])); if (!id) return;
+    RL.sel = id; rlObj(); rlPainel(); arr = {id, x: e.clientX, y: e.clientY, mov: false, g: T3.G.obj.children.find(g => g.userData.obj === id)}; T3.ctl.enabled = false; e.stopPropagation(); e.preventDefault(); }, true);
+  window.addEventListener('pointermove', e => { if (!arr || !RL.t3) return; if (!arr.mov && Math.hypot(e.clientX - arr.x, e.clientY - arr.y) < 4) return; arr.mov = true; const h = ray(e, RL.t3.chao); if (h.length && arr.g) { arr.g.position.copy(h[0].point); arr.p = plano(h[0].point); } });
+  window.addEventListener('pointerup', () => { if (!arr) return; const a = arr; arr = null; if (T3.ctl && !RL.andar) T3.ctl.enabled = true; if (a.mov && a.p) { const o = (P.obj3d || []).find(q => q.id === a.id); if (o) { o.x = +a.p[0].toFixed(2); o.y = +a.p[1].toFixed(2); salvar(); rlObj(); } } });
+}
+/* ── 🚶 andar na rua: olhos a 1,70 m; W/S ou ↑/↓ anda, A/D de lado, ←/→ ou Q/E gira, arrastar olha, Shift corre, Esc sai ── */
+function rlAndar(liga) {
+  const bt = document.querySelector('[data-t3="andar"]');
+  if (!liga) { RL.andar = null; if (T3.ctl) T3.ctl.enabled = true; if (bt) bt.classList.remove('on'); const p = $('rl-andar'); if (p) p.remove(); return; }
+  if (!RL.t3) return toast('O modo 🚶 Andar precisa do 3D 🏙 Realista ligado.');
+  if (T3.voo) t3Voo(false);
+  const RU = rlRuas(); if (!RU.S.length) return; const s = RU.S.slice().sort((a, b) => b.l - a.l)[0], p = [s.A[0] + s.u[0] * Math.min(8, s.l / 3), s.A[1] + s.u[1] * Math.min(8, s.l / 3)];
+  RL.andar = {x: p[0], y: p[1], yaw: Math.atan2(s.u[1], s.u[0]), pitch: -0.05, keys: {}, vel: 1.4};
+  T3.ctl.enabled = false; if (bt) bt.classList.add('on');
+  const box = $('t3'); if (box && !$('rl-andar')) { const d = document.createElement('div'); d.id = 'rl-andar'; d.className = 'rl-andar';
+    d.innerHTML = '<b>🚶 Andando na rua</b> · W/S ou ↑/↓ anda · A/D de lado · ←/→ gira · arraste para olhar · Shift corre · Esc sai<div class="rl-and-bt"><button class="bt peq" data-rlk="f">⬆</button><button class="bt peq" data-rlk="l">⟲</button><button class="bt peq" data-rlk="r">⟳</button><button class="bt peq" data-rlk="b">⬇</button><button class="bt peq pri" data-t3="andar">⏹ Sair</button></div>';
+    box.appendChild(d);
+    d.querySelectorAll('[data-rlk]').forEach(b => { const k = {f: 'w', b: 's', l: 'arrowleft', r: 'arrowright'}[b.dataset.rlk]; b.addEventListener('pointerdown', () => { if (RL.andar) RL.andar.keys[k] = 1; }); ['pointerup', 'pointerleave'].forEach(ev => b.addEventListener(ev, () => { if (RL.andar) RL.andar.keys[k] = 0; })); }); }
+  toast('Andando na rua (olhos a 1,70 m). Esc ou ⏹ Sair para voltar.', 5000);
+}
+function rlAndarTick(dt) {
+  const a = RL.andar; if (!a || !RL.t3) return; const k = a.keys, run = k.shift ? 3 : 1, v = a.vel * run * dt * 3.2;
+  if (k.arrowleft || k.q) a.yaw += dt * 1.4; if (k.arrowright || k.e) a.yaw -= dt * 1.4;
+  const fx = Math.cos(a.yaw), fy = Math.sin(a.yaw); let mx = 0, my = 0;
+  if (k.w || k.arrowup) { mx += fx; my += fy; } if (k.s || k.arrowdown) { mx -= fx; my -= fy; } if (k.a) { mx += -fy; my += fx; } if (k.d) { mx -= -fy; my -= fx; }
+  a.x += mx * v; a.y += my * v;
+  const T = THREE, rc = a.rc || (a.rc = new T.Raycaster()), o = P3(a.x, a.y, 0); rc.set(new T.Vector3(o.x, 1e5, o.z), new T.Vector3(0, -1, 0)); const h = rc.intersectObjects(RL.t3.chao, false);
+  const yb = h.length ? h[0].point.y : (rlChao(a.x, a.y) != null ? (rlChao(a.x, a.y) - T3.z0) * T3.ev : 0);
+  const eye = new T.Vector3(o.x, yb + 1.7, o.z); a.eyeY = a.eyeY == null ? eye.y : a.eyeY + (eye.y - a.eyeY) * Math.min(1, dt * 8); eye.y = a.eyeY;
+  T3.cam.position.copy(eye); const cp = Math.cos(a.pitch); T3.cam.lookAt(eye.x + fx * cp * 10, eye.y + Math.sin(a.pitch) * 10, eye.z - fy * cp * 10); T3.cam.near = 0.1; T3.cam.updateProjectionMatrix();
+  T3.ctl.target.set(eye.x + fx * 10, eye.y, eye.z - fy * 10);
+}
+document.addEventListener('keydown', e => { const a = RL.andar; if (!a) return; if (e.target && /input|textarea|select/i.test(e.target.tagName)) return; const k = e.key.toLowerCase(); if (k === 'escape') { rlAndar(false); e.stopPropagation(); return; } a.keys[k] = 1; if (e.shiftKey) a.keys.shift = 1; if (/^(arrow|w$|a$|s$|d$|q$|e$)/.test(k)) e.preventDefault(); }, true);
+document.addEventListener('keyup', e => { const a = RL.andar; if (!a) return; a.keys[e.key.toLowerCase()] = 0; if (!e.shiftKey) a.keys.shift = 0; });
+(() => { let arr = null; document.addEventListener('pointerdown', e => { if (RL.andar && e.target && e.target.id === 't3-c') arr = {x: e.clientX, y: e.clientY}; });
+  document.addEventListener('pointermove', e => { if (!arr || !RL.andar) return; RL.andar.yaw -= (e.clientX - arr.x) * 0.005; RL.andar.pitch = Math.max(-1.2, Math.min(0.8, RL.andar.pitch - (e.clientY - arr.y) * 0.004)); arr = {x: e.clientX, y: e.clientY}; });
+  document.addEventListener('pointerup', () => { arr = null; });
+  document.addEventListener('wheel', e => { if (!RL.andar || !e.target || e.target.id !== 't3-c') return; const a = RL.andar, d = -Math.sign(e.deltaY) * 1.5; a.x += Math.cos(a.yaw) * d; a.y += Math.sin(a.yaw) * d; e.preventDefault(); }, {passive: false}); })();
+/* vista “nível da rua”: em pé no meio da rua mais longa, olhando ao longo dela */
+function rlVistaRua() { const RU = rlRuas(); if (!RU.S.length) return; const s = RU.S.slice().sort((a, b) => b.l - a.l)[0], p = [s.A[0] + s.u[0] * s.l * 0.15, s.A[1] + s.u[1] * s.l * 0.15], z = s.za + (s.zb - s.za) * 0.15;
+  const e = P3(p[0], p[1], z), q = P3(p[0] + s.u[0] * 30, p[1] + s.u[1] * 30, z); e.y = e.y * T3.ev + 1.7; q.y = q.y * T3.ev + 1.2; T3.cam.position.copy(e); T3.ctl.target.copy(q); T3.cam.near = 0.1; T3.cam.updateProjectionMatrix(); T3.ctl.update(); }
+/* ⬇ imagem PNG do que está na tela */
+function rlPng() { if (!T3.ren) return; T3.ren.render(T3.cena, T3.cam); T3.ren.domElement.toBlob(b => { if (!b) return toast('Não foi possível gerar a imagem.'); const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = ((P.nome || 'esgoto').replace(/[^\w\-]+/g, '_')) + '-3D.png'; document.body.appendChild(a); a.click(); a.remove(); toast('Imagem 3D (PNG) baixada.'); }, 'image/png'); }
+/* ── painel “🏘 Cenário” e ações da barra ── */
+const RL_NIV = [['calcada', 'Calçada e meio-fio'], ['faixa', 'Faixa central da rua'], ['terreno', 'Terreno (entorno com grama)'], ['casas', 'Casas'], ['muros', 'Muros e portões'], ['arvc', 'Árvores e coqueiros do cenário'],
+  ['grama', 'Grama 3D (com vento)'], ['horiz', 'Horizonte e morros'], ['objArv', 'Árvores que você locou'], ['objPoste', 'Postes que você locou'], ['sat', '🛰 Imagem de satélite no chão']];
+function rlPainel() {
+  const box = $('t3'); if (!box) return; let p = $('rl-pan');
+  if (!RL.pan || !RL.on) { if (p) p.remove(); return; }
+  if (!p) { p = document.createElement('div'); p.id = 'rl-pan'; p.className = 'rl-pan'; box.appendChild(p); }
+  const qk = rlQualK(), hk = rlHoraK(), nObj = (P.obj3d || []).length, sel = (P.obj3d || []).find(o => o.id === RL.sel), geoOk = window.geoPronto && geoPronto();
+  p.innerHTML = `<div class="rl-h"><b>🏘 Cenário 3D</b><button class="bt peq" data-t3="cen" title="Fechar">✕</button></div>
+    <div class="rl-g"><label>Qualidade <select data-rlsel="qual">${Object.keys(RL_QUAL).map(k => `<option value="${k}"${k === qk ? ' selected' : ''}>${RL_QUAL[k].n}</option>`).join('')}</select></label>
+      <label>Sol <select data-rlsel="hora">${Object.keys(RL_HORAS).map(k => `<option value="${k}"${k === hk ? ' selected' : ''}>${RL_HORAS[k].n}</option>`).join('')}</select></label></div>
+    <div class="rl-t">Níveis do cenário (só desenho)</div>
+    ${RL_NIV.map(([k, t]) => `<label class="rl-c"><input type="checkbox" data-rlniv="${k}"${RL.vis[k] ? ' checked' : ''}${k === 'sat' && !geoOk ? ' disabled' : ''}/> ${t}${k === 'sat' && !geoOk ? ' <small>(georreferencie antes)</small>' : ''}</label>`).join('')}
+    <div class="rl-g"><button class="bt peq" data-rlact="todos">Mostrar tudo</button><button class="bt peq" data-rlact="nada">Ocultar o cenário</button></div>
+    <div class="rl-t">Locar no 3D (clique no chão; arraste para mover)</div>
+    <div class="rl-g"><button class="bt peq${RL.modo === 'arv' ? ' on' : ''}" data-rlact="arv">🌳 + Árvore</button><button class="bt peq${RL.modo === 'poste' ? ' on' : ''}" data-rlact="poste">💡 + Poste</button>
+      <button class="bt peq" data-rlact="del"${sel ? '' : ' disabled'}>🗑 Excluir ${sel ? (sel.t === 'arv' ? 'árvore' : 'poste') : 'selecionado'}</button></div>
+    <div class="rl-s">${nObj} objeto(s) locado(s). ${RL.modo ? '<b>Clique no chão do 3D para locar.</b>' : ''}</div>`;
+}
+function rlAcao(a) {
+  if (a === 'real') { RL.on = !RL.on; try { localStorage.setItem('tc_esg_3d_real', RL.on ? '1' : '0'); } catch (e) {} if (!RL.on) { RL.pan = false; rlAndar(false); } vT3($('main') || document.querySelector('#t3').parentElement); return true; }
+  if (a === 'cen') { if (!RL.on) { RL.on = true; try { localStorage.setItem('tc_esg_3d_real', '1'); } catch (e) {} RL.pan = true; vT3(document.querySelector('#t3').parentElement); return true; } RL.pan = !RL.pan; rlPainel(); const b = document.querySelector('[data-t3="cen"]'); if (b) b.classList.toggle('on', RL.pan); return true; }
+  if (a === 'andar') { rlAndar(!RL.andar); return true; }
+  if (a === 'rua') { if (RL.andar) rlAndar(false); rlVistaRua(); return true; }
+  if (a === 'png') { rlPng(); return true; }
+  if (a === 'geo') { if (window.geoAbrir) geoAbrir(); return true; }
+  return false;
+}
+function rlReconstroi() { if (!T3.on) return; const cam = T3.cam.position.clone(), alvo = T3.ctl.target.clone(); t3Montar(); T3.cam.position.copy(cam); T3.ctl.target.copy(alvo); T3.ctl.update(); }
+function rl3D() { rlReconstroi(); }
+document.addEventListener('change', e => { const el = e.target; if (!el || !el.dataset) return;
+  if (el.dataset.rlniv) { const k = el.dataset.rlniv; RL.vis[k] = el.checked ? 1 : 0; rlSalvaVis();
+    if (k === 'terreno') { if (T3.G && T3.G.rlTerr) T3.G.rlTerr.visible = !!(RL.vis.terreno && T3.terr); return; }
+    if (k === 'objArv' || k === 'objPoste') return rlObj();
+    rlReconstroi(); return; }
+  if (el.dataset.rlsel === 'qual') { try { localStorage.setItem('tc_esg_3d_qual', el.value); } catch (er) {} if (RL.t3) RL.t3.qualAplicada = null; rlReconstroi(); return; }
+  if (el.dataset.rlsel === 'hora') { try { localStorage.setItem('tc_esg_3d_hora', el.value); } catch (er) {} if (RL.t3) { rlCeuAplicar(RL.t3); if (RL.t3.sc.fog) RL.t3.sc.fog.color.copy(RL.t3.ceuMat.uniforms.uHor.value); } return; }
+});
+document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-rlact]'); if (!b) return; const a = b.dataset.rlact;
+  if (a === 'todos' || a === 'nada') { RL_NIV.forEach(([k]) => { if (k !== 'sat') RL.vis[k] = a === 'todos' ? 1 : 0; }); if (a === 'nada') { RL.vis.calcada = 1; RL.vis.terreno = 1; } rlSalvaVis(); rlReconstroi(); rlPainel(); return; }
+  if (a === 'arv' || a === 'poste') { RL.modo = RL.modo === a ? null : a; if (a === 'arv') RL.vis.objArv = 1; else RL.vis.objPoste = 1; rlPainel(); if (RL.modo) toast('Clique no chão do 3D onde quer ' + (a === 'arv' ? 'a árvore' : 'o poste') + '.'); return; }
+  if (a === 'del') return rlObjExcluir(); });
+/* computador lento: se os primeiros quadros passam de ~0,15 s e a qualidade não foi escolhida pelo usuário, cai para Baixa (uma vez) */
+function rlMede(dt) { const m = RL.med || (RL.med = {n: 0, s: 0}); if (m.feito) return; m.n++; if (m.n < 10) return; m.s += dt; if (m.n < 50) return; m.feito = 1;
+  let escolhida = null; try { escolhida = localStorage.getItem('tc_esg_3d_qual'); } catch (e) {}
+  if (!escolhida && m.s / 40 > 0.15 && rlQualK() !== 'baixa') { try { localStorage.setItem('tc_esg_3d_qual', 'baixa'); } catch (e) {} if (RL.t3) RL.t3.qualAplicada = null; rlReconstroi(); toast('3D lento neste computador: Qualidade passou para Baixa (🏘 Cenário › Qualidade para mudar).', 7000); } }
+/* ════════════════════════════════════════════════════════════════════
+   ES-04 · 🛰 GEORREFERENCIAR (como no Pavimento Intertravado): posiciona a rede sobre o satélite.
+   Mapa Leaflet + satélite Esri (o mesmo do Intertravado e do Imagens GoogleEarth), tipo Satélite / Mapa / Rótulos,
+   pesquisa de local (OpenStreetMap/Nominatim), coordenadas Lat/Lon ou UTM SIRGAS 2000, colar coordenadas, mover (arrastar ● ou o
+   desenho), girar (◎, campo ou Shift + roda), escala, transparência do desenho e da imagem, aparência Realista/Técnico,
+   níveis, pontos de controle (PV com coordenada → ajuste por mínimos quadrados), projeto já em UTM (locação exata),
+   ✔ Salvar posição (trava) / ✎ Reposicionar, KMZ/KML para o Google Earth, link do Google Maps e satélite no chão do 3D.
+   Estado em P.georef (vai junto com o projeto). Só desenho: nenhum cálculo muda.
+   ════════════════════════════════════════════════════════════════════ */
+const GEO_L = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.', GEO_M = 111320;
+const GEO_SAT = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+let GM = null;   /* mapa aberto: {map, camadas, marcadores} */
+function geoG() { if (!P.georef) P.georef = {lat: null, lng: null, rot: 0, esc: 100, opD: 85, opS: 100, base: 'sat', vis: 'real', fix: false, modo: 'dec', ctrl: [], niv: {ruas: 1, rede: 1, pvs: 1, lotes: 1, rot: 1}}; const g = P.georef; if (!g.niv) g.niv = {ruas: 1, rede: 1, pvs: 1, lotes: 1, rot: 1}; if (!g.ctrl) g.ctrl = []; return g; }
+function geoEhUTM() { const xs = P.nos.map(n => n.x).concat(P.ruas.flatMap(r => r.pts.map(q => q.x))), ys = P.nos.map(n => n.y).concat(P.ruas.flatMap(r => r.pts.map(q => q.y))); if (!xs.length) return false;
+  return Math.min(...xs) > 160000 && Math.max(...xs) < 840000 && Math.min(...ys) > 1000000 && Math.max(...ys) < 10000000; }
+function geoPronto() { const g = P.georef; return !!(g && ((g.utm && g.zona) || (g.lat != null && g.lng != null))); }
+function geoCentroProj() { const g = geoG(); if (g.cx == null) { const L = limites(); g.cx = +(L.x + L.w / 2).toFixed(3); g.cy = +(L.y + L.h / 2).toFixed(3); } return [g.cx, g.cy]; }
+/* ponto do projeto (x, y em metros) → [lat, lng] */
+function geoLL(x, y) { const g = geoG();
+  if (g.utm && g.zona) return geoDeUTM(x, y, +g.zona, g.hem !== 'N');
+  const c = geoCentroProj(), k = (g.esc || 100) / 100, th = (g.rot || 0) * Math.PI / 180, dx = (x - c[0]) * k, dy = (y - c[1]) * k;
+  const e = dx * Math.cos(th) - dy * Math.sin(th), n = dx * Math.sin(th) + dy * Math.cos(th); return [g.lat + n / GEO_M, g.lng + e / (GEO_M * Math.cos(g.lat * Math.PI / 180))]; }
+/* UTM SIRGAS 2000 (cópia do Intertravado) */
+function geoParaUTM(lat, lng, zona) { const a = 6378137, f = 1 / 298.257222101, k0 = .9996, e2 = f * (2 - f), ep2 = e2 / (1 - e2); const z = zona || Math.floor((lng + 180) / 6) + 1, l0 = ((z - 1) * 6 - 180 + 3) * Math.PI / 180, ph = lat * Math.PI / 180, l = lng * Math.PI / 180;
+  const N = a / Math.sqrt(1 - e2 * Math.sin(ph) ** 2), T = Math.tan(ph) ** 2, C = ep2 * Math.cos(ph) ** 2, A = Math.cos(ph) * (l - l0);
+  const M = a * ((1 - e2 / 4 - 3 * e2 * e2 / 64 - 5 * e2 ** 3 / 256) * ph - (3 * e2 / 8 + 3 * e2 * e2 / 32 + 45 * e2 ** 3 / 1024) * Math.sin(2 * ph) + (15 * e2 * e2 / 256 + 45 * e2 ** 3 / 1024) * Math.sin(4 * ph) - (35 * e2 ** 3 / 3072) * Math.sin(6 * ph));
+  const E = 500000 + k0 * N * (A + (1 - T + C) * A ** 3 / 6 + (5 - 18 * T + T * T + 72 * C - 58 * ep2) * A ** 5 / 120), Nn = k0 * (M + N * Math.tan(ph) * (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A ** 4 / 24 + (61 - 58 * T + T * T + 600 * C - 330 * ep2) * A ** 6 / 720)) + (lat < 0 ? 1e7 : 0);
+  return {e: E, n: Nn, z}; }
+function geoDeUTM(E, Nn, z, sul) { const a = 6378137, f = 1 / 298.257222101, k0 = .9996, e2 = f * (2 - f), ep2 = e2 / (1 - e2), e1 = (1 - Math.sqrt(1 - e2)) / (1 + Math.sqrt(1 - e2));
+  const x = E - 500000, y = sul ? Nn - 1e7 : Nn, M = y / k0, mu = M / (a * (1 - e2 / 4 - 3 * e2 * e2 / 64 - 5 * e2 ** 3 / 256));
+  const p1 = mu + (3 * e1 / 2 - 27 * e1 ** 3 / 32) * Math.sin(2 * mu) + (21 * e1 * e1 / 16 - 55 * e1 ** 4 / 32) * Math.sin(4 * mu) + (151 * e1 ** 3 / 96) * Math.sin(6 * mu) + (1097 * e1 ** 4 / 512) * Math.sin(8 * mu);
+  const C1 = ep2 * Math.cos(p1) ** 2, T1 = Math.tan(p1) ** 2, N1 = a / Math.sqrt(1 - e2 * Math.sin(p1) ** 2), R1 = a * (1 - e2) / Math.pow(1 - e2 * Math.sin(p1) ** 2, 1.5), D = x / (N1 * k0);
+  const lat = p1 - (N1 * Math.tan(p1) / R1) * (D * D / 2 - (5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * ep2) * D ** 4 / 24 + (61 + 90 * T1 + 298 * C1 + 45 * T1 * T1 - 252 * ep2 - 3 * C1 * C1) * D ** 6 / 720);
+  const lon = ((z - 1) * 6 - 180 + 3) * Math.PI / 180 + (D - (1 + 2 * T1 + C1) * D ** 3 / 6 + (5 - 2 * C1 + 28 * T1 - 3 * C1 * C1 + 8 * ep2 + 24 * T1 * T1) * D ** 5 / 120) / Math.cos(p1);
+  return [lat * 180 / Math.PI, lon * 180 / Math.PI]; }
+function geoNums(t) { return (String(t).match(/-?\d+(?:[.,]\d+)?/g) || []).map(v => parseFloat(v.replace(',', '.'))); }
+/* pontos de controle: PV com coordenada conhecida → giro + deslocamento por mínimos quadrados (escala 100 %) */
+function geoAjustar() { const g = geoG(), Q = g.ctrl.map(q => { const n = noDe(q.no); return n && q.lat != null && q.lng != null ? {p: [n.x, n.y], lat: +q.lat, lng: +q.lng, q} : null; }).filter(Boolean); if (!Q.length) return null;
+  const c = geoCentroProj(), la0 = Q.reduce((a, q) => a + q.lat, 0) / Q.length, ln0 = Q.reduce((a, q) => a + q.lng, 0) / Q.length, kx = GEO_M * Math.cos(la0 * Math.PI / 180);
+  const E = Q.map(q => [(q.lng - ln0) * kx, (q.lat - la0) * GEO_M]), pm = [0, 0]; Q.forEach(q => { pm[0] += q.p[0] / Q.length; pm[1] += q.p[1] / Q.length; });
+  let th = (g.rot || 0) * Math.PI / 180; if (Q.length >= 2) { let a = 0, b = 0; Q.forEach((q, i) => { const px = q.p[0] - pm[0], py = q.p[1] - pm[1]; a += px * E[i][1] - py * E[i][0]; b += px * E[i][0] + py * E[i][1]; }); th = Math.atan2(a, b); }
+  const Rr = v => [v[0] * Math.cos(th) - v[1] * Math.sin(th), v[0] * Math.sin(th) + v[1] * Math.cos(th)], cc = Rr([c[0] - pm[0], c[1] - pm[1]]);
+  const res = Q.map((q, i) => { const w = Rr([q.p[0] - pm[0], q.p[1] - pm[1]]); return Math.hypot(w[0] - E[i][0], w[1] - E[i][1]); });
+  Object.assign(g, {lat: la0 + cc[1] / GEO_M, lng: ln0 + cc[0] / kx, rot: Math.round(th * 18000 / Math.PI) / 100, esc: 100, utm: false});
+  return {n: Q.length, rms: Math.sqrt(res.reduce((a, x) => a + x * x, 0) / res.length), max: Math.max(...res)}; }
+/* geometria a desenhar no mapa (em coordenadas do projeto) */
+function geoFeicoes() {
+  const out = {pista: [], calc: [], mf: [], rede: [], pvs: [], lotes: [], eixo: []}; if (!R.ok) return out;
+  const RU = rlRuas(), w = RU.w, al = RU.alin, lin = (P0, o, n) => [P0[0] + n[0] * o, P0[1] + n[1] * o];
+  RU.S.forEach(s => { out.pista.push([lin(s.A, w, s.n), lin(s.B, w, s.n), lin(s.B, -w, s.n), lin(s.A, -w, s.n)]); if (!s.virt) out.eixo.push([s.A, s.B]);
+    const iA = RU.est.get(s.a).findIndex(e => e.s === s && e.p === 'a'), iB = RU.est.get(s.b).findIndex(e => e.s === s && e.p === 'b');
+    [['L', 1], ['R', -1]].forEach(([lado, sg]) => { const cA = rlCorte(RU, s.a, iA, lado), cB = rlCorte(RU, s.b, iB, lado === 'L' ? 'R' : 'L'), nn = [s.n[0] * sg, s.n[1] * sg];
+      const pt = (o, c) => rlInter(lin(s.A, o, nn), s.u, c.P, c.d) || lin(c.P, o, nn); const i0 = pt(w, cA), i1 = pt(w, cB), m0 = pt(w + 0.15, cA), m1 = pt(w + 0.15, cB), o0 = pt(al, cA), o1 = pt(al, cB);
+      if (((i1[0] - i0[0]) * s.u[0] + (i1[1] - i0[1]) * s.u[1]) < 0.05) return; out.mf.push([i0, i1, m1, m0]); out.calc.push([m0, m1, o1, o0]); }); });
+  RU.est.forEach((l, no) => { const N = [RU.nos.get(no).x, RU.nos.get(no).y], n = l.length; if (n < 2) return; const cant = [];
+    for (let i = 0; i < n; i++) { const d = l[i], e = l[(i + 1) % n]; let th = e.ang - d.ang; while (th <= 0) th += 2 * Math.PI; const nd = [-d.u[1], d.u[0]], ne = [e.u[1], -e.u[0]];
+      const k = Math.abs(th - Math.PI) < 0.09 ? lin(N, w, nd) : rlInter(lin(N, w, nd), d.u, lin(N, w, ne), e.u); if (k) cant.push(k);
+      if (th < Math.PI * 0.97) { const q = [[w, w], [w, al], [al, al], [al, w]].map(([a, b]) => rlInter(lin(N, a, nd), d.u, lin(N, b, ne), e.u)); if (q.every(Boolean)) out.calc.push(q); } }
+    if (cant.length > 2) out.pista.push(cant); });
+  P.trechos.forEach(t => { const r = R.tr[t.id], a = noDe(t.de), b = noDe(t.para); if (!r || !a || !b) return; const of = ESG.offsetTr(t, R.c), l = Math.hypot(b.x - a.x, b.y - a.y) || 1, ox = -(b.y - a.y) / l * of, oy = (b.x - a.x) / l * of;
+    out.rede.push({p: [[a.x + ox, a.y + oy], [b.x + ox, b.y + oy]], r, nome: r.nome || t.id}); });
+  P.nos.forEach(n => { const x = R.no[n.id]; if (x) out.pvs.push({p: [n.x, n.y], nome: nomeNo(n), x}); });
+  try { ESG.ligacoes(P, R).forEach(q => out.lotes.push(q.lote)); } catch (e) {}
+  return out;
+}
+/* ── janela do mapa ── */
+async function geoAbrir() {
+  if (!R.ok) return toast('Calcule a rede (Traçado → 🧭 Gerar rede) antes de georreferenciar.');
+  if ($('geo-ov')) return; if (RL.andar) rlAndar(false);
+  const g = geoG(); geoCentroProj();
+  const ov = document.createElement('div'); ov.id = 'geo-ov'; ov.className = 'geo-ov';
+  ov.innerHTML = `<div class="geo-map" id="geo-map"><div class="geo-carr">Carregando o mapa…</div></div><div class="geo-pan" id="geo-pan"></div>`;
+  document.body.appendChild(ov); document.body.classList.add('geo-on');
+  try { if (!window.L) { const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = GEO_L + 'css'; document.head.appendChild(css); await carregarScript(GEO_L + 'js'); } }
+  catch (e) { $('geo-map').innerHTML = '<div class="geo-carr er">Não foi possível carregar o mapa (Leaflet). Verifique a internet.</div>'; geoPainel(); return; }
+  if (!$('geo-ov')) return;
+  /* posição inicial: projeto em UTM → exato; já posicionado → mesmo lugar; senão Rio das Ostras */
+  if (!geoPronto()) { if (geoEhUTM()) Object.assign(g, {utm: true, zona: g.zona || 24, hem: g.hem || 'S'}); else Object.assign(g, {lat: -22.5266, lng: -41.9450}); }
+  const L = window.L, map = L.map('geo-map', {zoomControl: true, maxZoom: 21, zoomSnap: 0.25});
+  const sat = L.tileLayer(GEO_SAT, {maxZoom: 21, maxNativeZoom: 19, attribution: 'Imagem © Esri, Maxar, Earthstar'});
+  const rot = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {maxZoom: 21, maxNativeZoom: 19});
+  const rua = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 21, maxNativeZoom: 19, attribution: '© OpenStreetMap'});
+  GM = {map, sat, rot, rua, dese: L.layerGroup().addTo(map), F: geoFeicoes()};
+  $('geo-map').querySelector('.geo-carr') && $('geo-map').querySelector('.geo-carr').remove();
+  geoBase(g.base || 'sat'); geoDesenha(true); geoPainel();
+  /* arrastar o desenho (quando não está travado) */
+  let arr = null;
+  map.on('mousedown', e => { if (g.fix || g.utm || !e.originalEvent.shiftKey && !GM.sobre) return; arr = {ll: e.latlng, lat: g.lat, lng: g.lng}; map.dragging.disable(); });
+  map.on('mousemove', e => { if (!arr) return; g.lat = arr.lat + (e.latlng.lat - arr.ll.lat); g.lng = arr.lng + (e.latlng.lng - arr.ll.lng); geoDesenha(); });
+  map.on('mouseup', () => { if (!arr) return; arr = null; map.dragging.enable(); salvar(); geoCampos(); });
+  map.getContainer().addEventListener('wheel', e => { if (!e.shiftKey || g.fix || g.utm) return; e.preventDefault(); e.stopPropagation(); g.rot = +(((g.rot || 0) + (e.deltaY > 0 ? 1 : -1) * (e.altKey ? 0.1 : 1)) % 360).toFixed(2); geoDesenha(); geoCampos(); salvar(); }, {capture: true, passive: false});
+}
+function geoFechar() { if (GM) { try { GM.map.remove(); } catch (e) {} GM = null; } const o = $('geo-ov'); if (o) o.remove(); document.body.classList.remove('geo-on'); salvar(); if (TAB === 't3' && T3.on && RL.vis.sat) rlReconstroi(); if (TAB === 't3') rlPainel(); }
+function geoBase(b) { const g = geoG(); g.base = b; if (!GM) return; const m = GM.map; [GM.sat, GM.rot, GM.rua].forEach(t => { if (m.hasLayer(t)) m.removeLayer(t); });
+  if (b === 'rua') GM.rua.addTo(m); else { GM.sat.addTo(m); if (b === 'hib') GM.rot.addTo(m); } [GM.sat, GM.rot, GM.rua].forEach(t => t.setOpacity((g.opS == null ? 100 : g.opS) / 100)); if (GM.dese) GM.dese.eachLayer(l => l.bringToFront && l.bringToFront()); }
+/* desenha a rede no mapa (refaz tudo: simples e rápido para algumas centenas de feições) */
+function geoDesenha(enquadra) {
+  if (!GM) return; const L = window.L, g = geoG(), F = GM.F, op = (g.opD == null ? 85 : g.opD) / 100, real = g.vis !== 'tec', nv = g.niv, D = GM.dese; D.clearLayers();
+  const ll = p => geoLL(p[0], p[1]), pol = (pts, st) => L.polygon(pts.map(ll), Object.assign({weight: 0, fillOpacity: op, interactive: false}, st)).addTo(D);
+  if (nv.lotes) F.lotes.forEach(q => pol(q, {color: '#f59e0b', weight: 1, fill: real, fillColor: '#f3e7cf', fillOpacity: real ? op * 0.35 : 0, opacity: op}));
+  if (nv.ruas) { if (real) { F.pista.forEach(q => pol(q, {fillColor: '#4b4d50'})); F.calc.forEach(q => pol(q, {fillColor: '#d6d2c8'})); F.mf.forEach(q => pol(q, {fillColor: '#f2f0ea'})); }
+    else F.pista.forEach(q => pol(q, {color: '#e5e7eb', weight: 1, fill: false, opacity: op}));
+    F.eixo.forEach(e => L.polyline(e.map(ll), {color: real ? '#f8fafc' : '#94a3b8', weight: 1, dashArray: '6 6', opacity: op, interactive: false}).addTo(D)); }
+  if (nv.rede) F.rede.forEach(t => L.polyline(t.p.map(ll), {color: t.r.recq ? '#c026d3' : '#f97316', weight: 3, opacity: Math.min(1, op + 0.15)}).bindTooltip(`${esc(t.nome)} · DN ${t.r.D} · i ${fm(t.r.i * 100, 2)} %`, {sticky: true}).addTo(D));
+  if (nv.pvs) F.pvs.forEach(q => { const m = L.circleMarker(ll(q.p), {radius: 4, color: '#0f172a', weight: 1, fillColor: q.x.tipo === 'EEE' ? '#c026d3' : '#e2e8f0', fillOpacity: 1}).addTo(D);
+    m.bindPopup(`<b>${esc(q.nome)}</b><br>Tampa ${fm(q.x.ct, 3)} · Fundo ${fm(q.x.cf, 3)}<br>Profundidade ${fm(q.x.ct - q.x.cf, 2)} m`); if (nv.rot) m.bindTooltip(esc(q.nome), {permanent: F.pvs.length < 160, direction: 'top', className: 'geo-tt', offset: [0, -4]}); });
+  /* alças: ● mover e ◎ girar (somem com a posição salva ou com o projeto em UTM) */
+  if (!g.fix && !g.utm) { const c = geoCentroProj(), Lm = limites(), raio = Math.hypot(Lm.w, Lm.h) / 2 * 0.6 * (g.esc || 100) / 100;
+    const th = (g.rot || 0) * Math.PI / 180, cl = [g.lat, g.lng], pr = [g.lat + raio * Math.sin(th) / GEO_M, g.lng + raio * Math.cos(th) / (GEO_M * Math.cos(g.lat * Math.PI / 180))];
+    L.polyline([cl, pr], {color: '#2563eb', weight: 2, dashArray: '4 4', interactive: false}).addTo(D);
+    const mk = L.marker(cl, {draggable: true, icon: L.divIcon({className: 'geo-h geo-hm', html: '●', iconSize: [22, 22]}), title: 'Arraste para mover o desenho'}).addTo(D);
+    mk.on('drag', e => { const p = e.target.getLatLng(); g.lat = p.lat; g.lng = p.lng; }); mk.on('dragend', () => { geoDesenha(); geoCampos(); salvar(); });
+    const mr = L.marker(pr, {draggable: true, icon: L.divIcon({className: 'geo-h geo-hr', html: '◎', iconSize: [22, 22]}), title: 'Arraste para girar o desenho'}).addTo(D);
+    mr.on('drag', e => { const p = e.target.getLatLng(), dx = (p.lng - g.lng) * GEO_M * Math.cos(g.lat * Math.PI / 180), dy = (p.lat - g.lat) * GEO_M; g.rot = Math.round(Math.atan2(dy, dx) * 18000 / Math.PI) / 100; });
+    mr.on('dragend', () => { geoDesenha(); geoCampos(); salvar(); }); }
+  if (enquadra) { const b = L.latLngBounds(F.pvs.length ? F.pvs.map(q => ll(q.p)) : [[g.lat || -22.5, g.lng || -41.9]]); GM.map.fitBounds(b.pad(0.25), {maxZoom: 19}); }
+  geoLinks();
+}
+function geoLinks() { const a = $('geo-gm'); if (!a || !geoPronto()) return; const c = geoCentroProj(), p = geoLL(c[0], c[1]); a.href = 'https://www.google.com/maps/@' + p[0].toFixed(6) + ',' + p[1].toFixed(6) + ',18z/data=!3m1!1e3'; }
+function geoCampos() { const g = geoG(), q = id => $(id); if (!q('geo-a')) return; const c = geoCentroProj();
+  if (g.utm) return;
+  if (g.modo === 'utm') { const u = geoParaUTM(g.lat, g.lng); q('geo-a').value = u.e.toFixed(2); q('geo-b').value = u.n.toFixed(2); q('geo-z').value = u.z; }
+  else { q('geo-a').value = (+g.lat).toFixed(7); q('geo-b').value = (+g.lng).toFixed(7); }
+  q('geo-rot').value = (+g.rot || 0).toFixed(2); q('geo-esc').value = (+g.esc || 100).toFixed(1); }
+function geoPainel() {
+  const p = $('geo-pan'); if (!p) return; const g = geoG(), u = g.modo === 'utm', utmP = geoEhUTM(), nv = g.niv;
+  const ck = (k, t) => `<label class="rl-c"><input type="checkbox" data-geoniv="${k}"${nv[k] ? ' checked' : ''}/> ${t}</label>`;
+  const pvs = P.nos.filter(n => R.no[n.id]).map(n => `<option value="${n.id}">${esc(nomeNo(n))}</option>`).join('');
+  p.innerHTML = `<div class="rl-h"><b>🛰 Georreferenciar</b><button class="bt peq" data-geo="fechar" title="Fechar e voltar">✕</button></div>
+  <div class="geo-s">Posicione a rede sobre o satélite. Fica salvo no projeto (abre no mesmo lugar no 3D e no KMZ).</div>
+  <div class="rl-t">Procurar o local</div><div class="rl-g"><input id="geo-q" placeholder="Rua, bairro, cidade…" style="flex:1;min-width:120px"/><button class="bt peq" data-geo="busca">🔍</button></div><div id="geo-res" class="geo-res"></div>
+  <div class="rl-t">Tipo do mapa</div><div class="rl-g">${[['sat', 'Satélite'], ['hib', 'Satélite + nomes'], ['rua', 'Mapa']].map(([k, t]) => `<button class="bt peq${(g.base || 'sat') === k ? ' on' : ''}" data-geob="${k}">${t}</button>`).join('')}</div>
+  <div class="rl-t">Aparência</div><div class="rl-g"><button class="bt peq${g.vis !== 'tec' ? ' on' : ''}" data-geov="real">🏗 Realista</button><button class="bt peq${g.vis === 'tec' ? ' on' : ''}" data-geov="tec">📐 Técnico</button></div>
+  ${ck('ruas', 'Ruas, calçadas e meio-fio')}${ck('rede', 'Rede (trechos)')}${ck('pvs', 'PVs')}${ck('rot', 'Nome dos PVs')}${ck('lotes', 'Lotes')}
+  <div class="rl-t">Posição</div>
+  ${utmP ? `<label class="rl-c"><input type="checkbox" data-geo="utm"${g.utm ? ' checked' : ''}/> As coordenadas do projeto já são <b>UTM SIRGAS 2000</b> (locação exata)</label>
+     ${g.utm ? `<div class="rl-g"><label>Zona <input id="geo-zona" value="${g.zona || 24}" style="width:44px"/></label><label>Hemisfério <select id="geo-hem"><option value="S"${g.hem !== 'N' ? ' selected' : ''}>Sul</option><option value="N"${g.hem === 'N' ? ' selected' : ''}>Norte</option></select></label><button class="bt peq" data-geo="aplUtm">Aplicar</button></div>` : ''}` : ''}
+  ${g.utm ? '' : `<div class="rl-g"><button class="bt peq${!u ? ' on' : ''}" data-geom="dec">Lat/Lon</button><button class="bt peq${u ? ' on' : ''}" data-geom="utm">UTM</button><button class="bt peq" data-geo="colar">📋 Colar</button><button class="bt peq" data-geo="centro" title="Coloca o centro do desenho no centro do mapa">⌖ Centro do mapa</button></div>
+    <div class="rl-g"><label>${u ? 'E (m)' : 'Lat'} <input id="geo-a" style="width:118px"/></label><label>${u ? 'N (m)' : 'Lon'} <input id="geo-b" style="width:118px"/></label>${u ? '<label>Zona <input id="geo-z" style="width:40px"/></label>' : ''}<button class="bt peq" data-geo="ir">Ir</button></div>
+    <div class="rl-g"><label>Giro (°) <input id="geo-rot" style="width:64px"/></label><label>Escala (%) <input id="geo-esc" style="width:60px"/></label></div>
+    <div class="geo-s">Arraste o ● vermelho (ou Shift + arrastar o mapa) para mover; o ◎ azul (ou Shift + roda) para girar.</div>`}
+  <div class="rl-g"><label>Desenho <input type="range" min="10" max="100" value="${g.opD == null ? 85 : g.opD}" data-geor="opD"/></label><label>Imagem <input type="range" min="10" max="100" value="${g.opS == null ? 100 : g.opS}" data-geor="opS"/></label></div>
+  ${g.utm ? '' : `<div class="rl-t">Pontos de controle (PV com coordenada medida)</div>
+  <div class="rl-g"><select id="geo-pv">${pvs}</select><input id="geo-pc" placeholder="lat, lon  ou  E N" style="flex:1;min-width:110px"/><button class="bt peq" data-geo="pcAdd">+</button></div>
+  ${g.ctrl.length ? '<div class="geo-res">' + g.ctrl.map((q, i) => `<div>${esc(nomeNo(noDe(q.no)))}: ${(+q.lat).toFixed(6)}, ${(+q.lng).toFixed(6)} <button class="bt peq" data-geopc="${i}">✕</button></div>`).join('') + '</div><div class="rl-g"><button class="bt peq pri" data-geo="ajustar">📍 Locar pelos pontos</button></div>' : '<div class="geo-s">Com 2 ou mais pontos o desenho é girado e deslocado sozinho (mínimos quadrados) e o erro aparece aqui.</div>'}
+  <div id="geo-info" class="geo-s"></div>`}
+  <div class="rl-t">Salvar e exportar</div>
+  <div class="rl-g">${g.utm ? '' : `<button class="bt peq pri" data-geo="fix">${g.fix ? '✎ Reposicionar' : '✔ Salvar posição'}</button>`}<button class="bt peq" data-geo="kmz">⬇ KMZ (Google Earth)</button><button class="bt peq" data-geo="kml">KML</button><a class="bt peq" id="geo-gm" target="_blank" rel="noopener">🌎 Google Maps</a></div>
+  <div class="geo-s">No 3D, ligue <b>🏘 Cenário › 🛰 Imagem de satélite no chão</b> para ver o satélite sob a rede.</div>`;
+  geoCampos(); geoLinks();
+}
+document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-geo],[data-geob],[data-geov],[data-geom],[data-geopc]'); if (!b || !$('geo-ov')) return; const g = geoG(), d = b.dataset;
+  if (d.geob) { geoBase(d.geob); salvar(); return geoPainel(); }
+  if (d.geov) { g.vis = d.geov; salvar(); geoDesenha(); return geoPainel(); }
+  if (d.geom) { g.modo = d.geom; return geoPainel(); }
+  if (d.geopc != null) { g.ctrl.splice(+d.geopc, 1); salvar(); return geoPainel(); }
+  const a = d.geo;
+  if (a === 'fechar') return geoFechar();
+  if (a === 'busca') { const q = $('geo-q').value.trim(); if (!q) return; const out = $('geo-res'); out.textContent = 'Procurando…';
+    try { const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=6&countrycodes=br&q=' + encodeURIComponent(q)); const js = await r.json();
+      out.innerHTML = js.length ? js.map(x => `<div><a href="#" data-geoir="${x.lat},${x.lon}">${esc(x.display_name)}</a></div>`).join('') : 'Nada encontrado.'; } catch (er) { out.textContent = 'Sem resposta do serviço de busca (internet?).'; } return; }
+  if (a === 'centro') { if (g.utm || !GM) return; const c = GM.map.getCenter(); g.lat = c.lat; g.lng = c.lng; geoDesenha(); geoCampos(); return salvar(); }
+  if (a === 'colar') { const t = prompt('Cole as coordenadas do centro do desenho (Lat, Lon em graus, ex.: -22.5266, -41.9450) ou UTM (E N zona):'); if (!t) return; const v = geoNums(t);
+    if (v.length >= 2 && Math.abs(v[0]) <= 90 && Math.abs(v[1]) <= 180) { g.lat = v[0]; g.lng = v[1]; } else if (v.length >= 2) { const z = v[2] || 24, ll = geoDeUTM(v[0], v[1], z, true); g.lat = ll[0]; g.lng = ll[1]; } else return toast('Não reconheci as coordenadas.');
+    geoDesenha(true); geoCampos(); return salvar(); }
+  if (a === 'ir') { const A = geoNums($('geo-a').value)[0], B = geoNums($('geo-b').value)[0]; if (!isFinite(A) || !isFinite(B)) return toast('Coordenada inválida.');
+    if (g.modo === 'utm') { const ll = geoDeUTM(A, B, +($('geo-z').value || 24), true); g.lat = ll[0]; g.lng = ll[1]; } else { g.lat = A; g.lng = B; }
+    const r = geoNums($('geo-rot').value)[0], s = geoNums($('geo-esc').value)[0]; if (isFinite(r)) g.rot = r; if (isFinite(s) && s > 1) g.esc = s; geoDesenha(true); return salvar(); }
+  if (a === 'utm') { g.utm = b.checked; if (g.utm) { g.zona = g.zona || 24; g.hem = g.hem || 'S'; g.fix = true; } else if (g.lat == null) { const ll = geoDeUTM(geoCentroProj()[0], geoCentroProj()[1], 24, true); g.lat = ll[0]; g.lng = ll[1]; g.fix = false; }
+    salvar(); geoDesenha(true); return geoPainel(); }
+  if (a === 'aplUtm') { g.zona = +($('geo-zona').value) || 24; g.hem = $('geo-hem').value; salvar(); geoDesenha(true); return; }
+  if (a === 'pcAdd') { const v = geoNums($('geo-pc').value); if (v.length < 2) return toast('Digite a coordenada do PV: lat, lon (graus) ou E N (UTM).'); let lat = v[0], lng = v[1];
+    if (!(Math.abs(lat) <= 90 && Math.abs(lng) <= 180)) { const ll = geoDeUTM(v[0], v[1], v[2] || 24, true); lat = ll[0]; lng = ll[1]; }
+    g.ctrl = g.ctrl.filter(q => q.no !== $('geo-pv').value); g.ctrl.push({no: $('geo-pv').value, lat, lng}); salvar(); return geoPainel(); }
+  if (a === 'ajustar') { const r = geoAjustar(); if (!r) return; g.fix = false; salvar(); geoDesenha(true); geoPainel(); const i = $('geo-info');
+    if (i) i.innerHTML = r.n < 2 ? 'Com 1 ponto o desenho só é deslocado (o giro fica o digitado). Use 2 ou mais para girar.' : `Locado por ${r.n} pontos: erro médio <b>${fm(r.rms, 2)} m</b>, maior <b>${fm(r.max, 2)} m</b>${r.max > 2 ? ' — confira as coordenadas ou a escala do desenho.' : '.'}`; return; }
+  if (a === 'fix') { g.fix = !g.fix; salvar(); geoDesenha(); geoPainel(); return toast(g.fix ? 'Posição salva no projeto. ✎ Reposicionar para mexer de novo.' : 'Pode mover e girar o desenho.'); }
+  if (a === 'kmz' || a === 'kml') return geoExporta(a);
+});
+document.addEventListener('click', e => { const x = e.target.closest && e.target.closest('[data-geoir]'); if (!x) return; e.preventDefault(); const v = x.dataset.geoir.split(',').map(Number); if (GM) GM.map.setView(v, 18); const g = geoG(); if (!g.utm && !g.fix) { g.lat = v[0]; g.lng = v[1]; geoDesenha(); geoCampos(); salvar(); } $('geo-res').innerHTML = ''; });
+document.addEventListener('change', e => { const el = e.target; if (!el || !$('geo-ov')) return; const g = geoG();
+  if (el.dataset && el.dataset.geoniv) { g.niv[el.dataset.geoniv] = el.checked ? 1 : 0; salvar(); return geoDesenha(); }
+  if (el.id === 'geo-rot' || el.id === 'geo-esc') { const v = geoNums(el.value)[0]; if (!isFinite(v)) return; if (el.id === 'geo-rot') g.rot = v; else if (v > 1) g.esc = v; salvar(); geoDesenha(); } });
+document.addEventListener('input', e => { const el = e.target; if (!el || !el.dataset || !el.dataset.geor || !GM) return; const g = geoG(); g[el.dataset.geor] = +el.value; if (el.dataset.geor === 'opS') geoBase(g.base || 'sat'); else geoDesenha(); salvar(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && $('geo-ov')) { geoFechar(); e.stopPropagation(); } }, true);
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target && e.target.id === 'geo-q') { const b = document.querySelector('[data-geo="busca"]'); if (b) b.click(); } });
+/* ── KMZ / KML para o Google Earth (ZIP próprio sem compressão, como no Intertravado) ── */
+function geoCrc(u) { if (!geoCrc.t) { geoCrc.t = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; geoCrc.t[n] = c >>> 0; } } let r = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) r = geoCrc.t[(r ^ u[i]) & 255] ^ (r >>> 8); return (r ^ 0xFFFFFFFF) >>> 0; }
+function geoZip1(nome, texto) { const en = new TextEncoder(), nm = en.encode(nome), d = en.encode(texto), crc = geoCrc(d), n = nm.length, sz = d.length;
+  const lh = new DataView(new ArrayBuffer(30)); lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(12, 0x21, true); lh.setUint32(14, crc, true); lh.setUint32(18, sz, true); lh.setUint32(22, sz, true); lh.setUint16(26, n, true);
+  const ch = new DataView(new ArrayBuffer(46)); ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(14, 0x21, true); ch.setUint32(16, crc, true); ch.setUint32(20, sz, true); ch.setUint32(24, sz, true); ch.setUint16(28, n, true);
+  const ec = new DataView(new ArrayBuffer(22)); ec.setUint32(0, 0x06054b50, true); ec.setUint16(8, 1, true); ec.setUint16(10, 1, true); ec.setUint32(12, 46 + n, true); ec.setUint32(16, 30 + n + sz, true);
+  return new Blob([lh, nm, d, ch, nm, ec], {type: 'application/vnd.google-earth.kmz'}); }
+function geoKmlTexto() {
+  const g = geoG(), F = geoFeicoes(), real = g.vis !== 'tec', nv = g.niv, x = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const co = pts => pts.map(p => { const l = geoLL(p[0], p[1]); return l[1].toFixed(8) + ',' + l[0].toFixed(8) + ',0'; }).join(' ');
+  const pol = (pts, st, nome) => `<Placemark>${nome ? '<name>' + x(nome) + '</name>' : ''}<styleUrl>#${st}</styleUrl><Polygon><tessellate>1</tessellate><outerBoundaryIs><LinearRing><coordinates>${co(pts.concat([pts[0]]))}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>`;
+  const lin = (pts, st, nome, desc) => `<Placemark>${nome ? '<name>' + x(nome) + '</name>' : ''}${desc ? '<description>' + x(desc) + '</description>' : ''}<styleUrl>#${st}</styleUrl><LineString><tessellate>1</tessellate><coordinates>${co(pts)}</coordinates></LineString></Placemark>`;
+  const sty = (id, lc, lw, pc) => `<Style id="${id}"><LineStyle><color>${lc}</color><width>${lw}</width></LineStyle><PolyStyle><color>${pc || '00000000'}</color>${pc ? '' : '<fill>0</fill>'}</PolyStyle></Style>`;
+  let k = `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${x(P.nome || 'Rede de esgoto')}</name>
+${sty('pista', real ? 'ff504d4b' : 'ffd1d5db', real ? 0 : 1, real ? 'e6504d4b' : '')}${sty('calc', 'ffc8d2d6', 0, real ? 'e6c8d2d6' : '')}${sty('mf', 'ffeaf0f2', 0, 'f0eaf0f2')}${sty('lote', 'ff0b9ef5', 1, real ? '40cfe7f3' : '')}${sty('rede', 'ff1673f9', 4)}${sty('recq', 'ffd326c0', 4)}${sty('eixo', 'ffffffff', 1)}
+<Style id="pv"><IconStyle><scale>0.6</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle><LabelStyle><scale>0.7</scale></LabelStyle></Style>`;
+  if (nv.lotes) k += '<Folder><name>Lotes</name>' + F.lotes.map(q => pol(q, 'lote')).join('') + '</Folder>';
+  if (nv.ruas) { k += '<Folder><name>Ruas</name>' + F.pista.map(q => pol(q, 'pista')).join('') + (real ? F.calc.map(q => pol(q, 'calc')).join('') + F.mf.map(q => pol(q, 'mf')).join('') : '') + F.eixo.map(e => lin(e, 'eixo')).join('') + '</Folder>'; }
+  if (nv.rede) k += '<Folder><name>Rede de esgoto</name>' + F.rede.map(t => lin(t.p, t.r.recq ? 'recq' : 'rede', t.nome, `DN ${t.r.D} · L ${fm(t.r.L, 2)} m · i ${fm(t.r.i * 100, 3)} %`)).join('') + '</Folder>';
+  if (nv.pvs) k += '<Folder><name>PVs</name>' + F.pvs.map(q => { const l = geoLL(q.p[0], q.p[1]); return `<Placemark><name>${x(q.nome)}</name><description>Tampa ${fm(q.x.ct, 3)} · Fundo ${fm(q.x.cf, 3)} · Prof. ${fm(q.x.ct - q.x.cf, 2)} m</description><styleUrl>#pv</styleUrl><Point><coordinates>${l[1].toFixed(8)},${l[0].toFixed(8)},0</coordinates></Point></Placemark>`; }).join('') + '</Folder>';
+  return k + '</Document></kml>';
+}
+function geoExporta(tipo) { if (!geoPronto()) return toast('Posicione o desenho no mapa antes de exportar.'); const t = geoKmlTexto(), base = (P.nome || 'rede-esgoto').replace(/[^\w\-]+/g, '_');
+  const blob = tipo === 'kmz' ? geoZip1('doc.kml', t) : new Blob([t], {type: 'application/vnd.google-earth.kml+xml'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = base + '.' + tipo; document.body.appendChild(a); a.click(); a.remove();
+  toast((tipo === 'kmz' ? 'KMZ' : 'KML') + ' baixado: abra no Google Earth.'); }
+/* ── satélite no chão do 3D: mosaico de tiles Esri num canvas, UV de cada vértice do terreno pelo georreferenciamento ── */
+function geoSatChao(mesh) {
+  if (!geoPronto() || !RL.grade || !mesh) return; const T = THREE, m = RL.grade, g = mesh.geometry, pos = g.attributes.position, n = pos.count;
+  const lls = new Array(n); let la0 = 90, la1 = -90, lo0 = 180, lo1 = -180;
+  for (let i = 0; i < n; i++) { const x = pos.getX(i) + T3.cx, y = -pos.getZ(i) + T3.cy, l = geoLL(x, y); lls[i] = l; la0 = Math.min(la0, l[0]); la1 = Math.max(la1, l[0]); lo0 = Math.min(lo0, l[1]); lo1 = Math.max(lo1, l[1]); }
+  const ext = Math.max((la1 - la0) * GEO_M, (lo1 - lo0) * GEO_M * Math.cos(la0 * Math.PI / 180)), q = RL_QUAL[rlQualK()], Wmax = q.tex >= 2048 ? 4096 : 2048;
+  let z = Math.floor(Math.log2(156543.03 * Math.cos(la0 * Math.PI / 180) * Wmax / Math.max(10, ext))); z = Math.max(13, Math.min(19, z));
+  const px = (lat, lng) => { const s = Math.sin(lat * Math.PI / 180), k = 256 * Math.pow(2, z); return [(lng + 180) / 360 * k, (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * k]; };
+  const a = px(la1, lo0), b = px(la0, lo1), tx0 = Math.floor(a[0] / 256), ty0 = Math.floor(a[1] / 256), tx1 = Math.floor(b[0] / 256), ty1 = Math.floor(b[1] / 256);
+  if ((tx1 - tx0 + 1) * (ty1 - ty0 + 1) > 160) return toast('Área grande demais para o satélite no chão.');
+  const cv = document.createElement('canvas'); cv.width = (tx1 - tx0 + 1) * 256; cv.height = (ty1 - ty0 + 1) * 256; const cx = cv.getContext('2d'); cx.fillStyle = '#6f7a64'; cx.fillRect(0, 0, cv.width, cv.height);
+  const uv = new Float32Array(n * 2); for (let i = 0; i < n; i++) { const p = px(lls[i][0], lls[i][1]); uv[i * 2] = (p[0] - tx0 * 256) / cv.width; uv[i * 2 + 1] = 1 - (p[1] - ty0 * 256) / cv.height; }
+  const tex = new T.CanvasTexture(cv); tex.encoding = T.sRGBEncoding; tex.anisotropy = Math.min(8, RL.t3.rd.capabilities.getMaxAnisotropy());
+  const sat = new T.BufferGeometry(); sat.setAttribute('position', pos); sat.setAttribute('normal', g.attributes.normal); sat.setAttribute('uv', new T.Float32BufferAttribute(uv, 2)); sat.setIndex(g.index);
+  const mat = new T.MeshStandardMaterial({map: tex, roughness: 1, metalness: 0, side: T.DoubleSide}); RL.terrSat = mat; mesh.geometry = sat; mesh.material = mat; rlSolo();
+  let falhas = 0, ok = 0; const tot = (tx1 - tx0 + 1) * (ty1 - ty0 + 1);
+  for (let tx = tx0; tx <= tx1; tx++) for (let ty = ty0; ty <= ty1; ty++) { const im = new Image(); im.crossOrigin = 'anonymous';
+    im.onload = () => { try { cx.drawImage(im, (tx - tx0) * 256, (ty - ty0) * 256); tex.needsUpdate = true; ok++; } catch (e) { falhas++; } };
+    im.onerror = () => { if (++falhas === 1) toast('Algumas imagens de satélite não carregaram (internet ou bloqueio do servidor).'); };
+    im.src = GEO_SAT.replace('{z}', z).replace('{y}', ty).replace('{x}', tx); }
+  RL.satInfo = {z, tiles: tot};
 }
 /* ════════════════════════════════════════════════════════════════════
    ABA 6 — ORÇAMENTO (quantitativos do cálculo + EMOP, SINAPI RJ e SCO-Rio, como no programa de Orçamento)
@@ -2006,6 +3016,7 @@ const AJ = {
   'crit.berco': '<b>Berço de areia</b> (m) sob o tubo. Usual 0,10 m. Entra no volume de areia e na profundidade da vala.',
   'crit.envolt': '<b>Envoltória acima do tubo</b> (m) de areia ou pó de pedra. Usual 0,30 m.',
   'crit.espPav': '<b>Espessura do asfalto reposto</b> (m) sobre a vala. Usual 0,05 m (CBUQ). A área reposta é largura da vala + 0,30 m × extensão.',
+  'crit.fundoLote': '<b>Fundo do lote</b> (m) — profundidade dos lotes desenhados na planta e no 3D. Padrão <b>25 m</b>. Na esquina, o lote da rua mais longa fica com o canto e a rua que cruza começa os lotes dela logo depois do fundo desse lote: os lotes encostam, sem corredor ou servidão entre eles. Não muda o número de ligações (que depende da testada).',
   'crit.testada': '<b>Testada padrão do lote</b> (m) — a largura da frente do lote. Cada trecho recebe <b>uma ligação predial por lote, de cada lado</b>: trecho de 60 m com testada 12 m = 5 lotes por lado. Padrão <b>12 m</b>. Muda um trecho só no painel dele, ou arraste cada ligação na planta.',
   'crit.largPas': '<b>Largura do passeio</b> (m), do meio-fio ao alinhamento do lote. Define o <b>comprimento do ramal predial</b> (meia rua + passeio) e a posição do coletor quando a rede passa no passeio. Usual 2,50 m.',
   'crit.habLig': '<b>Habitantes por ligação</b> (hab/lote). Só informativo: compare com a população do projeto (nº de lotes × hab/lote).',
@@ -2090,6 +3101,12 @@ const AJ = {
   't3.voo': '<b>✈ Percorrer</b> — voa ao longo do coletor tronco.',
   't3.redim': '<b>🛠 Redimensionar</b> — grava a vazão do cenário como vazão de projeto e recalcula os diâmetros.',
   't3.solo': '<b>🛣 Rua</b> — transparência da rua, para enxergar os tubos.',
+  't3.real': '<b>🏙 Realista</b> — 3D como no Pavimento Intertravado: céu com nuvens, sol e sombras, asfalto, meio-fio e calçada, terreno com grama, os LOTES da planta com muros, portões e casas, árvores e horizonte. Desligado = 3D técnico (só rede e ruas cinza). Só desenho: nenhum cálculo muda.',
+  't3.cen': '<b>🏘 Cenário</b> — painel com Qualidade, Sol, os níveis do cenário (calçada, terreno, casas, muros, árvores, grama, horizonte, satélite) e para locar árvores e postes.',
+  't3.rua': '<b>👁 Nível da rua</b> — põe a câmera em pé (1,70 m) no meio da rua mais longa, olhando ao longo dela.',
+  't3.andar': '<b>🚶 Andar</b> — anda pela rua: W/S ou ↑/↓ anda, A/D de lado, ←/→ gira, arraste para olhar, roda do mouse dá passos, Shift corre, Esc sai. No celular use os botões na tela.',
+  't3.png': '<b>🖼 Imagem PNG</b> — baixa a imagem do 3D exatamente como está na tela (use Qualidade Alta/Ultra para a melhor imagem).',
+  't3.geo': '<b>🛰 Georreferenciar</b> — abre o mapa com satélite para posicionar a rede (coordenadas, giro, pontos de controle ou projeto já em UTM), exportar KMZ para o Google Earth e pôr o satélite no chão do 3D.',
   't3.ev': '<b>↕ Exagero vertical</b> — estica as alturas para ver profundidades e degraus.',
   'pf': '<b>Perfil</b> — terreno, tubo e PVs ao longo do coletor escolhido. O exagero vertical só estica o desenho.'
 };
@@ -2101,11 +3118,11 @@ const AJ = {
     if (!el || !el.closest) return null;
     const bt = el.closest('button,[data-act],[data-plmodo],[data-t3]');
     if (bt) { const d = bt.dataset; if (d.act && AJ['act.' + d.act]) return 'act.' + d.act; if (d.plmodo && AJ['modo.' + d.plmodo]) return 'modo.' + d.plmodo; if (d.t3 && AJ['t3.' + d.t3]) return 't3.' + d.t3; }
-    const f = el.closest('.f'); if (!f) return null;
+    const f = el.closest('.f'); if (!f) return window.ajTexto ? ajTexto(el) : null;   /* ES-04: quadros, tabelas e textos (76-ajuda2.js) */
     const no = f.querySelector('[data-no][data-k]'); if (no && AJ['no.' + no.dataset.k]) return 'no.' + no.dataset.k;
     for (const [at, pre, fixo] of ATTR) { const c = f.querySelector('[' + at + ']'); if (c) { const k = fixo ? pre : pre + c.getAttribute(at); if (AJ[k]) return k; } }
     if (f.querySelector('#pf-col,#pf-ate,#pf-ev')) return 'pf';
-    return null;
+    return window.ajTexto ? ajTexto(el) : null;
   }
   let alvo = null, fixo = false, tm = 0;
   function mostrar(el, k) {
@@ -2116,7 +3133,7 @@ const AJ = {
   function esconder() { clearTimeout(tm); pop.hidden = true; alvo = null; fixo = false; }
   document.addEventListener('mouseover', e => { if (fixo) return; const k = chave(e.target);
     if (!k) { if (alvo && !e.target.closest('#aj-pop')) esconder(); return; }
-    const el = e.target.closest('button,.f') || e.target; if (el === alvo) return;
+    const el = (window._ajEl && window._ajEl.contains(e.target) ? window._ajEl : null) || e.target.closest('button,.f') || e.target; window._ajEl = null; if (el === alvo) return;
     if (el.tagName === 'BUTTON' && el.title) { el.dataset.t0 = el.title; el.removeAttribute('title'); }   /* o balão do programa substitui o title do navegador */
     clearTimeout(tm); tm = setTimeout(() => mostrar(el, k), 220); });
   document.addEventListener('mouseout', e => { if (!fixo && !e.relatedTarget) esconder(); });
@@ -2133,6 +3150,158 @@ const AJ = {
   new MutationObserver(() => { clearTimeout(ob); ob = setTimeout(marca, 60); }).observe(document.body, {childList: true, subtree: true});
   marca();
 })();
+/* ════════════════════════════════════════════════════════════════════
+   ES-04 · AJUDA EM QUADROS, CAIXAS, TABELAS E TEXTOS (pedido do dono: “sempre que passar o mouse em quaisquer quadros,
+   caixas ou texto deve aparecer uma explicação: fórmulas e no que interfere no resultado”).
+   Complementa o 75-ajuda.js (campos e botões). Como funciona: o 75 chama ajTexto(el) quando o mouse não está num campo/botão;
+   aqui o texto do título do quadro (h2/h3), do cabeçalho da coluna (th — e também qualquer célula td da coluna), do chip da barra
+   de situação, do cartão (kpi), do rótulo do painel 3D/georreferenciar ou da linha da memória (📐) é comparado com AJT.
+   Chave = texto sem acentos, minúsculo, sem a unidade em <small>. Entrada nova: acrescentar em AJT (texto exato) ou em AJR (regex).
+   ════════════════════════════════════════════════════════════════════ */
+const AJT = {
+  /* ── planilha de dimensionamento ── */
+  'trecho': '<b>Trecho</b> — tubo entre dois PVs (ou TL), numerado “coletor-ordem” (1-3 = 3º trecho do coletor 1; o coletor 1 é o mais longo). O sentido do esgoto vai do PV de montante para o de jusante.',
+  'rua': '<b>Rua</b> — rua por onde o trecho passa (nome digitado uma vez no Traçado).',
+  'mont.': '<b>Montante</b> — PV/TL de onde o trecho sai (ponta mais alta da rede, de onde vem o esgoto).',
+  'jus.': '<b>Jusante</b> — PV para onde o trecho leva o esgoto.',
+  'l': '<b>L — extensão do trecho</b> (m), medida em planta entre os centros dos PVs. Entra na contribuição (taxa linear × L), na infiltração, no quantitativo de tubo, vala e pavimento.',
+  'l (m)': '<b>L — extensão do trecho</b> (m). Entra na contribuição, na infiltração e nos quantitativos de tubo, vala e pavimento.',
+  'contribui': '<b>Contribui</b> — de onde vem a vazão do trecho: <b>linear</b> = taxa × extensão (casas ao longo do trecho), mais a que chega dos trechos de montante e as contribuições concentradas do PV (indústria, condomínio).',
+  'q inicial': '<b>Q inicial</b> (L/s) — vazão no início de operação: <i>Qi = K2 · C · q<sub>i</sub> · P<sub>i</sub> / 86 400 + infiltração</i>, distribuída pela extensão da rede e acumulada de montante para jusante. Nunca menor que a vazão mínima (1,5 L/s, NBR 9649). Define a <b>tensão trativa</b> (autolimpeza).',
+  'q final': '<b>Q final</b> (L/s) — vazão de fim de plano: <i>Qf = K1 · K2 · C · q<sub>f</sub> · P<sub>f</sub> / 86 400 + infiltração</i>, acumulada de montante para jusante. Define o <b>diâmetro</b>, a <b>lâmina y/D</b> e a <b>velocidade máxima</b>.',
+  'qi': '<b>Q<sub>i</sub></b> — vazão inicial (L/s): K2·C·q·P/86 400 + infiltração; mínimo 1,5 L/s. Usada na tensão trativa.', 'qf': '<b>Q<sub>f</sub></b> — vazão final (L/s): K1·K2·C·q·P/86 400 + infiltração. Usada no diâmetro, lâmina e velocidade.',
+  'qi (l/s)': '<b>Q<sub>i</sub></b> — vazão inicial (L/s): K2·C·q·P/86 400 + infiltração; mínimo 1,5 L/s. Usada na tensão trativa.', 'qf (l/s)': '<b>Q<sub>f</sub></b> — vazão final (L/s): K1·K2·C·q·P/86 400 + infiltração. Usada no diâmetro, lâmina e velocidade.',
+  'q final (l/s)': '<b>Q final</b> (L/s) — vazão de fim de plano que passa pelo trecho/PV. Define diâmetro, lâmina e velocidade.',
+  'dn': '<b>DN — diâmetro nominal</b> (mm). O programa escolhe o menor DN da série (a partir do DN mínimo dos Dados) que leva a Q final com y/D ≤ 0,75 (ou 0,50 se V > Vc), por Manning: <i>Q = (1/n) · A · Rh<sup>2/3</sup> · I<sup>1/2</sup></i>, com o diâmetro INTERNO real do tubo escolhido. Muda o custo do tubo, a largura da vala e o recobrimento.',
+  'i terreno': '<b>i terreno</b> (%) — declividade do terreno no trecho: <i>(CT mont. − CT jus.) / L</i>. Quando é maior que a mínima, o coletor acompanha o terreno (vala rasa); quando é menor ou negativa, o coletor precisa aprofundar.',
+  'i coletor': '<b>i coletor</b> (%) — declividade adotada: <i>(CC mont. − CC jus.) / L</i>. É a maior entre a mínima (tensão trativa) e a necessária para manter o recobrimento, limitada pela máxima (V ≤ 5 m/s). Aumentar a declividade aprofunda a rede a jusante.',
+  'i min.': '<b>i mínima</b> (%) — declividade para a tensão trativa mínima (autolimpeza) com a vazão inicial. NBR 9649: <i>I<sub>mín</sub> = 0,0055 · Q<sub>i</sub><sup>−0,47</sup></i> (m/m, Q em L/s, n = 0,013, τ = 1 Pa); o programa resolve com o n e o τ dos Dados.',
+  'i (%)': '<b>I</b> — declividade do coletor (%) = (CC mont. − CC jus.) / L.', 'i min. (%)': '<b>I mínima</b> (%) — para τ ≥ τ mínima com a vazão inicial: I<sub>mín</sub> = 0,0055·Q<sub>i</sub><sup>−0,47</sup> (n = 0,013, 1 Pa).',
+  'ct mont.': '<b>CT montante</b> — cota do terreno (tampa do PV) na ponta de montante (m). Vem das cotas das ruas/topografia. É a referência do recobrimento e da profundidade.',
+  'ct jus.': '<b>CT jusante</b> — cota do terreno (tampa do PV) na ponta de jusante (m).',
+  'cc mont.': '<b>CC montante</b> — cota do coletor (geratriz inferior interna, o “fundo” do tubo) na saída do PV de montante (m). <i>Recobrimento = CT − (CC + DE) ≥ 0,90 m</i> na via (0,65 m no passeio).',
+  'cc jus.': '<b>CC jusante</b> — cota do coletor na chegada ao PV de jusante (m) = CC mont. − I × L. Se ficar acima da saída do PV, há degrau (≥ 0,50 m pede tubo de queda).',
+  'prof. mont.': '<b>Profundidade de montante</b> (m) = CT − CC. Define a faixa de escavação (0–1,5 / 1,5–3 / 3–4,5 m), o escoramento (> 1,25 m) e o PV. Acima da profundidade de alerta dos Dados aparece aviso (pensar em elevatória).',
+  'prof. jus.': '<b>Profundidade de jusante</b> (m) = CT − CC na chegada ao PV de jusante.',
+  'y/d inic.': '<b>y/D inicial</b> — lâmina relativa com a vazão inicial (altura da água ÷ diâmetro interno). Só informativo; a autolimpeza é verificada pela tensão trativa.',
+  'y/d final': '<b>y/D final</b> — lâmina com a vazão final. NBR 9649: <b>≤ 0,75</b> (ar para ventilação e folga), ou <b>≤ 0,50</b> se a velocidade final passar da crítica Vc = 6·√(g·Rh). Acima disso o 3D pinta o tubo de laranja; tubo cheio = vermelho.',
+  'y/di': '<b>y/D inicial</b> — lâmina relativa com a vazão inicial.', 'y/df': '<b>y/D final</b> — lâmina relativa com a vazão final (≤ 0,75; ≤ 0,50 se V > Vc).',
+  'v inic.': '<b>V inicial</b> (m/s) — velocidade média com a vazão inicial, por Manning na seção molhada.',
+  'v final': '<b>V final</b> (m/s) — velocidade com a vazão final. NBR 9649: <b>≤ 5 m/s</b> (desgaste do tubo). Se passar da crítica <i>Vc = 6·√(g·Rh)</i>, a lâmina máxima cai para 0,50.',
+  'vi': '<b>V<sub>i</sub></b> — velocidade inicial (m/s).', 'vf': '<b>V<sub>f</sub></b> — velocidade final (m/s), ≤ 5 m/s.', 'vc': '<b>Vc — velocidade crítica</b> (m/s) = 6·√(g·Rh). Se V final > Vc, y/D máximo = 0,50 (mistura de ar).',
+  'τ': '<b>τ — tensão trativa</b> (Pa) com a vazão inicial: <i>τ = γ · Rh · I</i> (γ = 9 807 N/m³). NBR 9649: <b>≥ 1,0 Pa</b> (n = 0,013) para arrastar os sólidos (autolimpeza). Abaixo disso aumente a declividade.',
+  'σ': '<b>σ (τ) — tensão trativa</b> (Pa) = γ · Rh · I, com a vazão inicial; mínimo 1,0 Pa (NBR 9649).',
+  'ok': '<b>OK</b> — ✔ o trecho atende todos os critérios (recobrimento, τ, y/D, velocidade, DN mínimo, distância entre PVs). ⚠ ou ✖ mostram o que falta; a lista completa está em Verificação.',
+  /* ── PVs ── */
+  'pv': '<b>PV — poço de visita</b> (ou TL, terminal de limpeza na cabeceira rasa). Entra no orçamento pela profundidade (faixas) e pelo diâmetro interno.',
+  'tipo': '<b>Tipo</b> — PV (poço de visita), TL (terminal de limpeza, cabeceira até a profundidade dos Dados), EEE (elevatória) ou lançamento.',
+  'cota terreno': '<b>Cota do terreno / tampa</b> (m) — interpolada das cotas das ruas e da topografia. Mexer nela muda recobrimento e profundidade.',
+  'cota fundo': '<b>Cota de fundo</b> (m) — a mais baixa entre as saídas e chegadas do PV (geratriz inferior do coletor de saída).',
+  'prof.': '<b>Profundidade</b> (m) = cota do terreno − cota de fundo. Define o item de PV no orçamento e a cava.',
+  'ø interno': '<b>Ø interno do PV</b> (m) — 1,00 m até 1,5 m de profundidade (ou o padrão), 1,20 m nos mais fundos; muda o item do orçamento e a cava.',
+  'maior dn': '<b>Maior DN</b> — maior tubo que chega/sai do PV; confere se cabe no Ø do PV.',
+  'degraus / tubo de queda': '<b>Degraus / tubo de queda</b> — diferença entre a chegada e a saída no PV. NBR 9649: degrau ≥ 0,50 m pede <b>tubo de queda</b> (orçado por metro).',
+  'tubos de queda': '<b>Tubos de queda</b> — chegadas com degrau ≥ 0,50 m (NBR 9649). Quantidade e altura entram no orçamento.',
+  /* ── vazões / critérios ── */
+  'populacao e contribuicao': '<b>População e contribuição</b> — de onde sai a vazão: população × consumo per capita × C (retorno) × K1 × K2, mais a infiltração. Mudou aqui, muda todo o dimensionamento.',
+  'criterios hidraulicos': '<b>Critérios hidráulicos</b> — Manning n, tensão trativa mínima, DN mínimo, lâmina máxima e velocidade máxima (NBR 9649). Definem declividade e diâmetro de cada trecho.',
+  'rede, pvs e vala': '<b>Rede, PVs e vala</b> — recobrimentos, profundidade de alerta, distância entre PVs, folgas e espessuras da vala: mudam cotas, quantidades e custo.',
+  'vala e orcamento': '<b>Vala e orçamento</b> — larguras, berço, envoltória, pavimento, lotes (testada e fundo) e DMT: mudam só quantitativos e preço (não a hidráulica).',
+  'vazoes de projeto': '<b>Vazões de projeto</b> — vazões médias, máximas (× K1 × K2) e taxas lineares (vazão ÷ extensão total da rede).',
+  'q media inicial': '<b>Q média inicial</b> = C · q<sub>i</sub> · P<sub>i</sub> / 86 400 (L/s), sem os coeficientes de pico.', 'q media final': '<b>Q média final</b> = C · q<sub>f</sub> · P<sub>f</sub> / 86 400 (L/s).',
+  'q max. inicial': '<b>Q máxima inicial</b> = K2 · Q média inicial + infiltração (L/s).', 'q max. final': '<b>Q máxima final</b> = K1 · K2 · Q média final + infiltração (L/s). É a que dimensiona os diâmetros.',
+  'infiltracao': '<b>Infiltração</b> = taxa (L/s·km) × extensão da rede (km). NBR 9649: 0,05 a 1,0 L/s·km.',
+  'taxa final': '<b>Taxa linear final</b> = (Q máx. final − infiltração) ÷ extensão da rede (L/s·km) + taxa de infiltração. Multiplicada pelo L de cada trecho dá a contribuição dele.',
+  'por habitante': '<b>Custo por habitante</b> = total com BDI ÷ população final.', 'por metro de rede': '<b>Custo por metro</b> = total com BDI ÷ extensão da rede.',
+  'tubos da rede': '<b>Tubos da rede</b> — material e diâmetros (interno/externo). O cálculo usa o diâmetro INTERNO real; a vala e o recobrimento usam o EXTERNO.',
+  'interno (di)': '<b>Diâmetro interno (DI)</b> (mm) — usado na hidráulica (área, Rh, lâmina). “≈” = valor aproximado: confira no catálogo do fabricante.', 'externo': '<b>Diâmetro externo (DE)</b> (mm) — usado na largura da vala e no recobrimento.',
+  /* ── orçamento ── */
+  'item': '<b>Item</b> — numeração da planilha (grupo.item).', 'codigo': '<b>Código</b> — código da composição no banco escolhido (SINAPI, SCO-Rio ou EMOP). Pode ser trocado por linha.',
+  'servico': '<b>Serviço</b> — descrição da composição do banco.', 'un.': '<b>Unidade</b> do banco (m, m², m³, un, t·km…).',
+  'quantidade': '<b>Quantidade</b> — calculada da rede (memória em 📐 abaixo de cada linha): mexer na rede ou nos dados de vala muda a quantidade.',
+  'preco unit.': '<b>Preço unitário</b> (R$) do banco/mês escolhido, desonerado ou não. EMOP sem preço se você não importou a tabela.',
+  'total (r$)': '<b>Total</b> = quantidade × preço unitário (sem BDI).', 'total com bdi': '<b>Total com BDI</b> = custo direto × (1 + BDI).',
+  'custo direto': '<b>Custo direto</b> — soma das linhas (quantidade × preço) antes do BDI.',
+  'solucao (total com bdi)': '<b>Solução</b> — recomposição do pavimento: as 3 soluções mudam só os itens de pavimento; o total já tem BDI.',
+  'orcamento da rede': '<b>Orçamento da rede</b> — itens nos 3 bancos (SINAPI, SCO-Rio, EMOP), quantidades da memória de cálculo, banco/mês/BDI escolhidos acima.',
+  'verificacao': '<b>Verificação</b> — todos os critérios da NBR 9649 / 14486 trecho a trecho: ✖ erro (não atende), ⚠ alerta (atende com ressalva).',
+  'planilha de dimensionamento': '<b>Planilha de dimensionamento</b> — um trecho por linha, de montante para jusante. Passe o mouse em cada coluna para ver a fórmula.',
+  'pocos de visita e terminais de limpeza': '<b>Poços de visita e terminais de limpeza</b> — cotas, profundidade, Ø e degraus de cada PV/TL.',
+  'elevatoria e recalque': '<b>Elevatória e recalque</b> (NBR 12208) — vazão de bombeamento = máxima final; volume útil V = Q · T / 4 (T = ciclo); altura manométrica = desnível + perdas (Hazen-Williams + localizadas).',
+  'sifao invertido': '<b>Sifão invertido</b> — passa sob obstáculo; linhas com V ≥ 0,60 m/s já com a vazão inicial (autolimpeza), perdas por Hazen-Williams + entrada/saída.',
+  'ligacoes (1 por lote)': '<b>Ligações</b> — uma por lote, dos dois lados do trecho (ou de um). Número = frente livre do trecho ÷ testada. Entram no orçamento (ligação + ramal).',
+  'ramal medio': '<b>Ramal médio</b> (m) — do coletor ao alinhamento do lote: meia rua + passeio (menos se a rede está no passeio).',
+  'ajustadas a mao': '<b>Ajustadas à mão</b> — ligações que você arrastou/criou na planta; as demais seguem o automático.',
+  /* ── memorial ── */
+  '1. normas e criterios adotados': '<b>Normas e critérios</b> — NBR 9649 (rede coletora), NBR 14486 (PVC), NBR 12208 (elevatórias): valores adotados nos Dados.',
+  '2. vazoes de projeto': '<b>Vazões de projeto</b> — fórmulas e valores (médias, máximas, infiltração, taxas lineares).',
+  '3. metodo hidraulico': '<b>Método hidráulico</b> — Manning em seção circular parcialmente cheia; tensão trativa τ = γ·Rh·I; lâmina e velocidade crítica.',
+  '4. planilha de dimensionamento': '<b>Planilha de dimensionamento</b> — trecho a trecho, como na aba Dimensionamento.',
+  '5. pocos de visita e terminais de limpeza': '<b>PVs e TLs</b> — cotas, profundidades e tubos de queda.', '6. verificacao': '<b>Verificação</b> — lista de erros e alertas.',
+  '7. quantitativos e orcamento': '<b>Quantitativos e orçamento</b> — memória de cálculo de cada quantidade e preços do banco escolhido.',
+  '8. planta da rede': '<b>Planta da rede</b> — desenho da rede com PVs, trechos e sentido.', '9. perfis longitudinais': '<b>Perfis</b> — terreno, coletor e PVs de cada coletor (exagero vertical só no desenho).',
+  'criterio': '<b>Critério</b> adotado no projeto.', 'valor': '<b>Valor</b> adotado (Dados).',
+  /* ── 3D realista e georreferenciar (rótulos do painel) ── */
+  'qualidade': '<b>Qualidade</b> do 3D — Baixa (sem sombra), Média, Alta, Ultra: resolução, sombras (1024–4096), quantidade de grama e texturas. No celular comece em Média. Não muda nenhum cálculo.',
+  'sol': '<b>Sol</b> — hora do dia (Manhã, Meio-dia, Tarde, Fim de tarde): direção e cor da luz, das sombras e do céu.',
+  'desenho': '<b>Desenho</b> — transparência da rede e das ruas sobre o mapa.', 'imagem': '<b>Imagem</b> — transparência do satélite/mapa de fundo.',
+  'giro (°)': '<b>Giro</b> (graus, sentido anti-horário) — gira o desenho em torno do centro do projeto. Shift + roda do mouse também gira.', 'escala (%)': '<b>Escala</b> — 100 % = desenho em metros reais. Mude só se o desenho foi feito em outra escala.',
+  'lat': '<b>Latitude</b> (graus decimais, negativa no hemisfério sul) do CENTRO do desenho.', 'lon': '<b>Longitude</b> (graus decimais, negativa a oeste) do centro do desenho.',
+  'e (m)': '<b>E (Este)</b> — coordenada UTM SIRGAS 2000 do centro do desenho (m).', 'n (m)': '<b>N (Norte)</b> — coordenada UTM SIRGAS 2000 do centro do desenho (m).', 'zona': '<b>Zona UTM</b> — Rio das Ostras e região: 24 (sul).',
+  'procurar o local': '<b>Procurar</b> — busca de endereço no OpenStreetMap (Nominatim). Clique no resultado para levar o desenho até lá.',
+  'tipo do mapa': '<b>Tipo do mapa</b> — Satélite (Esri), Satélite com nomes de ruas e lugares, ou Mapa (OpenStreetMap).',
+  'aparencia': '<b>Aparência</b> — Realista (pista, calçada e meio-fio preenchidos) ou Técnico (só linhas). Vale também para o KMZ.',
+  'posicao': '<b>Posição</b> — onde fica o centro do desenho, o giro e a escala. Com ✔ Salvar posição o desenho trava (as alças somem).',
+  'pontos de controle (pv com coordenada medida)': '<b>Pontos de controle</b> — PVs com coordenada medida (GPS/topografia). Com 2 ou mais, o programa acha o giro e o deslocamento por mínimos quadrados e mostra o erro médio e o maior.',
+  'salvar e exportar': '<b>Salvar e exportar</b> — a posição vai junto com o projeto; KMZ/KML abre no Google Earth com ruas, rede, PVs e lotes.',
+  'niveis do cenario (so desenho)': '<b>Níveis do cenário</b> — liga/desliga cada parte do 3D realista. Nenhum cálculo muda.',
+  'locar no 3d (clique no chao; arraste para mover)': '<b>Locar no 3D</b> — 🌳 + Árvore ou 💡 + Poste e clique no chão; arraste para mover; selecione e 🗑 para excluir. Fica salvo no projeto.',
+  'calcada e meio-fio': '<b>Calçada e meio-fio</b> — largura da rua e do passeio dos Dados; meio-fio de 15 cm. Só desenho.',
+  'faixa central da rua': '<b>Faixa central</b> — pintura tracejada (3 m pintados, 3 m sem), fora dos cruzamentos.',
+  'terreno (entorno com grama)': '<b>Terreno</b> — superfície pelas cotas dos PVs, das ruas e da topografia (interpolação IDW), encostando no fim da calçada.',
+  'casas': '<b>Casas</b> — uma por lote da planta (os mesmos lotes das ligações), recuo de 3 a 5,5 m, 1 ou 2 pavimentos. Ilustrativo: não entra em cálculo.',
+  'muros e portoes': '<b>Muros e portões</b> — na frente e nas divisas dos lotes; uma parede só entre vizinhos.',
+  'arvores e coqueiros do cenario': '<b>Árvores e coqueiros</b> — nos quintais e soltos no campo (ilustrativos).',
+  'grama 3d (com vento)': '<b>Grama 3D</b> — tufos com vento perto das ruas; a quantidade depende da Qualidade.',
+  'horizonte e morros': '<b>Horizonte</b> — terreno estendido e morros na névoa, para o 3D não terminar num “corte”.',
+  'arvores que voce locou': '<b>Árvores locadas</b> — as que você pôs com 🌳 + Árvore (ficam salvas no projeto).', 'postes que voce locou': '<b>Postes locados</b> — os que você pôs com 💡 + Poste (salvos no projeto).',
+  'imagem de satelite no chao': '<b>Satélite no chão</b> — com o projeto georreferenciado (🛰), a foto de satélite (Esri) vira o terreno do 3D. Desligue Casas/Muros para ver só a foto.',
+  'ruas, calcadas e meio-fio': '<b>Ruas</b> — pista, calçada e meio-fio desenhados sobre o mapa (Realista) ou só o contorno (Técnico).',
+  'rede (trechos)': '<b>Rede</b> — trechos em laranja (recalque em magenta); passe o mouse para ver DN e declividade.', 'pvs': '<b>PVs</b> — clique para ver tampa, fundo e profundidade.',
+  'nome dos pvs': '<b>Nome dos PVs</b> — rótulo fixo ao lado de cada PV.', 'lotes': '<b>Lotes</b> — os mesmos da planta e das ligações.'
+};
+/* textos que mudam (números): expressões regulares */
+const AJR = [
+  [/^rede [\d.,]+ m$/i, '<b>Extensão da rede</b> — soma dos trechos (coletores, recalque e sifões). Entra na infiltração e na taxa linear.'],
+  [/^\d+ trechos · \d+ pvs$/i, '<b>Trechos e PVs</b> — quantidade gerada pelo 🧭 Gerar rede (cruzamentos, deflexões, pontas e a cada distância máxima).'],
+  [/^vazao final [\d.,]+ l\/s$/i, '<b>Vazão final no lançamento</b> = Q máx. final de toda a rede (K1·K2·C·q·P/86 400 + infiltração).'],
+  [/^prof\. max\. [\d.,]+ m$/i, '<b>Profundidade máxima</b> da rede (CT − CC). Muito funda = escavação cara e escoramento: pense em elevatória.'],
+  [/sem erros|^\d+ erros?$/i, '<b>Erros</b> — critérios da NBR que não foram atendidos (lista na Verificação). Com erro a rede não deve ser orçada.'],
+  [/sem alertas|^\d+ alertas?$/i, '<b>Alertas</b> — atendem a norma, mas pedem atenção (profundidade, degrau, velocidade alta…).'],
+  [/^ruas \(\d+\)$/i, '<b>Ruas</b> — eixos desenhados ou colados (Nome; X; Y; cota). O nome é digitado UMA vez e vai para trechos, perfis e orçamento.'],
+  [/^\d+\/\d+ cotas$/i, '<b>Cotas da rua</b> — pontos da rua com cota digitada / total. Rua sem cota usa a topografia ou a interpolação.'],
+  [/% do esgoto de projeto$/i, '<b>Cenário do 3D</b> — a barra “Esgoto” multiplica a vazão sem mudar os tubos: veja onde passa de y/D ou entra em carga. 🛠 Redimensionar grava o cenário como projeto.'],
+  [/^custo direto/i, '<b>Custo direto</b> — soma das linhas antes do BDI, no banco e mês escolhidos.'],
+  [/^(sinapi|sco|emop)/i, '<b>Banco de preços</b> — SINAPI RJ, SCO-Rio ou EMOP; o mês aparece ao lado. A mesma rede pode ser orçada nos três.'],
+  [/^📐/, '<b>Memória de cálculo</b> — como a quantidade da linha acima foi obtida (fórmula com os números da sua rede). Mude a rede ou os Dados da vala e a conta é refeita.'],
+  [/^🏠 ligacoes prediais/i, '<b>Ligações prediais</b> — uma por lote (testada dos Dados). Arraste o quadradinho âmbar na planta para mover; 🏠 + Ligação cria; 🗑 exclui.']
+];
+function ajNorm(t) { return String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim().replace(/[:：]$/, ''); }
+function ajTxtEl(el) { /* texto do elemento sem a unidade em <small>/<sub> */ const c = el.cloneNode(true); c.querySelectorAll('small,.aj-i,input,select,button').forEach(x => x.remove()); return ajNorm(c.textContent.replace(/[ⓘ]/g, '')); }
+function ajBusca(t) { if (!t) return null; if (AJT[t]) return t; const t2 = t.replace(/\s*\(.*?\)\s*$/, '').trim(); if (AJT[t2]) return t2; const t3 = t.replace(/^[^\w(]+/, '').trim(); if (AJT[t3]) return t3;
+  for (let i = 0; i < AJR.length; i++) if (AJR[i][0].test(t)) return '#' + i; return null; }
+/* devolve a chave do AJ (registra 'txt.*') e guarda o elemento a destacar em window._ajEl */
+function ajTexto(el) {
+  if (!el || !el.closest) return null; let alvo = null, k = null;
+  { const lf = el.closest('small,span,div,b,em,i'); if (lf && lf.children.length === 0) { const kk = ajBusca(ajTxtEl(lf)); if (kk) { k = kk; alvo = lf; } } }   /* texto próprio (ex.: memória 📐) vale mais que a coluna */
+  const td = k ? null :  el.closest('td'); if (td) { const tb = td.closest('table'), th = tb && tb.tHead && tb.tHead.rows[0] && tb.tHead.rows[0].cells[td.cellIndex]; if (th) { k = ajBusca(ajTxtEl(th)); alvo = td; } }
+  if (!k) { const e2 = el.closest('th,h2,h3,h4,.chip,.kpi,label.rl-c,.rl-t,.t3-inf b,#situ > *, .barra > b, .lg > *, li, p'); if (e2) { k = ajBusca(ajTxtEl(e2)); alvo = e2;
+      if (!k && e2.classList.contains('kpi')) { const s = e2.querySelector('small,span'); if (s) k = ajBusca(ajTxtEl(s)); } } }
+  if (!k) { const sp = el.closest('span,b,small,div'); if (sp && sp.children.length === 0) { k = ajBusca(ajTxtEl(sp)); alvo = sp; } }
+  if (!k) return null;
+  const chave = 'txt.' + k; if (!AJ[chave]) AJ[chave] = k[0] === '#' ? AJR[+k.slice(1)][1] : AJT[k];
+  window._ajEl = alvo; return chave;
+}
 /* ════════════════════════════════════════════════════════════════════
    EVENTOS E PARTIDA
    ════════════════════════════════════════════════════════════════════ */

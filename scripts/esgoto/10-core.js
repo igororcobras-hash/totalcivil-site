@@ -27,7 +27,7 @@ const ESG = (() => {
     profMax: 4.5, degTQ: 0.50, distPV: 80, distMax: 100, profTL: 1.45,
     remanso: true,          /* nível d'água de saída do PV nunca acima do de chegada */
     folga: 0.60, berco: 0.10, envolt: 0.30, pav: 'asfalto', espPav: 0.05,
-    largRua: 8, largPas: 2.5, testada: 12, habLig: 3.0, ramal: 6, ligIm: 0.02, ligDN: 100, ligCob: 0.30, dmt: 5, empol: 1.30, folgaCava: 0.30, lastro: 0.10,
+    largRua: 8, largPas: 2.5, testada: 12, fundoLote: 25, habLig: 3.0, ramal: 6, ligIm: 0.02, ligDN: 100, ligCob: 0.30, dmt: 5, empol: 1.30, folgaCava: 0.30, lastro: 0.10,
     /* elevatória e recalque (NBR 12208) */
     eCiclo: 10, eDet: 30, eEta: 0.60, eFolgaMotor: 20, eVmin: 0.60, eVmax: 3.00, eKloc: 10, eSub: 0.50, eRecRec: 1.00, eMat: 'pvc',
     /* sifão invertido */
@@ -346,34 +346,83 @@ const ESG = (() => {
   function ligacoes(P, R) {
     const c = R.c, nos = new Map(P.nos.map(n => [n.id, n])), alin = c.largRua / 2 + c.largPas;   /* distância do eixo ao alinhamento dos lotes */
     /* direções das ruas que saem de cada nó (para cortar os lotes nas esquinas) */
-    const dirs = new Map();
+    const dirs = new Map(), trP = new Map((P.trechos || []).map(t => [t.id, t]));
     (P.trechos || []).forEach(t => { const r = R.tr[t.id]; if (r && r.recq) return; const a = nos.get(t.de), b = nos.get(t.para); if (!a || !b) return;
       const l = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / l, uy = (b.y - a.y) / l;
       if (!dirs.has(a.id)) dirs.set(a.id, []); if (!dirs.has(b.id)) dirs.set(b.id, []);
-      dirs.get(a.id).push({tr: t.id, x: ux, y: uy}); dirs.get(b.id).push({tr: t.id, x: -ux, y: -uy}); });
+      dirs.get(a.id).push({tr: t.id, x: ux, y: uy, no: a.id}); dirs.get(b.id).push({tr: t.id, x: -ux, y: -uy, no: b.id}); });
     /* nós a menos de um alinhamento um do outro (ex.: cabeceira a 3 m do cruzamento) formam a mesma esquina */
     const lnos = P.nos.filter(n => dirs.has(n.id)), extra = new Map();
     lnos.forEach(n => lnos.forEach(m => { if (m === n || Math.hypot(m.x - n.x, m.y - n.y) > alin) return; if (!extra.has(n.id)) extra.set(n.id, []); dirs.get(m.id).forEach(d => extra.get(n.id).push(d)); }));
     extra.forEach((l, id) => l.forEach(d => { if (!dirs.get(id).some(e => e.tr === d.tr)) dirs.get(id).push(d); }));
-    /* recuo, em cada ponta e de cada lado, até o alinhamento da rua que cruza (esquina) */
-    const recuo = (noId, tid, ux, uy, lado) => { let m = 0; (dirs.get(noId) || []).forEach(d => { if (d.tr === tid) return;
-      const cr = ux * d.y - uy * d.x, co = ux * d.x + uy * d.y; if (Math.abs(cr) < 0.34 || co < -0.94) return;   /* rua em frente (continuação) não corta */
-      if (Math.sign(cr) !== lado) return; m = Math.max(m, Math.min(3 * alin, alin / Math.abs(cr) + Math.max(0, co) * alin)); }); return m; };
+    /* recuo, em cada ponta e de cada lado, até o alinhamento da rua que cruza (esquina); devolve também a rua que faz a esquina */
+    /* interseção da linha de frente dos lotes (alinhamento do lado `lado`, a partir do nó N, direção u) com o alinhamento da rua d
+       do lado `ld` dela (+1: do lado para onde u aponta; −1: do lado de trás) → distância s ao longo de u (pode ser negativa) */
+    const corta = (N, ux, uy, lado, d, ld) => { const M = nos.get(d.no) || N, nl = [-uy * lado, ux * lado], nd = [-d.y, d.x], sg = (Math.sign(ux * nd[0] + uy * nd[1]) || 1) * ld;
+      const px = N.x + nl[0] * alin - (M.x + nd[0] * sg * alin), py = N.y + nl[1] * alin - (M.y + nd[1] * sg * alin);
+      const det = ux * (-d.y) - uy * (-d.x); if (Math.abs(det) < 1e-6) return null; return (-px * (-d.y) + py * (-d.x)) / det; };
+    /* lado (convenção do trecho tc: +1 = esquerda de quem anda de montante para jusante) em que fica o ponto Z */
+    const ladoDe = (tid, Z) => { const tc = trP.get(tid), A = tc && nos.get(tc.de), B = tc && nos.get(tc.para); if (!A || !B) return 1; return ((B.x - A.x) * (Z[1] - A.y) - (B.y - A.y) * (Z[0] - A.x)) >= 0 ? 1 : -1; };
+    const recuo = (noId, tid, ux, uy, lado) => { let m = 0, dm = null, ext = 0, dOut = null, cont = 0, segue = false; const N = nos.get(noId);
+      (dirs.get(noId) || []).forEach(d => { if (d.tr === tid) return;
+        const cr = ux * d.y - uy * d.x, co = ux * d.x + uy * d.y;
+        if (co < -0.94) { if (d.no === noId) segue = true; else { const M = nos.get(d.no), pr = M ? (M.x - N.x) * ux + (M.y - N.y) * uy : 0; if (pr < 0) cont = Math.min(cont, pr / 2); } return; }   /* continuação (a meia distância do vão da cabeceira) */
+        if (Math.abs(cr) < 0.34) return;
+        if (Math.sign(cr) === lado) {   /* ES-04: esquina do lado de dentro — recua até o alinhamento da rua que cruza (interseção exata) */
+          const sv = corta(N, ux, uy, lado, d, 1); if (sv == null) return; const v = Math.min(3 * alin + Math.hypot((nos.get(d.no) || N).x - N.x, (nos.get(d.no) || N).y - N.y), Math.max(0, sv)); if (v > m) { m = v; dm = d; } }
+        else {                          /* esquina do lado de fora (canto convexo da rede): avança até o alinhamento de trás da rua que cruza */
+          const sv = corta(N, ux, uy, lado, d, -1); if (sv == null || sv > 0 || sv < -3 * alin) return; if (sv < ext) { ext = sv; dOut = d; } } });
+      if (m > 0) return {m, d: dm, ext: 0, dOut: null}; if (segue) return {m: 0, d: null, ext: 0, dOut: null}; if (cont < 0) return {m: 0, d: null, ext: cont, dOut: null}; return {m: 0, d: null, ext: dOut ? ext : 0, dOut}; };
+    /* ES-04 · ESQUINA SEM CORREDOR: na esquina, UM lote fica com o canto (o da rua mais longa); a rua que cruza começa os
+       lotes dela logo depois do fundo desse lote de esquina. Assim os lotes encostam (sem corredor ou servidão entre eles). */
+    const fundo = Math.max(6, c.fundoLote > 0 ? +c.fundoLote : 25);
+    const fazLotes = (tid, lado) => { const t = trP.get(tid), r = R.tr[tid]; if (!t || !r || r.recq || r.sif || Array.isArray(t.lig)) return false;
+      const lados = t.lados == null ? 2 : +t.lados; if (lados === 0) return false; if (lados === 1) return (+t.ladoLote === -1 ? -1 : 1) === lado; return true; };
+    const comp = tid => { const r = R.tr[tid], t = trP.get(tid), a = t && nos.get(t.de), b = t && nos.get(t.para); return (r && r.L) || (a && b ? Math.hypot(b.x - a.x, b.y - a.y) : 0); };
+    const dono = (t1, t2) => { const l1 = comp(t1), l2 = comp(t2); return Math.abs(l1 - l2) > 0.01 ? (l1 > l2 ? t1 : t2) : (String(t1) < String(t2) ? t1 : t2); };
+    /* 1ª passada: trecho livre de cada lado e quem faz a esquina em cada ponta */
+    const lados0 = new Map();
+    R.ordem.forEach(id => {
+      const t = trP.get(id), r = R.tr[id]; if (!t || !r || r.recq || r.sif || Array.isArray(t.lig)) return;
+      const a = nos.get(t.de), b = nos.get(t.para); if (!a || !b) return;
+      const lh = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / lh, uy = (b.y - a.y) / lh, L = r.L || lh, kL = L / lh;
+      [1, -1].forEach(lado => { const ra = recuo(a.id, id, ux, uy, lado), rb = recuo(b.id, id, -ux, -uy, -lado);
+        /* lado da rua que cruza voltado para este canto, na convenção dela: ponto de amostra dentro do canto */
+        const nl = [-uy * lado, ux * lado];
+        const lc = (q, N, sx, sy, dd) => { if (!dd) return null; const sp = q.m > 0 ? q.m + 1 : q.ext - 1, Z = [N.x + sx * sp + nl[0] * (alin + 1), N.y + sy * sp + nl[1] * (alin + 1)]; return {tr: dd.tr, lado: ladoDe(dd.tr, Z)}; };
+        lados0.set(id + '|' + lado, {s0: ra.m * kL, s1: L - rb.m * kL, kL, ini: lc(ra, a, ux, uy, ra.d), fim: lc(rb, b, -ux, -uy, rb.d),
+          eIni: ra.ext, eFim: rb.ext, oIni: lc(ra, a, ux, uy, ra.dOut), oFim: lc(rb, b, -ux, -uy, rb.dOut)}); });
+    });
+    /* 2ª passada: quem não é dono da esquina recua o fundo do lote de esquina; o dono guarda esse fundo no lote do canto */
+    const fundoCanto = new Map(), fundoLado = new Map();   /* fundoLado: o lado inteiro acompanha o fundo do lote de esquina (fundo alinhado) */   /* 'trecho|lado|ini' ou '|fim' → fundo do lote de esquina (m, em planta) */
+    lados0.forEach((o, k) => { const [id, ls] = k.split('|'), lado = +ls; o.off0 = 0; o.off1 = 0;
+      ['ini', 'fim'].forEach(p => { const x = o[p]; if (!x || !fazLotes(x.tr, x.lado) || dono(id, x.tr) === id) return;
+        const livre = (o.s1 - o.s0) / o.kL, dep = Math.max(0, Math.min(fundo, livre * 0.5)); if (dep < 0.5) return;
+        if (p === 'ini') o.off0 = dep * o.kL; else o.off1 = dep * o.kL;
+        /* ponta da rua dona voltada para este canto: a que tem esta rua como esquina */
+        const ol = lados0.get(x.tr + '|' + x.lado); if (!ol) return; const pd = ol.ini && ol.ini.tr === id ? 'ini' : ol.fim && ol.fim.tr === id ? 'fim' : null;
+        if (pd) { fundoCanto.set(x.tr + '|' + x.lado + '|' + pd, dep); const k2 = x.tr + '|' + x.lado; fundoLado.set(k2, Math.min(fundoLado.get(k2) || fundo, dep)); } });
+      /* canto convexo (fora da quadra): os dois lados avançam até o alinhamento da outra rua e o dono fica também com o quadrado do canto */
+      [['ini', 'eIni', 'oIni'], ['fim', 'eFim', 'oFim']].forEach(([p, e, oo]) => { if (!(o[e] < 0)) return; const x = o[oo];
+        let ext = -o[e]; if (x && (!fazLotes(x.tr, x.lado) || dono(id, x.tr) === id)) ext += fundo;
+        if (p === 'ini') o.off0 -= ext * o.kL; else o.off1 -= ext * o.kL; }); });
     const cand = [];
     R.ordem.forEach(id => {
       const t = P.trechos.find(q => q.id === id), r = R.tr[id]; if (!t || !r || r.recq || r.sif) return;
       const a = nos.get(t.de), b = nos.get(t.para); if (!a || !b) return;
       const lh = Math.hypot(b.x - a.x, b.y - a.y) || 1, ux = (b.x - a.x) / lh, uy = (b.y - a.y) / lh, off = offsetTr(t, c), L = r.L || lh, kL = L / lh;
-      const tst = t.testada > 0 ? +t.testada : c.testada, D = Math.min(18, tst * 1.5);
+      const tst = t.testada > 0 ? +t.testada : c.testada, D = fundo;
       let lista;
       if (Array.isArray(t.lig)) lista = t.lig.map(q => ({s: +q.s, lado: +q.lado >= 0 ? 1 : -1, man: true, w: +q.w > 0 ? +q.w : tst}));
       else {
         lista = []; const lados = t.lados == null ? 2 : +t.lados; if (lados === 0) return;
         const lad = lados === 1 ? [+t.ladoLote === -1 ? -1 : 1] : [1, -1];
-        lad.forEach(lado => {   /* lotes só entre as esquinas (a frente da esquina fica com um lote só) */
-          const s0 = recuo(a.id, id, ux, uy, lado) * kL, s1 = L - recuo(b.id, id, -ux, -uy, -lado) * kL, livre = s1 - s0;
+        lad.forEach(lado => {   /* lotes só entre as esquinas (o canto fica com o lote da rua dona da esquina) */
+          const o = lados0.get(id + '|' + lado); if (!o) return;
+          const s0 = o.s0 + o.off0, s1 = o.s1 - o.off1, livre = s1 - s0;
           if (livre < tst * 0.5) return; const n = Math.max(1, Math.round(livre / tst)), w = livre / n;
-          for (let i = 0; i < n; i++) lista.push({s: s0 + (i + 0.5) * w, lado, man: false, w});
+          const fi = fundoCanto.get(id + '|' + lado + '|ini'), ff = fundoCanto.get(id + '|' + lado + '|fim'), fl = fundoLado.get(id + '|' + lado);
+          for (let i = 0; i < n; i++) lista.push({s: s0 + (i + 0.5) * w, lado, man: false, w, D0: fl, Dfix: n === 1 && (fi != null || ff != null) ? Math.max(fi || 0, ff || 0) : i === 0 && fi != null ? fi : i === n - 1 && ff != null ? ff : null});
         });
       }
       lista.forEach((q, i) => {
@@ -384,30 +433,32 @@ const ESG = (() => {
         const ct = r.ctM + (r.ctJ - r.ctM) * k, ci = r.ciM + (r.ciJ - r.ciM) * k, topo = ci + r.d;       /* geratriz superior do coletor */
         const cl = ct;                                                                                      /* terreno no alinhamento ≈ terreno do trecho */
         const cfRamal = topo + 0.10 + Lr * c.ligIm, profLote = cl - cfRamal, ok = profLote >= c.ligCob - 1e-9;
-        cand.push({id: id + '#' + i, tr: id, i, s, lado: q.lado, man: q.man, x: px, y: py, fx, fy, L: Lr, ct, ci, cfRamal, prof: profLote, ok,
-          w: q.w / kL, ws: q.w, D, ex, ey, nx: -ey, ny: ex});
+        const shU = q.s / kL, lx = a.x + ux * shU + ex * alin, ly = a.y + uy * shU + ey * alin;   /* frente do lote no alinhamento (pode passar do PV, no canto convexo) */
+        cand.push({id: id + '#' + i, tr: id, i, s, lado: q.lado, man: q.man, x: px, y: py, fx, fy, lx, ly, L: Lr, ct, ci, cfRamal, prof: profLote, ok,
+          w: q.w / kL, ws: q.w, D: q.Dfix != null ? q.Dfix : q.D0 || D, Dfix: q.Dfix != null ? q.Dfix : null, ex, ey, nx: -ey, ny: ex});
       });
     });
     /* um lote por lugar: lote que se sobrepõe a outro já aceito (esquina, rua oblíqua) sai, com a sua ligação.
        Os ajustados à mão entram primeiro e nunca saem. Depois cada lote recebe o fundo que cabe sem invadir o vizinho. */
-    const ret = (q, d, f) => { const h = q.w / 2 * (f || 0.97), a0 = 0.05; return [[q.fx - q.nx * h + q.ex * a0, q.fy - q.ny * h + q.ey * a0], [q.fx + q.nx * h + q.ex * a0, q.fy + q.ny * h + q.ey * a0],
-      [q.fx + q.nx * h + q.ex * d, q.fy + q.ny * h + q.ey * d], [q.fx - q.nx * h + q.ex * d, q.fy - q.ny * h + q.ey * d]]; };
+    const ret = (q, d, f) => { const h = q.w / 2 * (f || 0.97), a0 = 0.05; return [[q.lx - q.nx * h + q.ex * a0, q.ly - q.ny * h + q.ey * a0], [q.lx + q.nx * h + q.ex * a0, q.ly + q.ny * h + q.ey * a0],
+      [q.lx + q.nx * h + q.ex * d, q.ly + q.ny * h + q.ey * d], [q.lx - q.nx * h + q.ex * d, q.ly - q.ny * h + q.ey * d]]; };
     const sep = (A, B) => { for (const P0 of [A, B]) for (let i = 0; i < 4; i++) { const p = P0[i], q = P0[(i + 1) % 4], nx = q[1] - p[1], ny = p[0] - q[0];
       let a1 = Infinity, a2 = -Infinity, b1 = Infinity, b2 = -Infinity; A.forEach(v => { const z = v[0] * nx + v[1] * ny; a1 = Math.min(a1, z); a2 = Math.max(a2, z); });
       B.forEach(v => { const z = v[0] * nx + v[1] * ny; b1 = Math.min(b1, z); b2 = Math.max(b2, z); }); if (a2 <= b1 || b2 <= a1) return true; } return false; };
     const CEL = 40, grade = new Map(), chave = (x, y) => Math.floor(x / CEL) + ',' + Math.floor(y / CEL);
-    const vizinhos = q => { const out = [], cx = Math.floor(q.fx / CEL), cy = Math.floor(q.fy / CEL); for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) (grade.get((cx + i) + ',' + (cy + j)) || []).forEach(o => out.push(o)); return out; };
+    const vizinhos = q => { const out = [], cx = Math.floor(q.lx / CEL), cy = Math.floor(q.ly / CEL); for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) (grade.get((cx + i) + ',' + (cy + j)) || []).forEach(o => out.push(o)); return out; };
     const aceitos = [], DTESTE = 6;
     cand.filter(q => q.man).concat(cand.filter(q => !q.man)).forEach(q => {
       const A = ret(q, Math.min(DTESTE, q.D));
       if (!q.man && vizinhos(q).some(o => sep(A, ret(o, Math.min(DTESTE, o.D))) === false)) return;
-      aceitos.push(q); const k = chave(q.fx, q.fy); if (!grade.has(k)) grade.set(k, []); grade.get(k).push(q); });
-    aceitos.forEach(q => { const vz = vizinhos(q).filter(o => o !== q);   /* fundo: 18 m (ou 1,5 × testada) até onde não invade */
+      aceitos.push(q); const k = chave(q.lx, q.ly); if (!grade.has(k)) grade.set(k, []); grade.get(k).push(q); });
+    aceitos.forEach(q => { if (q.Dfix != null) { q.D = q.Dfix; q.fin = 1; } });
+    aceitos.forEach(q => { if (q.fin) return; const vz = vizinhos(q).filter(o => o !== q);   /* fundo (crit.fundoLote) até onde não invade; o lote de esquina guarda o dele */
       for (const d of [q.D, q.D * 0.75, q.D * 0.6, q.D * 0.45, DTESTE]) { const A = ret(q, d, 0.995); if (!vz.some(o => !sep(A, ret(o, o.fin ? o.D : Math.min(o.D, d), 0.995)))) { q.D = d; q.fin = 1; return; } } q.D = Math.min(DTESTE, q.D); q.fin = 1; });
     /* numeração por trecho na ordem final (é a que o arrastar/excluir usa) */
-    const out = [], cont = {}, ok = new Set(aceitos); cand.forEach(q => { if (!ok.has(q)) return; delete q.fin; const n = cont[q.tr] = (cont[q.tr] || 0) + 1;
+    const out = [], cont = {}, ok = new Set(aceitos); cand.forEach(q => { if (!ok.has(q)) return; delete q.fin; delete q.Dfix; const n = cont[q.tr] = (cont[q.tr] || 0) + 1;
       if (!q.man) { q.i = n - 1; q.id = q.tr + '#' + q.i; }
-      const h = q.w / 2; q.lote = [[q.fx - q.nx * h, q.fy - q.ny * h], [q.fx + q.nx * h, q.fy + q.ny * h], [q.fx + q.nx * h + q.ex * q.D, q.fy + q.ny * h + q.ey * q.D], [q.fx - q.nx * h + q.ex * q.D, q.fy - q.ny * h + q.ey * q.D]];
+      const h = q.w / 2; q.lote = [[q.lx - q.nx * h, q.ly - q.ny * h], [q.lx + q.nx * h, q.ly + q.ny * h], [q.lx + q.nx * h + q.ex * q.D, q.ly + q.ny * h + q.ey * q.D], [q.lx - q.nx * h + q.ex * q.D, q.ly - q.ny * h + q.ey * q.D]];
       out.push(q); });
     return out;
   }
