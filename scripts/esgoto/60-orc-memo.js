@@ -129,7 +129,7 @@ async function xlsOrc() {
   XLSX.writeFile(wb, nomeArq() + '_orcamento_' + orcCfg().banco + '.xlsx'); toast('Planilha gerada: orçamento, memória de cálculo, dimensionamento, PVs e cavas.');
 }
 async function orcEnviar() {
-  let w = null; try { w = window.open('', 'tc_orcamento'); if (w && (!w.location.href || w.location.href === 'about:blank')) w.location.href = '/orcamento/'; } catch (e) { w = null; }
+  let w = null; try { w = window.open('', 'tc_orcamento'); if (w && (!w.location.href || w.location.href === 'about:blank')) w.location.href = (function(){ try { return localStorage.getItem('tc_orc_destino') === 'v2' ? '/orcamento2/' : '/orcamento/'; } catch (e) { return '/orcamento/'; } })(); } catch (e) { w = null; }
   try { await carregarXlsx(); } catch (e) { return toast('Sem internet para montar a planilha. Conecte e tente de novo.'); }
   const A = orcAoa(), o = A.o, env = {v: 1, origem: 'Esgoto Sanitário', projeto: P.nome || '', municipio: P.local || '', solucao: A.sol.nome, banco: BANCOS[o.banco], regime: o.deson ? 'D' : 'O', bdi: +o.bdi || 0,
     arquivo: 'orcamento-esgoto-' + o.sol + '-' + o.banco + '-' + nomeArq() + '.xlsx', b64: XLSX.write(orcWb(), {bookType: 'xlsx', type: 'base64'}), crono: null, em: new Date().toISOString()};

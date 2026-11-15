@@ -523,7 +523,7 @@ const PROGRAMAS = [
    desc:'Dimensionamento pelo método do CBR, com topografia, seções transversais, volumes e memória de cálculo.',
    ico:'<path d="M4 13Q23 7 42 13"/><path d="M4 21h38M4 29h38M4 37h38"/>'},
   {key:'orcamento',    campo:'orcamentoAtivo',    solic:'orcamentoSolicitado',    nome:'Orçamento de Obras',          url:'/orcamento/',    disp:true,
-   desc:'Orçamento analítico com bancos EMOP, SINAPI e SCO, composições, BDI e exportação para planilha.',
+   desc:'Orçamento analítico com bancos EMOP, SINAPI e SCO, composições, BDI e exportação para planilha. Ao comprar, você ganha também o Orçamento de Obras V2.',
    ico:'<rect x="7" y="6" width="32" height="34" rx="3.5"/><path d="M7 16h32M7 27h32M19 16v24"/>'},
   {key:'intertravado', campo:'intertravadoAtivo', solic:'intertravadoSolicitado', nome:'Pavimento Intertravado',      url:'/intertravado/', disp:true,
    video:'/videos/intertravado-apresentacao.mp4',
@@ -628,6 +628,18 @@ function salvarSel(){ try{ sessionStorage.setItem('tc_pacote', JSON.stringify([.
 
 /* ---------- cartões ---------- */
 function liberado(u, p){ if(!u) return false; if(u.admin) return true; return !!u[p.campo] && !u.recusado && !u.vencida; }
+/* Orçamento de Obras V2: mesma liberação do Orçamento de Obras (campo orcamentoAtivo). Quem tem um tem o outro;
+   por isso NÃO está em PROGRAMAS (não soma no pacote nem aparece duas vezes no painel Usuários). */
+function cartaoOrcV2(lib){
+  return '<li><article class="card" data-card="orcamento2">' +
+    '<div class="topo-card"><span class="ico" aria-hidden="true"><svg viewBox="0 0 46 46"><rect x="7" y="6" width="32" height="34" rx="3.5"/><path d="M7 16h32M7 27h32M19 16v24"/><path d="M38 3h6M41 0v6"/></svg></span>' +
+      (lib ? '<span class="chip lib">No seu pacote</span>' : '<span class="chip ok">Leve 2, pague 1</span>') + '</div>' +
+    '<h3>Orçamento de Obras V2</h3>' +
+    '<p>Nova versão do Orçamento de Obras: as mesmas ferramentas, reorganizadas em abas, com ícones e 9 layouts de construção. Recebe o orçamento de todos os programas do site.</p>' +
+    '<div class="preco"><b>Grátis</b> com o Orçamento de Obras</div>' +
+    '<div class="rodape-card"><span class="mini">' + (lib ? 'Liberado para você' : 'Comprando um, você ganha o outro: os dois abrem com a mesma liberação.') + '</span>' +
+      '<span class="botoes-card"><a class="abrir" href="/orcamento2/">Abrir →</a></span></div></article></li>';
+}
 function renderProgramas(){
   $('lista-programas').innerHTML = PROGRAMAS.map(p => {
     const lib = p.disp && liberado(eu, p);
@@ -643,7 +655,7 @@ function renderProgramas(){
       '<div class="rodape-card">' +
         (lib ? '<span class="mini">Liberado para você</span>' :
          '<label class="incluir"><input type="checkbox" data-incluir="' + p.key + '"' + (sel.has(p.key) ? ' checked' : '') + '> Incluir no pacote</label>') +
-        abrirLink + '</div></article></li>';
+        abrirLink + '</div></article></li>' + (p.key === 'orcamento' ? cartaoOrcV2(lib) : '');
   }).join('');
 }
 /* vídeo de apresentação do programa (janela com player) */

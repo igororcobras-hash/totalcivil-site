@@ -8829,7 +8829,7 @@ async function exportCronoLic() {
 /* envio direto: mesma origem (totalcivil.com.br), o Orçamento lê e apaga a chave */
 async function enviarAoOrcamento(solK, bank) {
   let w = null;
-  try { w = window.open('', 'tc_orcamento'); if (w && (!w.location.href || w.location.href === 'about:blank')) w.location.href = '/orcamento/'; } catch (e) { w = null; }
+  try { w = window.open('', 'tc_orcamento'); if (w && (!w.location.href || w.location.href === 'about:blank')) w.location.href = (function(){ try { return localStorage.getItem('tc_orc_destino') === 'v2' ? '/orcamento2/' : '/orcamento/'; } catch (e) { return '/orcamento/'; } })(); } catch (e) { w = null; }
   let cap; try { cap = await wbLic(solK, bank); } catch (e) { toast('Sem internet para montar a planilha. Conecte e tente de novo.'); return; }
   const sol = SOLUCOES.find(s => s.k === solK), cr = cronoCfg(), et = etapasLic(solK, bank);
   const env = {v: 1, origem: 'Drenagem Pluvial', projeto: P.proj.nome || '', municipio: P.proj.municipio || '', solucao: sol.nome, banco: BANCOS_LIC[bank],

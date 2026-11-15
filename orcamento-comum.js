@@ -579,7 +579,7 @@
   }
   async function enviar(secoes, titulo, arquivo, crono, origem, solucao, banco){
     var w = null;
-    try { w = window.open('', 'tc_orcamento'); if (w && (!w.location.href || w.location.href === 'about:blank')) w.location.href = '/orcamento/'; } catch (e) { w = null; }
+    try { w = window.open('', 'tc_orcamento'); if (w && (!w.location.href || w.location.href === 'about:blank')) w.location.href = (function(){ try { return localStorage.getItem('tc_orc_destino') === 'v2' ? '/orcamento2/' : '/orcamento/'; } catch (e) { return '/orcamento/'; } })(); } catch (e) { w = null; }
     var wb; try { wb = await wbDe(secoes, titulo, null); } catch (e) { toast('Sem internet para montar a planilha. Conecte e tente de novo.'); return; }
     var env = {v: 1, origem: origem, projeto: secoes[0].projeto, municipio: secoes[0].municipio, solucao: solucao, banco: banco, regime: secoes[0].regime, bdi: secoes[0].bdi,
       arquivo: arquivo, b64: XLSX.write(wb, {bookType: 'xlsx', type: 'base64'}), crono: crono || null, em: new Date().toISOString()};

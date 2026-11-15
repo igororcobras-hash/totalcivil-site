@@ -18,6 +18,7 @@ const fs = require('fs'), path = require('path'), zlib = require('zlib'), crypto
 const PROGRAMAS = [
   {prog: 'pavimento',    campo: 'ativo',             pedido: '',                       nome: 'Pavimento Flexível'},
   {prog: 'orcamento',    campo: 'orcamentoAtivo',    pedido: 'orcamentoSolicitado',    nome: 'Orçamento de Obras'},
+  {prog: 'orcamento2',   campo: 'orcamentoAtivo',    pedido: 'orcamentoSolicitado',    nome: 'Orçamento de Obras V2'},
   {prog: 'intertravado', campo: 'intertravadoAtivo', pedido: 'intertravadoSolicitado', nome: 'Pavimento Intertravado'},
   {prog: 'drenagem',     campo: 'drenagemAtivo',     pedido: 'drenagemSolicitado',     nome: 'Drenagem Pluvial'},
   {prog: 'drenagem2',    campo: 'drenagem2Ativo',    pedido: 'drenagem2Solicitado',    nome: 'Drenagem Pluvial 2'},
