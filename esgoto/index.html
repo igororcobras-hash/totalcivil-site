@@ -3228,6 +3228,28 @@ const AJ = {
   const marca = () => { document.querySelectorAll('.f').forEach(f => { const l = f.querySelector('label'); if (!l || l.querySelector('.aj-i') || !chave(l)) return; const b = document.createElement('span'); b.className = 'aj-i'; b.textContent = 'ⓘ'; b.setAttribute('role', 'button'); b.setAttribute('aria-label', 'Explicação'); l.appendChild(b); }); };
   new MutationObserver(() => { clearTimeout(ob); ob = setTimeout(marca, 60); }).observe(document.body, {childList: true, subtree: true});
   marca();
+  /* ES-06: MODO AJUDA para o celular (sem mouse não há "passar por cima"). O botão ❓ liga o modo: tocar em qualquer botão, caixa, quadro ou texto
+     mostra a explicação (balão fixo) SEM executar a ação. Tocar de novo no ❓ (ou no ✕ do balão) desliga. */
+  const bh = document.createElement('button'); bh.id = 'aj-modo'; bh.type = 'button'; bh.textContent = '❓'; bh.setAttribute('aria-label', 'Ajuda: tocar nos botões para ver a explicação');
+  bh.style.cssText = 'position:fixed;left:10px;bottom:10px;z-index:2147483000;width:44px;height:44px;border-radius:50%;border:2px solid #fff;background:#1d4e89;color:#fff;font-size:22px;line-height:1;box-shadow:0 2px 10px rgba(0,0,0,.35);cursor:pointer;padding:0';
+  document.body.appendChild(bh);
+  const dica = document.createElement('div'); dica.id = 'aj-dica'; dica.hidden = true;
+  dica.style.cssText = 'position:fixed;left:62px;right:10px;bottom:12px;z-index:2147482999;background:#fff7d6;border:1px solid #e0b400;border-radius:10px;padding:8px 10px;font:600 13px system-ui,sans-serif;color:#4a3b00;box-shadow:0 2px 10px rgba(0,0,0,.25)';
+  dica.textContent = 'Modo ajuda ligado: toque em qualquer botão, caixa ou texto para ver o que é. Nada é executado. Toque no ❓ para sair.';
+  document.body.appendChild(dica);
+  let modo = false;
+  function ajModo(v) { modo = v; bh.style.background = v ? '#e8590c' : '#1d4e89'; bh.textContent = v ? '✕' : '❓'; dica.hidden = !v; if (!v) esconder(); }
+  window.ajModo = ajModo;
+  document.addEventListener('click', e => {
+    if (!modo) return;
+    if (e.target.closest('#aj-modo')) { e.preventDefault(); e.stopPropagation(); ajModo(false); return; }
+    if (e.target.closest('#aj-pop')) return;
+    e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation();
+    const k = chave(e.target), el = e.target.closest('button,[data-act],[data-plmodo],[data-t3],.f') || e.target;
+    if (k) { mostrar(el, k); fixo = true; pop.style.pointerEvents = 'auto'; }
+    else { esconder(); pop.innerHTML = 'Sem explicação para este item. Toque em um botão, campo ou quadro.'; pop.hidden = false; pop.style.pointerEvents = 'auto'; pop.style.width = Math.min(320, innerWidth - 24) + 'px'; pop.style.left = '12px'; pop.style.top = Math.max(8, (e.clientY || 100) + 14) + 'px'; fixo = true; }
+  }, true);
+  bh.addEventListener('click', e => { if (!modo) { e.stopPropagation(); ajModo(true); } });
 })();
 /* ════════════════════════════════════════════════════════════════════
    ES-04 · AJUDA EM QUADROS, CAIXAS, TABELAS E TEXTOS (pedido do dono: “sempre que passar o mouse em quaisquer quadros,
