@@ -4,6 +4,7 @@
 # Saída: pasta "audio" com cena01.mp3 ... cena10.mp3  (envie todos de volta no chat)
 import asyncio, os
 import edge_tts
+print('edge-tts', getattr(edge_tts, '__version__', '?'))
 
 F = "pt-BR-FranciscaNeural"
 A = "pt-BR-AntonioNeural"
@@ -26,7 +27,15 @@ async def main():
     os.makedirs("audio", exist_ok=True)
     for i, (voz, texto) in enumerate(CENAS, 1):
         arq = f"audio/cena{i:02d}.mp3"
-        await edge_tts.Communicate(texto, voz).save(arq)
-        print("ok", arq)
+        for tentativa in range(1, 5):
+            try:
+                await edge_tts.Communicate(texto, voz).save(arq)
+                print("ok", arq)
+                break
+            except Exception as e:
+                print("falhou", arq, "tentativa", tentativa, type(e).__name__)
+                if tentativa == 4:
+                    raise
+                await asyncio.sleep(5 * tentativa)
 
 asyncio.run(main())
