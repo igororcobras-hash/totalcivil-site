@@ -364,6 +364,13 @@ function rlCorte(RU, no, i, lado) {
     const ne = lado === 'L' ? [e.u[1], -e.u[0]] : [-e.u[1], e.u[0]];      /* normal da vizinha apontando para a quadra */
     return {P: [N[0] + ne[0] * RU.alin, N[1] + ne[1] * RU.alin], d: e.u, esq: true};
   }
+  /* ES-05b: rua que começa no TL colado ao cruzamento (trecho virtual de poucos metros): o raio da esquina do cruzamento acaba na tangente, que cai
+     ALÉM do TL — a calçada e o meio-fio desta rua só começam ali (senão sobra uma barra reta no meio da curva) */
+  if (e.s.virt && !d.s.virt) { const M = e.s.a === no ? e.s.b : e.s.a, l2 = RU.est.get(M), n2 = l2 ? l2.length : 0, k2 = n2 ? l2.findIndex(x => x.s === e.s) : -1;
+    if (k2 >= 0) { const sd = lado === 'L' ? [-d.u[1], d.u[0]] : [d.u[1], -d.u[0]];
+      for (const k of [k2, (k2 - 1 + n2) % n2]) { const cn = rlCantoK(RU, M, k); if (!cn || (cn.cc[0] - N[0]) * sd[0] + (cn.cc[1] - N[1]) * sd[1] <= 0) continue;
+        const dir = l2[k2].u, TP = [cn.cc[0] + dir[0] * cn.t, cn.cc[1] + dir[1] * cn.t];
+        if ((TP[0] - N[0]) * d.u[0] + (TP[1] - N[1]) * d.u[1] > 0.05) return {P: TP, d: [-d.u[1], d.u[0]], esq: true, arco: true}; } } }
   /* continuação ou canto convexo: corte na bissetriz (as duas calçadas se encontram em meia-esquadria) */
   const a = (lado === 'L' ? d.ang + th / 2 : d.ang - th / 2); return {P: N, d: [Math.cos(a), Math.sin(a)]};
 }
