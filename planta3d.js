@@ -14,10 +14,57 @@
    triggerDownload(), calcTopo(), _mf.
 ══════════════════════════════════════════════════════════════════════ */
 
+/* ── EIXO EM CURVA (traçado do levantamento) ── pontos em metros, norte do desenho para cima */
+function plLayCurva(){
+  const E=_plT.eixo; if(!Array.isArray(E)||E.length<2) return null;
+  const rm0=plLinhasMain(), s00=rm0.length?+rm0[0].est:0;
+  if(_pl.lc&&_pl.lc.E===E&&_pl.lc.s0===s00) return _pl.lc.lay;
+  /* reamostra a 1 m e suaviza (média móvel ±5 m, 3 passadas): tira os cantos vivos do desenho, que dobrariam a pista no lado de dentro da curva */
+  const Cr=[0]; for(let i=1;i<E.length;i++) Cr.push(Cr[i-1]+Math.hypot(E[i][0]-E[i-1][0],E[i][1]-E[i-1][1])); const Lr=Cr[Cr.length-1];
+  let Q=[]; { let j=0; for(let s=0;s<=Lr+1e-9;s+=1){ while(j<E.length-2&&Cr[j+1]<s) j++; const t=(s-Cr[j])/((Cr[j+1]-Cr[j])||1); Q.push([E[j][0]+(E[j+1][0]-E[j][0])*t,E[j][1]+(E[j+1][1]-E[j][1])*t]); } Q.push(E[E.length-1]); }
+  for(let it=0;it<3;it++){ Q=Q.map((p,i)=>{ if(i===0||i===Q.length-1) return p; const a=Math.max(0,i-5), b=Math.min(Q.length-1,i+5); let x=0,y=0; for(let k=a;k<=b;k++){ x+=Q[k][0]; y+=Q[k][1]; } return [x/(b-a+1),y/(b-a+1)]; }); }
+  const P=Q;
+  const C=[0]; for(let i=1;i<P.length;i++) C.push(C[i-1]+Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]));
+  const Lt=C[C.length-1], rm=plLinhasMain(), s0=rm.length?+rm[0].est:0;
+  const seg=s=>{ let i=0; while(i<P.length-2&&C[i+1]<s) i++; return i; };
+  const pt=s=>{ if(s<=0){ const d=dir(0); return [P[0][0]+d[0]*s,P[0][1]+d[1]*s]; } if(s>=Lt){ const d=dir(Lt); return [P[P.length-1][0]+d[0]*(s-Lt),P[P.length-1][1]+d[1]*(s-Lt)]; }
+    const i=seg(s), t=(s-C[i])/((C[i+1]-C[i])||1); return [P[i][0]+(P[i+1][0]-P[i][0])*t,P[i][1]+(P[i+1][1]-P[i][1])*t]; };
+  const raw=s=>{ const i=seg(Math.max(0,Math.min(Lt,s))); const dx=P[i+1][0]-P[i][0], dy=P[i+1][1]-P[i][1], l=Math.hypot(dx,dy)||1; return [dx/l,dy/l]; };
+  function dir(s){ let x=0,y=0; for(const o of [-1.5,-0.75,0,0.75,1.5]){ const d=raw(s+o); x+=d[0]; y+=d[1]; } const l=Math.hypot(x,y)||1; return [x/l,y/l]; }
+  const ch=[P[P.length-1][0]-P[0][0],P[P.length-1][1]-P[0][1]], cl=Math.hypot(ch[0],ch[1])||1, d=[ch[0]/cl,ch[1]/cl];
+  const pos=s=>{ const p=pt(s-s0); p._s=s; return p; };
+  /* o comprimento do eixo suavizado fica um pouco menor: as estacas seguem a distância ao longo do eixo original */
+  const kL=Lr>0?Lt/Lr:1, pos2=s=>{ const p=pt((s-s0)*kL); p._s=s; return p; };
+  const lay={curva:true,A:pos2(s0),sA:s0,d,n:[-d[1],d[0]],pos:pos2,dirAt:s=>dir((s-s0)*kL),nAt:s=>{ const q=dir((s-s0)*kL); return [-q[1],q[0]]; },P,C,s0,Lt,kL};
+  _pl.lc={E,s0:s00,lay}; return lay;
+}
+/* projeção de um ponto no eixo: estaca e afastamento (+ esquerda) */
+function plProj(ly,p){
+  if(!ly.curva){ const dx=p[0]-ly.A[0], dy=p[1]-ly.A[1]; return {s:dx*ly.d[0]+dy*ly.d[1]+ly.sA,lat:dx*ly.n[0]+dy*ly.n[1]}; }
+  const P=ly.P, C=ly.C; let best=1e18, s=0, lat=0;
+  for(let i=0;i<P.length-1;i++){ const ax=P[i][0], ay=P[i][1], ex=P[i+1][0]-ax, ey=P[i+1][1]-ay, l2=ex*ex+ey*ey||1e-12;
+    let t=((p[0]-ax)*ex+(p[1]-ay)*ey)/l2; if(i>0) t=Math.max(0,t); if(i<P.length-2) t=Math.min(1,t);
+    const qx=ax+ex*t, qy=ay+ey*t, dd=(p[0]-qx)**2+(p[1]-qy)**2;
+    if(dd<best){ best=dd; const l=Math.sqrt(l2); s=C[i]+t*l; lat=((p[0]-ax)*(-ey)+(p[1]-ay)*ex)/l; } }
+  return {s:s/(ly.kL||1)+ly.s0,lat}; }
+/* todas as projeções “de cada braço” da curva (mínimos locais da distância): o terreno mistura as duas
+   no lado de dentro de uma curva, sem degrau onde o ponto mais próximo troca de braço */
+function plProjAll(ly,p){
+  if(!ly.curva) return [plProj(ly,p)];
+  const P=ly.P, C=ly.C, n=P.length-1, ds=new Float64Array(n), ts=new Float64Array(n);
+  for(let i=0;i<n;i++){ const ax=P[i][0], ay=P[i][1], ex=P[i+1][0]-ax, ey=P[i+1][1]-ay, l2=ex*ex+ey*ey||1e-12; let t=((p[0]-ax)*ex+(p[1]-ay)*ey)/l2; if(i>0) t=Math.max(0,t); if(i<n-1) t=Math.min(1,t); ts[i]=t; ds[i]=(p[0]-ax-ex*t)**2+(p[1]-ay-ey*t)**2; }
+  let mn=1e18; for(let i=0;i<n;i++) mn=Math.min(mn,ds[i]); const lim=(Math.sqrt(mn)+40)**2, out=[]; /* peso some suave até 40 m além do braço mais próximo */
+  for(let i=0;i<n;i++){ if(ds[i]>lim) continue; if((i>0&&ds[i-1]<=ds[i])||(i<n-1&&ds[i+1]<ds[i])) continue; /* empate no vértice conta uma vez só */
+    const ax=P[i][0], ay=P[i][1], ex=P[i+1][0]-ax, ey=P[i+1][1]-ay, l=Math.hypot(ex,ey)||1e-9;
+    const fd=Math.max(0,1-(Math.sqrt(ds[i])-Math.sqrt(mn))/40); out.push({s:(C[i]+ts[i]*l)/(ly.kL||1)+ly.s0,lat:((p[0]-ax)*(-ey)+(p[1]-ay)*ex)/l,f:fd*fd*(3-2*fd)}); }
+  return out.length?out:[plProj(ly,p)]; }
+function plNrm(d,s){ const L=d.lay; if(!L.curva) return L.n; const e=(s&&s.est!=null)?s.est:(s&&s.c&&s.c._s!=null?s.c._s:null); return e==null?L.n:L.nAt(e); }
+function plDirE(d,e){ return d.lay.dirAt?d.lay.dirAt(e):d.lay.d; }
+
 /* ── 1) ADAPTADOR ───────────────────────────────────────────────────── */
 var ruas=[];
 let _cal={ativo:false,tipo:'concreto',larg:0,esp:10,decl:2};
-const PL_T_PADRAO={transv:[],sinal:{on:1,eixo:'LFO-2',vel:40,lbo:1,ftp:1,lre:1,placa:'R-1',r19:1}};
+const PL_T_PADRAO={transv:[],sinal:{on:1,eixo:'LFO-2',vel:40,lbo:1,ftp:1,lre:1,placa:'R-1',r19:1,adv:1},eixo:null,geo:{modo:'ll',lat:'',lng:'',e:'',n:'',zona:24,rot:0,est2:'',lat2:'',lng2:'',e2:'',n2:''}};
 let _plT=JSON.parse(JSON.stringify(PL_T_PADRAO));
 function esc(t){ return String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function toast(msg,err){ const el=document.getElementById('pl-msg'); if(!el) return; el.textContent=msg; el.style.color=err?'#b91c1c':''; clearTimeout(el._t); el._t=setTimeout(()=>{ el.textContent=''; el.style.color=''; },4500); }
@@ -123,7 +170,7 @@ function plLayout(){
   const res=new Array(ruas.length).fill(null);
   const mk=(A,sA,d)=>({A,sA,d,n:[-d[1],d[0]],pos:s=>[A[0]+(s-sA)*d[0],A[1]+(s-sA)*d[1]]});
   const e0=i=>{ const r=(ruas[i].rows||[])[0]; return r?+r.est:0; };
-  res[0]=mk([0,0],e0(0),[1,0]);
+  res[0]=plLayCurva()||mk([0,0],e0(0),[1,0]);
   let restam=ruas.length-1, guard=0;
   while(restam>0&&guard++<30){
     let prog=false;
@@ -132,7 +179,7 @@ function plLayout(){
       const lk=(ru.rows||[]).find(r=>r.cruz&&ruaIdx(r.cruz.rua)>=0&&res[ruaIdx(r.cruz.rua)]);
       if(!lk) return;
       const g=plGeo(i), sgn=g.lado==='dir'?-1:1, P=res[ruaIdx(lk.cruz.rua)], A=P.pos(lk.cruz.est), a=(+g.ang||90)*Math.PI/180*sgn;
-      res[i]=mk(A,+lk.est,[P.d[0]*Math.cos(a)-P.d[1]*Math.sin(a),P.d[0]*Math.sin(a)+P.d[1]*Math.cos(a)]); res[i].pai=ruaIdx(lk.cruz.rua); restam--; prog=true;
+      const Pd=P.dirAt?P.dirAt(+lk.cruz.est):P.d; res[i]=mk(A,+lk.est,[Pd[0]*Math.cos(a)-Pd[1]*Math.sin(a),Pd[0]*Math.sin(a)+Pd[1]*Math.cos(a)]); res[i].pai=ruaIdx(lk.cruz.rua); restam--; prog=true;
     });
     if(!prog){
       const i=ruas.findIndex((r,k)=>!res[k]); const ru=ruas[i], g=plGeo(i), sgn=g.lado==='dir'?-1:1;
@@ -161,7 +208,7 @@ function plAmostras0(d,passo){
 }
 const plZ=(s,u)=>u>=0?s.gr+(s.gE-s.gr)*Math.min(u,s.b)/(s.b||1):s.gr+(s.gD-s.gr)*Math.min(-u,s.b)/(s.b||1);
 const plZT=(s,u)=>u>=0?s.tc+(s.te-s.tc)*Math.min(u,s.b)/(s.b||1):s.tc+(s.td-s.tc)*Math.min(-u,s.b)/(s.b||1);
-const plOff=(d,s,u)=>[s.c[0]+d.lay.n[0]*u,s.c[1]+d.lay.n[1]*u];
+const plOff=(d,s,u)=>{ const n=plNrm(d,s); return [s.c[0]+n[0]*u,s.c[1]+n[1]*u]; };
 function plPoligono(d,A,ext){ const l=A.map(s=>plOff(d,s,s.b+ext)), r=A.map(s=>plOff(d,s,-(s.b+ext))); return l.concat(r.reverse()); }
 /* PI-10: contorno da pista + meio-fio + calçada (cada lado com a sua largura) e faixa lateral da calçada */
 function plPoligonoCal(d,A,ext,com){ const l=A.map(s=>plOff(d,s,s.b+ext+(com?(s.calE||0):0))), r=A.map(s=>plOff(d,s,-(s.b+ext+(com?(s.calD||0):0)))); return l.concat(r.reverse()); }
@@ -265,8 +312,7 @@ function plSvg(vb,Wpx){
   if(v.eixo) D.forEach((d,j)=>{ s+='<polyline points="'+A[j].map(q=>pt(q.c)).join(' ')+'" fill="none" stroke="#c0392b" stroke-width="1" stroke-dasharray="14 3 2 3"/>'; });
   // 5) estacas, larguras, cotas
   D.forEach((d,j)=>{ if(d.transv) return;
-    const a=ang(d.lay.d), nx=d.lay.n;
-    d.L.forEach((l,k)=>{
+    d.L.forEach((l,k)=>{ const a=ang(d.lay.dirAt?d.lay.dirAt(l.est):d.lay.d), nx=d.lay.nAt?d.lay.nAt(l.est):d.lay.n;
       const c=d.lay.pos(l.est), b=l.larg/2, ex=b+(v.mf?wmf:0), eh=Math.abs(l.est/20-Math.round(l.est/20))<1e-6, idx=Math.round(l.est/20);
       const mostra=!eh||k===0||k===d.L.length-1||idx%v.passo===0;
       if(v.estacas){ const p1=plOff(d,{c},ex+0.6), p2=plOff(d,{c},-(ex+0.6)); s+='<line x1="'+X(p1).toFixed(1)+'" y1="'+Y(p1).toFixed(1)+'" x2="'+X(p2).toFixed(1)+'" y2="'+Y(p2).toFixed(1)+'" stroke="'+(eh?'#111':'#1d4ed8')+'" stroke-width="'+(eh?0.9:0.8)+'"'+(eh?'':' stroke-dasharray="4 2"')+'/>'; }
@@ -1179,7 +1225,7 @@ function pl3Dmontar(manter){
           (a,c)=>[(R[a].est-s0)/tl,(c===1||c===2)?wd(R[a])/tl:0],mm,true); t.chao.push(grp.children[grp.children.length-1]); });
     });
     // ── eixo
-    if(v.eixo){ const g=new T.BufferGeometry().setFromPoints(Aj.map(s=>{ const q=W3(s.c,s.gr); q.y+=0.03; return q; })); const ln=new T.Line(g,new T.LineDashedMaterial({color:0xd03020,dashSize:1.2,gapSize:0.5})); ln.computeLineDistances(); grp.add(ln); }
+    if(v.eixo&&!(_plT.sinal&&_plT.sinal.on&&_plT.sinal.eixo!=='nenhum'&&!d.transv)){ const g=new T.BufferGeometry().setFromPoints(Aj.map(s=>{ const q=W3(s.c,s.gr); q.y+=0.03; return q; })); const ln=new T.Line(g,new T.LineDashedMaterial({color:0xd03020,dashSize:1.2,gapSize:0.5})); ln.computeLineDistances(); grp.add(ln); }
     // ── rótulos 3D
     if(v.rot3d||v.numeros){
       if(v.numeros&&!d.transv) d.L.forEach((l,k)=>{ const eh=Math.abs(l.est/20-Math.round(l.est/20))<1e-6, idx=Math.round(l.est/20); if(eh&&k>0&&k<d.L.length-1&&idx%v.passo) return;
@@ -1206,15 +1252,15 @@ function pl3Dmontar(manter){
     let x0=1e9,x1=-1e9,y0=1e9,y1=-1e9; A.forEach(Aj=>Aj.forEach(q=>{ x0=Math.min(x0,q.c[0]);x1=Math.max(x1,q.c[0]);y0=Math.min(y0,q.c[1]);y1=Math.max(y1,q.c[1]); })); x0-=mg;x1+=mg;y0-=mg;y1+=mg;
     const cel=Math.max(1,Math.max(x1-x0,y1-y0)/260), nx=Math.ceil((x1-x0)/cel), ny=Math.ceil((y1-y0)/cel);
     const H=(p)=>{ let best=null, sw=0, sh=0, sc=0;
-      for(let j=0;j<D.length;j++){ const d=D[j], Aj=A[j], ly=d.lay, dx=p[0]-ly.A[0], dy=p[1]-ly.A[1];
-        const al=dx*ly.d[0]+dy*ly.d[1]+ly.sA, lat=dx*ly.n[0]+dy*ly.n[1], s0=Aj[0].est, sN=Aj[Aj.length-1].est;
+      for(let j=0;j<D.length;j++){ const d=D[j], Aj=A[j], ly=d.lay; for(const pr of plProjAll(ly,p)){
+        const al=pr.s, lat=pr.lat, s0=Aj[0].est, sN=Aj[Aj.length-1].est;
         const ac=Math.min(sN,Math.max(s0,al)), over=Math.abs(al-ac); let k=0; while(k<Aj.length-2&&Aj[k+1].est<ac) k++; const qa=Aj[k], qb=Aj[k+1], tt=(qb.est-qa.est)>0?(ac-qa.est)/(qb.est-qa.est):0;
         const q={gr:qa.gr+(qb.gr-qa.gr)*tt,gE:qa.gE+(qb.gE-qa.gE)*tt,gD:qa.gD+(qb.gD-qa.gD)*tt,tc:qa.tc+(qb.tc-qa.tc)*tt,te:qa.te+(qb.te-qa.te)*tt,td:qa.td+(qb.td-qa.td)*tt,b:(qa.b+(qb.b-qa.b)*tt),calE:qa.calE+(qb.calE-qa.calE)*tt,calD:qa.calD+(qb.calD-qa.calD)*tt,fimE:qa.fimE+(qb.fimE-qa.fimE)*tt,fimD:qa.fimD+(qb.fimD-qa.fimD)*tt};
         const sg=lat>=0?1:-1, cs=calOn?(sg>0?q.calE:q.calD):0, cw=q.b+wmf+(cs>0.01?cs:0), nat=plZT(q,lat), topo=cs>0.01?(sg>0?q.fimE:q.fimD):plZ(q,sg*q.b); /* PI-09/10: entorno rente à cota do pavimento (ou do muro, se há calçada) no limite */
         if(Math.abs(lat)<=cw&&over<0.01) return {h:topo,c:0};
         const e=Math.hypot(Math.max(0,Math.abs(lat)-cw),over), dlt=nat-topo, tw=Math.max(1.2,Math.abs(dlt)*1.5), t1=Math.min(1,e/tw), sm=t1*t1*(3-2*t1);
-        const hh=topo+dlt*sm, cc=(1-t1)*Math.min(1,Math.abs(dlt)/0.25), w=1/Math.pow(e+0.3,3);
-        sw+=w; sh+=w*hh; sc+=w*cc; }
+        const hh=topo+dlt*sm, cc=(1-t1)*Math.min(1,Math.abs(dlt)/0.25), w=(pr.f==null?1:pr.f)/Math.pow(e+0.3,3);
+        sw+=w; sh+=w*hh; sc+=w*cc; } }
       return {h:sh/sw,c:sc/sw}; };
     /* PI-09: o entorno NÃO passa por baixo da pista. Pontos da malha que caem dentro da pista+meio-fio são
        puxados para o limite da rua (cota do pavimento) e os triângulos inteiramente dentro dela são omitidos. */
@@ -1280,9 +1326,9 @@ function plEsquinas(D){
   const d0=D.find(x=>x.id==='r0'); if(!d0) return [];
   const P=secaoParams(), wmf=plMfLarg(P), A0=plAmostras0(d0,1), out=[];
   D.forEach(d=>{ if(!d.transv||!d.lay) return;
-    const c=d.cfg, R=Math.max(0,+c.raio||0), A=d.lay.A, dm=d0.lay.d, nm=d0.lay.n, ds=d.lay.d, ns=d.lay.n, sg=c.sg, hb=plMeia(A0,c.estM), bs=c.bs, As=plAmostras0(d,1);
+    const c=d.cfg, R=Math.max(0,+c.raio||0), A=d.lay.A, dm=plDirE(d0,c.estM), nm=[-dm[1],dm[0]], ds=d.lay.d, ns=d.lay.n, sg=c.sg, hb=plMeia(A0,c.estM), bs=c.bs, As=plAmostras0(d,1);
     const linM=off=>[A[0]+nm[0]*sg*off,A[1]+nm[1]*sg*off];
-    const stM=p=>d0.lay.sA+((p[0]-d0.lay.A[0])*dm[0]+(p[1]-d0.lay.A[1])*dm[1]), stS=p=>d.lay.sA+((p[0]-A[0])*ds[0]+(p[1]-A[1])*ds[1]);
+    const stM=p=>plProj(d0.lay,p).s, stS=p=>d.lay.sA+((p[0]-A[0])*ds[0]+(p[1]-A[1])*ds[1]);
     [1,-1].forEach(e1=>{
       const u1=[dm[0]*e1,dm[1]*e1], k=(ns[0]*u1[0]+ns[1]*u1[1])>=0?1:-1;
       const zM=p=>plSurf(A0,stM(p),sg*hb), zS=p=>plSurfD(d,As,stS(p),k*bs);
@@ -1343,7 +1389,7 @@ function plDados(){ const D=plDados0(), d0=D.find(x=>x.id==='r0');
    a diferença some em 3 m para dentro da transversal (sem degrau nem sobreposição) */
 function plShift(d,est,u){ const c=d&&d.transv&&d.cfg, R=d&&d.ref; if(!c||!R) return 0;
   const a=c.sg*c.ang*Math.PI/180, e=(c.sg*c.hb-u*Math.cos(a))/Math.sin(a), f=est<=e?1:Math.max(0,1-(est-e)/3); if(f<=0) return 0;
-  const p=plOff(d,{c:d.lay.pos(e)},u), L=R.d0.lay, st=L.sA+((p[0]-L.A[0])*L.d[0]+(p[1]-L.A[1])*L.d[1]), la=(p[0]-L.A[0])*L.n[0]+(p[1]-L.A[1])*L.n[1];
+  const p=plOff(d,{c:d.lay.pos(e)},u), pr=plProj(R.d0.lay,p), st=pr.s, la=pr.lat;
   return f*(plSurf(R.A0,st,la)-plSurf(R.As,Math.max(0,e),u)); }
 function plZJ(d,s,u){ return plZ(s,u)+plShift(d,s.est,u); }
 function plSurfD(d,Aj,e,u){ return plSurf(Aj,e,u)+plShift(d,e,u); }
@@ -1385,11 +1431,14 @@ function plSinal(D){
   /* R-19 (velocidade máxima) no início de cada sentido, do lado direito */
   if(S.r19&&mN-m0>12){ const hb0=plMeia(A0,m0+5), hbN=plMeia(A0,mN-5);
     const p1=plOff(d0,{c:d0.lay.pos(m0+5)},-(hb0+wmf+0.5)), p2=plOff(d0,{c:d0.lay.pos(mN-5)},hbN+wmf+0.5);
-    out.plc.push({tipo:'R-19',txt:String(vel),p:p1,z:plSurf(A0,m0+5,-hb0)+hmf,f:[-d0.lay.d[0],-d0.lay.d[1]]},{tipo:'R-19',txt:String(vel),p:p2,z:plSurf(A0,mN-5,hbN)+hmf,f:d0.lay.d}); }
+    const f1=plDirE(d0,m0+5), f2=plDirE(d0,mN-5); out.plc.push({tipo:'R-19',txt:String(vel),p:p1,z:plSurf(A0,m0+5,-hb0)+hmf,f:[-f1[0],-f1[1]]},{tipo:'R-19',txt:String(vel),p:p2,z:plSurf(A0,mN-5,hbN)+hmf,f:f2}); }
+  /* advertência A-7a/A-7b (via lateral à esquerda/direita) na via principal, 30 m antes de cada transversal, nos dois sentidos, lado direito */
+  if(S.adv) D.filter(d=>d.transv).forEach(d=>{ const c=d.cfg; [1,-1].forEach(sen=>{ const e=c.estM-sen*30; if(e<m0+2||e>mN-2) return; const hb1=plMeia(A0,e), u=-sen*(hb1+wmf+0.5), fd=plDirE(d0,e);
+      const esqDoMotorista=(c.sg===sen); out.plc.push({tipo:esqDoMotorista?'A-7a':'A-7b',txt:'',p:plOff(d0,{c:d0.lay.pos(e),est:e},u),z:plSurf(A0,e,-sen*hb1)+hmf,f:[-sen*fd[0],-sen*fd[1]]}); }); });
   /* transversais */
   D.filter(d=>d.transv).forEach(d=>{
     const c=d.cfg, As=plAmostras(d,1), bs=c.bs, es=ESQ.filter(q=>q.d===d), eN=d.L[d.L.length-1].est, ds=d.lay.d;
-    const hb=plMeia(A0,c.estM), Xe=plInter([d.lay.A[0]+d0.lay.n[0]*c.sg*hb,d.lay.A[1]+d0.lay.n[1]*c.sg*hb],d0.lay.d,d.lay.A,ds);
+    const hb=plMeia(A0,c.estM), dmL=plDirE(d0,c.estM), Xe=plInter([d.lay.A[0]-dmL[1]*c.sg*hb,d.lay.A[1]+dmL[0]*c.sg*hb],dmL,d.lay.A,ds);
     const eEdge=Xe?(Xe[0]-d.lay.A[0])*ds[0]+(Xe[1]-d.lay.A[1])*ds[1]:hb, eT2=es.length?Math.max(...es.map(q=>q.stT2)):eEdge;
     const e0=Math.max(eEdge+1.0,eT2+0.3); /* FTP a ≥ 1,00 m do alinhamento da via transversal, fora da concordância */
     let eRet=e0;
@@ -1406,7 +1455,7 @@ function plSinal(D){
 function plSinalResumo(){
   const S=_plT.sinal, vel=+S.vel||40, wl=vel>=80?'0,15':'0,10', pat=vel<60?'2 m / 4 m':vel<80?'3 m / 6 m':'4 m / 12 m';
   const ex={'LFO-2':'LFO-2 amarela seccionada '+wl+' m, traço/espaço '+pat,'LFO-1':'LFO-1 amarela contínua '+wl+' m (proibido ultrapassar; pista &lt; 7 m)','LFO-3':'LFO-3 dupla contínua amarela '+wl+' m com '+wl+' m entre linhas (pista ≥ 7 m)','nenhum':'sem linha de eixo'}[S.eixo];
-  return 'Velocidade '+vel+' km/h → '+ex+'. LBO branca '+wl+' m, a 0,15 m da borda (e acompanha o raio da esquina). FTP-1 zebrada: listras 0,40 m, vão 0,60 m, extensão 4,00 m, a ≥ 1,00 m do alinhamento da via. LRE 0,40 m, a 1,60 m antes da faixa. Fonte: CONTRAN, MBST Vol. IV (Sinalização Horizontal) e Vol. I (R-1, R-2, R-19). Confirme com o órgão de trânsito do município.';
+  return 'Velocidade '+vel+' km/h → '+ex+'. LBO branca '+wl+' m, a 0,15 m da borda (e acompanha o raio da esquina). FTP-1 zebrada: listras 0,40 m, vão 0,60 m, extensão 4,00 m, a ≥ 1,00 m do alinhamento da via. LRE 0,40 m, a 1,60 m antes da faixa. Placas verticais: R-1/R-2 na transversal, R-19 nos dois sentidos e A-7a/A-7b 30 m antes de cada transversal, a 0,50 m do meio-fio e borda inferior a 2,00 m do chão. Fonte: CONTRAN, MBST Vol. IV (Sinalização Horizontal), Vol. I (R-1, R-2, R-19) e Vol. II (A-7a, A-7b). Confirme com o órgão de trânsito do município.';
 }
 /* desenho da sinalização na planta (SVG) */
 function plSvgSinal(D,X,Y,sc){
@@ -1417,6 +1466,7 @@ function plSvgSinal(D,X,Y,sc){
     if(q.tipo==='R-1'){ let pts=''; for(let i=0;i<8;i++){ const a=Math.PI/8+i*Math.PI/4; pts+=(x+r*Math.cos(a)).toFixed(1)+','+(y+r*Math.sin(a)).toFixed(1)+' '; }
       top+='<polygon points="'+pts+'" fill="#c62828" stroke="#fff" stroke-width="'+Math.max(1,r*0.12).toFixed(1)+'"/><polygon points="'+pts+'" fill="none" stroke="#7f1d1d" stroke-width="0.5"/><text x="'+x.toFixed(1)+'" y="'+(y+r*0.22).toFixed(1)+'" font-size="'+(r*0.55).toFixed(1)+'" font-weight="700" fill="#fff" text-anchor="middle">PARE</text>'; }
     else if(q.tipo==='R-2'){ top+='<polygon points="'+(x-r).toFixed(1)+','+(y-r*0.7).toFixed(1)+' '+(x+r).toFixed(1)+','+(y-r*0.7).toFixed(1)+' '+x.toFixed(1)+','+(y+r).toFixed(1)+'" fill="#fff" stroke="#c62828" stroke-width="'+Math.max(1.5,r*0.22).toFixed(1)+'"/>'; }
+    else if(/^A-7/.test(q.tipo)){ const s2=r*1.1, sx=q.tipo==='A-7a'?-1:1; top+='<polygon points="'+x.toFixed(1)+','+(y-s2).toFixed(1)+' '+(x+s2).toFixed(1)+','+y.toFixed(1)+' '+x.toFixed(1)+','+(y+s2).toFixed(1)+' '+(x-s2).toFixed(1)+','+y.toFixed(1)+'" fill="#f6c400" stroke="#111" stroke-width="1"/><path d="M'+x.toFixed(1)+','+(y+s2*0.55).toFixed(1)+' V'+(y-s2*0.55).toFixed(1)+' M'+x.toFixed(1)+','+(y-s2*0.05).toFixed(1)+' l'+(sx*s2*0.4).toFixed(1)+','+(-s2*0.3).toFixed(1)+'" stroke="#111" stroke-width="'+Math.max(1.2,r*0.14).toFixed(1)+'" fill="none"/>'; }
     else { top+='<circle cx="'+x.toFixed(1)+'" cy="'+y.toFixed(1)+'" r="'+r.toFixed(1)+'" fill="#fff" stroke="#c62828" stroke-width="'+Math.max(1.5,r*0.2).toFixed(1)+'"/><text x="'+x.toFixed(1)+'" y="'+(y+r*0.3).toFixed(1)+'" font-size="'+(r*0.85).toFixed(1)+'" font-weight="700" fill="#111" text-anchor="middle">'+q.txt+'</text>'; }
     top+='<text x="'+x.toFixed(1)+'" y="'+(y+r+9).toFixed(1)+'" font-size="8" fill="#111" text-anchor="middle">'+q.tipo+'</text>'; });
   return {s,top};
@@ -1430,6 +1480,7 @@ function plLegSinal(k,sx,yy){
   if(k==='s:r1') return '<polygon points="'+[0,1,2,3,4,5,6,7].map(i=>{ const a=Math.PI/8+i*Math.PI/4; return (sx+11+5.5*Math.cos(a)).toFixed(1)+','+(yy+5.5*Math.sin(a)).toFixed(1); }).join(' ')+'" fill="#c62828"/>';
   if(k==='s:r2') return '<polygon points="'+(sx+5)+','+(yy-4)+' '+(sx+17)+','+(yy-4)+' '+(sx+11)+','+(yy+5)+'" fill="#fff" stroke="#c62828" stroke-width="1.6"/>';
   if(k==='s:r19') return '<circle cx="'+(sx+11)+'" cy="'+yy+'" r="5" fill="#fff" stroke="#c62828" stroke-width="1.6"/>';
+  if(k==='s:a7') return '<polygon points="'+(sx+11)+','+(yy-6)+' '+(sx+17)+','+yy+' '+(sx+11)+','+(yy+6)+' '+(sx+5)+','+yy+'" fill="#f6c400" stroke="#111" stroke-width="0.8"/>';
   if(k==='s:esq') return '<path d="M'+sx+','+(yy-5)+' h8 a8,8 0 0 1 8,8 v2 h-16 z" fill="#a9aaae" stroke="#333" stroke-width="0.8"/>';
   return '';
 }
@@ -1439,6 +1490,7 @@ function plLegItens(){
   if(S.eixo!=='nenhum') it.push(['s:lfo','Eixo '+S.eixo+' (amarela)']); if(S.lbo) it.push(['s:lbo','Linha de bordo LBO (branca)']);
   if(_plT.transv.length){ if(S.ftp) it.push(['s:ftp','Faixa de pedestres FTP-1 (zebrada)']); if(S.lre) it.push(['s:lre','Linha de retenção LRE']); if(S.placa==='R-1') it.push(['s:r1','R-1 Parada obrigatória']); if(S.placa==='R-2') it.push(['s:r2','R-2 Dê a preferência']); }
   if(S.r19) it.push(['s:r19','R-19 Velocidade máxima '+S.vel+' km/h']);
+  if(S.adv&&_plT.transv.length) it.push(['s:a7','A-7a/b Via lateral (advertência)']);
   return it;
 }
 
@@ -1478,6 +1530,9 @@ function plPlacaTex(tipo,txt){
   if(tipo==='R-1'){ const oct=r=>{ g.beginPath(); for(let i=0;i<8;i++){ const a=Math.PI/8+i*Math.PI/4; g[i?'lineTo':'moveTo'](N/2+r*Math.cos(a),N/2+r*Math.sin(a)); } g.closePath(); };
     oct(126); g.fillStyle='#fff'; g.fill(); oct(112); g.fillStyle='#c62828'; g.fill(); g.fillStyle='#fff'; g.font='bold 74px Arial'; g.textAlign='center'; g.textBaseline='middle'; g.fillText('PARE',N/2,N/2+4); }
   else if(tipo==='R-2'){ g.beginPath(); g.moveTo(6,24); g.lineTo(N-6,24); g.lineTo(N/2,N-10); g.closePath(); g.fillStyle='#c62828'; g.fill(); g.beginPath(); g.moveTo(46,46); g.lineTo(N-46,46); g.lineTo(N/2,N-58); g.closePath(); g.fillStyle='#fff'; g.fill(); }
+  else if(tipo==='A-7a'||tipo==='A-7b'){ const dia=r=>{ g.beginPath(); g.moveTo(N/2,N/2-r); g.lineTo(N/2+r,N/2); g.lineTo(N/2,N/2+r); g.lineTo(N/2-r,N/2); g.closePath(); };
+    dia(126); g.fillStyle='#111'; g.fill(); dia(118); g.fillStyle='#f6c400'; g.fill(); dia(110); g.fillStyle='#111'; g.fill(); dia(104); g.fillStyle='#f6c400'; g.fill();
+    g.fillStyle='#111'; g.fillRect(N/2-9,N/2-62,18,124); const sx=tipo==='A-7a'?-1:1; g.beginPath(); g.moveTo(N/2,N/2-6); g.lineTo(N/2+sx*52,N/2-36); g.lineTo(N/2+sx*52,N/2-16); g.lineTo(N/2,N/2+14); g.closePath(); g.fill(); }
   else { g.beginPath(); g.arc(N/2,N/2,124,0,7); g.fillStyle='#c62828'; g.fill(); g.beginPath(); g.arc(N/2,N/2,96,0,7); g.fillStyle='#fff'; g.fill(); g.fillStyle='#111'; g.font='bold 104px Arial'; g.textAlign='center'; g.textBaseline='middle'; g.fillText(txt,N/2,N/2+6); }
   const t=new T.CanvasTexture(cv); t.encoding=T.sRGBEncoding; return c[k]=t;
 }
@@ -1491,9 +1546,12 @@ function plSinal3D(ctx){
   const matPoste=new T.MeshStandardMaterial({color:0x8a8f96,roughness:0.5,metalness:0.6}), matCosta=new T.MeshStandardMaterial({color:0x9aa0a6,roughness:0.6,metalness:0.4});
   R.plc.forEach(q=>{ const b=W3(q.p,q.z), th=Math.atan2(q.f[0],-q.f[1]);
     const poste=new T.Mesh(new T.CylinderGeometry(0.035,0.035,2.3,10),matPoste); poste.position.set(b.x,b.y+1.15,b.z); poste.castShadow=true; grp.add(poste);
-    const fr=new T.Mesh(new T.PlaneGeometry(0.75,0.75),new T.MeshStandardMaterial({map:plPlacaTex(q.tipo,q.txt),transparent:true,alphaTest:0.3,roughness:0.5}));
-    fr.position.set(b.x,b.y+2.0,b.z); fr.rotation.y=th; fr.position.x+=Math.sin(th)*0.04; fr.position.z+=Math.cos(th)*0.04; fr.castShadow=true; grp.add(fr);
-    const cs=new T.Mesh(new T.PlaneGeometry(0.7,0.7),matCosta); cs.position.set(b.x,b.y+2.0,b.z); cs.rotation.y=th+Math.PI; grp.add(cs); });
+    const L=/^A-/.test(q.tipo)?0.85:0.75, mf=new T.MeshStandardMaterial({map:plPlacaTex(q.tipo,q.txt),transparent:true,alphaTest:0.3,roughness:0.5});
+    const fr=new T.Mesh(new T.PlaneGeometry(L,L),mf); fr.position.set(b.x+Math.sin(th)*0.05,b.y+2.0,b.z+Math.cos(th)*0.05); fr.rotation.y=th; fr.castShadow=true; grp.add(fr);
+    /* costas: mesmo recorte da placa, escura */
+    const cs=new T.Mesh(new T.PlaneGeometry(L,L),new T.MeshStandardMaterial({color:0x3a3d42,roughness:0.6,metalness:0.4,transparent:true,alphaTest:0.3,map:plPlacaTex(q.tipo,q.txt)}));
+    cs.position.set(b.x+Math.sin(th)*0.035,b.y+2.0,b.z+Math.cos(th)*0.035); cs.rotation.y=th+Math.PI; grp.add(cs);
+  });
 }
 
 /* ── painel: ruas transversais e sinalização ── */
@@ -1515,8 +1573,9 @@ function plPainelTransv(tit,ck){
     'Velocidade '+sel('vel',[30,40,50,60,70,80].map(x=>[x,x+' km/h']),S.vel,"plSSet('vel',+this.value)")+
     'Placa na transversal '+sel('placa',[['R-1','R-1 Parada obrigatória'],['R-2','R-2 Dê a preferência'],['nenhuma','nenhuma']],S.placa,"plSSet('placa',this.value)")+'</div>'+
     ck('Linha de bordo (LBO)',S.lbo,"plSSet('lbo',this.checked?1:0)")+ck('Faixa de pedestres nas esquinas (FTP-1)',S.ftp,"plSSet('ftp',this.checked?1:0)")+
-    ck('Linha de retenção (LRE)',S.lre,"plSSet('lre',this.checked?1:0)")+ck('Placa de velocidade máxima (R-19)',S.r19,"plSSet('r19',this.checked?1:0)")+
+    ck('Linha de retenção (LRE)',S.lre,"plSSet('lre',this.checked?1:0)")+ck('Placa de velocidade máxima (R-19)',S.r19,"plSSet('r19',this.checked?1:0)")+ck('Placas de advertência A-7a/A-7b antes de cada transversal',S.adv,"plSSet('adv',this.checked?1:0)")+
     '<div style="font-size:11px;color:var(--fg2);margin-top:4px;line-height:1.4">'+plSinalResumo()+'</div>';
+  h+=plGeoPainel(tit);
   return h;
 }
 function plMarcarSujo(){ try{ _sujo=true; }catch(e){} }
@@ -1532,5 +1591,69 @@ function plTSet(i,k,val){ const t=_plT.transv[i]; if(!t) return;
 function plSSet(k,val){ _plT.sinal[k]=val; plPainel(); plRedesenhar(); plMarcarSujo(); }
 /* projeto (.json e nuvem) */
 function plTExportar(){ return JSON.parse(JSON.stringify(_plT)); }
-function plTImportar(o){ const p=JSON.parse(JSON.stringify(PL_T_PADRAO)); if(o&&typeof o==='object'){ if(Array.isArray(o.transv)) p.transv=o.transv.filter(t=>t&&typeof t==='object'); if(o.sinal&&typeof o.sinal==='object') Object.assign(p.sinal,o.sinal); }
+function plTImportar(o){ const p=JSON.parse(JSON.stringify(PL_T_PADRAO)); if(o&&typeof o==='object'){ if(Array.isArray(o.transv)) p.transv=o.transv.filter(t=>t&&typeof t==='object'); if(o.sinal&&typeof o.sinal==='object') Object.assign(p.sinal,o.sinal); if(Array.isArray(o.eixo)) p.eixo=o.eixo; if(o.geo&&typeof o.geo==='object') Object.assign(p.geo,o.geo); }
   _plT=p; ruasSinc(); _pl.vb=null; if(_pl.t3) _pl.t3.pronto=false; }
+
+/* ── GEORREFERENCIAMENTO: coordenadas das estacas (UTM SIRGAS 2000 e lat/lon) ── */
+function geoParaUTM(lat,lng,zona){ const a=6378137,f=1/298.257222101,k0=.9996,e2=f*(2-f),ep2=e2/(1-e2); const z=zona||Math.floor((lng+180)/6)+1, l0=((z-1)*6-180+3)*Math.PI/180, ph=lat*Math.PI/180, l=lng*Math.PI/180;
+  const N=a/Math.sqrt(1-e2*Math.sin(ph)**2), T=Math.tan(ph)**2, C=ep2*Math.cos(ph)**2, A=Math.cos(ph)*(l-l0);
+  const M=a*((1-e2/4-3*e2*e2/64-5*e2**3/256)*ph-(3*e2/8+3*e2*e2/32+45*e2**3/1024)*Math.sin(2*ph)+(15*e2*e2/256+45*e2**3/1024)*Math.sin(4*ph)-(35*e2**3/3072)*Math.sin(6*ph));
+  const E=500000+k0*N*(A+(1-T+C)*A**3/6+(5-18*T+T*T+72*C-58*ep2)*A**5/120), Nn=k0*(M+N*Math.tan(ph)*(A*A/2+(5-T+9*C+4*C*C)*A**4/24+(61-58*T+T*T+600*C-330*ep2)*A**6/720))+(lat<0?1e7:0);
+  return {e:E,n:Nn,z}; }
+function geoDeUTM(E,Nn,z,sul){ const a=6378137,f=1/298.257222101,k0=.9996,e2=f*(2-f),ep2=e2/(1-e2), e1=(1-Math.sqrt(1-e2))/(1+Math.sqrt(1-e2));
+  const x=E-500000, y=sul?Nn-1e7:Nn, M=y/k0, mu=M/(a*(1-e2/4-3*e2*e2/64-5*e2**3/256));
+  const p1=mu+(3*e1/2-27*e1**3/32)*Math.sin(2*mu)+(21*e1*e1/16-55*e1**4/32)*Math.sin(4*mu)+(151*e1**3/96)*Math.sin(6*mu)+(1097*e1**4/512)*Math.sin(8*mu);
+  const C1=ep2*Math.cos(p1)**2, T1=Math.tan(p1)**2, N1=a/Math.sqrt(1-e2*Math.sin(p1)**2), R1=a*(1-e2)/Math.pow(1-e2*Math.sin(p1)**2,1.5), D=x/(N1*k0);
+  const lat=p1-(N1*Math.tan(p1)/R1)*(D*D/2-(5+3*T1+10*C1-4*C1*C1-9*ep2)*D**4/24+(61+90*T1+298*C1+45*T1*T1-252*ep2-3*C1*C1)*D**6/720);
+  const lon=((z-1)*6-180+3)*Math.PI/180+(D-(1+2*T1+C1)*D**3/6+(5-2*C1+28*T1-3*C1*C1+8*ep2+24*T1*T1)*D**5/120)/Math.cos(p1);
+  return [lat*180/Math.PI,lon*180/Math.PI]; }
+const plNum=v=>{ const x=parseFloat(String(v==null?'':v).replace(',','.')); return isNaN(x)?null:x; };
+/* UTM de um ponto de referência (lat/lon ou E/N) */
+function plGeoRef(lat,lng,e,n){ const G=_plT.geo, z=+G.zona||24;
+  if(G.modo==='utm'){ const E=plNum(e), N=plNum(n); return (E!=null&&N!=null)?{e:E,n:N,z}:null; }
+  const la=plNum(lat), lo=plNum(lng); if(la==null||lo==null) return null; const u=geoParaUTM(la,lo,z); return {e:u.e,n:u.n,z}; }
+/* transformação do desenho (m, norte do desenho para cima) para UTM */
+function plGeoTf(){ const D=plDados(), d0=D.find(x=>x.id==='r0'); if(!d0) return null; const G=_plT.geo, r0=plGeoRef(G.lat,G.lng,G.e,G.n); if(!r0) return null;
+  const s0=d0.L[0].est, B=d0.lay.pos(s0), rot=(plNum(G.rot)||0)*Math.PI/180, c=Math.cos(rot), s=Math.sin(rot);
+  const f=p=>{ const dx=p[0]-B[0], dy=p[1]-B[1]; const E=r0.e+dx*c+dy*s, N=r0.n-dx*s+dy*c; const ll=geoDeUTM(E,N,r0.z,true); return {E,N,lat:ll[0],lng:ll[1]}; };
+  return {f,d0,rot:plNum(G.rot)||0,z:r0.z}; }
+function plGeoAzim(tf,d0,e){ const a=d0.lay.pos(e-0.5), b=d0.lay.pos(e+0.5), A=tf.f(a), B=tf.f(b); let az=Math.atan2(B.E-A.E,B.N-A.N)*180/Math.PI; if(az<0) az+=360; return az; }
+function plGeoGiro2(){ const G=_plT.geo, D=plDados(), d0=D.find(x=>x.id==='r0'); const s2=plParseEst(G.est2); const r0=plGeoRef(G.lat,G.lng,G.e,G.n), r2=plGeoRef(G.lat2,G.lng2,G.e2,G.n2);
+  if(!d0||!r0||!r2||isNaN(s2)){ toast('Preencha o ponto 1 (estaca inicial) e o ponto 2 (estaca e coordenada).',true); return; }
+  const B=d0.lay.pos(d0.L[0].est), Q=d0.lay.pos(s2), azD=Math.atan2(Q[0]-B[0],Q[1]-B[1]), azR=Math.atan2(r2.e-r0.e,r2.n-r0.n);
+  let g=(azR-azD)*180/Math.PI; while(g>180) g-=360; while(g<-180) g+=360; G.rot=+g.toFixed(4);
+  const dd=Math.hypot(Q[0]-B[0],Q[1]-B[1]), dr=Math.hypot(r2.e-r0.e,r2.n-r0.n);
+  toast('Giro calculado: '+fmt(g,3)+'°. Distância no desenho '+fmt(dd,2)+' m × nas coordenadas '+fmt(dr,2)+' m (diferença '+fmt(dr-dd,2)+' m).'); plPainel(); plMarcarSujo(); }
+function plGeoSet(k,v){ _plT.geo[k]=v; plMarcarSujo(); if(k==='modo') plPainel(); }
+function plGeoLinhas(){ const tf=plGeoTf(); if(!tf){ toast('Informe a coordenada da estaca inicial (eixo) em Georreferenciamento.',true); return null; }
+  const d0=tf.d0, A=plAmostras0(d0,1); return d0.L.map(l=>{ const s={c:d0.lay.pos(l.est),est:l.est}, b=l.larg/2, x=tf.f(s.c), e=tf.f(plOff(d0,s,b)), dr=tf.f(plOff(d0,s,-b)); return {est:l.est,eixo:x,esq:e,dir:dr,az:plGeoAzim(tf,d0,l.est),gr:l.gr}; }); }
+function plGeoTabela(){ const L=plGeoLinhas(); if(!L) return; const f3=x=>fmt(x,3), f7=x=>x.toFixed(7).replace('.',',');
+  const az=a=>{ const g=Math.floor(a), m=Math.floor((a-g)*60), s=((a-g)*60-m)*60; return g+'° '+String(m).padStart(2,'0')+"' "+s.toFixed(1).replace('.',',')+'"'; };
+  let h='<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()"><div style="background:var(--bg,#fff);color:var(--fg,#111);max-width:96vw;max-height:88vh;overflow:auto;border-radius:8px;padding:14px;font-size:12px">'+
+    '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px"><b style="font-size:14px">Coordenadas das estacas — UTM SIRGAS 2000, zona '+_plT.geo.zona+' S</b><span><button class="tb-btn" onclick="plGeoCsv()">⬇ CSV</button> <button class="tb-btn" onclick="plGeoKml()">⬇ KML (Google Earth)</button> <button class="tb-btn" onclick="this.closest(\'[style*=fixed]\').remove()">✕</button></span></div>'+
+    '<div style="color:var(--fg2);margin:4px 0 8px">Giro do desenho: '+fmt(+_plT.geo.rot||0,4)+'° · Azimute = do norte, no sentido horário, no sentido das estacas.</div><table class="lista-nuvem"><tr><th>Estaca</th><th>Eixo E</th><th>Eixo N</th><th>Eixo latitude</th><th>Eixo longitude</th><th>Azimute do eixo</th><th>Borda esq. E</th><th>Borda esq. N</th><th>Borda dir. E</th><th>Borda dir. N</th><th>Greide</th></tr>'+
+    L.map(r=>'<tr><td>'+estacaTxt(r.est)+'</td><td>'+f3(r.eixo.E)+'</td><td>'+f3(r.eixo.N)+'</td><td>'+f7(r.eixo.lat)+'</td><td>'+f7(r.eixo.lng)+'</td><td>'+az(r.az)+'</td><td>'+f3(r.esq.E)+'</td><td>'+f3(r.esq.N)+'</td><td>'+f3(r.dir.E)+'</td><td>'+f3(r.dir.N)+'</td><td>'+f3(r.gr)+'</td></tr>').join('')+'</table></div></div>';
+  const w=document.createElement('div'); w.innerHTML=h; document.body.appendChild(w.firstChild); }
+function plGeoCsv(){ const L=plGeoLinhas(); if(!L) return; const n=(x,d)=>x.toFixed(d).replace('.',',');
+  const t='Estaca;Distância (m);Eixo E;Eixo N;Eixo lat;Eixo lon;Azimute (°);Borda esq. E;Borda esq. N;Borda dir. E;Borda dir. N;Greide\n'+L.map(r=>[estacaTxt(r.est),n(r.est,3),n(r.eixo.E,3),n(r.eixo.N,3),n(r.eixo.lat,8),n(r.eixo.lng,8),n(r.az,4),n(r.esq.E,3),n(r.esq.N,3),n(r.dir.E,3),n(r.dir.N,3),r.gr==null?'':n(r.gr,3)].join(';')).join('\n');
+  triggerDownload(new Blob(['﻿'+t],{type:'text/csv;charset=utf-8'}),'pavimento_coordenadas_'+carimbo()+'.csv'); }
+function plGeoKml(){ const L=plGeoLinhas(); if(!L) return; const c=p=>p.lng.toFixed(8)+','+p.lat.toFixed(8)+',0', nm=esc(((document.getElementById('logradouro')||{}).value)||'Via');
+  const ln=(n,cor,pts)=>'<Placemark><name>'+n+'</name><Style><LineStyle><color>'+cor+'</color><width>3</width></LineStyle></Style><LineString><tessellate>1</tessellate><coordinates>'+pts.map(c).join(' ')+'</coordinates></LineString></Placemark>';
+  const k='<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>'+nm+'</name>'+ln('Eixo','ff0000ff',L.map(r=>r.eixo))+ln('Borda esquerda','ffffffff',L.map(r=>r.esq))+ln('Borda direita','ffffffff',L.map(r=>r.dir))+
+    '<Folder><name>Estacas</name>'+L.map(r=>'<Placemark><name>EST. '+estacaTxt(r.est)+'</name><description>E '+r.eixo.E.toFixed(3)+' · N '+r.eixo.N.toFixed(3)+' · azimute '+r.az.toFixed(4)+'°</description><Point><coordinates>'+c(r.eixo)+'</coordinates></Point></Placemark>').join('')+'</Folder></Document></kml>';
+  triggerDownload(new Blob([k],{type:'application/vnd.google-earth.kml+xml'}),'pavimento_'+carimbo()+'.kml'); }
+function plGeoPainel(tit){ const G=_plT.geo, ll=G.modo!=='utm', inp=(k,ph,w)=>'<input value="'+esc(G[k]==null?'':G[k])+'" placeholder="'+ph+'" style="width:'+(w||110)+'px;font-size:11px" onchange="plGeoSet(\''+k+'\',this.value)">';
+  const tf=plGeoTf(); let res='';
+  if(tf){ const p=tf.f(tf.d0.lay.pos(tf.d0.L[0].est)); res='<div style="font-size:11px;margin-top:4px">Estaca inicial: E '+fmt(p.E,3)+' · N '+fmt(p.N,3)+'<br>'+p.lat.toFixed(7)+', '+p.lng.toFixed(7)+' · <a href="https://www.google.com/maps?q='+p.lat.toFixed(7)+','+p.lng.toFixed(7)+'&t=k" target="_blank" rel="noopener">ver no Google Maps</a><br>Azimute do eixo na estaca inicial: '+fmt(plGeoAzim(tf,tf.d0,tf.d0.L[0].est),3)+'°</div>'; }
+  return tit('Georreferenciamento (coordenadas)')+
+    '<div style="font-size:11px;color:var(--fg2);line-height:1.4">O desenho segue o traçado e o azimute do PDF (norte do desenho para cima). Informe a coordenada do <b>eixo na estaca inicial</b>; com um 2º ponto o programa calcula o giro do desenho.</div>'+
+    '<div style="display:grid;grid-template-columns:auto 1fr;gap:4px 6px;font-size:11px;margin-top:4px;align-items:center">Tipo <select style="font-size:11px" onchange="plGeoSet(\'modo\',this.value)"><option value="ll"'+(ll?' selected':'')+'>Latitude / longitude</option><option value="utm"'+(!ll?' selected':'')+'>UTM (E / N)</option></select>'+
+    'Zona UTM <span>'+inp('zona','24',40)+' S (Macaé/Rio das Ostras = 24)</span>'+
+    'Ponto 1 (estaca inicial) <span>'+(ll?inp('lat','-22.38…')+' '+inp('lng','-41.78…'):inp('e','E (m)')+' '+inp('n','N (m)'))+'</span>'+
+    'Giro do desenho (°) <span>'+inp('rot','0',60)+' <span style="color:var(--fg2)">+ = horário</span></span>'+
+    'Ponto 2 (opcional) <span>estaca '+inp('est2','ex.: 10',50)+' '+(ll?inp('lat2','lat')+' '+inp('lng2','lon'):inp('e2','E')+' '+inp('n2','N'))+'</span></div>'+
+    '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:5px"><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plGeoGiro2()">Calcular giro pelos 2 pontos</button><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plGeoTabela()">📍 Coordenadas das estacas</button><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plGeoKml()">⬇ KML</button><button type="button" class="tb-btn" style="font-size:11px;padding:2px 6px" onclick="plGeoCsv()">⬇ CSV</button></div>'+res+
+    (_plT.eixo?'<div style="font-size:11px;color:#15803d;margin-top:3px">✔ Traçado do levantamento (com as curvas) em uso.</div>':'<div style="font-size:11px;color:var(--fg2);margin-top:3px">Eixo reto (importe o levantamento em PDF para usar o traçado com curvas).</div>');
+}
+/* recebe o eixo do levantamento (m; y para cima) */
+function plTEixo(pts){ if(!Array.isArray(pts)||pts.length<2){ _plT.eixo=null; return; } const x0=pts[0][0], y0=pts[0][1]; _plT.eixo=pts.map(p=>[+(p[0]-x0).toFixed(3),+(p[1]-y0).toFixed(3)]); ruasSinc(); _pl.vb=null; if(_pl.t3) _pl.t3.pronto=false; }

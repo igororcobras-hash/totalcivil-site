@@ -268,6 +268,6 @@ Lev.abrir=function(op){
   document.getElementById('lev-cancel').onclick=fechar;
   document.getElementById('lev-arq').onchange=e=>{ if(e.target.files[0]) ler(e.target.files[0]); };
   ['lev-esc','lev-passo','lev-lf','lev-inv','lev-todos'].forEach(id=>document.getElementById(id).addEventListener('change',recalcular));
-  document.getElementById('lev-aplicar').onclick=()=>{ if(!E.rua) return; const rows=E.rua.rows.map(r=>({est:r.est,tEsq:r.tEsq,tEixo:r.tEixo,tDir:r.tDir,larg:r.larg})); const info={comprimento:E.rua.comprimento,pontos:E.P.length}; fechar(); if(op&&op.aplicar) op.aplicar(rows,info); };
+  document.getElementById('lev-aplicar').onclick=()=>{ if(!E.rua) return; const rows=E.rua.rows.map(r=>({est:r.est,tEsq:r.tEsq,tEixo:r.tEixo,tDir:r.tDir,larg:r.larg})); const kk=E.rua.escalaMporPt, info={comprimento:E.rua.comprimento,pontos:E.P.length,eixo:(E.rua.extra&&E.rua.extra.axPts||[]).map(p=>[p[0]*kk,-p[1]*kk])}; /* eixo com as curvas, em metros, y para cima (norte do desenho) */ fechar(); if(op&&op.aplicar) op.aplicar(rows,info); };
 };
 })();
