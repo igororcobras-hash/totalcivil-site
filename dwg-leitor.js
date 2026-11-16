@@ -17,6 +17,9 @@ DwgLeitor.num=function(s){ const t=semFormato(s).replace(',','.'); return /^-?\d
 const ehCota=s=>/^-?\d+[.,]\d{2,3}$/.test(semFormato(s));
 const ehInt=s=>/^\d+$/.test(semFormato(s));
 const nomeCamada=e=>(e.layer&&e.layer.name)||'0';
+/* REGRA DO DONO (16/11/2026): sempre IGNORAR referências externas (xref). Fora: camadas "arquivo|camada" (dependentes de xref) e
+   INSERT de bloco que é xref (flags 4 xref, 8 sobreposição, 16 dependente, ou caminho externo). */
+const ehXref=e=>{ try{ if(nomeCamada(e).indexOf('|')>=0) return true; if(e.objectName==='INSERT'&&e.block){ const f=e.block.flags|0; if((f&(4|8|16))||e.block.xRefPath) return true; } }catch(_){} return false; };
 
 DwgLeitor.normalizar=function(doc){
   const out={versao:null,unidades:null,camadas:{},pontos:[],linhas:[],textos:[],blocos:[],extensao:null,avisos:[]};
@@ -28,7 +31,9 @@ DwgLeitor.normalizar=function(doc){
   const txtNum={}; // textos numéricos por camada (nº do ponto e cotas), para parear por proximidade
   const consumido=new Set();
   const ents=[...doc.entities];
+  out.xrefIgnorados=0;
   ents.forEach((e,idx)=>{
+    if(ehXref(e)){ out.xrefIgnorados++; return; }
     const t=e.objectName, l=nomeCamada(e), c=cam(l); c.total++; c.tipos[t]=(c.tipos[t]||0)+1;
     if(t==='POINT'){
       const p={x:e.location.x,y:e.location.y,z:e.location.z,camada:l,cota:null,fonte:null,nome:null,desc:null,zDifere:false};
