@@ -437,6 +437,7 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
   <button class="tab-btn" onclick="showTab('mem')">Memória de Cálculo</button>
   <button class="tab-btn" onclick="showTab('corte')">Seção Transversal</button>
   <button class="tab-btn" onclick="showTab('topo')">Topografia</button>
+  <button class="tab-btn" onclick="showTab('planta')">🗺 Planta e 3D</button>
   <button class="tab-btn" onclick="showTab('relatorio')">Relatório Técnico</button>
   <button class="tab-btn" onclick="showTab('mat')">Materiais</button>
   <button class="tab-btn" onclick="showTab('orc')">💰 Orçamento</button>
@@ -1015,6 +1016,39 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
     <button class="tb-btn tb-btn-excel" onclick="exportarTabExcel('topo')">Excel</button>
     <button class="tb-btn tb-btn-word" translate="no" onclick="exportarTabWord('topo')">Word</button>
     <button class="tb-btn tb-btn-pdf"   onclick="exportarTabPDF('topo')">PDF</button>
+  </div>
+</div>
+
+<!-- ============================================================
+     TAB: PLANTA E 3D (PF-PLANTA3D — código em /planta3d.js)
+     ============================================================ -->
+<div id="tab-planta" class="tab-content">
+  <div class="sec">
+    <div class="sec-title">Planta baixa e 3D · gerados da Topografia, do greide e das camadas dimensionadas</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <button type="button" class="tb-btn tb-btn-save" id="pl-b-planta" onclick="plModo('planta')">🗺 Planta baixa</button>
+      <button type="button" class="tb-btn" id="pl-b-3d" onclick="plModo('3d')">🧊 Ver em 3D</button>
+      <button type="button" class="tb-btn" onclick="_pl.modo==='planta'?plDesenhar(true):pl3DEnquadrar()">⤢ Enquadrar</button>
+      <button type="button" class="tb-btn" onclick="plZoom(0.7)" title="Aproximar">＋</button><button type="button" class="tb-btn" onclick="plZoom(1.43)" title="Afastar">－</button>
+      <button type="button" class="tb-btn" onclick="plTAdd()" title="Incluir uma rua transversal (cruzamento) com raio na esquina">＋ Rua transversal</button>
+      <button type="button" class="tb-btn" id="pl-b-svg" onclick="plBaixarSvg()" title="Baixa a planta atual (com o que está aceso) em SVG — abre no navegador, Inkscape, Illustrator ou AutoCAD (importar)">⬇ Planta (SVG)</button>
+      <button type="button" class="tb-btn" id="pl-b-png" style="display:none" onclick="plBaixarPng()">⬇ Imagem 3D (PNG)</button>
+      <span id="pl-ev-box" style="display:none;font-size:12px">Vistas: <button type="button" class="tb-btn" onclick="pl3DVista('iso')">Perspectiva</button> <button type="button" class="tb-btn" onclick="pl3DVista('topo')">Topo</button> <button type="button" class="tb-btn" onclick="pl3DVista('rua')">Nível da rua</button> &nbsp; Exagero vertical <input type="range" id="pl-ev" min="1" max="10" step="1" value="1" oninput="pl3D(true)" style="vertical-align:middle"> <b id="pl-ev-v">1×</b>
+        &nbsp; Qualidade <select id="pl-qual" onchange="plSetQual(this.value)" style="font-size:12px"></select>
+        &nbsp; Sol <select id="pl-hora" onchange="plSetHora(this.value)" style="font-size:12px"></select></span>
+      <span id="pl-msg" style="font-size:12px;color:var(--fg2)"></span>
+    </div>
+    <div style="display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap">
+      <div id="pl-painel" style="width:300px;flex:none;max-height:780px;overflow:auto;border:1px solid var(--border,#ddd);border-radius:6px;padding:8px"></div>
+      <div style="flex:1;min-width:320px;position:relative">
+        <div id="pl-obj" style="display:none"></div>
+        <style>@media (max-width:700px){#pl-svgwrap,#pl-3dwrap{height:68vh!important}#pl-painel{width:100%!important;max-height:none!important}#pl-svgwrap,#pl-3dwrap{touch-action:none}}</style>
+        <div id="pl-svgwrap" style="height:780px;touch-action:none;border:1px solid var(--border,#ddd);border-radius:6px;cursor:grab;overflow:hidden;user-select:none"></div>
+        <div id="pl-banda" style="display:none;overflow-x:auto;-webkit-overflow-scrolling:touch;border:1px solid var(--border,#ddd);border-top:none;border-radius:0 0 6px 6px;background:#f4f4f1"></div>
+        <div id="pl-3dwrap" style="display:none;height:700px;border:1px solid var(--border,#ddd);border-radius:6px;overflow:hidden"></div>
+        <div style="font-size:11px;color:var(--fg2);margin-top:4px">Computador: rolar o mouse = zoom, arrastar = mover (3D: botão esquerdo gira, direito move). Celular: 1 dedo move (3D: gira), 2 dedos = zoom. As camadas saem nas espessuras calculadas no Dimensionamento; a via principal vem da Topografia; as ruas transversais e a sinalização são definidas no painel ao lado.</div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1754,7 +1788,7 @@ function toggleTheme() {
 function showTab(id) {var _document$getElementB5, _document$querySelect;
   document.querySelectorAll('.tab-content').forEach((t) => t.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
-  const order = ['dim', 'numN', 'mem', 'corte', 'topo', 'relatorio', 'mat', 'orc'];
+  const order = ['dim', 'numN', 'mem', 'corte', 'topo', 'planta', 'relatorio', 'mat', 'orc'];
   _abaAtual = id;aplicarFonte();
   (_document$getElementB5 = document.getElementById('tab-' + id)) == null || _document$getElementB5.classList.add('active');
   (_document$querySelect = document.querySelectorAll('.tab-btn')[order.indexOf(id)]) == null || _document$querySelect.classList.add('active');
@@ -1762,6 +1796,7 @@ function showTab(id) {var _document$getElementB5, _document$querySelect;
   if (id === 'relatorio') updateRelatorio();
   if (id === 'corte') updateCorte();
   if (id === 'orc' && typeof window.pavOrcAtualizar === 'function') window.pavOrcAtualizar();
+  if (id === 'planta' && typeof plAbrir === 'function') {try {calcTopo();} catch (e) {}ruasSinc();plAbrir();} // PF-PLANTA3D
   if (id === 'topo') {calcTopo();mfAtualizarResumo();document.getElementById('topo_espessura').textContent = _R.e_total ? fmt(_R.e_total, 1) + ' cm' : '—';}
 }
 
@@ -2756,17 +2791,41 @@ function secaoCabecalho() {
   'Terreno Esq. (m)', 'Terreno Eixo (m)', 'Terreno Dir. (m)',
   'Altura Esq. (m)', 'Altura Eixo (m)', 'Altura Dir. (m)',
   'Área Corte (m²)', 'Área Aterro (m²)',
-  'Talude Esq. (H:V)', 'Distância Talude Esq. (m)', 'Talude Dir. (H:V)', 'Distância Talude Dir. (m)'];
+  'Talude Esq. (H:V · %)', 'Distância Talude Esq. (m)', 'Talude Dir. (H:V · %)', 'Distância Talude Dir. (m)',
+  'Vol. Corte (m³)', 'Vol. Aterro (m³)'];
+}
+/* PAV-SEC-VOL: volume de cada estaca até a seguinte (média das áreas × distância).
+   Só conta o trecho quando a estaca seguinte também está no intervalo escolhido. */
+function secaoVolumes() {
+  const linhas = _R._topo && _R._topo.linhas || [];
+  const sel = secaoSelecionadas().filter((o) => o.G);
+  const dentro = new Set(sel.map((o) => o.L));
+  return sel.map((o) => {
+    const k = linhas.indexOf(o.L), prox = linhas[k + 1];
+    const ok = prox && dentro.has(prox) && o.L.dl > 0;
+    return { vc: ok ? o.L.vc || 0 : null, va: ok ? o.L.va || 0 : null };
+  });
+}
+/* Linha de TOTAL do quadro resumo (somatório dos volumes de corte e de aterro) */
+function secaoTotal() {
+  const V = secaoVolumes();
+  const tc = V.reduce((s, x) => s + (x.vc || 0), 0), ta = V.reduce((s, x) => s + (x.va || 0), 0);
+  const r = new Array(secaoCabecalho().length).fill('');
+  r[0] = 'TOTAL';r[17] = Number(tc.toFixed(2));r[18] = Number(ta.toFixed(2));
+  return r;
 }
 function secaoTabela() {
   const n = (x, d) => x === null || x === undefined || isNaN(x) ? '' : Number(Number(x).toFixed(d === undefined ? 3 : d));
   const P = secaoParams();
-  return secaoSelecionadas().filter((o) => o.G).map((o) => {
+  const V = secaoVolumes();
+  return secaoSelecionadas().filter((o) => o.G).map((o, j) => {
     const L = o.L,G = o.G;
-    const tal = (Ld) => (Ld.tal <= 0 ? 'vertical' : n(Ld.tal, 2) + ':1') + (Ld.semInt ? ' (sem encontro)' : '');
+    // H:V e a inclinação em % (V/H × 100); talude vertical = 90°
+    const tal = (Ld) => (Ld.tal <= 0 ? 'vertical (90°)' : fmt(Ld.tal, 2) + ':1 (' + fmt(100 / Ld.tal, 1) + '%)') + (Ld.semInt ? ' (sem encontro)' : '');
+    const vol = V[j] || {};
     return [n(L.est), L.sit, n(L.larg, 2), n(L.gr), n(G.form), n(G.tE), n(G.tC), n(G.tD),
     n(G.E.h), n(G.hC), n(G.D.h), n(L.ac, 2), n(L.aa, 2),
-    tal(G.E), n(G.E.d, 2), tal(G.D), n(G.D.d, 2)];
+    tal(G.E), n(G.E.d, 2), tal(G.D), n(G.D.d, 2), n(vol.vc, 2), n(vol.va, 2)];
   });
 }
 /* Opção "Exportar perfis" da aba Seção Transversal (marcada = com os desenhos) */
@@ -2883,8 +2942,10 @@ function updateCorte() {
   if (resumo) {
     resumo.innerHTML = '<div class="tabela-rolagem"><table class="lista-nuvem"><tr>' + cab.map((c) => '<th>' + c + '</th>').join('') + '</tr>' +
     lin.map((r) => '<tr>' + r.map((c, i) => '<td' + (i > 1 ? ' style="text-align:right"' : '') + '>' + (
-    typeof c !== 'number' ? c : i === 0 ? String(c).replace('.', ',') : fmt(c, [2, 11, 12, 14, 16].indexOf(i) >= 0 ? 2 : 3)) + '</td>').join('') + '</tr>').join('') +
-    '</table></div>';
+    typeof c !== 'number' ? c : i === 0 ? String(c).replace('.', ',') : fmt(c, [2, 11, 12, 14, 16, 17, 18].indexOf(i) >= 0 ? 2 : 3)) + '</td>').join('') + '</tr>').join('') +
+    (lin.length ? '<tr style="font-weight:700;border-top:2px solid var(--border)">' + secaoTotal().map((c, i) => '<td' + (i > 1 ? ' style="text-align:right"' : '') + '>' + (typeof c === 'number' ? fmt(c, 2) : c) + '</td>').join('') + '</tr>' : '') +
+    '</table></div>' +
+    '<p class="hint" style="margin:6px 0 0">Vol. Corte / Vol. Aterro: volume entre esta seção e a seguinte = (área desta seção + área da seguinte) ÷ 2 × distância entre as duas seções. A linha TOTAL soma o trecho escolhido. Talude: H:V e, entre parênteses, a inclinação em % (V ÷ H × 100).</p>';
   }
 }
 
@@ -3095,7 +3156,8 @@ function salvarProjeto() {var _document$getElementB7;
       c_talaterro: v('c_talaterro'), c_berma: v('c_berma'),
       c_na: v('c_na'), c_rn: v('c_rn') },
     topo: { topo_rn: v('topo_rn'), topo_na: v('topo_na'), rows: getTopoData() },
-    meiofio: Object.assign({}, _mf)
+    meiofio: Object.assign({}, _mf),
+    planta3d: typeof plTExportar === 'function' ? plTExportar() : undefined
   };
   const blob = new Blob([JSON.stringify(proj, null, 2)], { type: 'application/json' });
   triggerDownload(blob, 'pavimento_projeto.json');
@@ -3152,7 +3214,7 @@ function aplicarProjeto(p) {
           selectScenario(N_INFORMADO);
         }
       }
-      _mf = Object.assign({}, MF_PADRAO, p.meiofio || {});mfAtualizarResumo();
+      _mf = Object.assign({}, MF_PADRAO, p.meiofio || {});mfAtualizarResumo();if (typeof plTImportar === 'function') plTImportar(p.planta3d); // PF-PLANTA3D
       calc();
       calcAlti();
     }
@@ -3995,7 +4057,8 @@ function exportarTabExcel(tab) {
     ['Total', fmt(R.e_total || 0, 1)],
     ['', ''],
     secaoCabecalho(),
-    ...secaoTabela()];
+    ...secaoTabela(),
+    secaoTotal()];
 
   } else if (tab === 'mat') {
     sheetName = 'Materiais';fname = 'pavimento_materiais.xlsx';
@@ -4110,7 +4173,7 @@ ${body}</body></html>`;
     fname = 'pavimento_secoes_transversais.docx';
     const Pc = secaoParams();
     const tb = secaoTabela();
-    const num = (c, i) => typeof c !== 'number' ? c : i === 0 ? String(c).replace('.', ',') : fmt(c, [2, 11, 12, 14, 16].indexOf(i) >= 0 ? 2 : 3);
+    const num = (c, i) => typeof c !== 'number' ? c : i === 0 ? String(c).replace('.', ',') : fmt(c, [2, 11, 12, 14, 16, 17, 18].indexOf(i) >= 0 ? 2 : 3);
     html = wrap(`
     <h2>Parâmetros das Seções Transversais</h2>
     <table><tr><th>Parâmetro</th><th>Valor</th></tr>
@@ -4132,6 +4195,7 @@ ${body}</body></html>`;
     ${tb.map((r) => `<h3>Estaca ${String(r[0]).replace('.', ',')} — ${r[1]}</h3>
     <table><tr><th>Item</th><th>Valor</th></tr>` +
     secaoCabecalho().map((c, i) => i < 2 ? '' : `<tr><td>${c}</td><td>${num(r[i], i)}</td></tr>`).join('') + '</table>').join('')}
+    ${tb.length ? (() => { const T = secaoTotal(); return `<h2>Volumes do trecho</h2><table><tr><th>Item</th><th>Valor</th></tr><tr><td>Volume total de corte (m³)</td><td>${fmt(T[17], 2)}</td></tr><tr><td>Volume total de aterro (m³)</td><td>${fmt(T[18], 2)}</td></tr></table>`; })() : ''}
     ${exportarPerfis() ? '<h2>Perfis das Seções</h2>' + perfisHtml(await perfisParaExportar(), figs) : ''}
     `, 'Seções Transversais');
   } else if (tab === 'mat') {
@@ -5039,7 +5103,8 @@ function dadosDoProjeto() {
     corte: { c_talcorte: v('c_talcorte'),
       c_talaterro: v('c_talaterro'), c_berma: v('c_berma'), c_na: v('c_na'), c_rn: v('c_rn') },
     topo: { rows: getTopoData() },
-    meiofio: Object.assign({}, _mf)
+    meiofio: Object.assign({}, _mf),
+    planta3d: typeof plTExportar === 'function' ? plTExportar() : undefined
   };
 }
 
@@ -5753,6 +5818,7 @@ function salvarUsuario(uid, acao) {
 })();
 </script>
 <script src="/levantamento.js"></script>
+<script src="/planta3d.js"></script>
 <script>
 /* PATCH PF-LEV-01: importar levantamento planialtimétrico em PDF para a Topografia (levantamento.js) */
 function levImportarPav(){
