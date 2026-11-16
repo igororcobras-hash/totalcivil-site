@@ -5855,5 +5855,151 @@ function levImportarPav(){
   }});
 }
 </script>
+<script>
+/* PATCH PAV-RUAS (16/11/2026): VÁRIAS RUAS NO MESMO PROJETO (bairro inteiro) + CRUZAMENTOS POR ESTACA.
+   Cada rua tem a sua tabela de Topografia (a tabela da tela é sempre a da rua ativa). O dimensionamento da estrutura (N, CBR, camadas)
+   é UM SÓ para o projeto. Quadros da Topografia, Orçamento e Memorial usam o TOTAL de todas as ruas (_R._topo somado).
+   Projeto: topo.ruas=[{id,nome,rows,cruz:[{est,rua,estOutra}]}], topo.ruaAtiva; topo.rows = rua ativa (compatível com projetos de uma rua só). */
+(function(){
+'use strict';
+if(window.__pvRuasOK) return; window.__pvRuasOK=true;
+const orig=window.calcTopo, ap0=window.aplicarProjeto, dp0=window.dadosDoProjeto;
+let ruas=[], ativa=0, cache={}, emPos=false, seq=0, htmlBarra='', abertoResumo=false;
+const $=id=>document.getElementById(id);
+const F=(x,d)=>typeof fmt==='function'?fmt(x,d):(+x).toFixed(d).replace('.',',');
+const esc=t=>typeof escapar==='function'?escapar(t):String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const sujo=()=>{try{_sujo=true;}catch(e){}};
+function novoId(){let id;do{id='r'+(++seq);}while(ruas.some(r=>r.id===id));return id;}
+function garante(){if(!ruas.length){ruas=[{id:novoId(),nome:'Rua 1',rows:[],cruz:[]}];ativa=0;}}
+function sync(){garante();ruas[ativa].rows=getTopoData();}
+function carrega(rows){const tb=$('topo_tbody');window.__pvSemCalc=true;try{tb.innerHTML='';topoRowCount=0;(rows||[]).forEach(r=>addTopoRow(r));}finally{window.__pvSemCalc=false;}}
+const nomeRua=id=>{const r=ruas.find(x=>x.id===id);return r?r.nome:'?';};
+function extRows(rows){const e=(rows||[]).map(r=>r.est).filter(x=>x!==''&&x!==null&&!isNaN(x)).map(Number);return e.length>1?Math.max(...e)-Math.min(...e):0;}
+
+/* ---------- totais de todas as ruas ---------- */
+const CAMPOS=['totVc','totVa','totVre','areaPav','areaPavInc','volCBUQ','volBase','volSB','volRef','volCBUQc','volBasec','volSBc','volRefc','extensao','nCritico'];
+const snap=t=>{const o={};CAMPOS.forEach(k=>o[k]=+t[k]||0);return o;};
+function assin(r){let sp='';try{sp=JSON.stringify(secaoParams());}catch(e){}
+  return JSON.stringify([_R.e_total,_R.e_ref,_R.e_base,_R.e_sb,_R.e_r,v('topo_caim_esq'),v('topo_caim_dir'),v('a_afast_min')])+sp+JSON.stringify(_mf)+JSON.stringify(r.rows);}
+function totais(){
+  const falta=ruas.some((r,i)=>i!==ativa&&!(cache[r.id]&&cache[r.id].a===assin(r)));
+  if(falta){
+    ruas.forEach((r,i)=>{if(i===ativa)return;const a=assin(r);if(cache[r.id]&&cache[r.id].a===a)return;
+      carrega(r.rows);orig();cache[r.id]={a:a,s:snap(_R._topo||{})};});
+    carrega(ruas[ativa].rows);orig();
+  }
+  const ta=_R._topo||{},S={};CAMPOS.forEach(k=>S[k]=0);const por=[];
+  ruas.forEach((r,i)=>{const s=i===ativa?snap(ta):((cache[r.id]||{}).s||{});CAMPOS.forEach(k=>S[k]+=s[k]||0);
+    por.push(Object.assign({id:r.id,nome:r.nome,nEst:(r.rows||[]).length},s));});
+  const bota=Math.max(0,S.totVc-S.totVa-S.totVre),empr=Math.max(0,S.totVa+S.totVre-S.totVc);
+  _R._topo=Object.assign({},ta,S,{totVbf:bota,totVem:empr,porRua:por,nRuas:ruas.length,ruaAtiva:ruas[ativa].nome,extensaoRua:ta.extensao||0});
+  const set2=(id,t)=>{const el=$(id);if(el)el.textContent=t;};
+  set2('topo_extensao',S.extensao>0?F(S.extensao,2)+' m':'—');
+  set2('topo_vol_corte',F(S.totVc,2)+' m³');set2('topo_vol_aterro',F(S.totVa,2)+' m³');
+  set2('topo_botafora',F(bota,2)+' m³');set2('topo_vol_reaterro',F(S.totVre,2)+' m³');
+  set2('topo_area_pav',F(S.areaPav,2)+' m²  ·  '+F(S.areaPavInc,2)+' m² c/ caimento');
+  const eR=(_R.e_ref||0)/100,eB=(_R.e_base||0)/100,eS=(_R.e_sb||0)/100,eF=(_R.e_r||0)/100;
+  const dois=(a,e)=>F(a,2)+' m³  ·  '+F(S.areaPavInc*e,2)+' m³ c/ caimento';
+  set2('topo_vol_cbuq',dois(S.volCBUQ,eR));set2('topo_vol_base',dois(S.volBase,eB));set2('topo_vol_sb',dois(S.volSB,eS));set2('topo_vol_ref',dois(S.volRef,eF));
+  set2('topo_status','TOTAL das '+ruas.length+' ruas. '+(empr>0.005?'Falta material: empréstimo de '+F(empr,2)+' m³.':bota>0.005?'Sobra material: bota-fora de '+F(bota,2)+' m³.':'Corte e aterro compensados.')+(S.nCritico?' '+S.nCritico+' estaca(s) com afastamento do N.A. abaixo do mínimo.':''));
+}
+
+/* ---------- cruzamentos ---------- */
+function parseEst(t){t=String(t).trim().replace(',','.');const m=t.match(/^(\d+(?:\.\d+)?)\s*\+\s*(\d+(?:\.\d+)?)$/);if(m)return parseFloat(m[1])*20+parseFloat(m[2]);const x=parseFloat(t);return isNaN(x)?null:x;}
+function greideEm(rows,est){const L=(rows||[]).filter(r=>r.est!==''&&r.gr!=='').map(r=>({e:+r.est,g:+r.gr})).sort((a,b)=>a.e-b.e);
+  for(const p of L)if(Math.abs(p.e-est)<0.005)return{g:p.g,exato:true};
+  for(let i=0;i<L.length-1;i++)if(est>L[i].e&&est<L[i+1].e){const t=(est-L[i].e)/(L[i+1].e-L[i].e);return{g:L[i].g+t*(L[i+1].g-L[i].g),exato:false};}
+  return null;}
+function marca(){const cz=(ruas[ativa]&&ruas[ativa].cruz)||[];
+  document.querySelectorAll('#topo_tbody tr').forEach(tr=>{const i=tr.id.replace('topo_row_','');const inp=$('tp_est_'+i);if(!inp)return;
+    let sp=tr.querySelector('.pv-cz');const e=parseFloat(inp.value);const m=cz.filter(c=>Math.abs(c.est-e)<0.01);
+    if(!m.length){if(sp)sp.remove();return;}
+    if(!sp){sp=document.createElement('div');sp.className='pv-cz';sp.style.cssText='font-size:10px;color:#b45309;font-weight:600;white-space:nowrap';inp.parentNode.appendChild(sp);}
+    sp.textContent='✚ '+m.map(c=>nomeRua(c.rua)+' (est. '+F(c.estOutra,2)+')').join(' · ');});}
+
+/* ---------- barra de ruas + quadro de cruzamentos ---------- */
+function barra(){
+  let bar=$('pv-ruas');
+  if(!bar){const w=document.querySelector('#tab-topo .tbl-wrap');if(!w)return;bar=document.createElement('div');bar.id='pv-ruas';bar.style.cssText='margin:0 0 12px;padding:10px;border:1px solid var(--inp-border,#ccc);border-radius:8px;background:var(--bg2,transparent)';w.parentNode.insertBefore(bar,w);}
+  const R=_R._topo&&_R._topo.porRua||[];
+  let h='<div style="font-weight:700;margin-bottom:6px">Ruas do projeto <span style="font-weight:400;font-size:11px;color:var(--fg3)">— a tabela abaixo é a da rua marcada; o dimensionamento da estrutura vale para todas.</span></div><div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">';
+  ruas.forEach((r,i)=>{const e=extRows(r.rows),ok=i===ativa;
+    h+='<button type="button" class="btn-add" style="'+(ok?'background:var(--accent,#1d4ed8);color:#fff;border-color:transparent;':'')+'padding:3px 9px;font-size:11.5px" onclick="__pvTroca('+i+')" title="'+esc(r.nome)+'">'+esc(r.nome)+' <span style="opacity:.8">('+(r.rows||[]).length+' est · '+F(e,0)+' m'+((r.cruz||[]).length?' · ✚'+r.cruz.length:'')+')</span></button>';});
+  h+='</div><div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">'+
+   '<button type="button" class="btn-add" onclick="__pvNova()">＋ Rua</button>'+
+   '<button type="button" class="btn-add" onclick="__pvRenomear()">✎ Renomear</button>'+
+   '<button type="button" class="btn-add" onclick="__pvExcluir()">🗑 Excluir esta rua</button>'+
+   '<button type="button" class="btn-add" onclick="__pvCruzForm()">＋ Cruzamento</button>'+
+   '<span style="font-size:11.5px;color:var(--fg2)">'+(ruas.length>1?'Quadros da Topografia, Orçamento e Memorial = <b>total das '+ruas.length+' ruas</b>.':'Com uma rua só, tudo funciona como antes. Use ＋ Rua para o bairro inteiro.')+'</span></div>';
+  /* cruzamentos da rua ativa */
+  const r0=ruas[ativa],cz=(r0.cruz||[]).slice().sort((a,b)=>a.est-b.est);
+  h+='<div style="margin-top:10px;font-weight:700">Cruzamentos da rua “'+esc(r0.nome)+'” <span style="font-weight:400;font-size:11px;color:var(--fg3)">(estaca onde cada rua cruza esta)</span></div>';
+  if(!cz.length)h+='<div style="font-size:12px;color:var(--fg3);margin-top:4px">Nenhum cruzamento informado. Use ＋ Cruzamento.</div>';
+  else{
+    h+='<div class="tbl-wrap" style="margin-top:4px"><table><thead><tr><th>Estaca nesta rua (m)</th><th>Cruza com</th><th>Estaca na outra rua (m)</th><th>Greide aqui (m)</th><th>Greide na outra (m)</th><th>Conferência</th><th></th></tr></thead><tbody>';
+    cz.forEach(c=>{const o=ruas.find(x=>x.id===c.rua);const ga=greideEm(r0.rows,c.est),gb=o?greideEm(o.rows,c.estOutra):null;
+      let conf='—';
+      if(ga&&gb){const d=(ga.g-gb.g)*100;conf=Math.abs(d)<=2?'✓ Δ '+F(d,1)+' cm':'⚠ Δ '+F(d,1)+' cm';if(!ga.exato||!gb.exato)conf+=' (interpolado só p/ conferir)';}
+      else conf=(ga?'':'fora do trecho levantado aqui; ')+(gb?'':'fora do trecho levantado na outra');
+      h+='<tr><td>'+F(c.est,2)+'</td><td>'+esc(nomeRua(c.rua))+'</td><td>'+F(c.estOutra,2)+'</td><td>'+(ga?F(ga.g,3)+(ga.exato?'':' ≈'):'—')+'</td><td>'+(gb?F(gb.g,3)+(gb.exato?'':' ≈'):'—')+'</td><td style="font-size:11px">'+conf+'</td>'+
+        '<td><button class="btn-rem" onclick="__pvCruzDel(\''+c.rua+'\','+c.est+','+c.estOutra+')" title="Remover cruzamento (nas duas ruas)">✕</button></td></tr>';});
+    h+='</tbody></table></div><div style="font-size:11px;color:var(--fg3);margin-top:3px">≈ = greide interpolado entre as estacas vizinhas, só para conferir (não é gravado). A estaca do cruzamento aparece marcada com ✚ na tabela.</div>';}
+  if(ruas.length>1){
+    h+='<details'+(abertoResumo?' open':'')+' ontoggle="__pvAberto(this.open)" style="margin-top:10px"><summary style="cursor:pointer;font-weight:700">Resumo de todas as ruas</summary><div class="tbl-wrap"><table><thead><tr><th>Rua</th><th>Estacas</th><th>Extensão (m)</th><th>Área do pavimento (m²)</th><th>Corte (m³)</th><th>Aterro (m³)</th><th>Cruzamentos</th></tr></thead><tbody>';
+    R.forEach(p=>{const r=ruas.find(x=>x.id===p.id)||{};h+='<tr><td>'+esc(p.nome)+'</td><td>'+p.nEst+'</td><td>'+F(p.extensao,2)+'</td><td>'+F(p.areaPav,2)+'</td><td>'+F(p.totVc,2)+'</td><td>'+F(p.totVa,2)+'</td><td>'+((r.cruz||[]).length)+'</td></tr>';});
+    const T=_R._topo||{};h+='<tr style="font-weight:700"><td>TOTAL</td><td>'+R.reduce((a,p)=>a+p.nEst,0)+'</td><td>'+F(T.extensao||0,2)+'</td><td>'+F(T.areaPav||0,2)+'</td><td>'+F(T.totVc||0,2)+'</td><td>'+F(T.totVa||0,2)+'</td><td></td></tr></tbody></table></div></details>';}
+  if(h!==htmlBarra){htmlBarra=h;bar.innerHTML=h;}
+}
+function pvPos(){
+  if(emPos)return;emPos=true;
+  try{sync();if(ruas.length>1)totais();else{const t=_R._topo;if(t)t.nRuas=1;}marca();barra();}
+  finally{emPos=false;}
+}
+window.calcTopo=function(){if(window.__pvSemCalc)return;orig();pvPos();};
+
+/* ---------- ações ---------- */
+window.__pvAberto=function(a){abertoResumo=a;};
+window.__pvTroca=function(i){if(i===ativa||!ruas[i])return;sync();ativa=i;carrega(ruas[ativa].rows);htmlBarra='';window.calcTopo();};
+window.__pvNova=function(){sync();const n=prompt('Nome da nova rua:','Rua '+(ruas.length+1));if(!n||!n.trim())return;
+  ruas.push({id:novoId(),nome:n.trim(),rows:[],cruz:[]});ativa=ruas.length-1;carrega([]);htmlBarra='';window.calcTopo();sujo();
+  if(typeof avisar==='function')avisar('Rua criada. Preencha as estacas, importe o levantamento (PDF) ou 📂 abra um projeto com várias ruas.');};
+window.__pvRenomear=function(){sync();const n=prompt('Novo nome da rua:',ruas[ativa].nome);if(!n||!n.trim())return;ruas[ativa].nome=n.trim();htmlBarra='';window.calcTopo();sujo();};
+window.__pvExcluir=function(){sync();if(ruas.length<2){if(typeof avisarErro==='function')avisarErro('O projeto precisa ter pelo menos uma rua. Para limpar, apague as estacas.');return;}
+  if(!confirm('Excluir a rua “'+ruas[ativa].nome+'” e seus cruzamentos?'))return;
+  const id=ruas[ativa].id;ruas.splice(ativa,1);ruas.forEach(r=>{r.cruz=(r.cruz||[]).filter(c=>c.rua!==id);});delete cache[id];
+  ativa=Math.min(ativa,ruas.length-1);carrega(ruas[ativa].rows);htmlBarra='';window.calcTopo();sujo();};
+window.__pvCruzForm=function(){sync();if(ruas.length<2){if(typeof avisarErro==='function')avisarErro('Crie outra rua (＋ Rua) para marcar um cruzamento.');return;}
+  abrirModal('Cruzamento','Em que estaca desta rua e da outra os eixos se cruzam? Aceita metros (120,5) ou “N+metros” (6+0,5 = 120,5).');
+  const op=ruas.map((r,i)=>i===ativa?'':'<option value="'+r.id+'">'+esc(r.nome)+'</option>').join('');
+  corpoModal('<div class="field" style="margin-top:10px"><label>Esta rua: '+esc(ruas[ativa].nome)+' — estaca (m)</label><input type="text" id="pvc_a" placeholder="ex.: 120,5"></div>'+
+   '<div class="field" style="margin-top:8px"><label>Cruza com a rua</label><select id="pvc_r">'+op+'</select></div>'+
+   '<div class="field" style="margin-top:8px"><label>Estaca na outra rua (m)</label><input type="text" id="pvc_b" placeholder="ex.: 40"></div>'+
+   '<button class="tb-btn tb-btn-save" style="margin-top:12px" onclick="__pvCruzOk()">Salvar cruzamento</button>');};
+window.__pvCruzOk=function(){const a=parseEst($('pvc_a').value),b=parseEst($('pvc_b').value),o=$('pvc_r').value;
+  if(a===null||b===null){if(typeof avisarErro==='function')avisarErro('Informe as duas estacas.');return;}
+  const eu=ruas[ativa],ou=ruas.find(r=>r.id===o);if(!ou)return;
+  eu.cruz=(eu.cruz||[]).filter(c=>!(c.rua===o&&Math.abs(c.est-a)<0.01));ou.cruz=(ou.cruz||[]).filter(c=>!(c.rua===eu.id&&Math.abs(c.est-b)<0.01));
+  eu.cruz.push({est:a,rua:o,estOutra:b});ou.cruz.push({est:b,rua:eu.id,estOutra:a});
+  fecharModal();htmlBarra='';window.calcTopo();sujo();};
+window.__pvCruzDel=function(rid,est,estO){const eu=ruas[ativa];eu.cruz=(eu.cruz||[]).filter(c=>!(c.rua===rid&&Math.abs(c.est-est)<0.01));
+  const ou=ruas.find(r=>r.id===rid);if(ou)ou.cruz=(ou.cruz||[]).filter(c=>!(c.rua===eu.id&&Math.abs(c.est-estO)<0.01));htmlBarra='';window.calcTopo();sujo();};
+
+/* ---------- projeto: salvar / abrir ---------- */
+window.dadosDoProjeto=function(){const d=dp0();
+  try{if(ruas.length>1){sync();d.topo.ruas=ruas.map(r=>({id:r.id,nome:r.nome,rows:r.rows,cruz:r.cruz||[]}));d.topo.ruaAtiva=ativa;}}catch(e){}
+  return d;};
+window.aplicarProjeto=function(p){
+  const T=p&&p.topo,rs=T&&Array.isArray(T.ruas)&&T.ruas.length>1?T.ruas:null;
+  cache={};htmlBarra='';
+  if(!rs){ruas=[];ativa=0;window.__pvSemCalc=true;try{ap0(p);}finally{window.__pvSemCalc=false;}window.calcTopo();return;}
+  const a=Math.min(Math.max(0,T.ruaAtiva|0),rs.length-1);
+  const p2=Object.assign({},p,{topo:Object.assign({},T,{rows:rs[a].rows||[]})});
+  window.__pvSemCalc=true;try{ap0(p2);}finally{window.__pvSemCalc=false;}
+  ruas=rs.map(r=>({id:String(r.id),nome:r.nome||'Rua',rows:(r.rows||[]).map(x=>Object.assign({},x)),cruz:(r.cruz||[]).map(c=>({est:+c.est,rua:String(c.rua),estOutra:+c.estOutra}))}));
+  ativa=a;seq=ruas.length+1;window.calcTopo();};
+/* a barra aparece já ao abrir o programa */
+setTimeout(function(){try{window.calcTopo();}catch(e){}},300);
+})();
+</script>
 </body>
 </html>
