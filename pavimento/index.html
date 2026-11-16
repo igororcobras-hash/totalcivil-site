@@ -6137,5 +6137,124 @@ window.pvPerfilDesenha=desenha;
 setTimeout(function(){try{desenha();}catch(e){}},500);
 })();
 </script>
+<script>
+/* ══════════════════════════════════════════════════════
+   PATCH PAV-COMP (16/11/2026) · 👥 COMPARTILHAR projeto da nuvem com outros usuários (igual ao Intertravado PI-02).
+   Coleção `projetos` ganha `compartilhado {uid:{papel,nome}}`, `membros[]`, `editores[]`, `donoNome`, `editadoPor`;
+   lista de pessoas em `diretorioPavimento` (cada um grava o próprio nome ao abrir o programa).
+   Visualizar = abre e, ao salvar, vira uma cópia no nome de quem abriu. Editar = grava por cima (vale a última gravação).
+   Precisa das regras novas do Firestore (firestore.rules, bloco projetos + diretorioPavimento).
+══════════════════════════════════════════════════════ */
+(function(){
+if(window.__pavComp) return; window.__pavComp=true;
+const COL='projetos', DIR='diretorioPavimento';
+let papelAberto='dono', compAberto={};
+function N(){ return window.Nuvem; }
+function erroComp(e){ const c=(e&&e.code)||''; if(/permission-denied/.test(c)) return 'Sem permissão no servidor: as regras novas do Firestore (compartilhamento do Pavimento Flexível) ainda não foram publicadas, ou o seu acesso não está ativo.'; if(/unavailable|network/.test(c)) return 'Sem conexão com o servidor.'; return (e&&e.message)||String(e); }
+function esperarNuvem(fn){ const t=setInterval(()=>{ const n=N(); if(n&&n._fb&&n.salvarProjeto){ clearInterval(t); fn(n); } },300); setTimeout(()=>clearInterval(t),60000); }
+esperarNuvem(function(Nv){
+  const fsb=()=>Nv._fb;
+  /* salvar: projeto novo já nasce com os campos de compartilhamento; editor grava só o conteúdo */
+  Nv.salvarProjeto=async function(nome,dados,id){
+    const {d,fs}=fsb(), u=Nv.usuario; if(!u||!u.liberado) throw new Error('Acesso não liberado.');
+    const nm=String(nome||'Projeto sem nome').slice(0,120), quem=u.nome||u.usuario||'', txt=JSON.stringify(dados);
+    if(txt.length>950000) throw new Error('Projeto grande demais para a nuvem (limite de cerca de 950 KB).');
+    if(id){
+      const ref=fs.doc(d,COL,id), s=await fs.getDoc(ref), v=s.exists()?s.data():{};
+      if(v.uid&&v.uid!==u.uid) await fs.updateDoc(ref,{nome:nm,dados:txt,atualizadoEm:fs.serverTimestamp(),editadoPor:quem});
+      else await fs.updateDoc(ref,{uid:u.uid,usuario:u.usuario,nome:nm,dados:txt,atualizadoEm:fs.serverTimestamp(),editadoPor:quem});
+      return id; }
+    const ref=await fs.addDoc(fs.collection(d,COL),{uid:u.uid,usuario:u.usuario,donoNome:quem,nome:nm,dados:txt,criadoEm:fs.serverTimestamp(),atualizadoEm:fs.serverTimestamp(),editadoPor:quem,compartilhado:{},membros:[],editores:[]});
+    return ref.id;
+  };
+  Nv.listarCompartilhados=async function(){
+    const {d,fs}=fsb(), u=Nv.usuario;
+    const s=await fs.getDocs(fs.query(fs.collection(d,COL),fs.where('membros','array-contains',u.uid)));
+    return s.docs.map(x=>{ const v=x.data(), c=v.compartilhado||{}; return {id:x.id,nome:v.nome||'Sem nome',usuario:v.donoNome||v.usuario||'',papel:(c[u.uid]&&c[u.uid].papel)||'ver',atualizadoEm:v.atualizadoEm&&v.atualizadoEm.toDate?v.atualizadoEm.toDate():null,editadoPor:v.editadoPor||''}; });
+  };
+  Nv.lerComp=async function(id){ const {d,fs}=fsb(), s=await fs.getDoc(fs.doc(d,COL,id)); if(!s.exists()) throw new Error('Projeto não encontrado.'); const v=s.data(); return {id,nome:v.nome||'',uid:v.uid,compartilhado:v.compartilhado||{}}; };
+  Nv.garantirDiretorio=async function(){ const {d,fs}=fsb(), u=Nv.usuario; if(!u||!u.uid||!u.liberado) return;
+    try{ await fs.setDoc(fs.doc(d,DIR,u.uid),{uid:u.uid,nome:u.nome||'',empresa:u.empresa||'',usuario:u.usuario||'',atualizadoEm:fs.serverTimestamp()}); }catch(e){ console.warn('diretório do Pavimento não atualizado:',(e&&(e.code||e.message))||e); } };
+  Nv.listarDiretorio=async function(){ const {d,fs}=fsb(), u=Nv.usuario, mapa={};
+    try{ const s=await fs.getDocs(fs.query(fs.collection(d,DIR),fs.limit(500))); s.docs.forEach(x=>{ const v=x.data(); mapa[x.id]={uid:x.id,nome:v.nome||'',empresa:v.empresa||'',usuario:v.usuario||''}; }); }catch(e){ if(!u.admin) throw e; }
+    if(u.admin){ try{ (await Nv.listarUsuarios()).forEach(x=>{ if(x.uid&&(x.ativo||x.admin)&&!mapa[x.uid]) mapa[x.uid]={uid:x.uid,nome:x.nome||'',empresa:x.empresa||'',usuario:x.usuario||x.email||''}; }); }catch(e){} }
+    delete mapa[u.uid]; return Object.values(mapa).sort((a,b)=>String(a.nome||a.usuario).localeCompare(String(b.nome||b.usuario))); };
+  Nv.compartilharProjeto=async function(id,mapa){ const {d,fs}=fsb(), comp={}, membros=[], editores=[];
+    Object.keys(mapa).forEach(k=>{ const p=mapa[k]&&mapa[k].papel; if(p!=='ver'&&p!=='editar') return; comp[k]={papel:p,nome:String(mapa[k].nome||'').slice(0,120)}; membros.push(k); if(p==='editar') editores.push(k); });
+    await fs.updateDoc(fs.doc(d,COL,id),{compartilhado:comp,membros,editores}); };
+  /* registra o usuário na lista assim que entra */
+  let feito=false; setInterval(()=>{ if(!feito&&Nv.usuario&&Nv.usuario.liberado){ feito=true; Nv.garantirDiretorio(); } },1500);
+});
+
+/* quem pode gravar por cima: dono ou quem recebeu "Editar" */
+window.projetoNuvemEhMeu=function(){ const u=N()&&N().usuario; return !_projetoNuvemId||!_projetoNuvemDono||(u&&u.uid===_projetoNuvemDono)||papelAberto==='editar'; };
+const carOrig=window.carregarDaNuvem;
+window.carregarDaNuvem=function(id,papel){
+  papelAberto=papel||'dono';
+  N().abrirProjeto(id).then(p=>{ const u=N().usuario; if(p.uid===u.uid) papelAberto='dono'; else if(!papel) papelAberto='ver'; carOrig(id);
+    setTimeout(()=>{ if(papelAberto==='ver') avisar('Projeto compartilhado com você só para VISUALIZAR: ao salvar na nuvem será criada uma cópia no seu nome.'); else if(papelAberto==='editar') avisar('Projeto compartilhado com você com permissão de EDITAR: ao salvar, grava por cima (vale a última gravação).'); },700); })
+  .catch(e=>avisarErro(erroComp(e)));
+};
+
+/* janela "Abrir da nuvem": Meus projetos + Compartilhados comigo, com 👥 */
+window.abrirDaNuvem=function(){
+  const Nv=N(); if(!Nv||!Nv.usuario||!Nv.usuario.liberado){ avisarErro('Acesso não liberado.'); return; }
+  const admin=Nv.usuario.admin;
+  abrirModal('Projetos na nuvem', admin?'Como administrador, você vê os projetos de todos os usuários.':'Seus projetos e os que outras pessoas compartilharam com você.');
+  Promise.all([Nv.listarProjetos(admin), Nv.listarCompartilhados().catch(()=>[])]).then(([lista,comigo])=>{
+    const meus=admin?lista:lista, idsMeus=new Set(meus.map(x=>x.id)), com=comigo.filter(x=>!idsMeus.has(x.id)||!admin);
+    const rot=p=>p==='editar'?'Pode editar':'Só visualizar';
+    let h='<h3 style="margin:12px 0 4px;font-size:14px">Meus projetos'+(admin?' (e de todos os usuários)':'')+'</h3>';
+    if(!meus.length) h+='<p style="font-size:13px;color:var(--fg2)">Nenhum projeto salvo ainda.</p>';
+    else{ h+='<table class="lista-nuvem"><tr><th>Projeto</th>'+(admin?'<th>Usuário</th>':'')+'<th>Atualizado</th><th></th></tr>';
+      meus.forEach(p=>{ h+='<tr><td>'+escapar(p.nome)+'</td>'+(admin?'<td>'+escapar(p.usuario||'')+'</td>':'')+'<td>'+(p.atualizadoEm?fmtData(p.atualizadoEm):'—')+'</td><td style="white-space:nowrap">'+
+        '<button class="tb-btn" onclick="carregarDaNuvem(\''+p.id+'\')">Abrir</button> '+
+        '<button class="tb-btn" title="Dar acesso (visualizar ou editar) a outros usuários" onclick="compartilharNuvem(\''+p.id+'\')">👥 Compartilhar</button> '+
+        '<button class="btn-rem" onclick="excluirDaNuvem(\''+p.id+'\')">Excluir</button></td></tr>'; });
+      h+='</table>'; }
+    h+='<h3 style="margin:16px 0 4px;font-size:14px">Compartilhados comigo</h3>';
+    if(!comigo.length) h+='<p style="font-size:13px;color:var(--fg2)">Ninguém compartilhou projetos com você ainda.</p>';
+    else{ h+='<table class="lista-nuvem"><tr><th>Projeto</th><th>De</th><th>Acesso</th><th>Atualizado</th><th></th></tr>';
+      comigo.forEach(p=>{ h+='<tr><td>'+escapar(p.nome)+'</td><td>'+escapar(p.usuario)+'</td><td>'+rot(p.papel)+'</td><td>'+(p.atualizadoEm?fmtData(p.atualizadoEm):'—')+(p.editadoPor?' · '+escapar(p.editadoPor):'')+'</td><td><button class="tb-btn" onclick="carregarDaNuvem(\''+p.id+'\',\''+p.papel+'\')">Abrir</button></td></tr>'; });
+      h+='</table>'; }
+    h+='<p style="font-size:11.5px;color:var(--fg3);margin-top:10px">“Visualizar”: a pessoa abre, e o que ela salvar vira uma cópia no nome dela. “Editar”: grava por cima do mesmo projeto (vale a última gravação).</p>';
+    corpoModal(h);
+  }).catch(e=>corpoModal('<p class="val-bar warn" style="margin-top:10px">'+escapar(erroComp(e))+'</p>'));
+};
+
+/* janela 👥 Compartilhar (da lista ou da barra: projeto aberto) */
+let ctx=null;
+window.compartilharNuvem=async function(id){
+  const Nv=N(); if(!Nv||!Nv.usuario||!Nv.usuario.liberado){ avisarErro('Entre na sua conta para usar a nuvem.'); return; }
+  if(!id){
+    if(!_projetoNuvemId){ avisar('Para compartilhar, salve o projeto na nuvem primeiro (botão “Salvar na nuvem”).'); salvarNaNuvem(); return; }
+    if(_projetoNuvemDono&&_projetoNuvemDono!==Nv.usuario.uid){ avisarErro('Só o dono do projeto pode compartilhar.'); return; }
+    id=_projetoNuvemId;
+  }
+  abrirModal('Compartilhar projeto','Carregando usuários…'); corpoModal('');
+  let proj,dir; try{ [proj,dir]=await Promise.all([Nv.lerComp(id),Nv.listarDiretorio()]); }catch(e){ corpoModal('<p class="val-bar warn" style="margin-top:10px">'+escapar(erroComp(e))+'</p>'); return; }
+  if(proj.uid!==Nv.usuario.uid&&!Nv.usuario.admin){ corpoModal('<p class="val-bar warn">Só o dono do projeto pode compartilhar.</p>'); return; }
+  const at=proj.compartilhado||{}; Object.keys(at).forEach(k=>{ if(!dir.some(x=>x.uid===k)) dir.push({uid:k,nome:at[k].nome||'(usuário)',empresa:'',usuario:''}); });
+  ctx={id,dir};
+  const sel=x=>{ const p=(at[x.uid]&&at[x.uid].papel)||''; return '<select data-uid="'+escapar(x.uid)+'"><option value=""'+(p===''?' selected':'')+'>Sem acesso</option><option value="ver"'+(p==='ver'?' selected':'')+'>Visualizar</option><option value="editar"'+(p==='editar'?' selected':'')+'>Editar</option></select>'; };
+  abrirModal('Compartilhar “'+proj.nome+'”','Usuários do Pavimento Flexível. Visualizar: abre, mas não grava por cima (salva cópia). Editar: grava por cima (vale a última gravação).');
+  corpoModal('<input type="text" id="pvsh-busca" placeholder="Buscar por nome, empresa ou usuário…" oninput="pvShFiltro()" style="width:100%;margin:8px 0;padding:6px 8px">'+
+    '<div style="max-height:46vh;overflow:auto"><table class="lista-nuvem"><tbody id="pvsh-corpo">'+
+    (dir.length?dir.map(x=>'<tr data-b="'+escapar((x.nome+' '+x.empresa+' '+x.usuario).toLowerCase())+'"><td><b>'+escapar(x.nome||x.usuario||'(sem nome)')+'</b><br><span style="font-size:11px;color:var(--fg3)">'+escapar(x.empresa)+(x.usuario?' · '+escapar(x.usuario):'')+'</span></td><td style="text-align:right">'+sel(x)+'</td></tr>').join('')
+      :'<tr><td style="color:var(--fg3)">Nenhum outro usuário apareceu ainda. Cada pessoa entra na lista depois de abrir o Pavimento Flexível uma vez com a conta liberada.</td></tr>')+
+    '</tbody></table></div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="tb-btn" onclick="fecharModal()">Cancelar</button><button class="tb-btn tb-btn-save" onclick="pvShGravar()">Gravar compartilhamento</button></div>');
+};
+window.pvShFiltro=function(){ const q=(document.getElementById('pvsh-busca').value||'').toLowerCase().trim(); document.querySelectorAll('#pvsh-corpo tr[data-b]').forEach(tr=>{ tr.style.display=(!q||tr.dataset.b.indexOf(q)>=0)?'':'none'; }); };
+window.pvShGravar=async function(){ if(!ctx) return; const mapa={};
+  document.querySelectorAll('#pvsh-corpo select[data-uid]').forEach(s=>{ if(!s.value) return; const x=ctx.dir.find(y=>y.uid===s.dataset.uid); mapa[s.dataset.uid]={papel:s.value,nome:(x&&(x.nome||x.usuario))||''}; });
+  try{ await N().compartilharProjeto(ctx.id,mapa); const n=Object.keys(mapa).length; fecharModal(); avisar(n?'Projeto compartilhado com '+n+' pessoa(s).':'Compartilhamento removido: só você tem acesso.'); }
+  catch(e){ corpoModal('<p class="val-bar warn">'+escapar(erroComp(e))+'</p>'); } };
+
+/* botão na barra, ao lado de "Abrir da nuvem" */
+const ab=document.querySelector('button.tb-nuvem[onclick="abrirDaNuvem()"]');
+if(ab&&!document.getElementById('pv-b-comp')){ const b=document.createElement('button'); b.id='pv-b-comp'; b.className='tb-btn tb-nuvem'; b.hidden=ab.hidden; b.title='Dar acesso a este projeto da nuvem (visualizar ou editar) a outros usuários'; b.textContent='👥 Compartilhar'; b.onclick=()=>compartilharNuvem(); ab.after(b); }
+})();
+</script>
+
 </body>
 </html>

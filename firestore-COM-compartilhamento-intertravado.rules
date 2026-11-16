@@ -270,17 +270,38 @@ service cloud.firestore {
     // 4. PAVIMENTO FLEXÍVEL
     // ════════════════════════════════════════════════════════════════
 
-    // Projetos salvos na nuvem (Pavimento Flexível).
+    // Projetos salvos na nuvem (Pavimento Flexível), com compartilhamento (PAV-COMP, 16/11/2026, igual ao Intertravado).
+    // O dono (quem criou) lê, grava, compartilha e exclui. Quem recebe acesso entra em `membros` (todos com acesso)
+    // e `editores` (só os que podem editar). Editor só troca o conteúdo (dados, nome, data, autor): não muda o dono
+    // nem a lista de compartilhamento. Projetos antigos sem esses campos continuam só do dono (ganham os campos no 1º compartilhamento).
     match /projetos/{projetoId} {
       allow read: if liberado()
-                  && (resource.data.uid == request.auth.uid || admin());
+                  && (resource.data.uid == request.auth.uid
+                      || admin()
+                      || request.auth.uid in resource.data.membros);
       allow create: if liberado()
                     && request.resource.data.uid == request.auth.uid;
       allow update: if liberado()
-                    && resource.data.uid == request.auth.uid
-                    && request.resource.data.uid == request.auth.uid;
+                    && request.resource.data.uid == resource.data.uid
+                    && (resource.data.uid == request.auth.uid
+                        || (request.auth.uid in resource.data.editores
+                            && request.resource.data.diff(resource.data).affectedKeys()
+                                 .hasOnly(['dados','nome','atualizadoEm','editadoPor'])));
       allow delete: if liberado()
                     && (resource.data.uid == request.auth.uid || admin());
+    }
+
+    // Lista de usuários do Pavimento Flexível para escolher com quem compartilhar (mesma regra do Intertravado):
+    // cada pessoa grava só o próprio registro ao abrir o programa; quem tem o Flexível liberado lê a lista.
+    // Sem e-mail, senha ou pagamento. Contas da promoção de 1 ano não leem a lista.
+    match /diretorioPavimento/{uid} {
+      allow read: if liberado()
+                  && (admin() || perfil().get('promo1ano', false) != true);
+      allow create, update: if liberado()
+                            && uid == request.auth.uid
+                            && request.resource.data.uid == request.auth.uid
+                            && request.resource.data.keys().hasOnly(['uid','nome','empresa','usuario','atualizadoEm']);
+      allow delete: if admin();
     }
 
     // ════════════════════════════════════════════════════════════════
