@@ -802,6 +802,7 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
       <div class="n-lbl" id="n_class">Tráfego Médio-Pesado</div>
     </div>
     <p style="font-size:11px;color:var(--fg3);margin-top:6px;">Este valor é usado automaticamente na aba Dimensionamento.</p>
+    <p style="font-size:11px;color:var(--fg3);margin-top:4px;">Este é o <b>N geral</b> do projeto. Se o tráfego varia ao longo da rua, digite o N de cada trecho na coluna <b>N</b> da aba <b>Topografia</b>: a espessura das camadas, a cota de formação, o corte e aterro, as seções e o orçamento passam a seguir o N de cada estaca.</p>
   </div>
 
   <div class="sec">
@@ -974,6 +975,7 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
           <th data-ajuda="tp_gr">Greide Eixo (m)</th>
           <th data-ajuda="tp_larg">Largura (m)</th>
           <th data-ajuda="tp_na">Cota N.A. (m)</th>
+          <th data-ajuda="tp_n">N (eixos equiv.)</th>
           <th data-ajuda="tp_form">Form. Eixo (m)</th>
           <th>Área Corte (m²)</th>
           <th>Área Aterro (m²)</th>
@@ -2024,6 +2026,7 @@ const AJUDA = {
   tp_td: `<b>Terreno direito (m)</b> — cota do terreno natural na borda direita da plataforma. Vazio: usa a cota do eixo.`,
   tp_gr: `<b>Greide no eixo (m)</b> — cota de projeto da superfície acabada, no eixo da via.`,
   tp_larg: `<b>Largura (m)</b> — largura total da plataforma da estaca, incluindo bermas e meio-fio.`,
+  tp_n: `<b>N desta estaca (eixos equivalentes)</b> — o N pode variar ao longo da rua. <b>Vazio</b> = vale o N da estaca de cima (ou o N geral da aba Número N, se nenhuma acima tiver N). Digitou? Vale daqui até a próxima estaca com outro N: a espessura das camadas, a cota de formação, os volumes e o orçamento passam a ser calculados com esse N, nesta estaca e no trecho até a seguinte. O cinza na célula mostra o N que está valendo.`,
   tp_na: `<b>Cota do N.A. (m)</b> — cota do nível d'água nesta estaca (cota, não profundidade). Deixe vazio se não houver sondagem.`,
   tp_form: `<b>Formação no eixo (m)</b> = greide − espessura estrutural total. Corte e aterro são medidos contra esta cota.`,
   tp_afna: `<b>Afastamento do N.A. (m)</b> = formação na borda mais baixa − cota do N.A.<br>Formação na borda = formação no eixo − (largura ÷ 2) × caimento, no lado de maior caimento.<br>Fica em destaque quando é menor que o afastamento mínimo da aba Dimensionamento.`
@@ -2170,7 +2173,7 @@ function convTopo(r) {
   const num = (x) => x === 0 || x ? x : '';
   if (r.te !== undefined || r.tc !== undefined || r.gr !== undefined) {
     return { est: num(r.est), te: num(r.te), tc: num(r.tc), td: num(r.td),
-      gr: num(r.gr), larg: num(r.larg), na: num(r.na) };
+      gr: num(r.gr), larg: num(r.larg), na: num(r.na), n: num(r.n) };
   }
   const t = num(r.cota); // havia uma cota só: vale para os três lados
   const L = r.lp !== undefined && r.lp !== 0 ? r.lp : r.la;
@@ -2195,6 +2198,7 @@ function addTopoRow(data) {
   inp('gr', d.gr, '0.001') +
   inp('larg', d.larg, '0.1') +
   inp('na', d.na, '0.001') +
+  inp('n', d.n, '1') +
   out('form') + out('ac') + out('aa') + out('dl') +
   out('vc') + out('va') + out('vr') + out('vcb') + out('vbs') + out('vsb') + out('vrf') +
   out('afna') + out('sit') +
@@ -2221,6 +2225,39 @@ function areaTrecho(h1, h2, b) {
   return h1 > 0 ? { c: a1, a: a2 } : { c: a2, a: a1 };
 }
 
+/* PATCH PAV-N-ESTACA (16/11/2026): N POR ESTACA. Mesmos dados do Dimensionamento (CBR, K, incremento...), só o N muda. */
+function estruturaParams() {
+  return { cbr_sub: Math.max(0.5, Math.min(100, v('cbr_sub'))), cbr_ref: Math.max(0.5, Math.min(100, v('cbr_ref'))),
+    cbr_sb: Math.max(0.5, Math.min(100, v('cbr_sb'))), k_base: v('k_base') || 1.0, k_sb: v('k_sb') || 1.0, k_r: v('k_r') || 1.0,
+    k_ref: v('k_ref') || 2.0, incr: v('incr') || 10, emin_base: v('emin_base') || 15, emin_gran: v('emin_gran') || 15,
+    modoFator: s('modo_fator') || 'auto', e_max_camada: v('e_max_camada') || 10, tipoRev: s('tipo_rev') || 'auto' };
+}
+let _estrCache = { sig: '', m: {} };
+function estruturaN(N) {
+  const pr = estruturaParams(), sig = JSON.stringify(pr);
+  if (_estrCache.sig !== sig) _estrCache = { sig: sig, m: {} };
+  if (_estrCache.m[N]) return _estrCache.m[N];
+  const tipo_rev = tipoRevEfetivo(N), rev_ts = tipo_rev === 'TS';
+  const D = dimensionar({ N: N, cbr_sub: pr.cbr_sub, cbr_ref: pr.cbr_ref, cbr_sb: pr.cbr_sb, k_ref: rev_ts ? 0 : pr.k_ref, k_base: pr.k_base,
+    k_sb: pr.k_sb, k_r: pr.k_r, incr: pr.incr, emin_base: pr.emin_base, emin_gran: pr.emin_gran, modoFator: pr.modoFator,
+    e_max_camada: pr.e_max_camada, rev_ts: rev_ts });
+  const ok = D.ineq1_val >= D.H20exig - 0.001 && D.ineq2_val >= D.Hn - 0.001 && D.ineq3_val >= D.Hm - 0.001;
+  const E = { N: N, tipo_rev: tipo_rev, e_ref: D.e_ref, e_base: D.e_base, e_sb: D.e_sb, e_r: D.e_r, e_total: D.e_total, ok: ok };
+  _estrCache.m[N] = E;
+  return E;
+}
+/* estrutura de uma estaca: a do N geral (_R, exatamente como antes) ou a calculada para o N próprio/herdado */
+function estruturaLinha(N) {
+  if (!(N > 0) || (_R.N > 0 && Math.abs(N - _R.N) < 0.5)) {
+    return { N: _R.N || 0, tipo_rev: _R.tipo_rev, e_ref: _R.e_ref || 0, e_base: _R.e_base || 0, e_sb: _R.e_sb || 0, e_r: _R.e_r || 0, e_total: _R.e_total || 0, ok: true, geral: true };
+  }
+  return estruturaN(N);
+}
+function camadasDe(E) {
+  return [['CBUQ', (E.e_ref || 0) / 100, '#2b2b2b'], ['Base', (E.e_base || 0) / 100, '#c49a3a'],
+  ['Sub-base', (E.e_sb || 0) / 100, '#e2c477'], ['Reforço', (E.e_r || 0) / 100, '#dcc9a2']].filter((c) => c[1] > 0);
+}
+
 function calcTopo() {
   const tbody = document.getElementById('topo_tbody');
   if (!tbody) return;
@@ -2243,17 +2280,30 @@ function calcTopo() {
       return isNaN(x) ? null : x;
     };
     return { i: i, est: n('est') || 0, te: n('te'), tc: n('tc'), td: n('td'),
-      gr: n('gr'), larg: n('larg') || 0, na: n('na'),
+      gr: n('gr'), larg: n('larg') || 0, na: n('na'), nProp: n('n'),
       form: null, ac: 0, aa: 0, ar: 0, dl: null, vc: null, va: null, vr: null,
       apav: 0, apavc: 0, vcb: null, vbs: null, vsb: null, vrf: null,
       afna: null, sit: '—', naCritico: false };
   });
 
+  // N por estaca (PAV-N-ESTACA): vazio = o da estaca de cima (por estaca crescente); sem nenhum acima = N geral.
+  {
+    let Nv = 0, nvar = false;
+    linhas.map((L, k) => [L, k]).sort((a, b) => a[0].est - b[0].est || a[1] - b[1]).forEach(([L]) => {
+      if (L.nProp > 0) {Nv = L.nProp;L.nOrig = 'próprio';} else if (Nv > 0) {L.nOrig = 'herdado';} else L.nOrig = 'geral';
+      L.N = Nv > 0 ? Nv : _R.N || 0;
+      L.estr = estruturaLinha(Nv > 0 ? Nv : 0);
+      L.eTot = (L.estr.e_total || 0) / 100;
+      L.camadas = camadasDe(L.estr);
+      if (!L.estr.geral) nvar = true;
+    });
+    window.__pvNvaria = nvar;
+  }
   // Geometria de cada seção.
   const Pp = secaoParams();
   linhas.forEach((L) => {
     if (L.gr === null) {return;}
-    L.form = L.gr - eTot; // cota de formação no eixo
+    L.form = L.gr - L.eTot; // cota de formação no eixo
     if (L.na !== null) {
       // formação mais baixa da seção: na borda, descontado o caimento transversal
       L.formNA = L.form - (L.larg || 0) / 2 * Math.max(cEsq, cDir, 0);
@@ -2284,6 +2334,8 @@ function calcTopo() {
     // com caimento: cada metade da plataforma é medida ao longo da superfície inclinada
     const sup = (X) => X.larg / 2 * (Math.sqrt(1 + cEsq * cEsq) + Math.sqrt(1 + cDir * cDir));
     A.apavc = (sup(A) + sup(B)) / 2 * A.dl;
+    // espessuras da estaca de início do trecho (o N vale daí até a próxima estaca)
+    const eRev = (A.estr.e_ref || 0) / 100, eBas = (A.estr.e_base || 0) / 100, eSbs = (A.estr.e_sb || 0) / 100, eRfc = (A.estr.e_r || 0) / 100;
     A.vcb = A.apav * eRev;
     A.vbs = A.apav * eBas;
     A.vsb = A.apav * eSbs;
@@ -2316,9 +2368,12 @@ function calcTopo() {
 
   // Totais da obra.
   let totVc = 0,totVa = 0,totVre = 0,apav = 0,apavc = 0,vCBUQ = 0,vBase = 0,vSB = 0,vRef = 0;
+  let vCBUQc = 0,vBasec = 0,vSBc = 0,vRefc = 0;const revG = {};
   linhas.forEach((L) => {
     totVc += L.vc || 0;totVa += L.va || 0;totVre += L.vr || 0;apav += L.apav || 0;apavc += L.apavc || 0;
     vCBUQ += L.vcb || 0;vBase += L.vbs || 0;vSB += L.vsb || 0;vRef += L.vrf || 0;
+    if (L.cc) {vCBUQc += L.cc.cb;vBasec += L.cc.bs;vSBc += L.cc.sb;vRefc += L.cc.rf;
+      if (L.apavc > 0) {const k = (L.estr.tipo_rev || '') + '|' + (L.estr.e_ref || 0);revG[k] = (revG[k] || 0) + L.apavc;}}
   });
   const extensao = linhas.length > 1 ? linhas[linhas.length - 1].est - linhas[0].est : 0;
   const bota = Math.max(0, totVc - totVa - totVre); // sobra de material a retirar (o reaterro reaproveita o corte)
@@ -2332,18 +2387,27 @@ function calcTopo() {
   set2('topo_botafora', fmt(bota, 2) + ' m³');
   set2('topo_vol_reaterro', fmt(totVre, 2) + ' m³');
   set2('topo_area_pav', fmt(apav, 2) + ' m²  ·  ' + fmt(apavc, 2) + ' m² c/ caimento');
-  const eR_ = (_R.e_ref || 0) / 100,eB_ = (_R.e_base || 0) / 100,eS_ = (_R.e_sb || 0) / 100,eF_ = (_R.e_r || 0) / 100;
-  const dois = (a, e) => fmt(a, 2) + ' m³  ·  ' + fmt(apavc * e, 2) + ' m³ c/ caimento';
-  set2('topo_vol_cbuq', dois(vCBUQ, eR_));
-  set2('topo_vol_base', dois(vBase, eB_));
-  set2('topo_vol_sb', dois(vSB, eS_));
-  set2('topo_vol_ref', dois(vRef, eF_));
+  const dois = (a, c) => fmt(a, 2) + ' m³  ·  ' + fmt(c, 2) + ' m³ c/ caimento';
+  set2('topo_vol_cbuq', dois(vCBUQ, vCBUQc));
+  set2('topo_vol_base', dois(vBase, vBasec));
+  set2('topo_vol_sb', dois(vSB, vSBc));
+  set2('topo_vol_ref', dois(vRef, vRefc));
   set2('topo_espessura', _R.e_total ? fmt(_R.e_total, 1) + ' cm' : '—');
 
   // Estrutura de referência, vinda do Dimensionamento.
   const camadas = [['Rev', _R.e_ref], ['Base', _R.e_base], ['Sub-base', _R.e_sb], ['Reforço', _R.e_r]].
   filter((c) => c[1] > 0).map((c) => c[0] + ' ' + fmt(c[1], 1));
   set2('topo_estrutura', camadas.length ? camadas.join(' · ') + ' cm' : '—');
+  if (window.__pvNvaria) {// N varia: mostra a faixa de espessuras
+    const et = linhas.filter((L) => L.gr !== null).map((L) => L.estr.e_total), Ns = linhas.map((L) => L.N).filter((x) => x > 0);
+    if (et.length) set2('topo_estrutura', (camadas.length ? camadas.join(' · ') + ' cm (N geral) · ' : '') + 'N por estaca: ' + fmt(Math.min.apply(null, et), 1) + ' a ' + fmt(Math.max.apply(null, et), 1) + ' cm totais');
+  }
+  // célula do N: mostra o N que está valendo (cinza) nas estacas sem N próprio
+  linhas.forEach((L) => {
+    const el = document.getElementById('tp_n_' + L.i);if (!el) return;
+    el.placeholder = L.nProp > 0 ? '' : L.N > 0 ? (L.nOrig === 'geral' ? 'geral ' : '= ') + fmtN(L.N) : '';
+    el.title = L.nProp > 0 ? 'N próprio — vale daqui até a próxima estaca com outro N. Espessura total: ' + fmt(L.estr.e_total, 1) + ' cm' + (L.estr.ok === false ? ' (NÃO atende)' : '') : 'Vazio: vale o N ' + (L.nOrig === 'geral' ? 'geral' : 'da estaca de cima') + ' (' + fmtN(L.N) + '). Espessura total: ' + fmt(L.estr.e_total, 1) + ' cm';
+  });
 
   // Situação geral da obra, em uma linha.
   let geral;
@@ -2361,7 +2425,7 @@ function calcTopo() {
 
   _R._topo = { totVc: totVc, totVa: totVa, totVre: totVre, semMeioFio: !(_mf && _mf.tipo !== 'nenhum'), totVbf: bota, totVem: empr, areaPav: apav, areaPavInc: apavc,
     volCBUQ: vCBUQ, volBase: vBase, volSB: vSB, volRef: vRef,
-    volCBUQc: apavc * eR_, volBasec: apavc * eB_, volSBc: apavc * eS_, volRefc: apavc * eF_,
+    volCBUQc: vCBUQc, volBasec: vBasec, volSBc: vSBc, volRefc: vRefc, revG: revG, nVaria: !!window.__pvNvaria,
     extensao: extensao, afMin: afMin, nCritico: nCrit,
     linhas: linhas, data: linhas };
   const tabC = document.getElementById('tab-corte');
@@ -2391,14 +2455,14 @@ function topoCabecalho() {
   'Greide Eixo (m)', 'Largura (m)', 'Cota N.A. (m)', 'Form. Eixo (m)', 'Área Corte (m²)',
   'Área Aterro (m²)', 'Dist. Trecho (m)', 'Corte (m³)', 'Aterro (m³)', 'Reaterro (m³)',
   'CBUQ (m³)', 'Base (m³)', 'Sub-base (m³)', 'Reforço (m³)',
-  'Afast. N.A. (m)', 'Situação'];
+  'Afast. N.A. (m)', 'Situação', 'N (eixos equiv.)', 'Esp. total (cm)'];
 }
 function topoLinhas() {
   const n = (x) => x === null || x === undefined || isNaN(x) ? '' : Number(Number(x).toFixed(3));
   return (_R._topo && _R._topo.linhas || []).map((L) => [
   n(L.est), n(L.te), n(L.tc), n(L.td), n(L.gr), n(L.larg), n(L.na), n(L.form),
   n(L.ac), n(L.aa), n(L.dl), n(L.vc), n(L.va), n(L.vr),
-  n(L.vcb), n(L.vbs), n(L.vsb), n(L.vrf), n(L.afna), L.sit]
+  n(L.vcb), n(L.vbs), n(L.vsb), n(L.vrf), n(L.afna), L.sit, n(L.N), n(L.estr && L.estr.e_total)]
   );
 }
 function topoResumo() {
@@ -2562,7 +2626,7 @@ function secaoAreas(L, G, P) {
 
 function secaoGeom(L, P) {
   if (L.gr === null || L.tc === null || !(L.larg > 0)) return null;
-  const b = L.larg / 2,form = L.gr - P.eTot,tC = L.tc;
+  const b = L.larg / 2,form = L.gr - (L.eTot !== undefined ? L.eTot : P.eTot),tC = L.tc; // L.eTot: N por estaca
   const tE = L.te === null ? tC : L.te,tD = L.td === null ? tC : L.td;
   const lado = (tB, cai) => {
     const yS = L.gr - b * cai,yF = form - b * cai;
@@ -2600,6 +2664,7 @@ function secaoGeom(L, P) {
 }
 
 function secaoSVG(L, G, P, papel) {
+  if (L.camadas && L.eTot !== undefined) P = Object.assign({}, P, { camadas: L.camadas, eTot: L.eTot }); // N por estaca
   const C = papel ? { fg: '#1f2937', fg2: '#4b5563', fg3: '#6b7280', bg: '#ffffff', acc: '#1d4ed8' } :
   { fg: 'var(--fg)', fg2: 'var(--fg2)', fg3: 'var(--fg3)', bg: 'var(--bg2)', acc: 'var(--accent2)' };
   const uid = 'sc' + ++_secUid;
@@ -3140,7 +3205,7 @@ function getTopoData() {
       return isNaN(x) ? '' : x;
     };
     return { est: n('est'), te: n('te'), tc: n('tc'), td: n('td'),
-      gr: n('gr'), larg: n('larg'), na: n('na') };
+      gr: n('gr'), larg: n('larg'), na: n('na'), n: n('n') };
   });
 }
 
@@ -5701,6 +5766,7 @@ function salvarUsuario(uid, acao) {
     if (!T || !(T.areaPavInc > 0)) return {erro: 'Preencha a aba Topografia (estacas, larguras e cotas) para o programa calcular as áreas e os volumes das camadas.'};
     var L = [], area = T.areaPavInc, ext = T.extensao;
     var eR = _R.e_ref || 0, eB = _R.e_base || 0, eS = _R.e_sb || 0, eF = _R.e_r || 0, rev = _R.tipo_rev;
+    if (T.nVaria && area > 0) {eR = T.volCBUQc / area * 100;eB = T.volBasec / area * 100;eS = T.volSBc / area * 100;eF = T.volRefc / area * 100;} /* PAV-N-ESTACA: espessura média ponderada */
     L = L.concat(U.preliminares(G[0], p.placa, ext));
     L = L.concat(U.terra(G[1], {corte: T.totVc, aterro: T.totVa + T.totVre}, p.dmt));
     var empr = Math.max(0, T.totVa + T.totVre - T.totVc);
@@ -5717,21 +5783,35 @@ function salvarUsuario(uid, acao) {
       L.push({g: G[4], nome: 'Base de ' + (sol.base === 'bgtc' ? 'brita graduada tratada com cimento' : sol.base === 'macadame' ? 'macadame seco' : 'brita graduada simples'), un: 'm³', q: T.volBasec, cod: cb, memo: nf(area, 2) + ' m² × ' + nf(eB / 100, 3) + ' m'});
     }
     L.push({g: G[5], nome: 'Imprimação da base', un: 'm²', q: area, cod: {emop: '08.026.0001', sinapi: 'SC-102470', sco: 'SCO-BP 05.05.0400'}, memo: 'Área pavimentada com caimento'});
-    if (rev === 'TS') {
-      var ts = sol.k === 'eco' ? 'SC-97801' : sol.k === 'rec' ? 'SC-97804' : 'SC-97808';
-      L.push({g: G[5], nome: 'Tratamento superficial ' + (sol.k === 'eco' ? 'simples' : sol.k === 'rec' ? 'duplo' : 'triplo'), un: 'm²', q: area, cod: {sinapi: ts}, memo: 'Área pavimentada com caimento'});
-    } else if (eR > 0) {
-      var pmf = rev === 'PMF', fria = pmf ? {sco: 'SCO-BP 10.05.0150'} : null, vol = T.volCBUQc, t = vol * 2.4;
-      if (rev === 'PEN') L.push({g: G[5], nome: 'Revestimento betuminoso por penetração, ' + nf(eR, 1) + ' cm', un: 'm³', q: vol, cod: {}, memo: 'Sem composição nos bancos: escolher no Orçamento'});
-      else if (pmf) L.push({g: G[5], nome: 'Pré-misturado a frio, ' + nf(eR, 1) + ' cm', un: 'm³', q: vol, cod: fria, memo: nf(area, 2) + ' m² × ' + nf(eR / 100, 3) + ' m'});
-      else {
-        var eRol = sol.binder && eR > 5 ? 4 : eR, eBin = sol.binder && eR > 5 ? eR - 4 : 0, vr = area * eRol / 100, vb = area * eBin / 100;
-        L.push({g: G[5], nome: 'Concreto asfáltico (CBUQ) usinado a quente, camada de rolamento, ' + nf(eRol, 1) + ' cm', un: 't', q: vr * 2.4, cod: {emop: '08.015.0068', sinapi: 'SC-95995', sco: 'SCO-BP 10.05.0100'}, qb: {sinapi: vr}, memo: nf(area, 2) + ' m² × ' + nf(eRol / 100, 3) + ' m × 2,4 t/m³ (SINAPI em m³ com usinagem e espalhamento)'});
-        /* PATCH PAV-LIG (16/11/2026): pintura de ligação só existe ENTRE duas camadas asfálticas (binder + rolamento); revestimento de uma camada só não leva pintura de ligação (a base recebe só a imprimação). */
-        if (eBin > 0) L.push({g: G[5], nome: 'Pintura de ligação (entre o binder e a capa de rolamento)', un: 'm²', q: area, cod: {emop: '08.026.0002', sinapi: 'SC-104375'}, memo: 'Área pavimentada com caimento'});
-        if (eBin > 0) L.push({g: G[5], nome: 'Concreto asfáltico (CBUQ) usinado a quente, camada de ligação (binder), ' + nf(eBin, 1) + ' cm', un: 't', q: vb * 2.4, cod: {sinapi: 'SC-95996', sco: 'SCO-BP 10.05.0050'}, qb: {sinapi: vb}, memo: nf(area, 2) + ' m² × ' + nf(eBin / 100, 3) + ' m × 2,4 t/m³'});
-        L.push({g: G[5], nome: 'Espalhamento com vibroacabadora e compactação do CBUQ', un: 't', q: t, cod: {emop: '08.037.0070', sinapi: false, sco: 'SCO-BP 10.05.0300'}, memo: nf(area, 2) + ' m² × ' + nf(eR / 100, 3) + ' m × 2,4 t/m³ (no SINAPI já incluído na composição do CBUQ)'});
+    /* PAV-N-ESTACA: o revestimento pode mudar ao longo da rua (N por estaca): agrupa as áreas por tipo e espessura e emite cada item UMA vez. */
+    var grupos = T.nVaria && T.revG ? Object.keys(T.revG).map(function(k){var q = k.split('|');return {rev: q[0], eR: +q[1], area: T.revG[k]};}) : [{rev: rev, eR: eR, area: area}];
+    var aTS = 0, aPEN = 0, vPEN = 0, aPMF = 0, vPMF = 0, aCB = 0, rolV = 0, binV = 0, aBin = 0;
+    grupos.forEach(function(gr){
+      var e = gr.eR, a = gr.area;
+      if (gr.rev === 'TS') aTS += a;
+      else if (e > 0) {
+        if (gr.rev === 'PEN') {aPEN += a;vPEN += a * e / 100;}
+        else if (gr.rev === 'PMF') {aPMF += a;vPMF += a * e / 100;}
+        else {
+          var dois = sol.binder && e > 5;
+          aCB += a;rolV += a * (dois ? 4 : e) / 100;
+          if (dois) {aBin += a;binV += a * (e - 4) / 100;}
+        }
       }
+    });
+    if (aTS > 0) {
+      var ts = sol.k === 'eco' ? 'SC-97801' : sol.k === 'rec' ? 'SC-97804' : 'SC-97808';
+      L.push({g: G[5], nome: 'Tratamento superficial ' + (sol.k === 'eco' ? 'simples' : sol.k === 'rec' ? 'duplo' : 'triplo'), un: 'm²', q: aTS, cod: {sinapi: ts}, memo: 'Área pavimentada com caimento' + (T.nVaria ? ' (trechos de N baixo)' : '')});
+    }
+    if (aPEN > 0) L.push({g: G[5], nome: 'Revestimento betuminoso por penetração, ' + nf(vPEN / aPEN * 100, 1) + ' cm', un: 'm³', q: vPEN, cod: {}, memo: 'Sem composição nos bancos: escolher no Orçamento'});
+    if (aPMF > 0) L.push({g: G[5], nome: 'Pré-misturado a frio, ' + nf(vPMF / aPMF * 100, 1) + ' cm', un: 'm³', q: vPMF, cod: {sco: 'SCO-BP 10.05.0150'}, memo: nf(aPMF, 2) + ' m² × ' + nf(vPMF / aPMF, 3) + ' m'});
+    if (aCB > 0) {
+      var eRol = rolV / aCB * 100, vr = rolV, vb = binV, eBin = aBin > 0 ? binV / aBin * 100 : 0, t = (vr + vb) * 2.4, eRt = (vr + vb) / aCB * 100;
+      L.push({g: G[5], nome: 'Concreto asfáltico (CBUQ) usinado a quente, camada de rolamento, ' + nf(eRol, 1) + ' cm', un: 't', q: vr * 2.4, cod: {emop: '08.015.0068', sinapi: 'SC-95995', sco: 'SCO-BP 10.05.0100'}, qb: {sinapi: vr}, memo: nf(aCB, 2) + ' m² × ' + nf(eRol / 100, 3) + ' m × 2,4 t/m³ (SINAPI em m³ com usinagem e espalhamento)'});
+      /* PATCH PAV-LIG (16/11/2026): pintura de ligação só existe ENTRE duas camadas asfálticas (binder + rolamento); revestimento de uma camada só não leva pintura de ligação (a base recebe só a imprimação). */
+      if (aBin > 0) L.push({g: G[5], nome: 'Pintura de ligação (entre o binder e a capa de rolamento)', un: 'm²', q: aBin, cod: {emop: '08.026.0002', sinapi: 'SC-104375'}, memo: 'Área pavimentada com caimento'});
+      if (aBin > 0) L.push({g: G[5], nome: 'Concreto asfáltico (CBUQ) usinado a quente, camada de ligação (binder), ' + nf(eBin, 1) + ' cm', un: 't', q: vb * 2.4, cod: {sinapi: 'SC-95996', sco: 'SCO-BP 10.05.0050'}, qb: {sinapi: vb}, memo: nf(aBin, 2) + ' m² × ' + nf(eBin / 100, 3) + ' m × 2,4 t/m³'});
+      L.push({g: G[5], nome: 'Espalhamento com vibroacabadora e compactação do CBUQ', un: 't', q: t, cod: {emop: '08.037.0070', sinapi: false, sco: 'SCO-BP 10.05.0300'}, memo: nf(aCB, 2) + ' m² × ' + nf(eRt / 100, 3) + ' m × 2,4 t/m³ (no SINAPI já incluído na composição do CBUQ)'});
     }
     if (typeof _mf !== 'undefined' && _mf.tipo && _mf.tipo !== 'nenhum' && ext > 0) {
       var c = _mf.tipo === 'simples', m = ext * 2;
@@ -5878,9 +5958,10 @@ function extRows(rows){const e=(rows||[]).map(r=>r.est).filter(x=>x!==''&&x!==nu
 
 /* ---------- totais de todas as ruas ---------- */
 const CAMPOS=['totVc','totVa','totVre','areaPav','areaPavInc','volCBUQ','volBase','volSB','volRef','volCBUQc','volBasec','volSBc','volRefc','extensao','nCritico'];
-const snap=t=>{const o={};CAMPOS.forEach(k=>o[k]=+t[k]||0);return o;};
+const snap=t=>{const o={};CAMPOS.forEach(k=>o[k]=+t[k]||0);o.revG=Object.assign({},t.revG||{});o.nVaria=!!t.nVaria;return o;};
 function assin(r){let sp='';try{sp=JSON.stringify(secaoParams());}catch(e){}
-  return JSON.stringify([_R.e_total,_R.e_ref,_R.e_base,_R.e_sb,_R.e_r,v('topo_caim_esq'),v('topo_caim_dir'),v('a_afast_min')])+sp+JSON.stringify(_mf)+JSON.stringify(r.rows);}
+  let es='';try{es=JSON.stringify(estruturaParams())+_R.N;}catch(e){}
+  return es+JSON.stringify([_R.e_total,_R.e_ref,_R.e_base,_R.e_sb,_R.e_r,v('topo_caim_esq'),v('topo_caim_dir'),v('a_afast_min')])+sp+JSON.stringify(_mf)+JSON.stringify(r.rows);}
 function totais(){
   const falta=ruas.some((r,i)=>i!==ativa&&!(cache[r.id]&&cache[r.id].a===assin(r)));
   if(falta){
@@ -5888,19 +5969,18 @@ function totais(){
       carrega(r.rows);orig();cache[r.id]={a:a,s:snap(_R._topo||{})};});
     carrega(ruas[ativa].rows);orig();
   }
-  const ta=_R._topo||{},S={};CAMPOS.forEach(k=>S[k]=0);const por=[];
-  ruas.forEach((r,i)=>{const s=i===ativa?snap(ta):((cache[r.id]||{}).s||{});CAMPOS.forEach(k=>S[k]+=s[k]||0);
+  const ta=_R._topo||{},S={};CAMPOS.forEach(k=>S[k]=0);const por=[];const revG={};let nVar=false;
+  ruas.forEach((r,i)=>{const s=i===ativa?snap(ta):((cache[r.id]||{}).s||{});CAMPOS.forEach(k=>S[k]+=s[k]||0);Object.keys(s.revG||{}).forEach(k=>revG[k]=(revG[k]||0)+s.revG[k]);if(s.nVaria)nVar=true;
     por.push(Object.assign({id:r.id,nome:r.nome,nEst:(r.rows||[]).length},s));});
   const bota=Math.max(0,S.totVc-S.totVa-S.totVre),empr=Math.max(0,S.totVa+S.totVre-S.totVc);
-  _R._topo=Object.assign({},ta,S,{totVbf:bota,totVem:empr,porRua:por,nRuas:ruas.length,ruaAtiva:ruas[ativa].nome,extensaoRua:ta.extensao||0});
+  _R._topo=Object.assign({},ta,S,{revG:revG,nVaria:nVar,totVbf:bota,totVem:empr,porRua:por,nRuas:ruas.length,ruaAtiva:ruas[ativa].nome,extensaoRua:ta.extensao||0});
   const set2=(id,t)=>{const el=$(id);if(el)el.textContent=t;};
   set2('topo_extensao',S.extensao>0?F(S.extensao,2)+' m':'—');
   set2('topo_vol_corte',F(S.totVc,2)+' m³');set2('topo_vol_aterro',F(S.totVa,2)+' m³');
   set2('topo_botafora',F(bota,2)+' m³');set2('topo_vol_reaterro',F(S.totVre,2)+' m³');
   set2('topo_area_pav',F(S.areaPav,2)+' m²  ·  '+F(S.areaPavInc,2)+' m² c/ caimento');
-  const eR=(_R.e_ref||0)/100,eB=(_R.e_base||0)/100,eS=(_R.e_sb||0)/100,eF=(_R.e_r||0)/100;
-  const dois=(a,e)=>F(a,2)+' m³  ·  '+F(S.areaPavInc*e,2)+' m³ c/ caimento';
-  set2('topo_vol_cbuq',dois(S.volCBUQ,eR));set2('topo_vol_base',dois(S.volBase,eB));set2('topo_vol_sb',dois(S.volSB,eS));set2('topo_vol_ref',dois(S.volRef,eF));
+  const dois=(a,c)=>F(a,2)+' m³  ·  '+F(c,2)+' m³ c/ caimento';
+  set2('topo_vol_cbuq',dois(S.volCBUQ,S.volCBUQc));set2('topo_vol_base',dois(S.volBase,S.volBasec));set2('topo_vol_sb',dois(S.volSB,S.volSBc));set2('topo_vol_ref',dois(S.volRef,S.volRefc));
   set2('topo_status','TOTAL das '+ruas.length+' ruas. '+(empr>0.005?'Falta material: empréstimo de '+F(empr,2)+' m³.':bota>0.005?'Sobra material: bota-fora de '+F(bota,2)+' m³.':'Corte e aterro compensados.')+(S.nCritico?' '+S.nCritico+' estaca(s) com afastamento do N.A. abaixo do mínimo.':''));
 }
 
@@ -5986,7 +6066,7 @@ window.__pvCruzDel=function(rid,est,estO){const eu=ruas[ativa];eu.cruz=(eu.cruz|
 
 /* ---------- projeto: salvar / abrir ---------- */
 window.dadosDoProjeto=function(){const d=dp0();
-  try{if(ruas.length>1){sync();d.topo.ruas=ruas.map(r=>({id:r.id,nome:r.nome,rows:r.rows,cruz:r.cruz||[]}));d.topo.ruaAtiva=ativa;}}catch(e){}
+  try{if(ruas.length>1){sync();d.topo.ruas=ruas.map(r=>({id:r.id,nome:r.nome,rows:r.rows,cruz:r.cruz||[],eixo:r.eixo||undefined}));d.topo.ruaAtiva=ativa;}}catch(e){}
   return d;};
 window.aplicarProjeto=function(p){
   const T=p&&p.topo,rs=T&&Array.isArray(T.ruas)&&T.ruas.length>1?T.ruas:null;
@@ -5995,10 +6075,65 @@ window.aplicarProjeto=function(p){
   const a=Math.min(Math.max(0,T.ruaAtiva|0),rs.length-1);
   const p2=Object.assign({},p,{topo:Object.assign({},T,{rows:rs[a].rows||[]})});
   window.__pvSemCalc=true;try{ap0(p2);}finally{window.__pvSemCalc=false;}
-  ruas=rs.map(r=>({id:String(r.id),nome:r.nome||'Rua',rows:(r.rows||[]).map(x=>Object.assign({},x)),cruz:(r.cruz||[]).map(c=>({est:+c.est,rua:String(c.rua),estOutra:+c.estOutra}))}));
+  ruas=rs.map(r=>({id:String(r.id),nome:r.nome||'Rua',eixo:Array.isArray(r.eixo)&&r.eixo.length>1?r.eixo:undefined,rows:(r.rows||[]).map(x=>Object.assign({},x)),cruz:(r.cruz||[]).map(c=>({est:+c.est,rua:String(c.rua),estOutra:+c.estOutra}))}));
   ativa=a;seq=ruas.length+1;window.calcTopo();};
+/* PAV-TRACADO: ruas com o eixo real (para a Planta e o 3D mostrarem o bairro inteiro, cada rua no seu lugar) */
+window.__pvRuas=function(){if(ruas.length<2)return null;return ruas.map((r,i)=>({id:r.id,nome:r.nome,rows:i===ativa?getTopoData():r.rows,eixo:r.eixo,cruz:r.cruz||[]}));};
 /* a barra aparece já ao abrir o programa */
 setTimeout(function(){try{window.calcTopo();}catch(e){}},300);
+})();
+</script>
+<script>
+/* PATCH PAV-PERFIL (16/11/2026): PERFIL LONGITUDINAL da rua ativa, logo abaixo da tabela da Topografia: terreno do eixo, greide, cota de formação
+   (greide − espessura do pavimento NA ESTACA, que muda com o N de cada estaca) e N.A.; marca onde o N muda. Só desenho: nenhum cálculo muda. */
+(function(){
+'use strict';
+if(window.__pvPerfilOK) return; window.__pvPerfilOK=true;
+const prev=window.calcTopo; let raf=0;
+const $=id=>document.getElementById(id);
+const F=(x,d)=>typeof fmt==='function'?fmt(x,d):(+x).toFixed(d).replace('.',',');
+function caixa(){let c=$('pv-perfil');if(c)return c;const w=document.querySelector('#tab-topo .tbl-wrap');if(!w)return null;
+  c=document.createElement('div');c.id='pv-perfil';c.style.cssText='margin:14px 0;padding:10px;border:1px solid var(--inp-border,#ccc);border-radius:8px;background:var(--bg2,transparent)';
+  w.parentNode.insertBefore(c,w.nextSibling);return c;}
+function desenha(){
+  const c=caixa();if(!c)return;
+  const T=_R._topo,Ls=((T&&T.linhas)||[]).filter(L=>L.gr!==null&&L.gr!==undefined&&L.form!==null).slice().sort((a,b)=>a.est-b.est);
+  if(Ls.length<2){c.innerHTML='<b>Perfil longitudinal</b> <span style="font-size:11px;color:var(--fg3)">— informe pelo menos duas estacas com greide.</span>';return;}
+  const W=1100,H=330,pl=64,pr=16,pt=34,pb=58;
+  const e0=Ls[0].est,e1=Ls[Ls.length-1].est;
+  let zmin=1e9,zmax=-1e9;
+  Ls.forEach(L=>{[L.tc,L.gr,L.form,L.na].forEach(z=>{if(z!==null&&z!==undefined&&!isNaN(z)){zmin=Math.min(zmin,z);zmax=Math.max(zmax,z);}});});
+  const m=(zmax-zmin)*0.08||0.5;zmin-=m;zmax+=m;
+  const X=e=>pl+(e-e0)/((e1-e0)||1)*(W-pl-pr),Y=z=>pt+(zmax-z)/((zmax-zmin)||1)*(H-pt-pb);
+  const pts=k=>Ls.filter(L=>L[k]!==null&&L[k]!==undefined&&!isNaN(L[k])).map(L=>X(L.est).toFixed(1)+','+Y(L[k]).toFixed(1)).join(' ');
+  let s='<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;max-height:420px;background:var(--bg,#fff);border-radius:6px" font-family="Arial,sans-serif">';
+  // grade e eixos
+  const nz=6;for(let i=0;i<=nz;i++){const z=zmin+(zmax-zmin)*i/nz,y=Y(z);s+='<line x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y+'" y2="'+y+'" stroke="#8884" stroke-width="0.6"/><text x="'+(pl-6)+'" y="'+(y+3)+'" font-size="10" text-anchor="end" fill="#667">'+F(z,2)+'</text>';}
+  const ne=Math.min(10,Math.max(2,Math.round((e1-e0)/20)));for(let i=0;i<=ne;i++){const e=e0+(e1-e0)*i/ne,x=X(e);s+='<line x1="'+x+'" x2="'+x+'" y1="'+pt+'" y2="'+(H-pb)+'" stroke="#8883" stroke-width="0.5"/><text x="'+x+'" y="'+(H-pb+14)+'" font-size="10" text-anchor="middle" fill="#667">'+F(e,0)+'</text>';}
+  s+='<text x="'+(W/2)+'" y="'+(H-6)+'" font-size="10" text-anchor="middle" fill="#667">Estaca (m)</text><text x="12" y="'+(pt-12)+'" font-size="10" fill="#667">Cota (m)</text>';
+  // corte/aterro: faixa entre o terreno e a formação
+  const area=(a,b)=>Ls.filter(L=>L.tc!==null&&L.form!==null).map(L=>X(L.est).toFixed(1)+','+Y(L.tc).toFixed(1)).join(' ')+' '+Ls.filter(L=>L.tc!==null&&L.form!==null).reverse().map(L=>X(L.est).toFixed(1)+','+Y(L.form).toFixed(1)).join(' ');
+  s+='<polygon points="'+area()+'" fill="#e08a4a" fill-opacity="0.18" stroke="none"/>';
+  s+='<polyline points="'+pts('tc')+'" fill="none" stroke="#6b4a1e" stroke-width="1.6"/>';
+  s+='<polyline points="'+pts('form')+'" fill="none" stroke="#1d4ed8" stroke-width="1.6" stroke-dasharray="6 3"/>';
+  s+='<polyline points="'+pts('gr')+'" fill="none" stroke="#111" stroke-width="2"/>';
+  if(Ls.some(L=>L.na!==null&&L.na!==undefined))s+='<polyline points="'+pts('na')+'" fill="none" stroke="#2f7fd1" stroke-width="1.2" stroke-dasharray="2 3"/>';
+  // pavimento (espessura por estaca) entre o greide e a formação
+  s+='<polygon points="'+pts('gr')+' '+Ls.slice().reverse().map(L=>X(L.est).toFixed(1)+','+Y(L.form).toFixed(1)).join(' ')+'" fill="#555" fill-opacity="0.22" stroke="none"/>';
+  // marcas do N
+  let ult=null,k=0;
+  Ls.forEach(L=>{const chave=L.N+'|'+L.estr.e_total;
+    if(chave!==ult){const x=X(L.est);s+='<line x1="'+x+'" x2="'+x+'" y1="'+pt+'" y2="'+(H-pb)+'" stroke="#b45309" stroke-width="1" stroke-dasharray="3 3"/>';
+      const dy=(k++%2)*13;s+='<text x="'+(x+3)+'" y="'+(pt-14+dy)+'" font-size="10" fill="#b45309" font-weight="700">N '+(typeof fmtN==='function'?fmtN(L.N):L.N)+' · pav. '+F(L.estr.e_total,1)+' cm</text>';ult=chave;}});
+  // legenda
+  const lg=[['#6b4a1e','Terreno (eixo)',''],['#111','Greide',''],['#1d4ed8','Formação (greide − pavimento da estaca)','6 3'],['#2f7fd1','N.A.','2 3']];let lx=pl;
+  lg.forEach(t=>{s+='<line x1="'+lx+'" x2="'+(lx+22)+'" y1="'+(H-pb+30)+'" y2="'+(H-pb+30)+'" stroke="'+t[0]+'" stroke-width="2" stroke-dasharray="'+t[2]+'"/><text x="'+(lx+26)+'" y="'+(H-pb+33)+'" font-size="10" fill="#667">'+t[1]+'</text>';lx+=t[1].length*5.4+54;});
+  s+='</svg>';
+  c.innerHTML='<div style="font-weight:700;margin-bottom:6px">Perfil longitudinal <span style="font-weight:400;font-size:11px;color:var(--fg3)">— '+((T&&T.ruaAtiva)?'rua “'+T.ruaAtiva+'”. ':'')+'A espessura do pavimento (faixa cinza) e a formação seguem o N de cada estaca; a faixa laranja entre o terreno e a formação é o corte/aterro.</span></div>'+s;
+}
+window.calcTopo=function(){prev.apply(this,arguments);if(window.__pvSemCalc)return;cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{try{desenha();}catch(e){console.error('perfil',e);}});};
+window.pvPerfilDesenha=desenha;
+setTimeout(function(){try{desenha();}catch(e){}},500);
 })();
 </script>
 </body>
