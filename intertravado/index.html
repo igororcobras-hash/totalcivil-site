@@ -769,6 +769,7 @@ function mostrarSelecaoAmbiente(){ if (!_ambienteEscolhido) abrirSelecaoAmbiente
       <button class="tb-btn tb-btn-save" id="btn-gerar-greide" onclick="abrirGerarGreide()" title="Gera o greide do eixo (e das bordas esquerda e direita) a partir das cotas do terreno, respeitando a inclinação longitudinal mínima">Gerar greide…</button>
       <button class="btn-rem" id="btn-desfazer-greide" onclick="desfazerGreide()" style="display:none">↶ Desfazer greide</button>
       <button class="tb-btn" onclick="importarExcelClick()" title="Importa estacas e cotas de uma planilha Excel (.xlsx, .xls) ou de um arquivo de texto (.txt, .csv, .tsv): você escolhe a linha dos títulos, as linhas de dados e quais colunas importar">📥 Importar Excel / TXT</button>
+      <button class="tb-btn" id="btn-lev-pdf" onclick="levImportarInt()" title="Lê um levantamento planialtimétrico em PDF (pontos e cotas das bordas da rua) e preenche as estacas da rua ativa">📄 Importar levantamento (PDF)</button>
       <input type="file" id="imp-xls" accept=".xlsx,.xls,.xlsm,.csv,.txt,.tsv,.dat,.prn,.asc,text/plain" style="display:none" onchange="importarExcelArquivo(event)">
       <button class="btn-add" id="btn-obj-topo" onclick="objColunasTopo()" title="Mostra/oculta as colunas Árvores e Postes: lado (E/D), distância do eixo e, se não for na estaca, + metros depois dela. Para arrastar no desenho: aba Planta e 3D › 🌳 Árvores e postes">🌳 Árvores e postes</button>
       <button class="tb-btn" id="btn-colunas" onclick="toggleColunasTopo()" title="Ocultar ou reexibir colunas da tabela de topografia">👁 Colunas</button>
@@ -6462,4 +6463,20 @@ function geoKmz(){ if(!_gm||_geo.lat==null){ toast('Posicione o desenho no mapa 
     hud(true); const b=q('geo-b-andar'); if(b){ b.textContent='⏹ Sair da rua'; b.classList.add('tb-btn-save'); }
     aplica(); G3.raf=requestAnimationFrame(loop); };
 })();
+</script>
+<script src="/levantamento.js"></script>
+<script>
+/* PATCH PI-LEV-01: importar levantamento planialtimétrico em PDF para a Topografia da rua ativa (levantamento.js) */
+function levImportarInt(){
+  Lev.abrir({destino:'da rua ativa',aplicar:function(rows,info){
+    if(topoRows.length && !confirm('Substituir as '+topoRows.length+' linha(s) da rua '+(ruas.length>1?'“'+nomeRua(ruaAtiva)+'” ':'')+'pelas '+rows.length+' do levantamento?')) return;
+    const marcas=topoRows.filter(function(r){return r.cruz;}).map(function(r){return {est:r.est,cruz:r.cruz};});
+    topoRows=rows.map(function(r){ return Object.assign({est:r.est,tEsq:r.tEsq,tEixo:r.tEixo,tDir:r.tDir,greide:r.tEixo,larg:r.larg}, (Math.abs(r.est/20-Math.round(r.est/20))>1e-6)?{ponto:true}:{}); });
+    ruasSinc(); _greideAnterior=null; const bd=document.getElementById('btn-desfazer-greide'); if(bd) bd.style.display='none';
+    const gr=document.getElementById('greide-resumo'); if(gr) gr.textContent='';
+    marcas.forEach(function(m){ const ib=ruaIdx(m.cruz.rua); if(ib>=0&&ib!==ruaAtiva) marcarCruz(ruaAtiva,m.est,ib,m.cruz.est); });
+    renderTopoTable(); calcTopo();
+    toast(rows.length+' estacas importadas do PDF ('+info.comprimento.toFixed(2).replace('.',',')+' m). Greide = terreno do eixo; use “Gerar greide…” ou edite se o projeto for diferente.');
+  }});
+}
 </script>
