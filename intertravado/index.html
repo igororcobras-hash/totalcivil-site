@@ -6470,13 +6470,15 @@ function geoKmz(){ if(!_gm||_geo.lat==null){ toast('Posicione o desenho no mapa 
 function levImportarInt(){
   Lev.abrir({destino:'da rua ativa',aplicar:function(rows,info){
     if(topoRows.length && !confirm('Substituir as '+topoRows.length+' linha(s) da rua '+(ruas.length>1?'“'+nomeRua(ruaAtiva)+'” ':'')+'pelas '+rows.length+' do levantamento?')) return;
+    if(!confirm('Os pontos do PDF são do TERRENO. A pista vai ficar com a largura padrão de '+String(parseFloat(document.getElementById('larg-pad').value)||6).replace('.',',')+' m em todas as estacas (campo “Largura da pista — padrão”). Continuar?')) return;
     const marcas=topoRows.filter(function(r){return r.cruz;}).map(function(r){return {est:r.est,cruz:r.cruz};});
-    topoRows=rows.map(function(r){ return Object.assign({est:r.est,tEsq:r.tEsq,tEixo:r.tEixo,tDir:r.tDir,greide:r.tEixo,larg:r.larg}, (Math.abs(r.est/20-Math.round(r.est/20))>1e-6)?{ponto:true}:{}); });
+    const lp=+((parseFloat(document.getElementById('larg-pad').value)||6).toFixed(2)); /* PAV-LARG: pontos do PDF = terreno; pista = largura padrão */
+    topoRows=rows.map(function(r){ return Object.assign({est:r.est,tEsq:r.tEsq,tEixo:r.tEixo,tDir:r.tDir,greide:r.tEixo,larg:lp}, (Math.abs(r.est/20-Math.round(r.est/20))>1e-6)?{ponto:true}:{}); });
     ruasSinc(); _greideAnterior=null; const bd=document.getElementById('btn-desfazer-greide'); if(bd) bd.style.display='none';
     const gr=document.getElementById('greide-resumo'); if(gr) gr.textContent='';
     marcas.forEach(function(m){ const ib=ruaIdx(m.cruz.rua); if(ib>=0&&ib!==ruaAtiva) marcarCruz(ruaAtiva,m.est,ib,m.cruz.est); });
     renderTopoTable(); calcTopo();
-    toast(rows.length+' estacas importadas do PDF ('+info.comprimento.toFixed(2).replace('.',',')+' m). Greide = terreno do eixo; use “Gerar greide…” ou edite se o projeto for diferente.');
+    toast(rows.length+' estacas importadas do PDF ('+info.comprimento.toFixed(2).replace('.',',')+' m). Pista com '+String(lp).replace('.',',')+' m (largura padrão; os pontos do PDF são do terreno). Greide = terreno do eixo; use “Gerar greide…” ou edite se o projeto for diferente.');
   }});
 }
 </script>

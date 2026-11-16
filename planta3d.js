@@ -65,10 +65,11 @@ function ruasSinc(){
          (acompanha a rampa da principal) e volta ao abaulamento normal num trecho de transição */
       const al=sg*ang*Math.PI/180, sa=Math.sin(al), ca=Math.cos(al), bordaM=x=>{ const g=itpRows(rm,x,'greide'), l=(itpRows(rm,x,'larg')||0)/2; return g-l*ce; };
       const canto=kk=>{ const tt=(sg*hb-kk*bs*ca)/sa; return bordaM(s-kk*bs*sa+tt*ca); };
-      const zE=+canto(1).toFixed(3), zD=+canto(-1).toFixed(3), eEdge=Math.max(0,sg*hb/sa), eTr=Math.min(comp-0.5,eEdge+Math.max(8,(+t.raio||0)+4));
+      const zE=+canto(1).toFixed(3), zD=+canto(-1).toFixed(3), eEdge=Math.max(0,sg*hb/sa), eTr=Math.min(comp-0.5,Math.max(eEdge,(sg*hb-bs*ca)/sa,(sg*hb+bs*ca)/sa)+Math.max(8,(+t.raio||0)+4));
       const lin=(e,o)=>Object.assign({est:+e.toFixed(3),tEsq:tn,tEixo:tn,tDir:tn,greide:gs,larg:bs*2},o||{});
-      const bo={greide:+((zE+zD)/2+bs*cs).toFixed(3),gEsq:zE,gDir:zD};
-      const rows=[lin(0,Object.assign({cruz:{rua:'r0',est:s}},bo))]; if(eEdge>0.05) rows.push(lin(eEdge,bo)); rows.push(lin(eTr),lin(comp));
+      const bo={greide:+((zE+zD)/2).toFixed(3),gEsq:zE,gDir:zD}; /* na boca a seção é reta entre as bordas da principal (encosta sem degrau); o abaulamento volta na transição */
+      const eMax=Math.max(eEdge,(sg*hb-bs*ca)/sa,(sg*hb+bs*ca)/sa); /* a borda da principal cruza a transversal entre e(−b) e e(+b) */
+      const rows=[lin(0,Object.assign({cruz:{rua:'r0',est:s}},bo))]; if(eMax>0.05) rows.push(lin(eMax,bo)); rows.push(lin(eTr),lin(comp));
       out.push({id,nome:t.nome||('Transversal '+(k+1)),transv:true,cfg:Object.assign({},t,{estM:s,sg,bs,hb,ang,comp}),
         geo:{lado:sg<0?'dir':'esq',ang,dist:30},obj:(old[id]&&old[id].obj)||[],rows});
     });
@@ -142,13 +143,13 @@ function plLayout(){
   }
   return res;
 }
-function plDados(){
+function plDados0(){
   const lay=plLayout(), v=plVis();
   return ruas.map((ru,i)=>({i,id:ru.id,nome:nomeRua(i),L:topoLinhas(ru.rows||[]).filter(l=>l.gr!=null&&l.larg>0),lay:lay[i],rows:ru.rows||[],transv:!!ru.transv,cfg:ru.cfg}))
     .filter(d=>d.L.length>1&&v.ruas[d.id]!==0);
 }
 /* amostras a cada ≤ passo m, com interpolação linear entre as estacas */
-function plAmostras(d,passo){
+function plAmostras0(d,passo){
   const L=d.L, out=[], f=(a,b,t,k)=>{ const x=a[k],y=b[k]; if(x==null) return y; if(y==null) return x; return x+(y-x)*t; };
   for(let k=0;k<L.length-1;k++){
     const a=L[k], b=L[k+1], n=Math.max(1,Math.ceil((b.est-a.est)/passo));
@@ -1129,20 +1130,20 @@ function pl3Dmontar(manter){
   D.forEach((d,j)=>{
     const Aj=A[j];
     // ── camadas do pavimento (volumes), recortadas onde já existe a pista de uma rua anterior
-    const runsPav=plCorridas(Aj,(a,b)=>!dentroOutra(j,[(a.c[0]+b.c[0])/2,(a.c[1]+b.c[1])/2],foot,true));
+    const runsPav=d.transv?[Aj]:plCorridas(Aj,(a,b)=>!dentroOutra(j,[(a.c[0]+b.c[0])/2,(a.c[1]+b.c[1])/2],foot,true));
     camadas.forEach((n,ci)=>{
       if(!v.pista||!plOn(v,n.k)) return;
       const tx=ci===0?null:plTex(/areia/i.test(n.nome)?'areia':'gran');
       const mm=ci===0?M('blocoLado','#3a3a3c',null):M('cam'+ci,n.cor,tx);
       if(tx){ tx.repeat&&0; }
       runsPav.forEach(R=>{
-        const secs=R.map(s=>{ const us=[s.b,s.b/2,0,-s.b/2,-s.b]; const topo=us.map(u=>W3(plOff(d,s,u),plZ(s,u)-n.prof)), fundo=us.slice().reverse().map(u=>W3(plOff(d,s,u),plZ(s,u)-n.prof-n.esp)); return topo.concat(fundo,[topo[0]]); });
+        const secs=R.map(s=>{ const us=[s.b,s.b/2,0,-s.b/2,-s.b]; const topo=us.map(u=>W3(plOffT(d,s,u),plZJ(d,s,u)-n.prof)), fundo=us.slice().reverse().map(u=>W3(plOffT(d,s,u),plZJ(d,s,u)-n.prof-n.esp)); return topo.concat(fundo,[topo[0]]); });
         const s0=R[0].est;
         fita(secs,tx?((a,c)=>[(R[a].est-s0)/1.5,c/3]):null,mm,true);
         if(ci===0){ /* superfície dos blocos com textura de paginação */
-          const tp=R.map(s=>[s.b,s.b/2,0,-s.b/2,-s.b].map(u=>{ const q=W3(plOff(d,s,u),plZ(s,u)-n.prof); q.y+=0.004; return q; }));
+          const tp=R.map(s=>[s.b,s.b/2,0,-s.b/2,-s.b].map(u=>{ const q=W3(plOffT(d,s,u),plZJ(d,s,u)-n.prof); q.y+=0.004; return q; }));
           const mp=plMat11('asfalto');
-          t.chao.push(fita(tp,(a,c)=>[(R[a].est-s0)/0.8,(R[a].b-[R[a].b,R[a].b/2,0,-R[a].b/2,-R[a].b][c])/0.8],mp,false));
+          t.chao.push(plNormUp(fita(tp,(a,c)=>[(R[a].est-s0)/0.8,(R[a].b-[R[a].b,R[a].b/2,0,-R[a].b/2,-R[a].b][c])/0.8],mp,false)));
         }
       });
     });
@@ -1155,7 +1156,7 @@ function pl3Dmontar(manter){
     if(v.mf&&P.mf) [1,-1].forEach(sg=>{
       const runs=plCorridas(Aj,(a,b)=>{ const m={c:[(a.c[0]+b.c[0])/2,(a.c[1]+b.c[1])/2],b:(a.b+b.b)/2}; return !dentroOutra(j,plOff(d,m,sg*(m.b+wmf/2)),foot,false); });
       runs.forEach(R=>{
-        const zE=s=>plZ(s,sg*s.b);
+        const zE=s=>plZJ(d,s,sg*s.b);
         if(P.mf.tipo==='conjugado'){
           const salt=(+P.mf.salt||8)/100, esp=(+P.mf.esp||15)/100;
           fita(R.map(s=>{ const e=zE(s), u0=sg*s.b, u1=sg*(s.b+sb); return [W3(plOff(d,s,u0),e),W3(plOff(d,s,u1),e+0.015),W3(plOff(d,s,u1),e-salt),W3(plOff(d,s,u0),e-salt),W3(plOff(d,s,u0),e)]; }),(a,c)=>[(R[a].est-R[0].est)/1,[0,0.3,0.6,0.9,1][c]],plMat11('sarjeta'),true); t.chao.push(grp.children[grp.children.length-1]);
@@ -1277,23 +1278,29 @@ function plMeia(Aj,est){ let k=0; while(k<Aj.length-2&&Aj[k+1].est<est) k++; con
 /* esquinas: dois cantos por rua transversal (um de cada lado dela) */
 function plEsquinas(D){
   const d0=D.find(x=>x.id==='r0'); if(!d0) return [];
-  const P=secaoParams(), wmf=plMfLarg(P), A0=plAmostras(d0,1), out=[];
+  const P=secaoParams(), wmf=plMfLarg(P), A0=plAmostras0(d0,1), out=[];
   D.forEach(d=>{ if(!d.transv||!d.lay) return;
-    const c=d.cfg, R=Math.max(0,+c.raio||0), A=d.lay.A, dm=d0.lay.d, nm=d0.lay.n, ds=d.lay.d, ns=d.lay.n, sg=c.sg, hb=plMeia(A0,c.estM), bs=c.bs, As=plAmostras(d,1);
+    const c=d.cfg, R=Math.max(0,+c.raio||0), A=d.lay.A, dm=d0.lay.d, nm=d0.lay.n, ds=d.lay.d, ns=d.lay.n, sg=c.sg, hb=plMeia(A0,c.estM), bs=c.bs, As=plAmostras0(d,1);
     const linM=off=>[A[0]+nm[0]*sg*off,A[1]+nm[1]*sg*off];
     const stM=p=>d0.lay.sA+((p[0]-d0.lay.A[0])*dm[0]+(p[1]-d0.lay.A[1])*dm[1]), stS=p=>d.lay.sA+((p[0]-A[0])*ds[0]+(p[1]-A[1])*ds[1]);
     [1,-1].forEach(e1=>{
       const u1=[dm[0]*e1,dm[1]*e1], k=(ns[0]*u1[0]+ns[1]*u1[1])>=0?1:-1;
-      const zM=p=>plSurf(A0,stM(p),sg*hb), zS=p=>plSurf(As,stS(p),k*bs);
+      const zM=p=>plSurf(A0,stM(p),sg*hb), zS=p=>plSurfD(d,As,stS(p),k*bs);
       const mk=(offM,offS,Rr)=>{ const C=plInter(linM(offM),dm,[A[0]+ns[0]*k*offS,A[1]+ns[1]*k*offS],ds); if(!C) return null;
         if(Rr>0.05){ const F=plFillet(C,u1,ds,Rr); return Object.assign({C},F); } return {C,T1:C,T2:C,arc:[C],O:null,t:0}; };
       const e=mk(hb,bs,R); if(!e) return;
       const zl=(arc,a,b)=>arc.map((p,i)=>arc.length>1?a+(b-a)*i/(arc.length-1):a);
-      const q={d,e1,k,R,C:e.C,T1:e.T1,T2:e.T2,arc:e.arc,stT1:stM(e.T1),stT2:stS(e.T2),zT1:zM(e.T1),zT2:zS(e.T2)};
+      const q={d,e1,k,R,O:e.O,C:e.C,T1:e.T1,T2:e.T2,arc:e.arc,stT1:stM(e.T1),stT2:stS(e.T2),zT1:zM(e.T1),zT2:zS(e.T2)};
       if(R>0.05){
         let arc=e.arc, za=zl(e.arc,q.zT1,q.zT2), sa=0; const pp=[e.C].concat(arc); for(let i=0;i<pp.length;i++){ const a=pp[i], b=pp[(i+1)%pp.length]; sa+=a[0]*b[1]-b[0]*a[1]; }
         if(sa<0){ arc=arc.slice().reverse(); za=za.slice().reverse(); } /* mesmo sentido (anti-horário) em todas as esquinas: faces do 3D para cima */
         q.arc=arc; q.poly=[e.C].concat(arc); q.z=[(zM(e.C)+zS(e.C))/2].concat(za); q.area=plAreaPoly(q.poly);
+        /* borda reta da esquina (T1→C na principal, C→T2 na transversal) com a cota EXATA de cada pista,
+           pareada ponto a ponto com o arco: a superfície do raio encosta nas duas pistas sem desnível */
+        { const m=arc.length-1, iniT1=Math.hypot(arc[0][0]-e.T1[0],arc[0][1]-e.T1[1])<1e-6, P0=iniT1?e.T1:e.T2, P1=iniT1?e.T2:e.T1, z0=iniT1?zM:zS, z1=iniT1?zS:zM;
+          const L1=Math.hypot(e.C[0]-P0[0],e.C[1]-P0[1]), L2=Math.hypot(P1[0]-e.C[0],P1[1]-e.C[1]), h=Math.max(1,Math.min(m-1,Math.round(m*L1/((L1+L2)||1))));
+          q.ed=[]; for(let i=0;i<=m;i++){ let p,z; if(i<=h){ const t=i/h; p=[P0[0]+(e.C[0]-P0[0])*t,P0[1]+(e.C[1]-P0[1])*t]; z=z0(p); } else { const t=(i-h)/(m-h); p=[e.C[0]+(P1[0]-e.C[0])*t,e.C[1]+(P1[1]-e.C[1])*t]; z=z1(p); } q.ed.push([p[0],p[1],z]); }
+          q.ed[0][2]=za[0]; q.ed[m][2]=za[m]; }
         if(wmf>0&&R>wmf+0.05){ q.arc2=arc.map(p=>{ const vx=p[0]-e.O[0], vy=p[1]-e.O[1], L=Math.hypot(vx,vy)||1; return [e.O[0]+vx/L*(R-wmf),e.O[1]+vy/L*(R-wmf)]; });
           q.ring=arc.concat(q.arc2.slice().reverse()); q.hole=[e.C,arc[0]].concat(q.arc2,[arc[arc.length-1]]); }
         else q.hole=q.poly;
@@ -1305,6 +1312,44 @@ function plEsquinas(D){
   });
   return out;
 }
+/* amostras com uma seção EXATA em cada ponto de tangência das esquinas: o meio-fio reto termina
+   exatamente onde começa o raio (antes cortava de 1 em 1 m e ficava um degrau) */
+function plAmostras(d,passo){
+  const out=plAmostras0(d,passo); if(!_plT.transv.length||!d||!(d.id==='r0'||d.transv)) return out;
+  let ests=[];
+  try{ const key=JSON.stringify([_plT.transv,ruas.map(r=>r.rows),(typeof _mf!=='undefined')?_mf:0,secaoParams().cEsq,secaoParams().cDir]);
+    if(!_pl.amC||_pl.amC.k!==key){ const E=plEsquinas(plDados()), m={};
+      E.forEach(q=>{ (m.r0||(m.r0=[])).push(q.stT1); if(q.lboT1!=null) m.r0.push(q.lboT1); const id=q.d.id; (m[id]||(m[id]=[])).push(q.stT2); if(q.lboT2!=null) m[id].push(q.lboT2); });
+      _pl.amC={k:key,m}; }
+    ests=_pl.amC.m[d.id]||[]; }catch(e){ return out; }
+  const num=['est','gr','gE','gD','tc','te','td','larg','calE','calD','fimE','fimD'];
+  ests.forEach(e=>{ if(!(e>out[0].est+0.005&&e<out[out.length-1].est-0.005)) return;
+    let k=0; while(k<out.length-2&&out[k+1].est<e) k++; const a=out[k], b=out[k+1];
+    if(Math.abs(a.est-e)<0.005||Math.abs(b.est-e)<0.005) return; const t=(e-a.est)/(b.est-a.est), s={sit:a.sit};
+    num.forEach(f=>{ const x=a[f], y=b[f]; s[f]=(x==null||y==null)?(x==null?y:x):x+(y-x)*t; }); s.est=e; s.c=d.lay.pos(e); s.b=(s.larg||0)/2;
+    out.splice(k+1,0,s); });
+  return out;
+}
+/* seção da rua transversal: dentro da pista principal ela é cortada EXATAMENTE pela borda da principal
+   (corte oblíquo, também em ângulo ≠ 90°): sem sobreposição de superfícies nem triângulo sem pavimento */
+function plOffT(d,s,u){ const c=d&&d.transv&&d.cfg; if(!c) return plOff(d,s,u);
+  const a=c.sg*c.ang*Math.PI/180, e=(c.sg*c.hb-u*Math.cos(a))/Math.sin(a);
+  return s.est>=e?plOff(d,s,u):plOff(d,{c:d.lay.pos(e)},u); }
+/* dados das ruas com a referência da via principal nas transversais (para a junção sem desnível) */
+function plDados(){ const D=plDados0(), d0=D.find(x=>x.id==='r0');
+  if(d0&&D.some(x=>x.transv)){ const A0=plAmostras0(d0,1); D.forEach(d=>{ if(d.transv) d.ref={d0,A0,As:plAmostras0(d,1)}; }); }
+  return D; }
+/* cota do pavimento da transversal: na linha de junção é a cota EXATA da pista principal naquele ponto;
+   a diferença some em 3 m para dentro da transversal (sem degrau nem sobreposição) */
+function plShift(d,est,u){ const c=d&&d.transv&&d.cfg, R=d&&d.ref; if(!c||!R) return 0;
+  const a=c.sg*c.ang*Math.PI/180, e=(c.sg*c.hb-u*Math.cos(a))/Math.sin(a), f=est<=e?1:Math.max(0,1-(est-e)/3); if(f<=0) return 0;
+  const p=plOff(d,{c:d.lay.pos(e)},u), L=R.d0.lay, st=L.sA+((p[0]-L.A[0])*L.d[0]+(p[1]-L.A[1])*L.d[1]), la=(p[0]-L.A[0])*L.n[0]+(p[1]-L.A[1])*L.n[1];
+  return f*(plSurf(R.A0,st,la)-plSurf(R.As,Math.max(0,e),u)); }
+function plZJ(d,s,u){ return plZ(s,u)+plShift(d,s.est,u); }
+function plSurfD(d,Aj,e,u){ return plSurf(Aj,e,u)+plShift(d,e,u); }
+/* superfície do asfalto com a mesma luz em todas as ruas e esquinas (rampas de até ~20 % não mudam o tom:
+   sem “emendas” claras e escuras entre a via principal, a transversal e o raio) */
+function plNormUp(me){ const g=me&&me.geometry, n=g&&g.getAttribute('normal'); if(n){ for(let i=0;i<n.count;i++) n.setXYZ(i,0,1,0); n.needsUpdate=true; } return me; }
 function plEsqPolys(D){ return plEsquinas(D).filter(q=>q.poly).map(q=>q.poly); }
 /* área pavimentada (principal pela Topografia + transversais + esquinas) para o quadro */
 function plAreaInfo(){
@@ -1326,12 +1371,12 @@ function plSinal(D){
   const AM='#f2b705', BR='#ffffff';
   const fitaQ=(pts,w,cor,tipo)=>{ for(let i=0;i<pts.length-1;i++){ const a=pts[i], b=pts[i+1], dx=b[0]-a[0], dy=b[1]-a[1], L=Math.hypot(dx,dy)||1, nx=-dy/L*w/2, ny=dx/L*w/2;
     out.pec.push({pts:[[a[0]+nx,a[1]+ny,a[2]],[b[0]+nx,b[1]+ny,b[2]],[b[0]-nx,b[1]-ny,b[2]],[a[0]-nx,a[1]-ny,a[2]]],cor,tipo}); } };
-  const linha=(d,Aj,e0,e1,uf)=>{ const r=[]; if(e1-e0<0.05) return r; const n=Math.max(1,Math.ceil((e1-e0)/0.5)); for(let i=0;i<=n;i++){ const e=e0+(e1-e0)*i/n, u=uf(e), q=plOff(d,{c:d.lay.pos(e)},u); r.push([q[0],q[1],plSurf(Aj,e,u)]); } return r; };
+  const linha=(d,Aj,e0,e1,uf)=>{ const r=[]; if(e1-e0<0.05) return r; const n=Math.max(1,Math.ceil((e1-e0)/0.5)); for(let i=0;i<=n;i++){ const e=e0+(e1-e0)*i/n, u=uf(e), q=plOff(d,{c:d.lay.pos(e)},u); r.push([q[0],q[1],plSurfD(d,Aj,e,u)]); } return r; };
   const tracejar=(d,Aj,e0,e1,uf,w,cor,tipo,padrao)=>{ if(!padrao){ fitaQ(linha(d,Aj,e0,e1,uf),w,cor,tipo); return; } const per=padrao[0]+padrao[1];
     for(let x=Math.floor(e0/per)*per;x<e1;x+=per){ const a=Math.max(e0,x), b=Math.min(e1,x+padrao[0]); if(b-a>0.05) fitaQ(linha(d,Aj,a,b,uf),w,cor,tipo); } };
   const livres=(a,b,J)=>{ let L=[[a,b]]; J.forEach(([x,y])=>{ const n=[]; L.forEach(([p,q])=>{ if(y<=p||x>=q){ n.push([p,q]); return; } if(x>p) n.push([p,x]); if(y<q) n.push([y,q]); }); L=n; }); return L.filter(([p,q])=>q-p>0.05); };
   const eixo=(d,Aj,a,b)=>{ if(S.eixo==='nenhum') return; if(S.eixo==='LFO-3') [wl,-wl].forEach(u=>tracejar(d,Aj,a,b,()=>u,wl,AM,'LFO-3',null)); else tracejar(d,Aj,a,b,()=>0,wl,AM,S.eixo,S.eixo==='LFO-2'?pat:null); };
-  const quad=(d,Aj,e0,e1,u0,u1,cor,tipo)=>{ const p=(e,u)=>{ const q=plOff(d,{c:d.lay.pos(e)},u); return [q[0],q[1],plSurf(Aj,e,u)]; }; out.pec.push({pts:[p(e0,u0),p(e1,u0),p(e1,u1),p(e0,u1)],cor,tipo}); };
+  const quad=(d,Aj,e0,e1,u0,u1,cor,tipo)=>{ const p=(e,u)=>{ const q=plOff(d,{c:d.lay.pos(e)},u); return [q[0],q[1],plSurfD(d,Aj,e,u)]; }; out.pec.push({pts:[p(e0,u0),p(e1,u0),p(e1,u1),p(e0,u1)],cor,tipo}); };
   const m0=d0.L[0].est, mN=d0.L[d0.L.length-1].est, jan=[], janL={'1':[],'-1':[]};
   D.filter(d=>d.transv).forEach(d=>{ const es=ESQ.filter(q=>q.d===d); if(es.length<2) return; const st=es.map(q=>q.lboT1!=null?q.lboT1:q.stT1); const lo=Math.min(...st), hi=Math.max(...st); jan.push([lo,hi]); janL[String(d.cfg.sg)].push([lo,hi]); });
   /* via principal: eixo (LFO) interrompido nas interseções; bordo (LBO) a 0,15 m da borda */
@@ -1401,16 +1446,29 @@ function plLegItens(){
 function plEsq3D(ctx){
   const T=window.THREE, {D,W3,grp,v,P,camadas,matDe,fita}=ctx, wmf=plMfLarg(P);
   plEsquinas(D).forEach(q=>{ if(!q.poly) return; const n=q.poly.length;
-    const laje=(dz0,dz1,mm,soTopo,uvk)=>{ const pos=[], uv=[]; const V=(i,dz)=>W3(q.poly[i],q.z[i]+dz);
-      const push=(a,b,c)=>{ [a,b,c].forEach(p=>{ pos.push(p.x,p.y,p.z); uv.push(p.x/(uvk||1.5),p.z/(uvk||1.5)); }); };
-      for(let i=1;i<n-1;i++){ push(V(0,dz0),V(i,dz0),V(i+1,dz0)); if(!soTopo) push(V(0,dz1),V(i+1,dz1),V(i,dz1)); }
-      if(!soTopo) for(let i=1;i<n-1;i++){ const a=V(i,dz0), b=V(i+1,dz0), c=V(i+1,dz1), d=V(i,dz1); push(a,b,c); push(a,c,d); }
+    const laje=(dz0,dz1,mm,soTopo,uvk)=>{ const pos=[], uv=[], m=q.arc.length-1, Ar=(i,dz)=>W3(q.arc[i],q.z[i+1]+dz), Ed=(i,dz)=>W3(q.ed[i],q.ed[i][2]+dz);
+      const push=(a,b,c,vira)=>{ const ny=(b.z-a.z)*(c.x-a.x)-(b.x-a.x)*(c.z-a.z); /* componente vertical da normal */
+        if(vira!=null&&((ny<0)!==(vira<0))){ const t=b; b=c; c=t; }
+        [a,b,c].forEach(p=>{ pos.push(p.x,p.y,p.z); uv.push(p.x/(uvk||1.5),p.z/(uvk||1.5)); }); };
+      for(let i=0;i<m;i++){
+        push(Ar(i,dz0),Ed(i,dz0),Ed(i+1,dz0),1); push(Ar(i,dz0),Ed(i+1,dz0),Ar(i+1,dz0),1);
+        if(!soTopo){ push(Ar(i,dz1),Ed(i,dz1),Ed(i+1,dz1),-1); push(Ar(i,dz1),Ed(i+1,dz1),Ar(i+1,dz1),-1);
+          push(Ar(i,dz0),Ar(i+1,dz0),Ar(i+1,dz1),null); push(Ar(i,dz0),Ar(i+1,dz1),Ar(i,dz1),null); } }
       const g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(pos,3)); g.setAttribute('uv',new T.Float32BufferAttribute(uv,2)); g.computeVertexNormals();
       const me=new T.Mesh(g,mm); me.castShadow=true; me.receiveShadow=true; grp.add(me); return me; };
-    if(v.pista) camadas.forEach((cn,ci)=>{ if(!plOn(v,cn.k)) return; laje(-cn.prof,-cn.prof-cn.esp,matDe(ci,cn),false); if(ci===0){ const me=laje(0.004,0,plMat11('asfalto'),true,0.8); if(_pl.t3&&_pl.t3.chao) _pl.t3.chao.push(me); } });
-    if(v.mf&&P.mf&&q.arc2){ const alt=(+P.mf.alt||30)/100, esp=(+P.mf.esp||15)/100, m=q.arc.length;
-      const me=fita(q.arc.map((p,i)=>{ const z=q.z[i+1], o=q.arc2[i]; return [W3(p,z),W3(p,z+esp),W3(o,z+esp),W3(o,z+esp-alt),W3(p,z+esp-alt),W3(p,z)]; }),(a,c)=>[a*0.25,[0,0.15,0.4,0.65,0.85,1][c]],plMat11('concreto'),true);
-      if(_pl.t3&&_pl.t3.chao) _pl.t3.chao.push(me); }
+    if(v.pista) camadas.forEach((cn,ci)=>{ if(!plOn(v,cn.k)) return; laje(-cn.prof,-cn.prof-cn.esp,matDe(ci,cn),false); if(ci===0){ const me=plNormUp(laje(0.004,0,plMat11('asfalto'),true,0.8)); if(_pl.t3&&_pl.t3.chao) _pl.t3.chao.push(me); } });
+    if(v.mf&&P.mf&&q.arc2&&q.O){ const O=q.O, m=q.arc.length, zA=i=>q.z[i+1];
+      const off=(p,w)=>{ const vx=O[0]-p[0], vy=O[1]-p[1], L=Math.hypot(vx,vy)||1; return [p[0]+vx/L*w,p[1]+vy/L*w]; };
+      const faz=(prof,topo,uvc,mat)=>{ let secs=q.arc.map((p,i)=>prof(p,zA(i)));
+        const a=secs[0][topo], b=secs[0][topo+1], c2=secs[1][topo+1], nY=(b.z-a.z)*(c2.x-a.x)-(b.x-a.x)*(c2.z-a.z);
+        if(nY<0) secs=secs.reverse(); /* face de cima sempre para cima, como no meio-fio reto */
+        const me=fita(secs,(a2,cc)=>[a2*0.25,uvc[cc]],plMat11(mat),true); if(_pl.t3&&_pl.t3.chao) _pl.t3.chao.push(me); };
+      if(P.mf.tipo==='conjugado'){ const salt=(+P.mf.salt||8)/100, esp=(+P.mf.esp||15)/100, sb=(+P.mf.sbase||0)/100;
+        if(sb>0) faz((p,e)=>[W3(p,e),W3(off(p,sb),e+0.015),W3(off(p,sb),e-salt),W3(p,e-salt),W3(p,e)],0,[0,0.3,0.6,0.9,1],'sarjeta');
+        faz((p,e)=>[W3(off(p,sb),e+0.015),W3(off(p,sb+0.02),e+0.015+esp),W3(off(p,wmf),e+0.015+esp),W3(off(p,wmf),e-salt-0.1),W3(off(p,sb),e-salt-0.1),W3(off(p,sb),e+0.015)],1,[0,0.15,0.4,0.65,0.85,1],'concreto');
+      }else{ const alt=(+P.mf.alt||30)/100, esp=(+P.mf.esp||15)/100;
+        faz((p,e)=>[W3(p,e),W3(p,e+esp),W3(off(p,wmf),e+esp),W3(off(p,wmf),e+esp-alt),W3(p,e+esp-alt),W3(p,e)],1,[0,0.15,0.4,0.65,0.85,1],'concreto'); }
+    }
   });
 }
 /* 3D: sinalização (pintura sobre o pavimento e placas) */

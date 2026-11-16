@@ -940,6 +940,10 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
       <div class="field" data-ajuda="topo_espessura"><label>Espessura Estrutural Total (cm)</label>
         <div class="out-cell"><div class="val" id="topo_espessura">—</div></div>
       </div>
+      <div class="field" data-ajuda="topo_larg_proj"><label>Largura da pista projetada (m)</label>
+        <div style="display:flex;gap:4px"><input type="number" id="topo_larg_proj" step="0.05" min="2" placeholder="ex.: 6,00" style="flex:1">
+        <button type="button" class="btn-add" style="padding:2px 8px;font-size:11px" onclick="pavLargAplicar()" title="Põe esta largura em todas as estacas da tabela (depois você pode mudar a largura de uma estaca)">Aplicar a todas</button></div>
+      </div>
       <div class="field" data-ajuda="topo_caim_esq"><label>Caimento Transv. Esq. (%)</label>
         <input type="number" id="topo_caim_esq" value="2.0" step="0.1" oninput="calcTopo()">
       </div>
@@ -2010,6 +2014,7 @@ const AJUDA = {
   c_talaterro: `<b>Talude de aterro (H:V)</b> — inclinação da saia do aterro, da borda da plataforma até o terreno. Usual: 1,5:1 (horizontal:vertical).`,
   c_berma: `<b>Berma / acostamento (m)</b> — largura de cada lado, dentro da largura da plataforma informada na Topografia.`,
   topo_espessura: `<b>Espessura estrutural total</b> — vem do Dimensionamento.<br>Formação = greide − esta espessura`,
+  topo_larg_proj: `<b>Largura da pista projetada (m)</b> — largura do pavimento asfáltico (de meio-fio a meio-fio) que vale para toda a rua. O botão “Aplicar a todas” coloca esta largura em todas as estacas; depois cada estaca pode ter a sua (coluna Largura). Na importação do levantamento em PDF os pontos são do TERRENO, não do asfalto: a pista recebe esta largura, centrada no eixo.`,
   topo_caim_esq: `<b>Caimento transversal esquerdo (%)</b> — inclinação da pista do eixo para a borda esquerda, para escoar a água. Usual: 2% em revestimento asfáltico.`,
   topo_caim_dir: `<b>Caimento transversal direito (%)</b> — inclinação da pista do eixo para a borda direita, para escoar a água. Usual: 2% em revestimento asfáltico.`,
   topo_estrutura: `<b>Estrutura</b> — camadas do Dimensionamento usadas nos volumes de cada trecho.`,
@@ -3155,7 +3160,7 @@ function salvarProjeto() {var _document$getElementB7;
     corte: { c_talcorte: v('c_talcorte'),
       c_talaterro: v('c_talaterro'), c_berma: v('c_berma'),
       c_na: v('c_na'), c_rn: v('c_rn') },
-    topo: { topo_rn: v('topo_rn'), topo_na: v('topo_na'), rows: getTopoData() },
+    topo: { topo_rn: v('topo_rn'), topo_na: v('topo_na'), larg_proj: v('topo_larg_proj'), rows: getTopoData() },
     meiofio: Object.assign({}, _mf),
     planta3d: typeof plTExportar === 'function' ? plTExportar() : undefined
   };
@@ -3201,6 +3206,7 @@ function aplicarProjeto(p) {
         topoRowCount = 0;
         p.topo.rows.forEach((r) => addTopoRow(r));
       }
+      set('topo_larg_proj', p.topo && p.topo.larg_proj > 0 ? p.topo.larg_proj : ''); // PAV-LARG
       if (p.numN) {
         if (p.numN.versao === 2) {
           const d = p.numN.dnit || {};
@@ -5102,7 +5108,7 @@ function dadosDoProjeto() {
       a_na: v('a_na'), a_afast_min: v('a_afast_min') },
     corte: { c_talcorte: v('c_talcorte'),
       c_talaterro: v('c_talaterro'), c_berma: v('c_berma'), c_na: v('c_na'), c_rn: v('c_rn') },
-    topo: { rows: getTopoData() },
+    topo: { larg_proj: v('topo_larg_proj'), rows: getTopoData() },
     meiofio: Object.assign({}, _mf),
     planta3d: typeof plTExportar === 'function' ? plTExportar() : undefined
   };
@@ -5821,15 +5827,31 @@ function salvarUsuario(uid, acao) {
 <script src="/planta3d.js"></script>
 <script>
 /* PATCH PF-LEV-01: importar levantamento planialtimétrico em PDF para a Topografia (levantamento.js) */
+/* PAV-LARG: os pontos do levantamento são do TERRENO; a pista asfáltica tem a largura projetada */
+function pavLargProj(rows){
+  const el=document.getElementById('topo_larg_proj'); let x=parseFloat(el&&el.value);
+  if(!(x>0)){ const L=(rows||[]).map(r=>+r.larg).filter(v=>v>0).sort((a,b)=>a-b), med=L.length?L[Math.floor(L.length/2)]:6;
+    const sug=Math.max(3,Math.round(med*2)/2);
+    const t=prompt('Largura da pista asfáltica PROJETADA (m).\nOs pontos do PDF são do terreno (a largura entre eles varia de '+(L.length?L[0].toFixed(2).replace('.',','):'—')+' a '+(L.length?L[L.length-1].toFixed(2).replace('.',','):'—')+' m).\nA pista terá esta largura em todas as estacas, centrada no eixo; depois você pode ajustar cada estaca.',String(sug).replace('.',','));
+    if(t===null) return null; x=parseFloat(String(t).replace(',','.')); if(!(x>0)){ alert('Largura inválida.'); return null; } if(el) el.value=x; }
+  return +x.toFixed(2);
+}
+function pavLargAplicar(){
+  const x=parseFloat((document.getElementById('topo_larg_proj')||{}).value); if(!(x>0)){ alert('Digite a largura da pista projetada.'); return; }
+  const ins=document.querySelectorAll('#topo_tbody input[id^="tp_larg_"]'); if(!ins.length) return;
+  if(!confirm('Colocar a largura de '+String(x).replace('.',',')+' m nas '+ins.length+' estacas?')) return;
+  ins.forEach(i=>{ i.value=x; }); calcTopo(); try{ _sujo=true; }catch(e){}
+}
 function levImportarPav(){
   Lev.abrir({destino:'do Pavimento Flexível',aplicar:function(rows,info){
     const tb=document.getElementById('topo_tbody'); if(!tb) return;
     if(tb.querySelectorAll('tr').length && !confirm('Substituir as '+tb.querySelectorAll('tr').length+' estaca(s) da Topografia pelas '+rows.length+' do levantamento?')) return;
     tb.innerHTML=''; topoRowCount=0;
+    const lp=pavLargProj(rows); if(lp===null) return;
     const prof=parseFloat(document.getElementById('a_na').value); /* profundidade do N.A. informada → cota do N.A. = terreno do eixo − profundidade */
-    rows.forEach(function(r){ addTopoRow({est:r.est,te:r.tEsq,tc:r.tEixo,td:r.tDir,gr:r.tEixo,larg:r.larg,na:prof>0?+(r.tEixo-prof).toFixed(3):''}); });
+    rows.forEach(function(r){ addTopoRow({est:r.est,te:r.tEsq,tc:r.tEixo,td:r.tDir,gr:r.tEixo,larg:lp,na:prof>0?+(r.tEixo-prof).toFixed(3):''}); });
     calcTopo();
-    const av=document.getElementById('topo_recalc_aviso'); if(av) av.textContent=rows.length+' estacas importadas do PDF ('+info.comprimento.toFixed(2).replace('.',',')+' m). Greide = terreno do eixo; ajuste o greide de projeto se for diferente.';
+    const av=document.getElementById('topo_recalc_aviso'); if(av) av.textContent=rows.length+' estacas importadas do PDF ('+info.comprimento.toFixed(2).replace('.',',')+' m). Pista com '+String(lp).replace('.',',')+' m (largura projetada). Greide = terreno do eixo; ajuste o greide de projeto se for diferente.';
   }});
 }
 </script>
