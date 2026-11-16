@@ -164,6 +164,12 @@ Lev.montarRua=function(A,P,opt){
   let sentido=(zIni<=zFim)?1:-1; if(opt.inverter) sentido=-sentido; if(sentido<0) AX=AX.slice().reverse();
   const Ca=comp(AX), Ltot=Ca[Ca.length-1]*k;
   const estacas=[]; const rows=[];
+  /* LEV-03: só cotas REAIS do levantamento. Cada lado usa a cota do ponto levantado mais próximo ao longo do eixo (dentro de
+     raioCota); o eixo é a MÉDIA das cotas reais disponíveis; sem ponto real por perto a cota fica vazia (nada é interpolado). */
+  const posNoEixo=pt=>{ const pr=proj(AX,Ca,pt); return pr.d>25?null:pr.s*k; };
+  const realL=[], realR=[]; zl.forEach(q=>{ const m=posNoEixo(noPonto(Vl,Cl,q.s)); if(m!=null) realL.push({m,z:q.z}); }); zr.forEach(q=>{ const m=posNoEixo(noPonto(Vr,Cr,q.s)); if(m!=null) realR.push({m,z:q.z}); });
+  const raioCota=opt.raioCota!=null?opt.raioCota:opt.passo/2;
+  const maisPerto=(arr,m)=>{ let b=null,bd=1e9; arr.forEach(q=>{ const d=Math.abs(q.m-m); if(d<bd){bd=d;b=q;} }); return b&&bd<=raioCota?{z:b.z,d:bd}:null; };
   let posicoes=[]; for(let m=0;m<Ltot-1e-6;m+=opt.passo) posicoes.push({m,grade:true}); posicoes.push({m:Ltot,grade:false});
   if(opt.todosPontos!==false){
     const addP=(lado,pt,z)=>{ const pr=proj(AX,Ca,pt); if(pr.d>25) return; const m=pr.s*k; if(m<-0.3||m>Ltot+0.3) return; posicoes.push({m:Math.max(0,Math.min(Ltot,m)),grade:false,ov:{[lado]:z}}); };
@@ -177,9 +183,11 @@ Lev.montarRua=function(A,P,opt){
     // pontos das bordas mais próximos do eixo (vale também no cruzamento, onde a normal pegaria a parede do outro lado)
     const pL=proj(Vl,Cl,a), pR=proj(Vr,Cr,a); const eL={s:pL.s,q:pL.q,d:pL.d}, eR={s:pR.s,q:pR.q,d:pR.d};
     const esqEhL=((pL.q[0]-a[0])*nx+(pL.q[1]-a[1])*ny)>0;
-    let zL=interpZ(zl,eL.s), zR=interpZ(zr,eR.s); if(pp.ov&&pp.ov.L!=null) zL=pp.ov.L; if(pp.ov&&pp.ov.R!=null) zR=pp.ov.R; const larg=dist2(eL.q,eR.q)*k;
-    const zEsq=esqEhL?zL:zR, zDir=esqEhL?zR:zL;
-    rows.push({est:+m.toFixed(3), tEsq:+zEsq.toFixed(3), tEixo:+((zL+zR)/2).toFixed(3), tDir:+zDir.toFixed(3), larg:+larg.toFixed(2), exata:!!pp.ov, qE:esqEhL?eL.q:eR.q, qD:esqEhL?eR.q:eL.q, ax:a});
+    const nl=maisPerto(realL,m), nr=maisPerto(realR,m); const zL=nl?nl.z:null, zR=nr?nr.z:null; const larg=dist2(eL.q,eR.q)*k;
+    const zEsq=esqEhL?zL:zR, zDir=esqEhL?zR:zL, dEsq=esqEhL?(nl&&nl.d):(nr&&nr.d), dDir=esqEhL?(nr&&nr.d):(nl&&nl.d);
+    const nz=[zL,zR].filter(v=>v!=null), eixo=nz.length?nz.reduce((a,b)=>a+b,0)/nz.length:null;
+    const r3=v=>v==null?null:+v.toFixed(3);
+    rows.push({est:+m.toFixed(3), tEsq:r3(zEsq), tEixo:r3(eixo), tDir:r3(zDir), larg:+larg.toFixed(2), exata:!!pp.ov, fonte:nz.length===2?'media':nz.length===1?'um lado':'sem cota', dEsq:dEsq==null?null:+dEsq.toFixed(1), dDir:dDir==null?null:+dDir.toFixed(1), qE:esqEhL?eL.q:eR.q, qD:esqEhL?eR.q:eL.q, ax:a});
   });
   return {rows,comprimento:Ltot,escalaMporPt:k,bordas:{L:{id:L.id,n:L.pts.length},R:{id:R.id,n:R.pts.length}},extra:{axPts:AX}};
 };
@@ -236,7 +244,10 @@ function recalcular(){
     if(larg.some(w=>w>12)) av.push('Há estaca com largura acima de 12 m (boca de cruzamento ou erro de leitura). Confira na tabela.');
     document.getElementById('lev-res').innerHTML='Eixo com <b>'+fmt(R.comprimento,2)+' m</b> na escala 1:'+esc+' · '+R.rows.length+' estacas ('+R.rows.filter(r=>r.exata).length+' nas cotas do levantamento, as demais de '+passo+' em '+passo+' m) · '+E.P.length+' pontos ('+(E.P.length-sem)+' com cota). Se você conhece o comprimento real, ajuste a escala até bater.';
     aviso.innerHTML=av.map(t=>'<div class="lv-aviso">⚠ '+t+'</div>').join('');
-    document.getElementById('lev-tb').innerHTML=R.rows.map(r=>'<tr'+(r.exata?' style="background:#f0fdf4"':'')+'><td style="text-align:left">'+rotEstaca(r.est,E.passo)+'</td><td>'+fmt(r.est,2)+'</td><td>'+fmt(r.tEsq,3)+'</td><td>'+fmt(r.tEixo,3)+'</td><td>'+fmt(r.tDir,3)+'</td><td>'+fmt(r.larg,2)+'</td></tr>').join('');
+    const nSem=R.rows.filter(r=>r.tEixo==null).length;
+    if(nSem) av.push(nSem+' estaca(s) de '+passo+' m sem nenhum ponto levantado por perto (a até '+(passo/2)+' m) ficam SEM cota e não serão importadas: o programa não inventa cota.');
+    aviso.innerHTML=av.map(t=>'<div class="lv-aviso">⚠ '+t+'</div>').join('');
+    document.getElementById('lev-tb').innerHTML=R.rows.map(r=>'<tr'+(r.exata?' style="background:#f0fdf4"':r.tEixo==null?' style="background:#fef2f2"':'')+'><td style="text-align:left">'+rotEstaca(r.est,E.passo)+'</td><td>'+fmt(r.est,2)+'</td><td>'+fmt(r.tEsq,3)+'</td><td>'+fmt(r.tEixo,3)+'</td><td>'+fmt(r.tDir,3)+'</td><td>'+fmt(r.larg,2)+'</td><td style="text-align:left;font-size:10px">'+r.fonte+(r.dEsq>0||r.dDir>0?' ('+(r.dEsq!=null?'esq. a '+fmt(r.dEsq,1)+' m':'')+(r.dEsq!=null&&r.dDir!=null?'; ':'')+(r.dDir!=null?'dir. a '+fmt(r.dDir,1)+' m':'')+')':'')+'</td></tr>').join('');
     document.getElementById('lev-aplicar').disabled=false; desenhar();
   }catch(e){ E.rua=null; document.getElementById('lev-res').textContent=''; aviso.innerHTML='<div class="lv-aviso">⚠ '+e.message+'</div>'; document.getElementById('lev-aplicar').disabled=true; }
 }
@@ -265,14 +276,14 @@ Lev.abrir=function(op){
   '<label style="flex-direction:row;align-items:center;gap:5px"><input type="checkbox" id="lev-inv"> Inverter sentido</label>'+
   '<label style="flex-direction:row;align-items:center;gap:5px"><input type="checkbox" id="lev-todos" checked> Usar todas as cotas do levantamento (estacas fracionadas, ex.: 1 + 5 m)</label></div>'+
   '<div id="lev-res" class="lv-info"></div><svg id="lev-svg"></svg>'+
-  '<div class="lv-cols" style="margin-top:10px"><div><b style="font-size:13px">Estacas geradas</b><div class="lv-sc"><table><thead><tr><th>Estaca</th><th>Distância (m)</th><th>Terreno esq.</th><th>Terreno eixo</th><th>Terreno dir.</th><th>Largura (m)</th></tr></thead><tbody id="lev-tb"></tbody></table></div></div>'+
+  '<div class="lv-cols" style="margin-top:10px"><div><b style="font-size:13px">Estacas geradas</b><div class="lv-sc"><table><thead><tr><th>Estaca</th><th>Distância (m)</th><th>Terreno esq.</th><th>Terreno eixo</th><th>Terreno dir.</th><th>Largura (m)</th><th>Origem da cota</th></tr></thead><tbody id="lev-tb"></tbody></table></div></div>'+
   '<div><b style="font-size:13px">Pontos lidos (confira / corrija a cota)</b><div class="lv-sc"><table><thead><tr><th>#</th><th>Cota (m)</th><th>Lido</th></tr></thead><tbody id="lev-pts"></tbody></table></div></div></div>'+
-  '<p>A cota do eixo é a média das duas bordas na mesma estaca; as cotas entre dois pontos são interpoladas ao longo da borda. Linhas em verde = estacas que coincidem com cota do levantamento (cota exata no lado do ponto). A largura é a distância entre as bordas medida no desenho.</p></div>'+
+  '<p>Só entram cotas REAIS do levantamento (nada é interpolado nem inventado): cada lado usa o ponto levantado mais próximo da estaca e a cota do eixo é a média das cotas reais disponíveis; sem ponto por perto a estaca fica sem cota e não é importada. Linhas em verde = estacas que coincidem com ponto do levantamento; em vermelho = sem cota real. A largura é a distância entre as bordas medida no desenho.</p></div>'+
   '<div class="lv-row" style="justify-content:flex-end"><button id="lev-cancel">Cancelar</button><button id="lev-aplicar" class="lv-ok" disabled>Aplicar na Topografia</button></div></div>';
   document.body.appendChild(bg);
   document.getElementById('lev-cancel').onclick=fechar;
   document.getElementById('lev-arq').onchange=e=>{ if(e.target.files[0]) ler(e.target.files[0]); };
   ['lev-esc','lev-passo','lev-lf','lev-inv','lev-todos'].forEach(id=>document.getElementById(id).addEventListener('change',recalcular));
-  document.getElementById('lev-aplicar').onclick=()=>{ if(!E.rua) return; const rows=E.rua.rows.map(r=>({est:r.est,tEsq:r.tEsq,tEixo:r.tEixo,tDir:r.tDir,larg:r.larg})); const kk=E.rua.escalaMporPt, info={comprimento:E.rua.comprimento,pontos:E.P.length,eixo:(E.rua.extra&&E.rua.extra.axPts||[]).map(p=>[p[0]*kk,-p[1]*kk])}; /* eixo com as curvas, em metros, y para cima (norte do desenho) */ fechar(); if(op&&op.aplicar) op.aplicar(rows,info); };
+  document.getElementById('lev-aplicar').onclick=()=>{ if(!E.rua) return; const rows=E.rua.rows.filter(r=>r.tEixo!=null).map(r=>({est:r.est,tEsq:r.tEsq==null?'':r.tEsq,tEixo:r.tEixo,tDir:r.tDir==null?'':r.tDir,larg:r.larg})); if(!rows.length){ alert('Nenhuma estaca com cota real.'); return; } const kk=E.rua.escalaMporPt, info={comprimento:E.rua.comprimento,pontos:E.P.length,eixo:(E.rua.extra&&E.rua.extra.axPts||[]).map(p=>[p[0]*kk,-p[1]*kk])}; /* eixo com as curvas, em metros, y para cima (norte do desenho) */ fechar(); if(op&&op.aplicar) op.aplicar(rows,info); };
 };
 })();
