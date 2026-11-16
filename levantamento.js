@@ -136,6 +136,11 @@ Lev.bordas=function(A,P){
     if(best.ej===1) VE.reverse(); // início de E é o ponto de ligação
     const V=VM.concat(VE); main[best.mi]=Object.assign({id:M.id,cor:M.cor},mk(V));
   });
+  /* tira das bordas os trechos que entram na rua que cruza (ex.: Av. São João): vértice muito mais longe da
+     borda oposta que a largura típica da rua sai, e a borda passa reto pela boca do cruzamento (alinhamento da via) */
+  const limpa=(M,O)=>{ const d=M.V.map(v=>proj(O.V,O.C,v).d), s=d.slice().sort((a,b)=>a-b), med=s[Math.floor(s.length/2)]||0; if(!(med>0)) return M;
+    const V=M.V.filter((v,i)=>d[i]<=med*1.3); if(V.length<2||V.length===M.V.length) return M; return Object.assign({id:M.id,cor:M.cor,cortado:M.V.length-V.length},mk(V)); };
+  for(let it=0;it<2;it++){ main[0]=limpa(main[0],main[1]); main[1]=limpa(main[1],main[0]); }
   main.sort((a,b)=>b.C[b.C.length-1]-a.C[a.C.length-1]); // [0] = a mais longa
   return main;
 };
