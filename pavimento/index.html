@@ -952,6 +952,7 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
 
     <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;">
       <button class="btn-add" onclick="addTopoRow()">+ Adicionar Estaca</button>
+      <button class="btn-add" id="btn-lev-pdf" onclick="levImportarPav()" title="Lê um levantamento planialtimétrico em PDF (pontos e cotas das bordas da rua) e preenche as estacas">📄 Importar levantamento (PDF)</button>
       <button class="btn-add" id="btn-meiofio" onclick="abrirMeioFio()">Meio-fio…</button>
       <button class="btn-calc" id="topo_btn_recalc" onclick="recalcTopo(this)">⟳ Recalcular</button>
       <span id="mf_resumo" style="font-size:11px;color:var(--fg2);align-self:center;"></span>
@@ -5749,6 +5750,21 @@ function salvarUsuario(uid, acao) {
     dSave('pavimento_secoes.dxf',dBuild(layers,e));
   };
 })();
+</script>
+<script src="/levantamento.js"></script>
+<script>
+/* PATCH PF-LEV-01: importar levantamento planialtimétrico em PDF para a Topografia (levantamento.js) */
+function levImportarPav(){
+  Lev.abrir({destino:'do Pavimento Flexível',aplicar:function(rows,info){
+    const tb=document.getElementById('topo_tbody'); if(!tb) return;
+    if(tb.querySelectorAll('tr').length && !confirm('Substituir as '+tb.querySelectorAll('tr').length+' estaca(s) da Topografia pelas '+rows.length+' do levantamento?')) return;
+    tb.innerHTML=''; topoRowCount=0;
+    const prof=parseFloat(document.getElementById('a_na').value); /* profundidade do N.A. informada → cota do N.A. = terreno do eixo − profundidade */
+    rows.forEach(function(r){ addTopoRow({est:r.est,te:r.tEsq,tc:r.tEixo,td:r.tDir,gr:r.tEixo,larg:r.larg,na:prof>0?+(r.tEixo-prof).toFixed(3):''}); });
+    calcTopo();
+    const av=document.getElementById('topo_recalc_aviso'); if(av) av.textContent=rows.length+' estacas importadas do PDF ('+info.comprimento.toFixed(2).replace('.',',')+' m). Greide = terreno do eixo; ajuste o greide de projeto se for diferente.';
+  }});
+}
 </script>
 </body>
 </html>
