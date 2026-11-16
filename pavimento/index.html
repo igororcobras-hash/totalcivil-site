@@ -5646,7 +5646,6 @@ function salvarUsuario(uid, acao) {
       L.push({g: G[4], nome: 'Base de ' + (sol.base === 'bgtc' ? 'brita graduada tratada com cimento' : sol.base === 'macadame' ? 'macadame seco' : 'brita graduada simples'), un: 'm³', q: T.volBasec, cod: cb, memo: nf(area, 2) + ' m² × ' + nf(eB / 100, 3) + ' m'});
     }
     L.push({g: G[5], nome: 'Imprimação da base', un: 'm²', q: area, cod: {emop: '08.026.0001', sinapi: 'SC-102470', sco: 'SCO-BP 05.05.0400'}, memo: 'Área pavimentada com caimento'});
-    L.push({g: G[5], nome: 'Pintura de ligação', un: 'm²', q: area, cod: {emop: '08.026.0002', sinapi: 'SC-104375'}, memo: 'Área pavimentada com caimento'});
     if (rev === 'TS') {
       var ts = sol.k === 'eco' ? 'SC-97801' : sol.k === 'rec' ? 'SC-97804' : 'SC-97808';
       L.push({g: G[5], nome: 'Tratamento superficial ' + (sol.k === 'eco' ? 'simples' : sol.k === 'rec' ? 'duplo' : 'triplo'), un: 'm²', q: area, cod: {sinapi: ts}, memo: 'Área pavimentada com caimento'});
@@ -5657,6 +5656,8 @@ function salvarUsuario(uid, acao) {
       else {
         var eRol = sol.binder && eR > 5 ? 4 : eR, eBin = sol.binder && eR > 5 ? eR - 4 : 0, vr = area * eRol / 100, vb = area * eBin / 100;
         L.push({g: G[5], nome: 'Concreto asfáltico (CBUQ) usinado a quente, camada de rolamento, ' + nf(eRol, 1) + ' cm', un: 't', q: vr * 2.4, cod: {emop: '08.015.0068', sinapi: 'SC-95995', sco: 'SCO-BP 10.05.0100'}, qb: {sinapi: vr}, memo: nf(area, 2) + ' m² × ' + nf(eRol / 100, 3) + ' m × 2,4 t/m³ (SINAPI em m³ com usinagem e espalhamento)'});
+        /* PATCH PAV-LIG (16/11/2026): pintura de ligação só existe ENTRE duas camadas asfálticas (binder + rolamento); revestimento de uma camada só não leva pintura de ligação (a base recebe só a imprimação). */
+        if (eBin > 0) L.push({g: G[5], nome: 'Pintura de ligação (entre o binder e a capa de rolamento)', un: 'm²', q: area, cod: {emop: '08.026.0002', sinapi: 'SC-104375'}, memo: 'Área pavimentada com caimento'});
         if (eBin > 0) L.push({g: G[5], nome: 'Concreto asfáltico (CBUQ) usinado a quente, camada de ligação (binder), ' + nf(eBin, 1) + ' cm', un: 't', q: vb * 2.4, cod: {sinapi: 'SC-95996', sco: 'SCO-BP 10.05.0050'}, qb: {sinapi: vb}, memo: nf(area, 2) + ' m² × ' + nf(eBin / 100, 3) + ' m × 2,4 t/m³'});
         L.push({g: G[5], nome: 'Espalhamento com vibroacabadora e compactação do CBUQ', un: 't', q: t, cod: {emop: '08.037.0070', sinapi: false, sco: 'SCO-BP 10.05.0300'}, memo: nf(area, 2) + ' m² × ' + nf(eR / 100, 3) + ' m × 2,4 t/m³ (no SINAPI já incluído na composição do CBUQ)'});
       }

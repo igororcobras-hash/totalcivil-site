@@ -122,15 +122,29 @@ const noPonto=(V,C,s)=>{ s=Math.max(0,Math.min(C[C.length-1],s)); let i=0; while
 const interpZ=(zs,s)=>{ if(!zs.length) return null; if(s<=zs[0].s) return zs[0].z; if(s>=zs[zs.length-1].s) return zs[zs.length-1].z; let i=0; while(zs[i+1].s<s) i++; const t=(s-zs[i].s)/((zs[i+1].s-zs[i].s)||1); return zs[i].z+(zs[i+1].z-zs[i].z)*t; };
 /* escolhe as duas bordas: as polilinhas com mais pontos de cota */
 Lev.bordas=function(A,P){
-  const pl=A.polis.map((p,id)=>{ const V=Lev.vertices(p.segs), C=comp(V); const pts=[]; P.forEach((q,qi)=>{ if(q.z==null) return; const r=proj(V,C,[q.x,q.y]); if(r.d<0.4) pts.push({s:r.s,z:q.z,qi}); }); pts.sort((a,b)=>a.s-b.s); return {id,V,C,pts,cor:p.cor}; });
-  pl.sort((a,b)=>b.pts.length-a.pts.length); return pl.slice(0,3);
+  const mk=(V)=>{ const C=comp(V); const pts=[]; P.forEach((q,qi)=>{ if(q.z==null) return; const r=proj(V,C,[q.x,q.y]); if(r.d<0.4) pts.push({s:r.s,z:q.z,qi}); }); pts.sort((a,b)=>a.s-b.s); return {V,C,pts}; };
+  let pl=A.polis.map((p,id)=>Object.assign({id,cor:p.cor},mk(Lev.vertices(p.segs))));
+  pl.sort((a,b)=>b.pts.length-a.pts.length);
+  if(pl.length<2) return pl;
+  let main=[pl[0],pl[1]]; const extras=pl.slice(2).filter(p=>p.pts.length>=2&&p.V.length>=3);
+  extras.forEach(E=>{ // cola o trecho extra (ex.: lateral da rua que cruza) na borda que ele "fecha" melhor
+    const ends=(p)=>[p.V[0],p.V[p.V.length-1]]; let best=null;
+    main.forEach((M,mi)=>{ const O=main[1-mi]; ends(M).forEach((me,mj)=>{ [0,1].forEach(ej=>{ const ee=ends(E)[ej], eo=ends(E)[1-ej]; const d=dist2(me,ee); const d2=Math.min(...ends(O).map(o=>dist2(o,eo))); if(d<30&&d2<30){ const cost=d2*2+d; if(!best||cost<best.cost) best={mi,mj,ej,cost}; } }); }); });
+    if(!best) return;
+    const M=main[best.mi]; let VM=M.V.slice(), VE=E.V.slice();
+    if(best.mj===0) VM.reverse(); // fim de M vira o ponto de ligação
+    if(best.ej===1) VE.reverse(); // início de E é o ponto de ligação
+    const V=VM.concat(VE); main[best.mi]=Object.assign({id:M.id,cor:M.cor},mk(V));
+  });
+  main.sort((a,b)=>b.C[b.C.length-1]-a.C[a.C.length-1]); // [0] = a mais longa
+  return main;
 };
 /* monta a rua: opt={escala:1000, passo:20, inverter:false, bordaA:idx, bordaB:idx} */
 Lev.montarRua=function(A,P,opt){
   opt=Object.assign({escala:1000,passo:20,inverter:false},opt||{});
   const k=0.0254/72*opt.escala; // metros por ponto do PDF
   const B=Lev.bordas(A,P); if(B.length<2) throw new Error('Não encontrei duas bordas da rua com cotas.');
-  let R=B[1], L=B[0]; // R = borda com menos pontos? ajusta abaixo
+  let R=B[0], L=B[1]; // R = a mais longa (amostrada); L = a outra, recortada ao trecho de R
   // recorta a borda mais longa (L) ao trecho entre os extremos mais próximos da outra (R)
   const extR=[R.V[0],R.V[R.V.length-1]]; const pe=extR.map(p=>proj(L.V,L.C,p).s); const sa=Math.min(pe[0],pe[1]), sb=Math.max(pe[0],pe[1]);
   // sub-polilinha de L entre sa e sb
@@ -145,21 +159,22 @@ Lev.montarRua=function(A,P,opt){
   let sentido=(zIni<=zFim)?1:-1; if(opt.inverter) sentido=-sentido; if(sentido<0) AX=AX.slice().reverse();
   const Ca=comp(AX), Ltot=Ca[Ca.length-1]*k;
   const estacas=[]; const rows=[];
-  const posicoes=[]; for(let m=0;m<Ltot-1e-6;m+=opt.passo) posicoes.push(m); posicoes.push(Ltot);
-  posicoes.forEach(m=>{
+  let posicoes=[]; for(let m=0;m<Ltot-1e-6;m+=opt.passo) posicoes.push({m,grade:true}); posicoes.push({m:Ltot,grade:false});
+  if(opt.todosPontos!==false){
+    const addP=(lado,pt,z)=>{ const pr=proj(AX,Ca,pt); if(pr.d>25) return; const m=pr.s*k; if(m<-0.3||m>Ltot+0.3) return; posicoes.push({m:Math.max(0,Math.min(Ltot,m)),grade:false,ov:{[lado]:z}}); };
+    zl.forEach(q=>addP('L',noPonto(Vl,Cl,q.s),q.z)); zr.forEach(q=>addP('R',noPonto(Vr,Cr,q.s),q.z));
+  }
+  posicoes.sort((a,b)=>a.m-b.m);
+  { const f=[]; posicoes.forEach(p=>{ const u=f[f.length-1]; if(u&&Math.abs(p.m-u.m)<0.4){ if(p.grade&&!u.grade){ u.m=p.m; u.grade=true; } u.ov=Object.assign({},u.ov,p.ov); } else f.push(Object.assign({},p)); }); posicoes=f; }
+  posicoes.forEach(pp=>{ const m=pp.m;
     const s=m/k, a=noPonto(AX,Ca,s), a1=noPonto(AX,Ca,s-1.5), a2=noPonto(AX,Ca,s+1.5); let tx=a2[0]-a1[0], ty=a2[1]-a1[1]; const tl=Math.hypot(tx,ty)||1; tx/=tl; ty/=tl;
     const nx=ty, ny=-tx; // normal para a esquerda (y para baixo)
-    const cruza=(V,C,sgn)=>{ let best=null; for(let i=0;i<V.length-1;i++){ const p=V[i], q=V[i+1], ex=q[0]-p[0], ey=q[1]-p[1]; const den=ex*ny-ey*nx; if(Math.abs(den)<1e-9) continue; const t=((a[0]-p[0])*ny-(a[1]-p[1])*nx)/den; if(t<-1e-9||t>1+1e-9) continue; const u=(ex*(a[1]-p[1])-ey*(a[0]-p[0]))/den; /* a + u*n = ponto */ const du=((p[0]+t*ex-a[0])*nx+(p[1]+t*ey-a[1])*ny); if(sgn*du<=0) continue; if(!best||Math.abs(du)<best.d) best={d:Math.abs(du),s:C[i]+t*Math.sqrt(ex*ex+ey*ey),q:[p[0]+t*ex,p[1]+t*ey]}; } return best; };
-    const lado=(V,C)=>{ const pos=cruza(V,C,1), neg=cruza(V,C,-1); return {pos,neg}; };
-    const ll=lado(Vl,Cl), rr=lado(Vr,Cr);
-    // a borda L está de que lado? usa a que cruza mais perto
-    let eL=null,eR=null, esqEhL=true;
-    const cand=[ [ll.pos,rr.neg,true], [ll.neg,rr.pos,false] ].filter(c=>c[0]&&c[1]).sort((x,y)=>(x[0].d+x[1].d)-(y[0].d+y[1].d))[0];
-    if(cand){ eL=cand[0]; eR=cand[1]; esqEhL=cand[2]; }
-    if(!eL){ const pL=proj(Vl,Cl,a), pR=proj(Vr,Cr,a); eL={s:pL.s,q:pL.q,d:pL.d}; eR={s:pR.s,q:pR.q,d:pR.d}; const side=((pL.q[0]-a[0])*nx+(pL.q[1]-a[1])*ny)>0; esqEhL=side; }
-    const zL=interpZ(zl,eL.s), zR=interpZ(zr,eR.s); const larg=dist2(eL.q,eR.q)*k;
+    // pontos das bordas mais próximos do eixo (vale também no cruzamento, onde a normal pegaria a parede do outro lado)
+    const pL=proj(Vl,Cl,a), pR=proj(Vr,Cr,a); const eL={s:pL.s,q:pL.q,d:pL.d}, eR={s:pR.s,q:pR.q,d:pR.d};
+    const esqEhL=((pL.q[0]-a[0])*nx+(pL.q[1]-a[1])*ny)>0;
+    let zL=interpZ(zl,eL.s), zR=interpZ(zr,eR.s); if(pp.ov&&pp.ov.L!=null) zL=pp.ov.L; if(pp.ov&&pp.ov.R!=null) zR=pp.ov.R; const larg=dist2(eL.q,eR.q)*k;
     const zEsq=esqEhL?zL:zR, zDir=esqEhL?zR:zL;
-    rows.push({est:+m.toFixed(3), tEsq:+zEsq.toFixed(3), tEixo:+((zL+zR)/2).toFixed(3), tDir:+zDir.toFixed(3), larg:+larg.toFixed(2), qE:esqEhL?eL.q:eR.q, qD:esqEhL?eR.q:eL.q, ax:a});
+    rows.push({est:+m.toFixed(3), tEsq:+zEsq.toFixed(3), tEixo:+((zL+zR)/2).toFixed(3), tDir:+zDir.toFixed(3), larg:+larg.toFixed(2), exata:!!pp.ov, qE:esqEhL?eL.q:eR.q, qD:esqEhL?eR.q:eL.q, ax:a});
   });
   return {rows,comprimento:Ltot,escalaMporPt:k,bordas:{L:{id:L.id,n:L.pts.length},R:{id:R.id,n:R.pts.length}},extra:{axPts:AX}};
 };
@@ -189,6 +204,7 @@ const css=`#lev-bg{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:
 #lev-box table{border-collapse:collapse;width:100%;font-size:12px} #lev-box th,#lev-box td{border:1px solid #e2e8f0;padding:2px 5px;text-align:right} #lev-box th{background:#f1f5f9;position:sticky;top:0}
 #lev-box .lv-sc{max-height:300px;overflow:auto;border:1px solid #e2e8f0;border-radius:6px} #lev-box .lv-z{width:62px;padding:1px 3px;font-size:12px;text-align:right} #lev-box .lv-zbad{background:#fee2e2}
 #lev-box svg{width:100%;height:300px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px}`;
+function rotEstaca(m,p){ p=p||20; const n=Math.floor(m/p+1e-9), r=m-n*p; return n+' + '+(Math.abs(r)<0.005?'0':r.toFixed(2).replace('.',','))+' m'; }
 function fmt(v,n){ return v==null||isNaN(v)?'—':Number(v).toFixed(n).replace('.',','); }
 function fechar(){ const b=document.getElementById('lev-bg'); if(b) b.remove(); E={}; }
 function desenhar(){
@@ -205,17 +221,17 @@ function desenhar(){
 }
 function recalcular(){
   if(!E.A) return; const g=id=>parseFloat(String(document.getElementById(id).value).replace(',','.'));
-  const esc=g('lev-esc')||1000, passo=g('lev-passo')||20, inv=document.getElementById('lev-inv').checked, lf=g('lev-lf');
+  const esc=g('lev-esc')||1000, passo=g('lev-passo')||20, todos=document.getElementById('lev-todos').checked; E.passo=passo; const inv=document.getElementById('lev-inv').checked, lf=g('lev-lf');
   const aviso=document.getElementById('lev-av'); aviso.innerHTML='';
   try{
-    const R=Lev.montarRua(E.A,E.P,{escala:esc,passo:passo,inverter:inv}); if(lf>0) R.rows.forEach(r=>{ r.larg=lf; }); E.rua=R;
+    const R=Lev.montarRua(E.A,E.P,{escala:esc,passo:passo,inverter:inv,todosPontos:todos}); if(lf>0) R.rows.forEach(r=>{ r.larg=lf; }); E.rua=R;
     const sem=E.P.filter(p=>p.z==null).length; const av=[];
     if(sem) av.push(sem+' ponto(s) sem cota lida (em laranja no desenho): digite a cota na lista ao lado.');
-    const larg=R.rows.slice(1).map(r=>r.larg); const med=larg.slice().sort((a,b)=>a-b)[Math.floor(larg.length/2)]||0; if(R.rows[0]&&med&&R.rows[0].larg>1.6*med) av.push('A estaca 0 tem largura de '+fmt(R.rows[0].larg,2)+' m (mediana das outras: '+fmt(med,2)+' m): provavelmente é a boca do cruzamento. Use “Largura fixa” ou corrija depois na Topografia.');
+    const larg=R.rows.map(r=>r.larg); const med=larg.slice().sort((a,b)=>a-b)[Math.floor(larg.length/2)]||0; const largas=R.rows.filter(r=>med&&r.larg>1.5*med); if(largas.length) av.push(largas.length+' estaca(s) com largura acima de 1,5× a mediana ('+fmt(med,2)+' m), maior '+fmt(Math.max.apply(null,largas.map(r=>r.larg)),2)+' m: normalmente é o cruzamento/boca de rua. Confira na tabela ou use “Largura fixa”.');
     if(larg.some(w=>w>12)) av.push('Há estaca com largura acima de 12 m (boca de cruzamento ou erro de leitura). Confira na tabela.');
-    document.getElementById('lev-res').innerHTML='Eixo com <b>'+fmt(R.comprimento,2)+' m</b> na escala 1:'+esc+' · '+R.rows.length+' estacas de '+passo+' em '+passo+' m · '+E.P.length+' pontos ('+(E.P.length-sem)+' com cota). Se você conhece o comprimento real, ajuste a escala até bater.';
+    document.getElementById('lev-res').innerHTML='Eixo com <b>'+fmt(R.comprimento,2)+' m</b> na escala 1:'+esc+' · '+R.rows.length+' estacas ('+R.rows.filter(r=>r.exata).length+' nas cotas do levantamento, as demais de '+passo+' em '+passo+' m) · '+E.P.length+' pontos ('+(E.P.length-sem)+' com cota). Se você conhece o comprimento real, ajuste a escala até bater.';
     aviso.innerHTML=av.map(t=>'<div class="lv-aviso">⚠ '+t+'</div>').join('');
-    document.getElementById('lev-tb').innerHTML=R.rows.map(r=>'<tr><td>'+fmt(r.est,2)+'</td><td>'+fmt(r.tEsq,3)+'</td><td>'+fmt(r.tEixo,3)+'</td><td>'+fmt(r.tDir,3)+'</td><td>'+fmt(r.larg,2)+'</td></tr>').join('');
+    document.getElementById('lev-tb').innerHTML=R.rows.map(r=>'<tr'+(r.exata?' style="background:#f0fdf4"':'')+'><td style="text-align:left">'+rotEstaca(r.est,E.passo)+'</td><td>'+fmt(r.est,2)+'</td><td>'+fmt(r.tEsq,3)+'</td><td>'+fmt(r.tEixo,3)+'</td><td>'+fmt(r.tDir,3)+'</td><td>'+fmt(r.larg,2)+'</td></tr>').join('');
     document.getElementById('lev-aplicar').disabled=false; desenhar();
   }catch(e){ E.rua=null; document.getElementById('lev-res').textContent=''; aviso.innerHTML='<div class="lv-aviso">⚠ '+e.message+'</div>'; document.getElementById('lev-aplicar').disabled=true; }
 }
@@ -241,16 +257,17 @@ Lev.abrir=function(op){
   '<label>Escala 1:<input type="number" id="lev-esc" value="1000" min="1" step="1"></label>'+
   '<label>Estaca a cada (m)<input type="number" id="lev-passo" value="20" min="1" step="1"></label>'+
   '<label>Largura fixa (m), opcional<input type="number" id="lev-lf" value="" min="0" step="0.1" placeholder="medida"></label>'+
-  '<label style="flex-direction:row;align-items:center;gap:5px"><input type="checkbox" id="lev-inv"> Inverter sentido</label></div>'+
+  '<label style="flex-direction:row;align-items:center;gap:5px"><input type="checkbox" id="lev-inv"> Inverter sentido</label>'+
+  '<label style="flex-direction:row;align-items:center;gap:5px"><input type="checkbox" id="lev-todos" checked> Usar todas as cotas do levantamento (estacas fracionadas, ex.: 1 + 5 m)</label></div>'+
   '<div id="lev-res" class="lv-info"></div><svg id="lev-svg"></svg>'+
-  '<div class="lv-cols" style="margin-top:10px"><div><b style="font-size:13px">Estacas geradas</b><div class="lv-sc"><table><thead><tr><th>Estaca (m)</th><th>Terreno esq.</th><th>Terreno eixo</th><th>Terreno dir.</th><th>Largura (m)</th></tr></thead><tbody id="lev-tb"></tbody></table></div></div>'+
+  '<div class="lv-cols" style="margin-top:10px"><div><b style="font-size:13px">Estacas geradas</b><div class="lv-sc"><table><thead><tr><th>Estaca</th><th>Distância (m)</th><th>Terreno esq.</th><th>Terreno eixo</th><th>Terreno dir.</th><th>Largura (m)</th></tr></thead><tbody id="lev-tb"></tbody></table></div></div>'+
   '<div><b style="font-size:13px">Pontos lidos (confira / corrija a cota)</b><div class="lv-sc"><table><thead><tr><th>#</th><th>Cota (m)</th><th>Lido</th></tr></thead><tbody id="lev-pts"></tbody></table></div></div></div>'+
-  '<p>A cota do eixo é a média das duas bordas na mesma estaca; as cotas entre dois pontos são interpoladas ao longo da borda. A largura é a distância entre as bordas medida no desenho.</p></div>'+
+  '<p>A cota do eixo é a média das duas bordas na mesma estaca; as cotas entre dois pontos são interpoladas ao longo da borda. Linhas em verde = estacas que coincidem com cota do levantamento (cota exata no lado do ponto). A largura é a distância entre as bordas medida no desenho.</p></div>'+
   '<div class="lv-row" style="justify-content:flex-end"><button id="lev-cancel">Cancelar</button><button id="lev-aplicar" class="lv-ok" disabled>Aplicar na Topografia</button></div></div>';
   document.body.appendChild(bg);
   document.getElementById('lev-cancel').onclick=fechar;
   document.getElementById('lev-arq').onchange=e=>{ if(e.target.files[0]) ler(e.target.files[0]); };
-  ['lev-esc','lev-passo','lev-lf','lev-inv'].forEach(id=>document.getElementById(id).addEventListener('change',recalcular));
+  ['lev-esc','lev-passo','lev-lf','lev-inv','lev-todos'].forEach(id=>document.getElementById(id).addEventListener('change',recalcular));
   document.getElementById('lev-aplicar').onclick=()=>{ if(!E.rua) return; const rows=E.rua.rows.map(r=>({est:r.est,tEsq:r.tEsq,tEixo:r.tEixo,tDir:r.tDir,larg:r.larg})); const info={comprimento:E.rua.comprimento,pontos:E.P.length}; fechar(); if(op&&op.aplicar) op.aplicar(rows,info); };
 };
 })();
