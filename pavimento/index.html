@@ -439,6 +439,7 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
   <button class="tab-btn" onclick="showTab('topo')">Topografia</button>
   <button class="tab-btn" onclick="showTab('relatorio')">Relatório Técnico</button>
   <button class="tab-btn" onclick="showTab('mat')">Materiais</button>
+  <button class="tab-btn" onclick="showTab('orc')">💰 Orçamento</button>
 </div>
 
 <!-- ============================================================
@@ -1167,6 +1168,17 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
   </div>
 </div>
 
+<!-- ============================================================
+     TAB: ORÇAMENTO (EMOP, SINAPI e SCO-Rio) — PATCH PAV-ORC2
+     ============================================================ -->
+<div id="tab-orc" class="tab-content">
+  <div class="sec">
+    <div class="sec-title">Orçamento do pavimento — EMOP, SINAPI e SCO-Rio</div>
+    <p class="hint" style="margin:0 0 10px">O orçamento sai das camadas dimensionadas (revestimento, base, sub-base e reforço) e das áreas e volumes da aba <b>Topografia</b> (corte, aterro, área pavimentada com caimento e meio-fio). São três soluções: econômica, recomendada e de maior durabilidade. Escolha o banco de preços, o regime e o BDI na janela, veja os itens com código e memória de cálculo e exporte a planilha (Excel, PDF) ou envie direto ao programa de Orçamento.</p>
+    <div id="tco-res-orc"></div>
+  </div>
+</div>
+
 <!-- CDN libraries -->
 <script src="firebase-config.js"></script>
 <script type="module">
@@ -1741,13 +1753,14 @@ function toggleTheme() {
 function showTab(id) {var _document$getElementB5, _document$querySelect;
   document.querySelectorAll('.tab-content').forEach((t) => t.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
-  const order = ['dim', 'numN', 'mem', 'corte', 'topo', 'relatorio', 'mat'];
+  const order = ['dim', 'numN', 'mem', 'corte', 'topo', 'relatorio', 'mat', 'orc'];
   _abaAtual = id;aplicarFonte();
   (_document$getElementB5 = document.getElementById('tab-' + id)) == null || _document$getElementB5.classList.add('active');
   (_document$querySelect = document.querySelectorAll('.tab-btn')[order.indexOf(id)]) == null || _document$querySelect.classList.add('active');
   if (id === 'mem') updateMemoria();
   if (id === 'relatorio') updateRelatorio();
   if (id === 'corte') updateCorte();
+  if (id === 'orc' && typeof window.pavOrcAtualizar === 'function') window.pavOrcAtualizar();
   if (id === 'topo') {calcTopo();mfAtualizarResumo();document.getElementById('topo_espessura').textContent = _R.e_total ? fmt(_R.e_total, 1) + ' cm' : '—';}
 }
 
@@ -5668,10 +5681,12 @@ function salvarUsuario(uid, acao) {
       var el = document.getElementById(p[0]), sec = el && el.closest('.sec'); if (!sec) return;
       var d = document.createElement('div'); d.id = p[1]; sec.parentNode.insertBefore(d, sec.nextSibling); alvos.push(d);
     });
+    var fixo = document.getElementById('tco-res-orc'); if (fixo) alvos.push(fixo); /* PAV-ORC2: aba Orçamento */
   }
   function atualizar(){ try { acharAlvos(); alvos.forEach(function(d){ TCORC.resumo('pavimento', d); }); } catch (e) { console.error(e); } }
   var _calc = calc; calc = function(){ var r = _calc.apply(this, arguments); atualizar(); return r; };
   var _ct = calcTopo; calcTopo = function(){ var r = _ct.apply(this, arguments); atualizar(); return r; };
+  window.pavOrcAtualizar = function(){ try { if (typeof _R !== 'undefined' && !_R.e_total && typeof calc === 'function') calc(); } catch (e) {} atualizar(); };
   setTimeout(atualizar, 1500);
 })();
 </script>
