@@ -80,7 +80,7 @@ function plDirE(d,e){ return d.lay.dirAt?d.lay.dirAt(e):d.lay.d; }
 /* ── 1) ADAPTADOR ───────────────────────────────────────────────────── */
 var ruas=[];
 let _cal={ativo:false,tipo:'concreto',larg:0,esp:10,decl:2};
-const PL_T_PADRAO={fundo:[],transv:[],sinal:{on:1,eixo:'LFO-2',vel:40,lbo:1,ftp:1,lre:1,placa:'R-1',r19:1,adv:1},eixo:null,geo:{modo:'ll',lat:'',lng:'',e:'',n:'',zona:24,rot:0,est2:'',lat2:'',lng2:'',e2:'',n2:''}};
+const PL_T_PADRAO={fundo:[],transv:[],sinal:{on:1,eixo:'LFO-2',vel:40,lbo:1,ftp:1,lre:1,placa:'R-1',r19:1,adv:1},eixo:null,raioBairro:6,geo:{modo:'ll',lat:'',lng:'',e:'',n:'',zona:24,rot:0,est2:'',lat2:'',lng2:'',e2:'',n2:''}};
 let _plT=JSON.parse(JSON.stringify(PL_T_PADRAO));
 function esc(t){ return String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function toast(msg,err){ const el=document.getElementById('pl-msg'); if(!el) return; el.textContent=msg; el.style.color=err?'#b91c1c':''; clearTimeout(el._t); el._t=setTimeout(()=>{ el.textContent=''; el.style.color=''; },4500); }
@@ -361,14 +361,18 @@ function plSvg(vb,Wpx){
   if(_cal.ativo&&v.calcada!==0) D.forEach((d,j)=>{ [1,-1].forEach(sg=>{ if(!A[j].some(q=>(sg>0?q.calE:q.calD)>0.01)) return;
     s+='<polygon points="'+plFaixaCal(d,A[j],sg,wmf).map(pt).join(' ')+'" fill="'+(_cal.tipo==='intertravado'?'#d8c3a2':'#d6d4cd')+'" stroke="#8a867c" stroke-width="0.6"/>'; }); });
   // 2) meio-fio + sarjeta (por baixo das pistas: no cruzamento o meio-fio some sob a outra pista)
-  if(v.mf&&wmf>0) D.forEach((d,j)=>{
+  if(v.mf&&wmf>0){ const HOL=plEsquinas(D).filter(e=>e.hole).map(e=>e.hole); D.forEach((d,j)=>{
     const sb=P.mf.tipo==='conjugado'?(+P.mf.sbase||0)/100:0;
     [1,-1].forEach(sg=>{
-      const ring=(u0,u1)=>A[j].map(q=>plOff(d,q,sg*(q.b+u0))).concat(A[j].slice().reverse().map(q=>plOff(d,q,sg*(q.b+u1))));
-      if(sb>0) s+='<polygon points="'+ring(0,sb).map(pt).join(' ')+'" fill="#c9ccd1" stroke="#80858d" stroke-width="0.6"/>';
-      s+='<polygon points="'+ring(sb,wmf).map(pt).join(' ')+'" fill="#a9aeb6" stroke="#5b616b" stroke-width="0.8"/>';
+      /* o meio-fio reto termina nas tangentes da esquina (o do raio é desenhado à parte) */
+      const runs=HOL.length?plCorridas(A[j],(a,b)=>{ const m={c:[(a.c[0]+b.c[0])/2,(a.c[1]+b.c[1])/2],b:(a.b+b.b)/2,est:(a.est+b.est)/2}; const p=plOff(d,m,sg*(m.b+wmf/2)); return !HOL.some(h=>plDentro(p,h)); }):[A[j]];
+      runs.forEach(R=>{
+        const ring=(u0,u1)=>R.map(q=>plOff(d,q,sg*(q.b+u0))).concat(R.slice().reverse().map(q=>plOff(d,q,sg*(q.b+u1))));
+        if(sb>0) s+='<polygon points="'+ring(0,sb).map(pt).join(' ')+'" fill="#c9ccd1" stroke="#80858d" stroke-width="0.6"/>';
+        s+='<polygon points="'+ring(sb,wmf).map(pt).join(' ')+'" fill="#a9aeb6" stroke="#5b616b" stroke-width="0.8"/>';
+      });
     });
-  });
+  }); }
   // 3) pistas
   if(v.mf&&wmf>0) plEsquinas(D).forEach(q=>{ if(q.ring) s+='<polygon points="'+q.ring.map(pt).join(' ')+'" fill="#a9aeb6" stroke="#5b616b" stroke-width="0.8"/>'; });
   if(v.pista){ const pp=D.map((d,j)=>plPoligono(d,A[j],0).map(pt).join(' ')).concat(plEsqPolys(D).map(q=>q.map(pt).join(' ')));
@@ -1275,7 +1279,7 @@ function pl3Dmontar(manter){
     }
     // ── meio-fio e sarjeta (concreto), sem passar por dentro da pista de outra rua
     if(v.mf&&P.mf) [1,-1].forEach(sg=>{
-      const runs=plCorridas(Aj,(a,b)=>{ const m={c:[(a.c[0]+b.c[0])/2,(a.c[1]+b.c[1])/2],b:(a.b+b.b)/2}; return !dentroOutra(j,plOff(d,m,sg*(m.b+wmf/2)),foot,false); });
+      const runs=plCorridas(Aj,(a,b)=>{ const m={c:[(a.c[0]+b.c[0])/2,(a.c[1]+b.c[1])/2],b:(a.b+b.b)/2,est:(a.est+b.est)/2}; return !dentroOutra(j,plOff(d,m,sg*(m.b+wmf/2)),foot,false); });
       runs.forEach(R=>{
         const zE=s=>plZJ(d,s,sg*s.b);
         if(P.mf.tipo==='conjugado'){
@@ -1291,7 +1295,7 @@ function pl3Dmontar(manter){
     // ── calçada (PI-10): laje do fundo do meio-fio até o muro, sem passar por dentro da pista de outra rua
     if(calOn) [1,-1].forEach(sg=>{
       const wd=s=>sg>0?s.calE:s.calD, fim=s=>sg>0?s.fimE:s.fimD, espC=_cal.esp/100, dcl=_cal.decl/100;
-      const runs=plCorridas(Aj,(a,b)=>{ const w=(wd(a)+wd(b))/2; if(!(w>0.01)) return false; const m={c:[(a.c[0]+b.c[0])/2,(a.c[1]+b.c[1])/2],b:(a.b+b.b)/2}, pm=plOff(d,m,sg*(m.b+wmf+w/2));
+      const runs=plCorridas(Aj,(a,b)=>{ const w=(wd(a)+wd(b))/2; if(!(w>0.01)) return false; const m={c:[(a.c[0]+b.c[0])/2,(a.c[1]+b.c[1])/2],b:(a.b+b.b)/2,est:(a.est+b.est)/2}, pm=plOff(d,m,sg*(m.b+wmf+w/2));
         return !(dentroOutra(j,pm,footMf,false)||dentroOutra(j,pm,footCal,true)); });
       const inter=_cal.tipo==='intertravado', mm=inter?plMat11('pavCal'):plMat11('calcConc'), tl=inter?0.8:1.5;
       runs.forEach(R=>{ const s0=R[0].est;
@@ -1347,12 +1351,15 @@ function pl3Dmontar(manter){
         if(dd<bd){ const ln=Math.sqrt(l2), n=[-ey/ln,ex/ln]; for(const sg of [1,-1]){ const r=[q[0]+n[0]*0.05*sg,q[1]+n[1]*0.05*sg]; if(!emHole(r)){ bd=dd; best=r; break; } } } } });
       return best; };
     const pos=[], col=[], uv=[], idx=[], terra=[], dentro=new Uint8Array((nx+1)*(ny+1));
-    for(let iy=0;iy<=ny;iy++) for(let ix=0;ix<=nx;ix++){ let p=[x0+ix*cel,y0+iy*cel]; if(emHole(p)){ dentro[iy*(nx+1)+ix]=1; const q2=proxBorda(p); if(q2) p=q2; } const r=H(p), q=W3(p,r.h); pos.push(q.x,q.y,q.z); uv.push(p[0]/3,p[1]/3);
+    for(let iy=0;iy<=ny;iy++) for(let ix=0;ix<=nx;ix++){ let p=[x0+ix*cel,y0+iy*cel]; const puxado=emHole(p); if(puxado) dentro[iy*(nx+1)+ix]=1; const r=H(p), q=W3(p,r.h); if(puxado) q.y-=0.03; pos.push(q.x,q.y,q.z); /* PAV-ESQ: vértice dentro de pista/esquina fica no lugar, 3 cm abaixo do pavimento (escondido sob o asfalto): sem buraco no terreno */ uv.push(p[0]/3,p[1]/3);
       const c=r.c, nz=0.86+0.22*plRuido(p[0]/22,p[1]/22)+0.08*plRuido(p[0]/5,p[1]/5), sec=0.94+0.14*plRuido(p[0]/40+7,p[1]/40+3);
       col.push(nz*sec*1.02,nz,nz*(2-sec)*0.92); terra.push(Math.min(1,c*1.15)); }
     for(let iy=0;iy<ny;iy++) for(let ix=0;ix<nx;ix++){ const a=iy*(nx+1)+ix, b2=a+1, c2=a+nx+1, d2=c2+1;
-      if(!(dentro[a]&&dentro[b2]&&dentro[c2])) idx.push(a,b2,c2);
-      if(!(dentro[b2]&&dentro[d2]&&dentro[c2])) idx.push(b2,d2,c2); }
+      /* PAV-ESQ: só some o triângulo cujo centro e cujos meios de aresta também estão dentro de pista/esquina (vértices em buracos diferentes deixavam uma cunha sem terreno no canto) */
+      const gx=i=>x0+(i%(nx+1))*cel, gy=i=>y0+Math.floor(i/(nx+1))*cel, vazio=(p,q,r)=>{ const X=[gx(p),gx(q),gx(r)], Y=[gy(p),gy(q),gy(r)]; return PAV_AMOSTRAS.every(w=>emHole([X[0]*w[0]+X[1]*w[1]+X[2]*w[2],Y[0]*w[0]+Y[1]*w[1]+Y[2]*w[2]])); };
+      /* vértices puxados para a borda podem inverter o triângulo (face para baixo = buraco no terreno): a face de cima fica sempre para cima */
+      const tri=(i,j,k)=>{ const ny=(pos[j*3+2]-pos[i*3+2])*(pos[k*3]-pos[i*3])-(pos[j*3]-pos[i*3])*(pos[k*3+2]-pos[i*3+2]); if(ny<0) idx.push(i,k,j); else idx.push(i,j,k); };
+      tri(a,b2,c2); tri(b2,d2,c2); }
     const g=new T.BufferGeometry(); g.setAttribute('position',new T.Float32BufferAttribute(pos,3)); g.setAttribute('color',new T.Float32BufferAttribute(col,3)); g.setAttribute('uv',new T.Float32BufferAttribute(uv,2)); g.setAttribute('aTerra',new T.Float32BufferAttribute(terra,1)); g.setIndex(idx); g.computeVertexNormals();
     if(v.entorno){ const me=new T.Mesh(g,plMat11('terreno')); me.receiveShadow=true; grp.add(me); t.chao.push(me); }
     { const hh=new Float32Array((nx+1)*(ny+1)); for(let i=0;i<hh.length;i++) hh[i]=pos[i*3+1]; t.terr={x0,y0,cel,nx,ny,h:hh,c:Float32Array.from(terra)}; }
@@ -1398,7 +1405,7 @@ function plMeia(Aj,est){ let k=0; while(k<Aj.length-2&&Aj[k+1].est<est) k++; con
 
 /* esquinas: dois cantos por rua transversal (um de cada lado dela) */
 function plEsquinas(D){
-  const d0=D.find(x=>x.id==='r0'); if(!d0) return [];
+  const d0=D.find(x=>x.id==='r0'); if(!d0) return plEsquinasBairro(D);
   const P=secaoParams(), wmf=plMfLarg(P), A0=plAmostras0(d0,1), out=[];
   D.forEach(d=>{ if(!d.transv||!d.lay) return;
     const c=d.cfg, R=Math.max(0,+c.raio||0), A=d.lay.A, dm=plDirE(d0,c.estM), nm=[-dm[1],dm[0]], ds=d.lay.d, ns=d.lay.n, sg=c.sg, hb=plMeia(A0,c.estM), bs=c.bs, As=plAmostras0(d,1);
@@ -1436,11 +1443,11 @@ function plEsquinas(D){
 /* amostras com uma seção EXATA em cada ponto de tangência das esquinas: o meio-fio reto termina
    exatamente onde começa o raio (antes cortava de 1 em 1 m e ficava um degrau) */
 function plAmostras(d,passo){
-  const out=plAmostras0(d,passo); if(!_plT.transv.length||!d||!(d.id==='r0'||d.transv)) return out;
+  const out=plAmostras0(d,passo); const mul=ruas.some(r=>r.multi); if(!(_plT.transv.length||mul)||!d||!(d.id==='r0'||d.transv||(mul&&ruas[d.i]&&ruas[d.i].multi))) return out;
   let ests=[];
-  try{ const key=JSON.stringify([_plT.transv,ruas.map(r=>r.rows),(typeof _mf!=='undefined')?_mf:0,secaoParams().cEsq,secaoParams().cDir]);
+  try{ const key=JSON.stringify([_plT.transv,ruas.map(r=>r.rows),(typeof _mf!=='undefined')?_mf:0,secaoParams().cEsq,secaoParams().cDir,_plT.raioBairro,plVis().alinha,ruas.map(r=>r.eixo?r.eixo.length:0)]);
     if(!_pl.amC||_pl.amC.k!==key){ const E=plEsquinas(plDados()), m={};
-      E.forEach(q=>{ (m.r0||(m.r0=[])).push(q.stT1); if(q.lboT1!=null) m.r0.push(q.lboT1); const id=q.d.id; (m[id]||(m[id]=[])).push(q.stT2); if(q.lboT2!=null) m[id].push(q.lboT2); });
+      E.forEach(q=>{ if(q.cuts){ q.cuts.forEach(c=>{ (m[c[0]]||(m[c[0]]=[])).push(c[1]); }); return; } (m.r0||(m.r0=[])).push(q.stT1); if(q.lboT1!=null) m.r0.push(q.lboT1); const id=q.d.id; (m[id]||(m[id]=[])).push(q.stT2); if(q.lboT2!=null) m[id].push(q.lboT2); });
       _pl.amC={k:key,m}; }
     ests=_pl.amC.m[d.id]||[]; }catch(e){ return out; }
   const num=['est','gr','gE','gD','tc','te','td','larg','calE','calD','fimE','fimD'];
@@ -1633,6 +1640,7 @@ function plSinal3D(ctx){
 function plPainelTransv(tit,ck){
   const S=_plT.sinal, L=_plT.transv, sel=(k,ops,val,fn)=>'<select style="font-size:11px" onchange="'+fn+'">'+ops.map(o=>'<option value="'+o[0]+'"'+(String(val)===String(o[0])?' selected':'')+'>'+o[1]+'</option>').join('')+'</select>';
   let h=tit('Ruas transversais e esquinas');
+  if(ruas.some(r=>r.multi)) h+='<div style="font-size:11px;margin:4px 0 8px;display:grid;grid-template-columns:1fr auto;gap:3px 6px;align-items:center"><span title="Raio do meio-fio nas esquinas entre as ruas do bairro. As esquinas onde só uma das ruas chega (rua sem saída) e as que não cabem entre os cruzamentos vizinhos ficam com raio menor. 0 = canto vivo.">Raio das esquinas do bairro (m)</span><input type="number" min="0" max="30" step="0.5" value="'+esc(_plT.raioBairro==null?6:_plT.raioBairro)+'" style="width:60px;font-size:11px" onchange="plRaioB(this.value)"></div>';
   if(!L.length) h+='<div style="font-size:11px;color:var(--fg2)">Nenhuma. Clique em “+ Rua transversal” para incluir um cruzamento: a rua usa o greide da via principal na estaca escolhida.</div>';
   L.forEach((t,i)=>{ const inp=(k,val,w,tp)=>'<input type="'+(tp||'number')+'" value="'+esc(val)+'" style="width:'+w+'px;font-size:11px" onchange="plTSet('+i+',\''+k+'\',this.value)">';
     h+='<div style="font-size:11px;margin:6px 0;border-top:1px solid var(--border,#ddd);padding-top:5px"><div style="display:flex;gap:6px;align-items:center">'+inp('nome',t.nome||('Transversal '+(i+1)),190,'text')+
@@ -1666,7 +1674,7 @@ function plTSet(i,k,val){ const t=_plT.transv[i]; if(!t) return;
 function plSSet(k,val){ _plT.sinal[k]=val; plPainel(); plRedesenhar(); plMarcarSujo(); }
 /* projeto (.json e nuvem) */
 function plTExportar(){ return JSON.parse(JSON.stringify(_plT)); }
-function plTImportar(o){ const p=JSON.parse(JSON.stringify(PL_T_PADRAO)); if(o&&typeof o==='object'){ if(Array.isArray(o.transv)) p.transv=o.transv.filter(t=>t&&typeof t==='object'); if(o.sinal&&typeof o.sinal==='object') Object.assign(p.sinal,o.sinal); if(Array.isArray(o.eixo)) p.eixo=o.eixo; if(Array.isArray(o.fundo)) p.fundo=o.fundo; if(o.geo&&typeof o.geo==='object') Object.assign(p.geo,o.geo); }
+function plTImportar(o){ const p=JSON.parse(JSON.stringify(PL_T_PADRAO)); if(o&&typeof o==='object'){ if(Array.isArray(o.transv)) p.transv=o.transv.filter(t=>t&&typeof t==='object'); if(o.sinal&&typeof o.sinal==='object') Object.assign(p.sinal,o.sinal); if(Array.isArray(o.eixo)) p.eixo=o.eixo; if(Array.isArray(o.fundo)) p.fundo=o.fundo; if(o.raioBairro!=null&&isFinite(+o.raioBairro)) p.raioBairro=Math.max(0,Math.min(30,+o.raioBairro)); if(o.geo&&typeof o.geo==='object') Object.assign(p.geo,o.geo); }
   _plT=p; ruasSinc(); _pl.vb=null; if(_pl.t3) _pl.t3.pronto=false; }
 
 /* ── GEORREFERENCIAMENTO: coordenadas das estacas (UTM SIRGAS 2000 e lat/lon) ── */
@@ -2167,3 +2175,75 @@ plGeoPainel=function(tit){ const ok=_geo.lat!=null;
     if(_geo.lat==null&&Array.isArray(_plT.origemUTM)){ let pts=null; try{ pts=geoPontos(); }catch(e){}
       if(pts){ const z=+((_plT.geo&&_plT.geo.zona)||24)||24, ll=geoDeUTM(_plT.origemUTM[0]+pts.cx,_plT.origemUTM[1]+pts.cy,z,true); _geo.lat=ll[0]; _geo.lng=ll[1]; _geo.rot=0; _geo.esc=100; _geo.doDWG=true; } }
     return gm.apply(this,arguments); }; })();
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   PAV-ESQ · esquinas com raio nos cruzamentos entre as ruas do BAIRRO (projeto com várias ruas)
+   Para cada cruzamento dos eixos, em cada um dos quatro cantos: as duas bordas da pista (± largura/2 de cada rua)
+   se encontram no canto C e uma curva circular de raio R (meio-fio) é tangente às duas. O objeto devolvido é igual
+   ao das esquinas das transversais (poly, ring, hole, arc, ed, z), então a planta, o 3D, o meio-fio e o terreno usam o mesmo caminho.
+   Canto onde uma das ruas não chega (rua sem saída/T) é pulado; se o raio pedido não cabe, usa 75 %, 55 % ou 40 % dele.
+══════════════════════════════════════════════════════════════════════ */
+var _plIdc=0;
+/* pontos (pesos baricêntricos) em que um triângulo do terreno é testado: só some se TODOS estão dentro de pista/esquina */
+var PAV_AMOSTRAS=(function(){ const o=[[1/3,1/3,1/3],[.6,.2,.2],[.2,.6,.2],[.2,.2,.6]]; [.25,.5,.75].forEach(t=>{ o.push([t,1-t,0],[0,t,1-t],[t,0,1-t]); }); return o; })();
+function plRaioB(v){ _plT.raioBairro=Math.max(0,Math.min(30,+String(v).replace(',','.')||0)); _pl.esqB=null; _pl.amC=null; plTMudou(); }
+function plCruzamentosGeo(D){
+  const ls=D.map(d=>d.lay), k=_pl.crzK;
+  if(k&&k.length===ls.length&&k.every((x,i)=>x===ls[i])) return _pl.crzV;
+  const bb=D.map(d=>{ let x0=1e18,x1=-1e18,y0=1e18,y1=-1e18; ((d.lay&&d.lay.P)||[]).forEach(p=>{ if(p[0]<x0)x0=p[0]; if(p[0]>x1)x1=p[0]; if(p[1]<y0)y0=p[1]; if(p[1]>y1)y1=p[1]; }); return [x0,y0,x1,y1]; });
+  const out=[];
+  for(let i=0;i<D.length;i++) for(let j=i+1;j<D.length;j++){
+    const a=D[i].lay, b=D[j].lay; if(!a||!b||!a.P||!b.P) continue;
+    const A=bb[i], B=bb[j]; if(A[0]>B[2]+1||B[0]>A[2]+1||A[1]>B[3]+1||B[1]>A[3]+1) continue;
+    const Pa=a.P, Pb=b.P, Ca=a.C, Cb=b.C;
+    for(let s=0;s<Pa.length-1;s++){ const p=Pa[s], q=Pa[s+1], x0=Math.min(p[0],q[0]), x1=Math.max(p[0],q[0]), y0=Math.min(p[1],q[1]), y1=Math.max(p[1],q[1]);
+      if(x1<B[0]-1||x0>B[2]+1||y1<B[1]-1||y0>B[3]+1) continue;
+      for(let t=0;t<Pb.length-1;t++){ const r=Pb[t], u=Pb[t+1];
+        if(Math.max(r[0],u[0])<x0||Math.min(r[0],u[0])>x1||Math.max(r[1],u[1])<y0||Math.min(r[1],u[1])>y1) continue;
+        const d1x=q[0]-p[0], d1y=q[1]-p[1], d2x=u[0]-r[0], d2y=u[1]-r[1], den=d1x*d2y-d1y*d2x; if(Math.abs(den)<1e-12) continue;
+        const tt=((r[0]-p[0])*d2y-(r[1]-p[1])*d2x)/den, uu=((r[0]-p[0])*d1y-(r[1]-p[1])*d1x)/den; if(tt<0||tt>1||uu<0||uu>1) continue;
+        const X=[p[0]+d1x*tt,p[1]+d1y*tt];
+        if(!out.some(o=>o.i===i&&o.j===j&&Math.hypot(o.X[0]-X[0],o.X[1]-X[1])<6)) out.push({i,j,X,sa:Ca[s]+tt*(Ca[s+1]-Ca[s]),sb:Cb[t]+uu*(Cb[t+1]-Cb[t])}); } }
+  }
+  _pl.crzK=ls; _pl.crzV=out; return out;
+}
+function plEsquinasBairro(D){
+  const R0=_plT.raioBairro==null?6:+_plT.raioBairro; if(!(R0>0.3)||!D||D.length<2) return [];
+  const P=secaoParams(), wmf=plMfLarg(P), AM=D.map(d=>plAmostras0(d,1));
+  const sig=R0+'|'+wmf+'|'+D.map(d=>(d.lay._id||(d.lay._id=++_plIdc))+':'+d.L.length+':'+d.L.reduce((a,l)=>a+l.larg+l.gr*1.37+l.est*0.7,0).toFixed(3)).join(',');
+  if(_pl.esqB&&_pl.esqB.sig===sig) return _pl.esqB.v;
+  const out=[];
+  plCruzamentosGeo(D).forEach(cr=>{
+    const A=D[cr.i], B=D[cr.j], LA=A.lay, LB=B.lay, mA=AM[cr.i], mB=AM[cr.j];
+    const eA=(LA.iv?LA.iv(cr.sa):cr.sa)+LA.s0, eB=(LB.iv?LB.iv(cr.sb):cr.sb)+LB.s0;
+    const dA=LA.dirAt(eA), dB=LB.dirAt(eB), nA=[-dA[1],dA[0]], nB=[-dB[1],dB[0]], hbA=plMeia(mA,eA), hbB=plMeia(mB,eB);
+    const rA=[A.L[0].est,A.L[A.L.length-1].est], rB=[B.L[0].est,B.L[B.L.length-1].est];
+    const zA=p=>{ const r=plProj(LA,p); return plSurf(mA,r.s,r.lat); }, zB=p=>{ const r=plProj(LB,p); return plSurf(mB,r.s,r.lat); };
+    [1,-1].forEach(sa=>[1,-1].forEach(sb=>{
+      const C=plInter([cr.X[0]+nA[0]*sa*hbA,cr.X[1]+nA[1]*sa*hbA],dA,[cr.X[0]+nB[0]*sb*hbB,cr.X[1]+nB[1]*sb*hbB],dB); if(!C) return;
+      const gA=(dA[0]*nB[0]+dA[1]*nB[1])*sb>=0?1:-1, gB=(dB[0]*nA[0]+dB[1]*nA[1])*sa>=0?1:-1;
+      const u1=[dA[0]*gA,dA[1]*gA], u2=[dB[0]*gB,dB[1]*gB], cs=u1[0]*u2[0]+u1[1]*u2[1]; if(cs>0.94||cs<-0.94) return;
+      const phi=Math.acos(cs); let F=null, Rr=0, pa=null, pb=null;
+      for(const f of [1,0.75,0.55,0.4]){ Rr=R0*f; if(Rr<1) break; const t=Rr/Math.tan(phi/2), T1=[C[0]+u1[0]*t,C[1]+u1[1]*t], T2=[C[0]+u2[0]*t,C[1]+u2[1]*t];
+        const a=plProj(LA,T1), b=plProj(LB,T2);
+        if(a.s>rA[0]+0.3&&a.s<rA[1]-0.3&&b.s>rB[0]+0.3&&b.s<rB[1]-0.3){ F=plFillet(C,u1,u2,Rr); pa=a; pb=b; break; } }
+      if(!F) return;
+      const zT1=zA(F.T1), zT2=zB(F.T2), zC=(zA(C)+zB(C))/2;
+      const zl=(arc,a,b)=>arc.map((p,i)=>arc.length>1?a+(b-a)*i/(arc.length-1):a);
+      const q={d:B,dA:A,multi:1,e1:sa,k:sb,R:Rr,O:F.O,C,T1:F.T1,T2:F.T2,arc:F.arc,stT1:pa.s,stT2:pb.s,zT1,zT2,cuts:[[A.id,pa.s],[B.id,pb.s]]};
+      let arc=F.arc, za=zl(F.arc,zT1,zT2), sg=0; const pp=[C].concat(arc); for(let i=0;i<pp.length;i++){ const a=pp[i], b=pp[(i+1)%pp.length]; sg+=a[0]*b[1]-b[0]*a[1]; }
+      if(sg<0){ arc=arc.slice().reverse(); za=za.slice().reverse(); } /* mesmo sentido em todas as esquinas: faces do 3D para cima */
+      q.arc=arc; q.poly=[C].concat(arc); q.z=[zC].concat(za); q.area=plAreaPoly(q.poly);
+      { const m=arc.length-1, ini1=Math.hypot(arc[0][0]-F.T1[0],arc[0][1]-F.T1[1])<1e-6, P0=ini1?F.T1:F.T2, P1=ini1?F.T2:F.T1, z0=ini1?zA:zB, z1=ini1?zB:zA;
+        const L1=Math.hypot(C[0]-P0[0],C[1]-P0[1]), L2=Math.hypot(P1[0]-C[0],P1[1]-C[1]), h=Math.max(1,Math.min(m-1,Math.round(m*L1/((L1+L2)||1))));
+        q.ed=[]; for(let i=0;i<=m;i++){ let p,z; if(i<=h){ const t=i/h; p=[P0[0]+(C[0]-P0[0])*t,P0[1]+(C[1]-P0[1])*t]; z=z0(p); } else { const t=(i-h)/(m-h); p=[C[0]+(P1[0]-C[0])*t,C[1]+(P1[1]-C[1])*t]; z=z1(p); } q.ed.push([p[0],p[1],z]); }
+        q.ed[0][2]=za[0]; q.ed[m][2]=za[m]; }
+      if(wmf>0&&Rr>wmf+0.05){ q.arc2=arc.map(p=>{ const vx=p[0]-F.O[0], vy=p[1]-F.O[1], L=Math.hypot(vx,vy)||1; return [F.O[0]+vx/L*(Rr-wmf),F.O[1]+vy/L*(Rr-wmf)]; });
+        q.ring=arc.concat(q.arc2.slice().reverse()); q.hole=[C,arc[0]].concat(q.arc2,[arc[arc.length-1]]); }
+      else q.hole=q.poly;
+      out.push(q);
+    }));
+  });
+  _pl.esqB={sig,v:out}; return out;
+}
