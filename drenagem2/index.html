@@ -13166,6 +13166,106 @@ function lev27Exemplo() {
 })();
 
 </script>
+<script>
+/* =====================================================================
+   PATCH DR-29 (17/11/2026) — satélite na planta baixa e exclusão no desenho.
+   (1) A aba 8 oferece a caixa “Mapa de satélite” somente como opção visual:
+       ela só fica habilitada quando P.georef já tem uma posição válida.
+       O mapa usa o mesmo georreferenciamento DR-26 e redesenha as feições
+       da planta com Leaflet/Esri, sem alterar cálculo ou coordenadas.
+   (2) A ficha de PV, caixa e trecho da planta ganha “Excluir”. PV exclui
+       seus trechos ligados e caixas ligadas; bacias são preservadas, mas
+       ficam sem destino. Caixa exclui bacias que apontavam para ela e limpa
+       os encadeamentos de excedente. A ação entra no desfazer da planta.
+   ===================================================================== */
+let PLSAT = null;
+function plSatFechar() {
+  if (PLSAT && PLSAT.map) { try { PLSAT.map.remove(); } catch (e) {} }
+  PLSAT = null;
+}
+function plSatPontos(F) {
+  const a = [];
+  const add = p => { if (p && p.length >= 2) a.push(geo26LL(+p[0], +p[1])); };
+  (F.pass || []).forEach(q => q.forEach(add)); (F.pista || []).forEach(q => q.forEach(add));
+  (F.eixo || []).forEach(q => q.p.forEach(add)); (F.rede || []).forEach(q => q.p.forEach(add));
+  (F.ramais || []).forEach(q => q.forEach(add)); (F.bls || []).forEach(q => add(q.p)); (F.pvs || []).forEach(q => add(q.p));
+  return a;
+}
+function plSatDesenhar() {
+  if (!PLSAT || !window.L) return;
+  const L = window.L, D = PLSAT.layers, F = PLSAT.F, ll = p => geo26LL(+p[0], +p[1]);
+  D.clearLayers();
+  const poly = (q, opt) => L.polygon(q.map(ll), Object.assign({weight: 1, interactive: false}, opt)).addTo(D);
+  (F.pass || []).forEach(q => poly(q, {color: '#b8b3a8', fillColor: '#d6d2c8', fillOpacity: .48}));
+  (F.pista || []).forEach(q => poly(q, {color: '#555', fillColor: '#4b4d50', fillOpacity: .72}));
+  (F.eixo || []).forEach(x => L.polyline(x.p.map(ll), {color: '#f8fafc', weight: 1.5, dashArray: '6 5', interactive: false}).bindTooltip(esc(x.nome || ''), {sticky: true}).addTo(D));
+  (F.rede || []).forEach(x => { const r = x.r, cor = r && r.st === 'err' ? '#dc2626' : galOf(x.t) ? '#7c3aed' : '#0ea5e9';
+    L.polyline(x.p.map(ll), {color: cor, weight: galOf(x.t) ? 6 : 4, opacity: .95}).bindTooltip(esc(x.t.id) + (r ? ' · Q ' + fL(r.Q) + ' · V ' + fmt(r.h && r.h.V, 2) + ' m/s' : ''), {sticky: true}).addTo(D); });
+  (F.ramais || []).forEach(q => L.polyline(q.map(ll), {color: '#22d3ee', weight: 2, dashArray: '6 4', interactive: false}).addTo(D));
+  (F.bls || []).forEach(x => L.circleMarker(ll(x.p), {radius: 5, color: '#0e7490', weight: 1, fillColor: '#cffafe', fillOpacity: 1}).bindTooltip(esc(x.b.id), {permanent: false}).addTo(D));
+  (F.pvs || []).forEach(x => { const r = x.r; L.circleMarker(ll(x.p), {radius: 6, color: '#0f172a', weight: 2, fillColor: r && r.exut ? '#f97316' : '#fff', fillOpacity: 1}).bindTooltip(esc(x.pv.id), {permanent: true, direction: 'top', className: 'pl-sat-label'}).addTo(D); });
+}
+async function plSatAbrir(box) {
+  if (!geo26Pronto()) return;
+  plSatFechar();
+  box.innerHTML = '<div id="pl-sat-map" style="width:100%;height:100%;min-height:300px;background:#dbeafe"></div>';
+  try {
+    if (!window.L) { const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = GEO26_L + 'css'; document.head.appendChild(css); await loadScript(GEO26_L + 'js'); }
+  } catch (e) { box.innerHTML = '<div class="msg err">Não foi possível carregar o mapa. Verifique a internet.</div>'; return; }
+  if (!document.getElementById('pl-sat-map')) return;
+  const L = window.L, g = geo26G(), F = geo26Feicoes(), map = L.map('pl-sat-map', {zoomControl: true, maxZoom: 21, zoomSnap: .25});
+  const sat = L.tileLayer(GEO26_SAT, {maxZoom: 21, maxNativeZoom: 19, opacity: (g.opS == null ? 100 : g.opS) / 100, attribution: 'Imagem © Esri, Maxar, Earthstar'}).addTo(map);
+  PLSAT = {map, sat, layers: L.layerGroup().addTo(map), F}; plSatDesenhar();
+  const pts = plSatPontos(F); if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(.10), {maxZoom: 19}); else map.setView([g.lat, g.lng], 17);
+  setTimeout(() => map.invalidateSize(), 30);
+}
+const _vPlantaDR29 = vPlanta;
+vPlanta = function () {
+  const h = _vPlantaDR29.apply(this, arguments), ready = geo26Pronto();
+  const c = `<label style="font-size:.8rem;display:inline-flex;gap:.3rem;align-items:center" title="${ready ? 'Mostra a planta sobre a imagem de satélite usando a posição georreferenciada salva' : 'Georreferencie o projeto na aba 11 antes de usar o satélite'}"><input id="pl-sat-toggle" type="checkbox" ${PLAY.sat ? 'checked' : ''}${ready ? '' : ' disabled'}/>🛰 Mapa de satélite${ready ? '' : ' (georreferencie na aba 11)'}</label>`;
+  return h.replace('<button id="pl-ed-btn"', c + '<button id="pl-ed-btn"');
+};
+const _drawPlantaDR29 = drawPlanta;
+drawPlanta = function () {
+  const box = $('pl-box'); if (!box) return;
+  if (PLAY.sat && geo26Pronto()) { plSatAbrir(box); return; }
+  plSatFechar(); return _drawPlantaDR29.apply(this, arguments);
+};
+document.addEventListener('change', e => {
+  if (e.target && e.target.id === 'pl-sat-toggle') { PLAY.sat = !!e.target.checked; drawPlanta(); }
+});
+function plExcluir(tipo, id) {
+  const nomes = {pv: 'PV ' + id, bl: 'caixa ' + id, tr: 'trecho ' + id};
+  if (!confirm('Excluir ' + (nomes[tipo] || id) + ' da planta e do projeto? Esta ação pode ser desfeita pelo botão ↶.')) return;
+  const antes = JSON.stringify(P); plPush();
+  if (tipo === 'tr') P.trechos = P.trechos.filter(t => t.id !== id);
+  if (tipo === 'bl') {
+    P.bls = P.bls.filter(b => b.id !== id);
+    P.bacias.forEach(b => { if (b.dest === id) b.dest = ''; });
+    P.bls.forEach(b => { if (b.prox === id) b.prox = ''; });
+  }
+  if (tipo === 'pv') {
+    P.pvs = P.pvs.filter(p => p.id !== id);
+    P.trechos = P.trechos.filter(t => t.m !== id && t.j !== id);
+    const caixas = new Set(P.bls.filter(b => b.pv === id).map(b => b.id));
+    P.bls = P.bls.filter(b => b.pv !== id);
+    P.bacias.forEach(b => { if (b.dest === id || caixas.has(b.dest)) b.dest = ''; });
+    P.bls.forEach(b => { if (b.prox === id || caixas.has(b.prox)) b.prox = ''; });
+  }
+  if (JSON.stringify(P) === antes) { PLED.undo.pop(); return toast('Elemento não encontrado.'); }
+  save(); calc(); renderTab(); toast((nomes[tipo] || id) + ' excluído.');
+}
+const _plInfoDR29 = plantaInfo;
+plantaInfo = function (k) {
+  _plInfoDR29.apply(this, arguments);
+  const p = String(k || '').split(':'), tipo = p[0], id = p.slice(1).join(':');
+  if (!['pv', 'bl', 'tr'].includes(tipo) || !id) return;
+  const box = $('pl-info'), card = box && box.firstElementChild; if (!card) return;
+  const label = tipo === 'pv' ? 'PV' : tipo === 'bl' ? 'caixa' : 'trecho';
+  card.insertAdjacentHTML('beforeend', `<div class="bar-btns" style="margin-top:.7rem"><button class="btn btn-danger btn-sm" onclick="plExcluir('${tipo}','${esc(id)}')">✕ Excluir ${label}</button></div>`);
+};
+</script>
+
 <!-- GUIA-IA:INICIO — skill e guia de cálculos da Drenagem Pluvial 2 guardados no programa (não aparecem na tela).
      Para IAs e projetistas: leia #guia-ia-skill (como trabalhar no programa) e #guia-ia-calculos (fórmulas, critérios, normas, decisões).
      Gerado por scripts/embutir_guia.py a partir de .claude/skills/drenagem/. -->
