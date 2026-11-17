@@ -6042,6 +6042,7 @@ window.calcTopo=function(){if(window.__pvSemCalc)return;orig();pvPos();};
 /* ---------- ações ---------- */
 window.__pvAberto=function(a){abertoResumo=a;};
 window.__pvTroca=function(i){if(i===ativa||!ruas[i])return;sync();ativa=i;carrega(ruas[ativa].rows);htmlBarra='';window.calcTopo();};
+window.__pvAtiva=function(){return ativa;};
 window.__pvNova=function(){sync();const n=prompt('Nome da nova rua:','Rua '+(ruas.length+1));if(!n||!n.trim())return;
   ruas.push({id:novoId(),nome:n.trim(),rows:[],cruz:[]});ativa=ruas.length-1;carrega([]);htmlBarra='';window.calcTopo();sujo();
   if(typeof avisar==='function')avisar('Rua criada. Preencha as estacas, importe o levantamento (PDF) ou 📂 abra um projeto com várias ruas.');};
@@ -6257,5 +6258,68 @@ if(ab&&!document.getElementById('pv-b-comp')){ const b=document.createElement('b
 })();
 </script>
 
+
+<script>
+/* PATCH PAV-SEC-RUA (17/11/2026): aba Seção transversal ganha o seletor "Rua" — troca a rua ativa do projeto sem sair da aba
+   (usa o mesmo __pvTroca da Topografia; some em projeto de uma rua só). */
+(function(){
+  if(window.__pvSecRua) return; window.__pvSecRua=true;
+  function monta(){
+    const de=document.getElementById('c_de'); if(!de) return;
+    let f=document.getElementById('sec_rua_f');
+    const rs=(typeof window.__pvRuas==='function')?window.__pvRuas():null;
+    if(!rs){ if(f) f.style.display='none'; return; }
+    if(!f){ f=document.createElement('div'); f.className='field'; f.id='sec_rua_f'; f.innerHTML='<label>Rua</label><select id="sec_rua" onchange="__pvSecRuaTroca(this.value)"></select>';
+      const pai=de.closest('.field'); pai.parentNode.insertBefore(f,pai); }
+    f.style.display='';
+    const sel=document.getElementById('sec_rua'), at=window.__pvAtiva?window.__pvAtiva():0;
+    const chave=rs.map(r=>r.id+'|'+r.nome).join('§')+'#'+at;
+    if(sel.dataset.chave===chave) return; sel.dataset.chave=chave;
+    sel.innerHTML=rs.map((r,i)=>'<option value="'+i+'"'+(i===at?' selected':'')+'>'+String(r.nome).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</option>').join('');
+  }
+  window.__pvSecRuaTroca=function(i){ i=+i; if(typeof window.__pvTroca==='function') window.__pvTroca(i);
+    const de=document.getElementById('c_de'), ate=document.getElementById('c_ate'); if(de) delete de.dataset.chave;
+    if(typeof window.updateCorte==='function') window.updateCorte(); monta(); };
+  const orig=window.updateCorte;
+  if(typeof orig==='function') window.updateCorte=function(){ monta(); return orig.apply(this,arguments); };
+  document.addEventListener('DOMContentLoaded',monta); setTimeout(monta,800);
+})();
+</script>
+
+<script>
+/* PATCH PAV-DWG (17/11/2026): 📥 Importar DWG com escolha das camadas (Topografia e Planta e 3D). Usa /dwg-importar.js (carregado só ao clicar)
+   e a biblioteca de leitura do DWG (a mesma do ⬇ DWG do Esgoto). Camadas marcadas como Fundo vão para o desenho de fundo da planta;
+   as marcadas como Eixo de rua viram ruas do projeto (estaca 0 no início, até o cruzamento) com as cotas dos pontos reais marcados em Cotas. */
+(function(){
+  if(window.__pvDwg) return; window.__pvDwg=true;
+  function carrega(src){ return new Promise((ok,err)=>{ const t=document.createElement('script'); t.src=src; t.onload=ok; t.onerror=()=>err(new Error('não carregou '+src)); document.head.appendChild(t); }); }
+  function aplicar(dados){
+    const d=dadosDoProjeto(); d.planta3d=Object.assign({},d.planta3d||{});
+    if(dados.ruas&&dados.ruas.length){
+      const tem=((d.topo.ruas&&d.topo.ruas.length>1)||(d.topo.rows||[]).some(r=>r&&r.est!=null&&r.est!==''));
+      if(tem&&!confirm('Gerar as ruas do DWG substitui as estacas e as ruas do projeto aberto. Continuar?')) throw new Error('cancelado');
+      d.topo=Object.assign({},d.topo,{ruas:dados.ruas,rows:dados.ruas[0].rows,ruaAtiva:0});
+      d.planta3d.transv=[]; d.planta3d.eixo=null;
+    }
+    d.planta3d.origemUTM=dados.origem;
+    if(dados.fundo) d.planta3d.fundo=dados.fundo;
+    aplicarProjeto(d);
+    if(typeof avisar==='function') avisar('DWG importado'+(dados.ruas&&dados.ruas.length?': '+dados.ruas.length+' rua(s)':'')+(dados.fundo?', fundo da planta com '+dados.fundo.length+' camada(s)':'')+'.');
+  }
+  window.dwgImportarPav=async function(){
+    try{ if(!window.DwgImp) await carrega(location.origin+'/dwg-importar.js?v=20261117'); }catch(e){ alert('Não consegui carregar o importador de DWG: '+e.message); return; }
+    let org=null; try{ const o=(typeof _plT!=='undefined'&&_plT.origemUTM); if(Array.isArray(o)&&o.length===2) org=o; }catch(e){}
+    window.DwgImp.abrir({origem:org,aplicar:aplicar});
+  };
+  function botoes(){
+    const pdf=document.getElementById('btn-lev-pdf');
+    if(pdf&&!document.getElementById('btn-dwg')){ const b=document.createElement('button'); b.type='button'; b.id='btn-dwg'; b.className=pdf.className; b.style.cssText=pdf.style.cssText; b.title='Lê um DWG, deixa escolher as camadas e importa fundo da planta e ruas com cotas reais'; b.textContent='📥 Importar DWG'; b.onclick=window.dwgImportarPav; pdf.parentNode.insertBefore(b,pdf.nextSibling); }
+    const g=document.getElementById('pl-b-geo');
+    if(g&&!document.getElementById('pl-b-dwg')){ const b=document.createElement('button'); b.type='button'; b.id='pl-b-dwg'; b.className=g.className; b.title='Importar DWG escolhendo as camadas'; b.textContent='📥 Importar DWG'; b.onclick=window.dwgImportarPav; g.parentNode.insertBefore(b,g); }
+  }
+  new MutationObserver(botoes).observe(document.documentElement,{childList:true,subtree:true});
+  document.addEventListener('DOMContentLoaded',botoes); setTimeout(botoes,800);
+})();
+</script>
 </body>
 </html>
