@@ -12288,6 +12288,829 @@ function dissip24(res) {
   POS_CALC.push(['Sarjeta, área e queda (DR-24)', 'checks24']);
 })();
 </script>
+<script>
+/* =====================================================================
+   PATCH DR-26 (17/11/2026) — 🛰 GEORREFERENCIAR na aba 11 (3D), como no Esgoto (ES-04) e no Intertravado.
+   Janela com mapa Leaflet + satélite Esri, tipo Satélite / Satélite + nomes / Mapa, pesquisa de local
+   (OpenStreetMap/Nominatim), coordenadas Lat/Lon ou UTM SIRGAS 2000 (com zona), colar coordenadas, mover
+   (arrastar o ● vermelho ou Shift + arrastar o mapa), girar (arrastar o ◎ azul, campo ou Shift + roda),
+   escala, transparência do desenho e da imagem, níveis (ruas, rede, PVs, caixas, nomes, levantamento da
+   bacia), pontos de controle (PV com coordenada medida → giro + deslocamento por mínimos quadrados),
+   projeto já em UTM (locação exata), ✔ Salvar posição / ✎ Reposicionar, KMZ/KML para o Google Earth e
+   link do Google Maps. Estado em P.georef (vai junto com o projeto). Só desenho: nenhum cálculo muda.
+   O levantamento da bacia (DR-27: malha, poligonal, talvegues, pontos baixos, ponte) aparece no mesmo
+   mapa, sempre em coordenadas geográficas.
+   ===================================================================== */
+const GEO26_L = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.', GEO26_M = 111320;
+const GEO26_SAT = 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+let GM26 = null;
+function geo26G() {
+  if (!P.georef) P.georef = {lat: null, lng: null, rot: 0, esc: 100, opD: 85, opS: 100, base: 'sat', fix: false, modo: 'dec', ctrl: [], niv: {}};
+  const g = P.georef; g.niv = Object.assign({ruas: 1, rede: 1, pvs: 1, bls: 1, rot: 1, lev: 1, malha: 0, talv: 1, baixos: 1}, g.niv || {});
+  if (!g.ctrl) g.ctrl = []; return g;
+}
+function geo26Pronto() { const g = P.georef; return !!(g && ((g.utm && g.zona) || (g.lat != null && g.lng != null))); }
+function geo26Limites() { const G = geoRuas(), b = plantaBBox(G); return {x: b.x0, y: b.y0, w: Math.max(1, b.x1 - b.x0), h: Math.max(1, b.y1 - b.y0)}; }
+function geo26EhUTM() {
+  const G = geoRuas(), b = plantaBBox(G); if (!P.ruas.length && !P.pvs.length) return false;
+  return b.x0 > 160000 && b.x1 < 840000 && b.y0 > 1000000 && b.y1 < 10000000;
+}
+function geo26Centro() { const g = geo26G(); if (g.cx == null) { const L = geo26Limites(); g.cx = +(L.x + L.w / 2).toFixed(3); g.cy = +(L.y + L.h / 2).toFixed(3); } return [g.cx, g.cy]; }
+/* UTM SIRGAS 2000 (mesmas fórmulas do Intertravado e do Esgoto) */
+function geo26ParaUTM(lat, lng, zona) {
+  const a = 6378137, f = 1 / 298.257222101, k0 = .9996, e2 = f * (2 - f), ep2 = e2 / (1 - e2);
+  const z = zona || Math.floor((lng + 180) / 6) + 1, l0 = ((z - 1) * 6 - 180 + 3) * Math.PI / 180, ph = lat * Math.PI / 180, l = lng * Math.PI / 180;
+  const N = a / Math.sqrt(1 - e2 * Math.sin(ph) ** 2), T = Math.tan(ph) ** 2, C = ep2 * Math.cos(ph) ** 2, A = Math.cos(ph) * (l - l0);
+  const M = a * ((1 - e2 / 4 - 3 * e2 * e2 / 64 - 5 * e2 ** 3 / 256) * ph - (3 * e2 / 8 + 3 * e2 * e2 / 32 + 45 * e2 ** 3 / 1024) * Math.sin(2 * ph) + (15 * e2 * e2 / 256 + 45 * e2 ** 3 / 1024) * Math.sin(4 * ph) - (35 * e2 ** 3 / 3072) * Math.sin(6 * ph));
+  const E = 500000 + k0 * N * (A + (1 - T + C) * A ** 3 / 6 + (5 - 18 * T + T * T + 72 * C - 58 * ep2) * A ** 5 / 120);
+  const Nn = k0 * (M + N * Math.tan(ph) * (A * A / 2 + (5 - T + 9 * C + 4 * C * C) * A ** 4 / 24 + (61 - 58 * T + T * T + 600 * C - 330 * ep2) * A ** 6 / 720)) + (lat < 0 ? 1e7 : 0);
+  return {e: E, n: Nn, z};
+}
+function geo26DeUTM(E, Nn, z, sul) {
+  const a = 6378137, f = 1 / 298.257222101, k0 = .9996, e2 = f * (2 - f), ep2 = e2 / (1 - e2), e1 = (1 - Math.sqrt(1 - e2)) / (1 + Math.sqrt(1 - e2));
+  const x = E - 500000, y = sul ? Nn - 1e7 : Nn, M = y / k0, mu = M / (a * (1 - e2 / 4 - 3 * e2 * e2 / 64 - 5 * e2 ** 3 / 256));
+  const p1 = mu + (3 * e1 / 2 - 27 * e1 ** 3 / 32) * Math.sin(2 * mu) + (21 * e1 * e1 / 16 - 55 * e1 ** 4 / 32) * Math.sin(4 * mu) + (151 * e1 ** 3 / 96) * Math.sin(6 * mu) + (1097 * e1 ** 4 / 512) * Math.sin(8 * mu);
+  const C1 = ep2 * Math.cos(p1) ** 2, T1 = Math.tan(p1) ** 2, N1 = a / Math.sqrt(1 - e2 * Math.sin(p1) ** 2), R1 = a * (1 - e2) / Math.pow(1 - e2 * Math.sin(p1) ** 2, 1.5), D = x / (N1 * k0);
+  const lat = p1 - (N1 * Math.tan(p1) / R1) * (D * D / 2 - (5 + 3 * T1 + 10 * C1 - 4 * C1 * C1 - 9 * ep2) * D ** 4 / 24 + (61 + 90 * T1 + 298 * C1 + 45 * T1 * T1 - 252 * ep2 - 3 * C1 * C1) * D ** 6 / 720);
+  const lon = ((z - 1) * 6 - 180 + 3) * Math.PI / 180 + (D - (1 + 2 * T1 + C1) * D ** 3 / 6 + (5 - 2 * C1 + 28 * T1 - 3 * C1 * C1 + 8 * ep2 + 24 * T1 * T1) * D ** 5 / 120) / Math.cos(p1);
+  return [lat * 180 / Math.PI, lon * 180 / Math.PI];
+}
+/* ponto do projeto (x, y em metros) → [lat, lng] */
+function geo26LL(x, y) {
+  const g = geo26G(); if (g.utm && g.zona) return geo26DeUTM(x, y, +g.zona, g.hem !== 'N');
+  const c = geo26Centro(), k = (g.esc || 100) / 100, th = (g.rot || 0) * Math.PI / 180, dx = (x - c[0]) * k, dy = (y - c[1]) * k;
+  const e = dx * Math.cos(th) - dy * Math.sin(th), n = dx * Math.sin(th) + dy * Math.cos(th);
+  return [g.lat + n / GEO26_M, g.lng + e / (GEO26_M * Math.cos(g.lat * Math.PI / 180))];
+}
+function geo26Nums(t) { return (String(t).match(/-?\d+(?:[.,]\d+)?/g) || []).map(v => parseFloat(v.replace(',', '.'))); }
+/* pontos de controle: PV com coordenada medida → giro + deslocamento (mínimos quadrados, escala 100 %) */
+function geo26Ajustar() {
+  const g = geo26G(), G = geoRuas();
+  const Q = g.ctrl.map(q => { const pv = pvById(q.pv), p = pv && posPV(G, pv); return p && q.lat != null ? {p: [p.x, p.y], lat: +q.lat, lng: +q.lng} : null; }).filter(Boolean);
+  if (!Q.length) return null;
+  const c = geo26Centro(), la0 = Q.reduce((a, q) => a + q.lat, 0) / Q.length, ln0 = Q.reduce((a, q) => a + q.lng, 0) / Q.length, kx = GEO26_M * Math.cos(la0 * Math.PI / 180);
+  const E = Q.map(q => [(q.lng - ln0) * kx, (q.lat - la0) * GEO26_M]), pm = [0, 0]; Q.forEach(q => { pm[0] += q.p[0] / Q.length; pm[1] += q.p[1] / Q.length; });
+  let th = (g.rot || 0) * Math.PI / 180;
+  if (Q.length >= 2) { let a = 0, b = 0; Q.forEach((q, i) => { const px = q.p[0] - pm[0], py = q.p[1] - pm[1]; a += px * E[i][1] - py * E[i][0]; b += px * E[i][0] + py * E[i][1]; }); th = Math.atan2(a, b); }
+  const Rr = v => [v[0] * Math.cos(th) - v[1] * Math.sin(th), v[0] * Math.sin(th) + v[1] * Math.cos(th)], cc = Rr([c[0] - pm[0], c[1] - pm[1]]);
+  const res = Q.map((q, i) => { const w = Rr([q.p[0] - pm[0], q.p[1] - pm[1]]); return Math.hypot(w[0] - E[i][0], w[1] - E[i][1]); });
+  Object.assign(g, {lat: la0 + cc[1] / GEO26_M, lng: ln0 + cc[0] / kx, rot: Math.round(th * 18000 / Math.PI) / 100, esc: 100, utm: false});
+  return {n: Q.length, rms: Math.sqrt(res.reduce((a, x) => a + x * x, 0) / res.length), max: Math.max(...res)};
+}
+/* feições do projeto (coordenadas do projeto, metros) */
+function geo26Feicoes() {
+  const out = {pista: [], pass: [], eixo: [], rede: [], pvs: [], bls: [], ramais: [], des: []};
+  const G = geoRuas();
+  P.ruas.forEach(r => { const g = G[r.id]; if (!g) return; let e = [g.sMin, g.sMax]; try { e = extRua(G, g); } catch (er) {}
+    const a = (+r.larg || 7) / 2, w = a + (+r.passeio || 0), P4 = (o1, o2) => [g.at(e[0], o1), g.at(e[1], o1), g.at(e[1], o2), g.at(e[0], o2)].map(p => [p.x, p.y]);
+    if (w > a) { out.pass.push(P4(w, a)); out.pass.push(P4(-a, -w)); }
+    out.pista.push(P4(a, -a)); out.eixo.push({p: [[g.at(e[0]).x, g.at(e[0]).y], [g.at(e[1]).x, g.at(e[1]).y]], nome: r.nome || r.id}); });
+  P.trechos.forEach(t => { const a = posPV(G, pvById(t.m)), b = posPV(G, pvById(t.j)); if (!a || !b) return; out.rede.push({p: [[a.x, a.y], [b.x, b.y]], t, r: R && R.tr ? R.tr[t.id] : null}); });
+  P.pvs.forEach(pv => { const p = posPV(G, pv); if (p) out.pvs.push({p: [p.x, p.y], pv, r: R && R.pv ? R.pv[pv.id] : null}); });
+  P.bls.forEach(b => { const p = posBL(G, b); if (p) out.bls.push({p: [p.x, p.y], b}); const rp = ramalPts(G, b); if (rp) out.ramais.push(rp.map(q => [q.x, q.y])); });
+  ((R && R.outlets) || []).forEach(id => { const p = posPV(G, pvById(id)); if (p) out.des.push({p: [p.x, p.y], id}); });
+  return out;
+}
+const GEO26_CSS = `.geo26-ov{position:fixed;inset:0;z-index:9000;display:flex;background:#0f1620}
+.geo26-map{flex:1;position:relative;min-width:0;overflow:hidden}.geo26-carr{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;text-align:center;padding:1rem}.geo26-carr.er{color:#fca5a5}
+.geo26-pan{width:350px;max-width:46vw;overflow:auto;background:#fff;color:#14202e;padding:10px 12px;font-size:.8rem}
+.geo26-pan .t{font-weight:700;margin:10px 0 4px;color:#0b3a66}.geo26-pan .g{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:3px 0}
+.geo26-pan .s{color:#475569;font-size:.74rem;margin:4px 0}.geo26-pan label.c{display:flex;gap:6px;align-items:center;margin:2px 0;cursor:pointer}
+.geo26-pan input{font-size:.8rem;padding:2px 4px}.geo26-pan .b{border:1px solid #cbd5e1;background:#f8fafc;border-radius:6px;padding:3px 7px;cursor:pointer;font-size:.78rem;color:#14202e;text-decoration:none}
+.geo26-pan .b.on{background:#0b6bcb;color:#fff;border-color:#0b6bcb}.geo26-pan .b.pri{background:#16a34a;color:#fff;border-color:#16a34a}
+.geo26-res{max-height:150px;overflow:auto;font-size:.74rem;margin:3px 0}.geo26-res div{margin:2px 0}
+.geo26-h{font-size:20px;line-height:22px;text-align:center;text-shadow:0 0 3px #fff;cursor:grab}.geo26-hm{color:#dc2626}.geo26-hr{color:#2563eb}
+.geo26-tt{font-size:.66rem;padding:1px 4px}
+body.ov27 #tc-fab,body.ov27 #tc-aa,body.ov27 #tc-pg{display:none!important}
+body.cel .geo26-ov,body.dev-android .geo26-ov,body.dev-iphone .geo26-ov{flex-direction:column}
+body.cel .geo26-pan,body.dev-android .geo26-pan,body.dev-iphone .geo26-pan{width:auto;max-width:none;height:42vh}
+@media (max-width:760px){.geo26-ov{flex-direction:column}.geo26-pan{width:auto;max-width:none;height:44vh}}`;
+(function () { const s = document.createElement('style'); s.textContent = GEO26_CSS; document.head.appendChild(s); })();
+async function geo26Abrir() {
+  if (document.getElementById('geo26-ov')) return;
+  if (!P.ruas.length && !(P.lev27 && P.lev27.pts && P.lev27.pts.length)) return toast('Cadastre as ruas (aba 3) ou importe o levantamento da bacia antes de georreferenciar.');
+  try { calc(); } catch (e) {}
+  const g = geo26G(); if (P.ruas.length) geo26Centro();
+  const ov = document.createElement('div'); ov.id = 'geo26-ov'; ov.className = 'geo26-ov';
+  ov.innerHTML = '<div class="geo26-map" id="geo26-map"><div class="geo26-carr">Carregando o mapa…</div></div><div class="geo26-pan" id="geo26-pan"></div>';
+  document.body.appendChild(ov); document.body.classList.add('ov27');
+  try {
+    if (!window.L) { const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = GEO26_L + 'css'; document.head.appendChild(css); await loadScript(GEO26_L + 'js'); }
+  } catch (e) { $('geo26-map').innerHTML = '<div class="geo26-carr er">Não foi possível carregar o mapa (Leaflet). Verifique a internet.</div>'; geo26Painel(); return; }
+  if (!document.getElementById('geo26-ov')) return;
+  if (!geo26Pronto()) {
+    if (geo26EhUTM()) Object.assign(g, {utm: true, zona: g.zona || 23, hem: g.hem || 'S', fix: true});
+    else if (P.lev27 && P.lev27.road && P.lev27.road.length) { const m = P.lev27.road[Math.floor(P.lev27.road.length / 2)]; Object.assign(g, {lat: m[1], lng: m[0]}); }
+    else Object.assign(g, {lat: -22.5266, lng: -41.9450});
+  }
+  const L = window.L, map = L.map('geo26-map', {zoomControl: true, maxZoom: 21, zoomSnap: 0.25});
+  const sat = L.tileLayer(GEO26_SAT, {maxZoom: 21, maxNativeZoom: 19, attribution: 'Imagem © Esri, Maxar, Earthstar'});
+  const rot = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {maxZoom: 21, maxNativeZoom: 19});
+  const rua = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 21, maxNativeZoom: 19, attribution: '© OpenStreetMap'});
+  GM26 = {map, sat, rot, rua, dese: L.layerGroup().addTo(map), lev: L.layerGroup().addTo(map), F: geo26Feicoes()};
+  const ca = $('geo26-map').querySelector('.geo26-carr'); if (ca) ca.remove();
+  geo26Base(g.base || 'sat'); geo26Lev(); geo26Desenha(true); geo26Painel();
+  let arr = null;
+  map.on('mousedown', e => { if (g.fix || g.utm || !e.originalEvent.shiftKey) return; arr = {ll: e.latlng, lat: g.lat, lng: g.lng}; map.dragging.disable(); });
+  map.on('mousemove', e => { if (!arr) return; g.lat = arr.lat + (e.latlng.lat - arr.ll.lat); g.lng = arr.lng + (e.latlng.lng - arr.ll.lng); geo26Desenha(); });
+  map.on('mouseup', () => { if (!arr) return; arr = null; map.dragging.enable(); save(); geo26Campos(); });
+  map.getContainer().addEventListener('wheel', e => { if (!e.shiftKey || g.fix || g.utm) return; e.preventDefault(); e.stopPropagation();
+    g.rot = +(((g.rot || 0) + (e.deltaY > 0 ? 1 : -1) * (e.altKey ? 0.1 : 1)) % 360).toFixed(2); geo26Desenha(); geo26Campos(); save(); }, {capture: true, passive: false});
+}
+function geo26Fechar() { if (GM26) { try { GM26.map.remove(); } catch (e) {} GM26 = null; } const o = document.getElementById('geo26-ov'); if (o) o.remove(); if (!document.getElementById('lev27-ov')) document.body.classList.remove('ov27'); save(); }
+function geo26Base(b) {
+  const g = geo26G(); g.base = b; if (!GM26) return; const m = GM26.map;
+  [GM26.sat, GM26.rot, GM26.rua].forEach(t => { if (m.hasLayer(t)) m.removeLayer(t); });
+  if (b === 'rua') GM26.rua.addTo(m); else { GM26.sat.addTo(m); if (b === 'hib') GM26.rot.addTo(m); }
+  [GM26.sat, GM26.rot, GM26.rua].forEach(t => t.setOpacity((g.opS == null ? 100 : g.opS) / 100));
+}
+/* cor por cota (azul baixo → marrom alto) */
+function geo26CorZ(z, z0, z1) { const t = Math.max(0, Math.min(1, (z - z0) / Math.max(1, z1 - z0))); const c = [[37, 99, 235], [22, 163, 74], [234, 179, 8], [180, 83, 9], [120, 53, 15]]; const k = Math.min(3, Math.floor(t * 4)), u = t * 4 - k, a = c[k], b = c[k + 1]; return 'rgb(' + a.map((v, i) => Math.round(v + (b[i] - v) * u)).join(',') + ')'; }
+/* levantamento da bacia (DR-27) — sempre em lat/lon */
+function geo26Lev() {
+  if (!GM26) return; const L = window.L, D = GM26.lev, g = geo26G(), nv = g.niv; D.clearLayers();
+  const lv = P.lev27; if (!lv || !nv.lev) return; const E = typeof lev27Estudo === 'function' ? lev27Estudo() : null;
+  if (lv.poly && lv.poly.length > 2) L.polygon(lv.poly.map(p => [p[1], p[0]]), {color: '#facc15', weight: 2, fill: true, fillOpacity: 0.04, interactive: false}).addTo(D);
+  if (nv.malha && lv.pts && lv.pts.length) { const zs = lv.pts.map(p => p[2]), z0 = Math.min(...zs), z1 = Math.max(...zs), mx = 6000, st = Math.max(1, Math.ceil(lv.pts.length / mx));
+    for (let i = 0; i < lv.pts.length; i += st) { const p = lv.pts[i]; L.circleMarker([p[1], p[0]], {radius: 2.5, weight: 0, fillOpacity: 0.9, fillColor: geo26CorZ(p[2], z0, z1)}).bindTooltip('z = ' + fmt(p[2], 1) + ' m', {sticky: true}).addTo(D); } }
+  if (nv.talv && E && E.talv) E.talv.forEach(s => L.polyline(s.p.map(q => [q[1], q[0]]), {color: '#38bdf8', weight: Math.min(6, 1 + Math.log10(1 + s.A * 10) * 2.2), opacity: 0.9}).bindTooltip('Talvegue · área ' + fmt(s.A, 2) + ' km²', {sticky: true}).addTo(D));
+  if (lv.road && lv.road.length > 1) L.polyline(lv.road.map(p => [p[1], p[0]]), {color: '#f8fafc', weight: 2, dashArray: '8 6', interactive: false}).addTo(D);
+  if (nv.baixos && E && E.pools) E.pools.forEach((q, i) => L.circleMarker([q.lat, q.lon], {radius: 6, color: '#7f1d1d', weight: 1, fillColor: '#ef4444', fillOpacity: 0.95})
+    .bindPopup(`<b>Ponto baixo ${i + 1}</b> — estaca ${estLabel(q.s)}<br>Fundo ${fmt(q.zf, 2)} m · cheia ${fmt(q.nivel, 2)} m · greide ${fmt(q.greide, 2)} m<br>Bacia local ${fmt(q.A, 2)} km² · Tc ${fmt(q.tc, 0)} min<br>Q${lev27Par('trTrav')} = ${fmt(q.Q, 2)} m³/s · ${esc(q.secTxt || '')}`).addTo(D));
+  if (E && E.out) { const o = E.out; L.marker([o.lat, o.lon], {title: 'Deságue da bacia'}).bindPopup(`<b>${esc(lev27Par('ponteNome'))}</b><br>Área ${fmt(E.bac.A, 2)} km² · Tc ${fmt(E.bac.tc, 0)} min<br>Q${lev27Par('trPonte')} = ${fmt(E.bac.Q[lev27Par('trPonte')], 1)} m³/s<br>Capacidade (folga ${fmt(E.ponte.folga, 2)} m): ${fmt(E.ponte.Qf, 1)} m³/s — <b>${E.ponte.ok ? 'atende' : 'NÃO atende'}</b>`).addTo(D); }
+}
+function geo26Desenha(enquadra) {
+  if (!GM26) return; const L = window.L, g = geo26G(), F = GM26.F, op = (g.opD == null ? 85 : g.opD) / 100, nv = g.niv, D = GM26.dese; D.clearLayers();
+  if (!P.ruas.length) { if (enquadra && P.lev27 && P.lev27.poly && P.lev27.poly.length) GM26.map.fitBounds(L.latLngBounds(P.lev27.poly.map(p => [p[1], p[0]])).pad(0.05)); return; }
+  const ll = p => geo26LL(p[0], p[1]), pol = (pts, st) => L.polygon(pts.map(ll), Object.assign({weight: 0, fillOpacity: op, interactive: false}, st)).addTo(D);
+  if (nv.ruas) { F.pass.forEach(q => pol(q, {fillColor: '#d6d2c8'})); F.pista.forEach(q => pol(q, {fillColor: '#4b4d50'}));
+    F.eixo.forEach(e => L.polyline(e.p.map(ll), {color: '#f8fafc', weight: 1, dashArray: '6 6', opacity: op}).bindTooltip(esc(e.nome), {sticky: true}).addTo(D)); }
+  if (nv.rede) F.rede.forEach(x => { const r = x.r, gal = galOf(x.t), cor = r && r.st === 'err' ? '#dc2626' : gal ? '#7c3aed' : '#0ea5e9';
+    L.polyline(x.p.map(ll), {color: cor, weight: gal ? 5 : 3, opacity: Math.min(1, op + 0.15)})
+      .bindTooltip(`${esc(x.t.id)} · ${esc(secLbl(x.t))}${r ? ' · Q ' + fmt(r.Q, 3) + ' m³/s · V ' + fmt(r.h && r.h.V, 2) + ' m/s · y/D ' + fmt(r.h && r.h.yD, 2) : ''}`, {sticky: true}).addTo(D); });
+  if (nv.bls) { F.ramais.forEach(q => L.polyline(q.map(ll), {color: '#22d3ee', weight: 1.5, opacity: op, interactive: false}).addTo(D));
+    F.bls.forEach(q => L.circleMarker(ll(q.p), {radius: 3, color: '#0e7490', weight: 1, fillColor: '#cffafe', fillOpacity: 1}).bindTooltip(esc(q.b.id), {sticky: true}).addTo(D)); }
+  if (nv.pvs) F.pvs.forEach(q => { const r = q.r, m = L.circleMarker(ll(q.p), {radius: 4, color: '#0f172a', weight: 1, fillColor: r && r.exut ? '#f97316' : '#e2e8f0', fillOpacity: 1}).addTo(D);
+    m.bindPopup(`<b>${esc(q.pv.id)}</b><br>Tampa ${fmt(r && r.tp, 3)} · Fundo ${fmt(r && r.fundo, 3)}<br>Profundidade ${fmt(r && r.prof, 2)} m${r && r.exut ? '<br><b>Deságue</b>' : ''}`);
+    if (nv.rot) m.bindTooltip(esc(q.pv.id), {permanent: F.pvs.length < 30, direction: 'top', className: 'geo26-tt', offset: [0, -4]}); });
+  if (!g.fix && !g.utm) {
+    const Lm = geo26Limites(), raio = Math.hypot(Lm.w, Lm.h) / 2 * 0.6 * (g.esc || 100) / 100, th = (g.rot || 0) * Math.PI / 180, cl = [g.lat, g.lng];
+    const pr = [g.lat + raio * Math.sin(th) / GEO26_M, g.lng + raio * Math.cos(th) / (GEO26_M * Math.cos(g.lat * Math.PI / 180))];
+    L.polyline([cl, pr], {color: '#2563eb', weight: 2, dashArray: '4 4', interactive: false}).addTo(D);
+    const mk = L.marker(cl, {draggable: true, icon: L.divIcon({className: 'geo26-h geo26-hm', html: '●', iconSize: [22, 22]}), title: 'Arraste para mover o desenho'}).addTo(D);
+    mk.on('drag', e => { const p = e.target.getLatLng(); g.lat = p.lat; g.lng = p.lng; }); mk.on('dragend', () => { geo26Desenha(); geo26Campos(); save(); });
+    const mr = L.marker(pr, {draggable: true, icon: L.divIcon({className: 'geo26-h geo26-hr', html: '◎', iconSize: [22, 22]}), title: 'Arraste para girar o desenho'}).addTo(D);
+    mr.on('drag', e => { const p = e.target.getLatLng(), dx = (p.lng - g.lng) * GEO26_M * Math.cos(g.lat * Math.PI / 180), dy = (p.lat - g.lat) * GEO26_M; g.rot = Math.round(Math.atan2(dy, dx) * 18000 / Math.PI) / 100; });
+    mr.on('dragend', () => { geo26Desenha(); geo26Campos(); save(); });
+  }
+  if (enquadra) { const pts = []; F.pista.forEach(q => q.forEach(p => pts.push(ll(p)))); F.pvs.forEach(q => pts.push(ll(q.p)));
+    if (P.lev27 && P.lev27.poly && P.lev27.poly.length && g.niv.lev) P.lev27.poly.forEach(p => pts.push([p[1], p[0]]));
+    if (pts.length) GM26.map.fitBounds(L.latLngBounds(pts).pad(0.08), {maxZoom: 19}); else GM26.map.setView([g.lat, g.lng], 17); }
+  geo26Links();
+}
+function geo26Links() { const a = document.getElementById('geo26-gm'); if (!a || !geo26Pronto() || !P.ruas.length) return; const c = geo26Centro(), p = geo26LL(c[0], c[1]); a.href = 'https://www.google.com/maps/@' + p[0].toFixed(6) + ',' + p[1].toFixed(6) + ',17z/data=!3m1!1e3'; }
+function geo26Campos() {
+  const g = geo26G(), q = id => document.getElementById(id); if (!q('geo26-a') || g.utm) return;
+  if (g.modo === 'utm') { const u = geo26ParaUTM(g.lat, g.lng); q('geo26-a').value = u.e.toFixed(2); q('geo26-b').value = u.n.toFixed(2); q('geo26-z').value = u.z; }
+  else { q('geo26-a').value = (+g.lat).toFixed(7); q('geo26-b').value = (+g.lng).toFixed(7); }
+  q('geo26-rot').value = (+g.rot || 0).toFixed(2); q('geo26-esc').value = (+g.esc || 100).toFixed(1);
+}
+function geo26Painel() {
+  const p = document.getElementById('geo26-pan'); if (!p) return; const g = geo26G(), u = g.modo === 'utm', utmP = geo26EhUTM(), nv = g.niv;
+  const ck = (k, t) => `<label class="c"><input type="checkbox" data-geo26niv="${k}"${nv[k] ? ' checked' : ''}/> ${t}</label>`;
+  const pvs = P.pvs.map(v => `<option value="${esc(v.id)}">${esc(v.id)}</option>`).join('');
+  const temLev = P.lev27 && P.lev27.pts && P.lev27.pts.length;
+  p.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center"><b>🛰 Georreferenciar</b><button class="b" data-geo26="fechar" title="Fechar e voltar (Esc)">✕</button></div>
+  <div class="s">Posicione o projeto sobre o satélite. A posição fica salva no projeto (abre no mesmo lugar e vai para o KMZ).</div>
+  <div class="t">Procurar o local</div><div class="g"><input id="geo26-q" placeholder="Rua, bairro, cidade…" style="flex:1;min-width:120px"/><button class="b" data-geo26="busca">🔍</button></div><div id="geo26-res" class="geo26-res"></div>
+  <div class="t">Tipo do mapa</div><div class="g">${[['sat', 'Satélite'], ['hib', 'Satélite + nomes'], ['rua', 'Mapa']].map(([k, t]) => `<button class="b${(g.base || 'sat') === k ? ' on' : ''}" data-geo26b="${k}">${t}</button>`).join('')}</div>
+  <div class="t">Mostrar</div>
+  ${ck('ruas', 'Ruas (pista e passeio)')}${ck('rede', 'Rede (tubos e galerias)')}${ck('pvs', 'PVs e deságues')}${ck('rot', 'Nome dos PVs')}${ck('bls', 'Caixas e ramais')}
+  ${temLev ? ck('lev', 'Levantamento da bacia (poligonal, estrada, ponte)') + ck('malha', 'Malha de pontos (cor pela cota)') + ck('talv', 'Talvegues (caminho da água)') + ck('baixos', 'Pontos baixos da estrada') : ''}
+  ${P.ruas.length ? `<div class="t">Posição</div>
+  ${utmP ? `<label class="c"><input type="checkbox" data-geo26="utm"${g.utm ? ' checked' : ''}/> As coordenadas do projeto já são <b>UTM SIRGAS 2000</b> (locação exata)</label>
+    ${g.utm ? `<div class="g"><label>Zona <input id="geo26-zona" value="${g.zona || 23}" style="width:44px"/></label><label>Hemisfério <select id="geo26-hem"><option value="S"${g.hem !== 'N' ? ' selected' : ''}>Sul</option><option value="N"${g.hem === 'N' ? ' selected' : ''}>Norte</option></select></label><button class="b" data-geo26="aplUtm">Aplicar</button></div>` : ''}` : ''}
+  ${g.utm ? '' : `<div class="g"><button class="b${!u ? ' on' : ''}" data-geo26m="dec">Lat/Lon</button><button class="b${u ? ' on' : ''}" data-geo26m="utm">UTM</button><button class="b" data-geo26="colar">📋 Colar</button><button class="b" data-geo26="centro" title="Coloca o centro do desenho no centro do mapa">⌖ Centro do mapa</button></div>
+    <div class="g"><label>${u ? 'E (m)' : 'Lat'} <input id="geo26-a" style="width:118px"/></label><label>${u ? 'N (m)' : 'Lon'} <input id="geo26-b" style="width:118px"/></label>${u ? '<label>Zona <input id="geo26-z" style="width:40px"/></label>' : ''}<button class="b" data-geo26="ir">Ir</button></div>
+    <div class="g"><label>Giro (°) <input id="geo26-rot" style="width:64px"/></label><label>Escala (%) <input id="geo26-esc" style="width:60px"/></label></div>
+    <div class="s">Arraste o ● vermelho (ou Shift + arrastar o mapa) para mover; o ◎ azul (ou Shift + roda do mouse) para girar.</div>`}
+  <div class="g"><label>Desenho <input type="range" min="10" max="100" value="${g.opD == null ? 85 : g.opD}" data-geo26r="opD"/></label><label>Imagem <input type="range" min="10" max="100" value="${g.opS == null ? 100 : g.opS}" data-geo26r="opS"/></label></div>
+  ${g.utm ? '' : `<div class="t">Pontos de controle (PV com coordenada medida)</div>
+    <div class="g"><select id="geo26-pv">${pvs}</select><input id="geo26-pc" placeholder="lat, lon  ou  E N zona" style="flex:1;min-width:110px"/><button class="b" data-geo26="pcAdd">+</button></div>
+    ${g.ctrl.length ? '<div class="geo26-res">' + g.ctrl.map((q, i) => `<div>${esc(q.pv)}: ${(+q.lat).toFixed(6)}, ${(+q.lng).toFixed(6)} <button class="b" data-geo26pc="${i}">✕</button></div>`).join('') + '</div><div class="g"><button class="b pri" data-geo26="ajustar">📍 Locar pelos pontos</button></div>' : '<div class="s">Com 2 ou mais pontos o desenho é girado e deslocado sozinho (mínimos quadrados) e o erro aparece aqui.</div>'}
+    <div id="geo26-info" class="s"></div>`}
+  <div class="t">Salvar e exportar</div>
+  <div class="g">${g.utm ? '' : `<button class="b pri" data-geo26="fix">${g.fix ? '✎ Reposicionar' : '✔ Salvar posição'}</button>`}<button class="b" data-geo26="kmz">⬇ KMZ (Google Earth)</button><button class="b" data-geo26="kml">KML</button><a class="b" id="geo26-gm" target="_blank" rel="noopener">🌎 Google Maps</a></div>` : '<div class="s">Sem ruas no projeto: só o levantamento é mostrado. Use <b>🏔 Levantamento da bacia</b> → “Criar o projeto pela estrada”.</div>'}`;
+  geo26Campos(); geo26Links();
+}
+document.addEventListener('click', async e => {
+  const b = e.target.closest && e.target.closest('[data-geo26],[data-geo26b],[data-geo26m],[data-geo26pc]'); if (!b || !document.getElementById('geo26-ov')) return;
+  const g = geo26G(), d = b.dataset;
+  if (d.geo26b) { geo26Base(d.geo26b); save(); return geo26Painel(); }
+  if (d.geo26m) { g.modo = d.geo26m; return geo26Painel(); }
+  if (d.geo26pc != null) { g.ctrl.splice(+d.geo26pc, 1); save(); return geo26Painel(); }
+  const a = d.geo26;
+  if (a === 'fechar') return geo26Fechar();
+  if (a === 'busca') { const q = $('geo26-q').value.trim(); if (!q) return; const out = $('geo26-res'); out.textContent = 'Procurando…';
+    try { const r = await fetch('https://nominatim.openstreetmap.org/search?format=json&limit=6&countrycodes=br&q=' + encodeURIComponent(q)); const js = await r.json();
+      out.innerHTML = js.length ? js.map(x => `<div><a href="#" data-geo26ir="${x.lat},${x.lon}">${esc(x.display_name)}</a></div>`).join('') : 'Nada encontrado.'; }
+    catch (er) { out.textContent = 'Sem resposta do serviço de busca (internet?).'; } return; }
+  if (a === 'centro') { if (g.utm || !GM26) return; const c = GM26.map.getCenter(); g.lat = c.lat; g.lng = c.lng; geo26Desenha(); geo26Campos(); return save(); }
+  if (a === 'colar') { const t = prompt('Cole as coordenadas do centro do desenho: Lat, Lon em graus (ex.: -22.4800, -42.2900) ou UTM (E N zona):'); if (!t) return; const v = geo26Nums(t);
+    if (v.length >= 2 && Math.abs(v[0]) <= 90 && Math.abs(v[1]) <= 180) { g.lat = v[0]; g.lng = v[1]; }
+    else if (v.length >= 2) { const ll = geo26DeUTM(v[0], v[1], v[2] || 23, true); g.lat = ll[0]; g.lng = ll[1]; } else return toast('Não reconheci as coordenadas.');
+    geo26Desenha(true); geo26Campos(); return save(); }
+  if (a === 'ir') { const A = geo26Nums($('geo26-a').value)[0], B = geo26Nums($('geo26-b').value)[0]; if (!isFinite(A) || !isFinite(B)) return toast('Coordenada inválida.');
+    if (g.modo === 'utm') { const ll = geo26DeUTM(A, B, +($('geo26-z').value || 23), true); g.lat = ll[0]; g.lng = ll[1]; } else { g.lat = A; g.lng = B; }
+    const r = geo26Nums($('geo26-rot').value)[0], s = geo26Nums($('geo26-esc').value)[0]; if (isFinite(r)) g.rot = r; if (isFinite(s) && s > 1) g.esc = s; geo26Desenha(true); return save(); }
+  if (a === 'utm') { g.utm = b.checked; if (g.utm) { g.zona = g.zona || 23; g.hem = g.hem || 'S'; g.fix = true; }
+    else if (g.lat == null) { const c = geo26Centro(), ll = geo26DeUTM(c[0], c[1], g.zona || 23, true); g.lat = ll[0]; g.lng = ll[1]; g.fix = false; }
+    save(); geo26Desenha(true); return geo26Painel(); }
+  if (a === 'aplUtm') { g.zona = +($('geo26-zona').value) || 23; g.hem = $('geo26-hem').value; save(); geo26Desenha(true); return; }
+  if (a === 'pcAdd') { const v = geo26Nums($('geo26-pc').value); if (v.length < 2) return toast('Digite a coordenada do PV: lat, lon (graus) ou E N zona (UTM).'); let lat = v[0], lng = v[1];
+    if (!(Math.abs(lat) <= 90 && Math.abs(lng) <= 180)) { const ll = geo26DeUTM(v[0], v[1], v[2] || 23, true); lat = ll[0]; lng = ll[1]; }
+    const id = $('geo26-pv').value; g.ctrl = g.ctrl.filter(q => q.pv !== id); g.ctrl.push({pv: id, lat, lng}); save(); return geo26Painel(); }
+  if (a === 'ajustar') { const r = geo26Ajustar(); if (!r) return; g.fix = false; save(); geo26Desenha(true); geo26Painel(); const i = $('geo26-info');
+    if (i) i.innerHTML = r.n < 2 ? 'Com 1 ponto o desenho só é deslocado (o giro fica o digitado). Use 2 ou mais para girar.' : `Locado por ${r.n} pontos: erro médio <b>${fmt(r.rms, 2)} m</b>, maior <b>${fmt(r.max, 2)} m</b>${r.max > 2 ? ' — confira as coordenadas ou a escala do desenho.' : '.'}`; return; }
+  if (a === 'fix') { g.fix = !g.fix; save(); geo26Desenha(); geo26Painel(); return toast(g.fix ? 'Posição salva no projeto. ✎ Reposicionar para mexer de novo.' : 'Pode mover e girar o desenho.'); }
+  if (a === 'kmz' || a === 'kml') return geo26Exporta(a);
+});
+document.addEventListener('click', e => { const x = e.target.closest && e.target.closest('[data-geo26ir]'); if (!x) return; e.preventDefault(); const v = x.dataset.geo26ir.split(',').map(Number);
+  if (GM26) GM26.map.setView(v, 17); const g = geo26G(); if (!g.utm && !g.fix) { g.lat = v[0]; g.lng = v[1]; geo26Desenha(); geo26Campos(); save(); } $('geo26-res').innerHTML = ''; });
+document.addEventListener('change', e => { const el = e.target; if (!el || !document.getElementById('geo26-ov')) return; const g = geo26G();
+  if (el.dataset && el.dataset.geo26niv) { g.niv[el.dataset.geo26niv] = el.checked ? 1 : 0; save(); geo26Lev(); return geo26Desenha(); }
+  if (el.id === 'geo26-rot' || el.id === 'geo26-esc') { const v = geo26Nums(el.value)[0]; if (!isFinite(v)) return; if (el.id === 'geo26-rot') g.rot = v; else if (v > 1) g.esc = v; save(); geo26Desenha(); } });
+document.addEventListener('input', e => { const el = e.target; if (!el || !el.dataset || !el.dataset.geo26r || !GM26) return; const g = geo26G(); g[el.dataset.geo26r] = +el.value; if (el.dataset.geo26r === 'opS') geo26Base(g.base || 'sat'); else geo26Desenha(); save(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('geo26-ov')) { geo26Fechar(); e.stopPropagation(); } }, true);
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target && e.target.id === 'geo26-q') { const b = document.querySelector('[data-geo26="busca"]'); if (b) b.click(); } });
+/* ── KMZ / KML para o Google Earth (ZIP sem compressão) ── */
+function geo26Crc(u) { if (!geo26Crc.t) { geo26Crc.t = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; geo26Crc.t[n] = c >>> 0; } } let r = 0xFFFFFFFF; for (let i = 0; i < u.length; i++) r = geo26Crc.t[(r ^ u[i]) & 255] ^ (r >>> 8); return (r ^ 0xFFFFFFFF) >>> 0; }
+function geo26Zip1(nome, texto) {
+  const en = new TextEncoder(), nm = en.encode(nome), d = en.encode(texto), crc = geo26Crc(d), n = nm.length, sz = d.length;
+  const lh = new DataView(new ArrayBuffer(30)); lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(12, 0x21, true); lh.setUint32(14, crc, true); lh.setUint32(18, sz, true); lh.setUint32(22, sz, true); lh.setUint16(26, n, true);
+  const ch = new DataView(new ArrayBuffer(46)); ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(14, 0x21, true); ch.setUint32(16, crc, true); ch.setUint32(20, sz, true); ch.setUint32(24, sz, true); ch.setUint16(28, n, true);
+  const ec = new DataView(new ArrayBuffer(22)); ec.setUint32(0, 0x06054b50, true); ec.setUint16(8, 1, true); ec.setUint16(10, 1, true); ec.setUint32(12, 46 + n, true); ec.setUint32(16, 30 + n + sz, true);
+  return new Blob([lh, nm, d, ch, nm, ec], {type: 'application/vnd.google-earth.kmz'});
+}
+function geo26KmlTexto() {
+  const F = geo26Feicoes(), x = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;'), ll = p => geo26LL(p[0], p[1]);
+  const co = pts => pts.map(p => { const l = ll(p); return l[1].toFixed(8) + ',' + l[0].toFixed(8) + ',0'; }).join(' ');
+  const coG = pts => pts.map(p => (+p[0]).toFixed(8) + ',' + (+p[1]).toFixed(8) + ',0').join(' ');
+  const pol = (c, st) => `<Placemark><styleUrl>#${st}</styleUrl><Polygon><tessellate>1</tessellate><outerBoundaryIs><LinearRing><coordinates>${c}</coordinates></LinearRing></outerBoundaryIs></Polygon></Placemark>`;
+  const lin = (c, st, nome, desc) => `<Placemark>${nome ? '<name>' + x(nome) + '</name>' : ''}${desc ? '<description>' + x(desc) + '</description>' : ''}<styleUrl>#${st}</styleUrl><LineString><tessellate>1</tessellate><coordinates>${c}</coordinates></LineString></Placemark>`;
+  const pt = (l, nome, desc, st) => `<Placemark><name>${x(nome)}</name>${desc ? '<description>' + x(desc) + '</description>' : ''}<styleUrl>#${st}</styleUrl><Point><coordinates>${l[1].toFixed(8)},${l[0].toFixed(8)},0</coordinates></Point></Placemark>`;
+  const sty = (id, lc, lw, pc) => `<Style id="${id}"><LineStyle><color>${lc}</color><width>${lw}</width></LineStyle><PolyStyle><color>${pc || '00000000'}</color>${pc ? '' : '<fill>0</fill>'}</PolyStyle></Style>`;
+  let k = `<?xml version="1.0" encoding="UTF-8"?><kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${x(P.proj.nome || 'Drenagem')}</name>
+${sty('pista', 'ff504d4b', 0, 'e6504d4b')}${sty('pass', 'ffc8d2d6', 0, 'e6c8d2d6')}${sty('eixo', 'ffffffff', 1)}${sty('rede', 'fff9a50e', 4)}${sty('gal', 'ffed3a7c', 6)}${sty('bac', 'ff15ccfa', 2, '1015ccfa')}${sty('estr', 'ffffffff', 2)}${sty('talv', 'fff8bd38', 2)}
+<Style id="pv"><IconStyle><scale>0.6</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/placemark_circle.png</href></Icon></IconStyle><LabelStyle><scale>0.7</scale></LabelStyle></Style>
+<Style id="baixo"><IconStyle><color>ff4444ef</color><scale>0.8</scale><Icon><href>http://maps.google.com/mapfiles/kml/shapes/caution.png</href></Icon></IconStyle></Style>`;
+  if (P.ruas.length && geo26Pronto()) {
+    k += '<Folder><name>Ruas</name>' + F.pass.map(q => pol(co(q.concat([q[0]])), 'pass')).join('') + F.pista.map(q => pol(co(q.concat([q[0]])), 'pista')).join('') + F.eixo.map(e => lin(co(e.p), 'eixo', e.nome)).join('') + '</Folder>';
+    k += '<Folder><name>Rede de drenagem</name>' + F.rede.map(q => { const r = q.r; return lin(co(q.p), galOf(q.t) ? 'gal' : 'rede', q.t.id + ' ' + secLbl(q.t), r ? `Q ${fmt(r.Q, 3)} m³/s · V ${fmt(r.h && r.h.V, 2)} m/s · y/D ${fmt(r.h && r.h.yD, 2)} · L ${fmt(r.L, 1)} m` : ''); }).join('') + '</Folder>';
+    k += '<Folder><name>PVs</name>' + F.pvs.map(q => pt(ll(q.p), q.pv.id, q.r ? `Tampa ${fmt(q.r.tp, 3)} · Fundo ${fmt(q.r.fundo, 3)} · Prof. ${fmt(q.r.prof, 2)} m${q.r.exut ? ' · DESÁGUE' : ''}` : '', 'pv')).join('') + '</Folder>';
+  }
+  const lv = P.lev27; if (lv && lv.poly && lv.poly.length) {
+    const E = typeof lev27Estudo === 'function' ? lev27Estudo() : null;
+    k += '<Folder><name>Levantamento da bacia</name>' + pol(coG(lv.poly.concat([lv.poly[0]])), 'bac') + (lv.road && lv.road.length ? lin(coG(lv.road), 'estr', 'Estrada (eixo do levantamento)') : '');
+    if (E) { k += (E.talv || []).map(s => lin(coG(s.p), 'talv', 'Talvegue', 'Área ' + fmt(s.A, 2) + ' km²')).join('');
+      k += E.pools.map((q, i) => pt([q.lat, q.lon], 'Ponto baixo ' + (i + 1), `Estaca ${estLabel(q.s)} · fundo ${fmt(q.zf, 2)} · greide ${fmt(q.greide, 2)} · Q ${fmt(q.Q, 2)} m³/s · ${q.secTxt || ''}`, 'baixo')).join('');
+      if (E.out) k += pt([E.out.lat, E.out.lon], lev27Par('ponteNome'), `Área ${fmt(E.bac.A, 2)} km² · Q${lev27Par('trPonte')} ${fmt(E.bac.Q[lev27Par('trPonte')], 1)} m³/s · capacidade ${fmt(E.ponte.Qf, 1)} m³/s`, 'pv'); }
+    k += '</Folder>';
+  }
+  return k + '</Document></kml>';
+}
+function geo26Exporta(tipo) {
+  if (P.ruas.length && !geo26Pronto()) return toast('Posicione o desenho no mapa antes de exportar.');
+  const t = geo26KmlTexto(), base = (P.proj.nome || 'drenagem').replace(/[^\w\-]+/g, '_');
+  const blob = tipo === 'kmz' ? geo26Zip1('doc.kml', t) : new Blob([t], {type: 'application/vnd.google-earth.kml+xml'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = base + '.' + tipo; document.body.appendChild(a); a.click(); a.remove();
+  toast((tipo === 'kmz' ? 'KMZ' : 'KML') + ' baixado: abra no Google Earth.');
+}
+/* botões na aba 11 (3D): 🛰 Georreferenciar e 🏔 Levantamento da bacia, na barra de cima do desenho */
+(function () {
+  const v0 = vTresD;
+  vTresD = function () {
+    const h = v0.apply(this, arguments), g = P.georef;
+    const info = geo26Pronto() ? (g.utm ? 'UTM SIRGAS 2000 zona ' + (g.zona || 23) + (g.hem === 'N' ? 'N' : 'S') : 'Lat ' + (+g.lat).toFixed(5) + ', Lon ' + (+g.lng).toFixed(5) + ' · giro ' + fmt(+g.rot || 0, 1) + '°') : 'ainda não posicionado';
+    const bar = `<div class="bar-btns" id="geo26-bar" style="margin-bottom:.5rem;flex-wrap:wrap;gap:.5rem;align-items:center">
+      <button class="btn btn-primary btn-sm" onclick="geo26Abrir()" title="Abre o mapa de satélite para posicionar o projeto: pesquisa, coordenadas, arrastar e girar">🛰 Georreferenciar</button>
+      <button class="btn btn-secondary btn-sm" onclick="lev27Abrir()" title="Malha de pontos do terreno, poligonal da bacia e linha da estrada: estudo completo da bacia e projeto da estrada">🏔 Levantamento da bacia</button>
+      <span style="font-size:.8rem;color:var(--muted)">Posição: ${esc(info)}</span></div>`;
+    const k = h.indexOf('<div id="t3-box"');
+    return k > 0 ? h.slice(0, k) + bar + h.slice(k) : h + bar;
+  };
+})();
+
+/* =====================================================================
+   PATCH DR-27 (17/11/2026) — 🏔 LEVANTAMENTO DA BACIA: malha de pontos do terreno + poligonal da bacia +
+   linha da estrada → ESTUDO COMPLETO DA BACIA e PROJETO DA ESTRADA (travessias, greide, ponte do deságue).
+   Estado em P.lev27 = {nome, pts:[[lon,lat,z]], poly:[[lon,lat]], road:[[lon,lat]], out:[lon,lat], par:{...}}.
+   Passos (lev27Calcula, mesmo método do estudo de Aldeia Velha de 16/11/2026):
+   1. Coordenadas → UTM SIRGAS 2000 (zona pelo centro). Grade quadrada dentro da poligonal com o espaçamento
+      da malha (mediana da distância ao vizinho mais próximo, ou o informado); cota de cada célula por IDW
+      (inverso do quadrado da distância, 8 vizinhos).
+   2. Caminho da água: D8 com preenchimento de depressões (priority-flood) a partir do DESÁGUE (célula mais baixa
+      perto do ponto informado — ex.: a ponte —, ou a mais baixa da borda). Área drenada, comprimento do talvegue
+      (L), desnível (H), declividade média e 10–85 %, hipsometria.
+   3. Tempo de concentração: média de Kirpich, Ventura e Pasini (bacia rural grande). Vazões pelo racional
+      modificado Q = 0,278·C·φ·i·A, φ = A^-0,15 (A > 1 km²), IDF do projeto (aba 2), C da bacia, TR 10/25/50/100.
+   4. Estrada: perfil a cada 25 m (IDW), filtro de mediana, CORREÇÃO DE COPA (topos > mínimo local ±300 m + 4 m
+      são copas: descontar 4 m), pontos baixos onde a água acumula até a profundidade informada (1 m), greide
+      mínimo = nível de cheia + folga (0,30 m).
+   5. Bacia local de cada ponto baixo (células cuja água chega primeiro à estrada naquele trecho entre cristas,
+      sem passar pelo rio > 5 km²): A, L, H, Tc (Kirpich, mín. 10 min), Q do TR das travessias (C local);
+      seção da travessia = tubo único até Ø1500 ou galeria de aduelas de MENOR ALTURA que leva a vazão
+      (Manning com as funções do programa: partFlow / rectFlow, y/D limite do programa); greide levantado no
+      ponto para cobrir a travessia (recobrimento informado + 2 % até a borda), com rampas de 5 %.
+   6. Ponte do deságue (BR-101): seção retangular B × H, Manning (n, S do talvegue), capacidade com a folga sob a
+      viga × Q do TR da ponte; largura necessária.
+   "Criar o projeto pela estrada" (lev27Projeto): a estrada vira ruas retas encadeadas (Douglas-Peucker), estacas
+   com greide e terreno, uma travessia (2 PVs de cabeceira/saída + trecho) por ponto baixo, bacia local ligada
+   à travessia, IDF/TR/recobrimento do estudo e georreferenciamento UTM exato (DR-26). O cálculo e o orçamento do
+   programa passam a valer para as travessias. Verificação: "Ponte do deságue — capacidade" (checks27).
+   ===================================================================== */
+const LEV27_PAR = {cel: 0, copa: 4, copaLim: 4, copaJan: 300, prof: 1.0, folga: 0.30, Cbac: 0.40, Cloc: 0.50, trTrav: 50, trPonte: 100,
+  rioA: 5, passo: 25, Strav: 0.005, recob: 0.30, rampa: 0.05, larg: 8, talude: 1.5, dp: 10,
+  ponteB: 8, ponteH: 5, ponteN: 0.035, ponteS: 0, ponteFolga: 1.0, ponteNome: 'Ponte da BR-101'};
+function lev27Par(k) { const p = P && P.lev27 && P.lev27.par; const v = p ? p[k] : undefined; return v === undefined || v === '' || v === null ? LEV27_PAR[k] : (typeof LEV27_PAR[k] === 'number' ? +v : v); }
+let LEV27_CACHE = {s: null, E: null};
+function lev27Estudo() {
+  const lv = P && P.lev27; if (!lv || !lv.pts || lv.pts.length < 10 || !lv.poly || lv.poly.length < 3) return null;
+  const s = JSON.stringify([lv.pts.length, lv.pts[0], lv.pts[lv.pts.length - 1], lv.poly, lv.road, lv.out, lv.par, P.idf]);
+  if (LEV27_CACHE.s === s && LEV27_CACHE.E) return LEV27_CACHE.E;
+  let E = null; try { E = lev27Calcula(lv); } catch (e) { console.error('Levantamento:', e); E = {erro: e.message}; }
+  LEV27_CACHE = {s, E}; return E;
+}
+/* ---------- utilidades ---------- */
+function lev27Heap() { const a = []; return {
+  push(v) { a.push(v); let i = a.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (a[p][0] <= a[i][0]) break; [a[p], a[i]] = [a[i], a[p]]; i = p; } },
+  pop() { const t = a[0], e = a.pop(); if (a.length) { a[0] = e; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < a.length && a[l][0] < a[m][0]) m = l; if (r < a.length && a[r][0] < a[m][0]) m = r; if (m === i) break; [a[m], a[i]] = [a[i], a[m]]; i = m; } } return t; },
+  get n() { return a.length; }}; }
+function lev27Dentro(x, y, pol) { let c = false; for (let i = 0, j = pol.length - 1; i < pol.length; j = i++) { const a = pol[i], b = pol[j]; if ((a[1] > y) !== (b[1] > y) && x < (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]) + a[0]) c = !c; } return c; }
+function lev27Med(v, w) { const n = v.length, o = new Array(n), h = w >> 1; for (let i = 0; i < n; i++) { const s = []; for (let k = i - h; k <= i + h; k++) s.push(v[Math.max(0, Math.min(n - 1, k))]); s.sort((a, b) => a - b); o[i] = s[h]; } return o; }
+function lev27Mov(v, w) { const n = v.length, o = new Array(n), h = w >> 1; for (let i = 0; i < n; i++) { let s = 0; for (let k = i - h; k <= i + h; k++) s += v[Math.max(0, Math.min(n - 1, k))]; o[i] = s / w; } return o; }
+function lev27Min(v, w) { const n = v.length, o = new Array(n), h = w >> 1; for (let i = 0; i < n; i++) { let m = Infinity; for (let k = i - h; k <= i + h; k++) m = Math.min(m, v[Math.max(0, Math.min(n - 1, k))]); o[i] = m; } return o; }
+function lev27Kirpich(L, H) { return 57 * Math.pow(Math.pow(L / 1000, 3) / Math.max(H, 1), 0.385); }
+function lev27TcBacia(A, L, H) { const S = Math.max(H, 1) / L; const k = lev27Kirpich(L, H), v = 0.127 * Math.sqrt(A / S) * 60, p = 0.107 * Math.pow(A * L / 1000, 1 / 3) / Math.sqrt(S) * 60; return {k, v, p, tc: (k + v + p) / 3}; }
+function lev27Phi(A) { return A > 1 ? Math.pow(A, -0.15) : 1; }
+function lev27Idf(tc, tr) { const f = P.idf || {}; return (+f.a || 0) * Math.pow(tr, +f.b || 0) / Math.pow(tc + (+f.c || 0), +f.d || 1); }   // sem o fator de chuva do 3D
+function lev27Q(C, A, tc, tr) { return 0.278 * C * lev27Phi(A) * lev27Idf(tc, tr) * A; }
+/* picos com proeminência (como scipy.signal.find_peaks) */
+function lev27Picos(z, prom) {
+  const n = z.length, out = []; let i = 1;
+  while (i < n - 1) {
+    if (z[i] > z[i - 1]) { let j = i; while (j + 1 < n && z[j + 1] === z[i]) j++; if (j + 1 < n && z[j + 1] < z[i]) { const k = (i + j) >> 1;
+        let lm = z[k], a = k; while (a > 0 && z[a - 1] <= z[k]) { a--; lm = Math.min(lm, z[a]); } let rm = z[k], b = k; while (b < n - 1 && z[b + 1] <= z[k]) { b++; rm = Math.min(rm, z[b]); }
+        if (z[k] - Math.max(lm, rm) >= prom) out.push(k); } i = j + 1; } else i++;
+  }
+  return out;
+}
+/* ---------- estudo ---------- */
+function lev27Calcula(lv) {
+  const par = k => { const v = lv.par ? lv.par[k] : undefined; return v === undefined || v === '' || v === null ? LEV27_PAR[k] : (typeof LEV27_PAR[k] === 'number' ? +v : v); };
+  const cx = lv.poly.reduce((a, p) => a + p[0], 0) / lv.poly.length, cy = lv.poly.reduce((a, p) => a + p[1], 0) / lv.poly.length;
+  const zona = Math.floor((cx + 180) / 6) + 1, U = (lon, lat) => { const u = geo26ParaUTM(lat, lon, zona); return [u.e, u.n]; }, LL = (x, y) => { const l = geo26DeUTM(x, y, zona, cy < 0); return [l[1], l[0]]; };
+  const pol = lv.poly.map(p => U(p[0], p[1])), pts = lv.pts.map(p => { const u = U(p[0], p[1]); return [u[0], u[1], +p[2]]; }).filter(p => isFinite(p[2]));
+  let Apol = 0; for (let i = 0, j = pol.length - 1; i < pol.length; j = i++) Apol += (pol[j][0] + pol[i][0]) * (pol[j][1] - pol[i][1]); Apol = Math.abs(Apol) / 2 / 1e6;
+  const xs = pol.map(p => p[0]), ys = pol.map(p => p[1]), x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+  /* espaçamento: mediana da distância ao vizinho mais próximo (amostra) */
+  let cel = par('cel');
+  const B = 60, bk = new Map(), key = (i, j) => i + ',' + j; pts.forEach((p, k) => { const kk = key(Math.floor(p[0] / B), Math.floor(p[1] / B)); if (!bk.has(kk)) bk.set(kk, []); bk.get(kk).push(k); });
+  const viz = (x, y, nmin, rmax) => { const i0 = Math.floor(x / B), j0 = Math.floor(y / B); let r = 0, got = []; while (r * B <= rmax) { got = []; for (let i = i0 - r; i <= i0 + r; i++) for (let j = j0 - r; j <= j0 + r; j++) { const l = bk.get(key(i, j)); if (l) l.forEach(k => got.push(k)); } if (got.length >= nmin && r > 0) break; r++; } return got; };
+  if (!(cel > 0)) { const sm = []; const st = Math.max(1, Math.floor(pts.length / 1500)); for (let k = 0; k < pts.length; k += st) { const p = pts[k]; let d = Infinity; viz(p[0], p[1], 2, 2000).forEach(q => { if (q !== k) d = Math.min(d, Math.hypot(pts[q][0] - p[0], pts[q][1] - p[1])); }); if (isFinite(d)) sm.push(d); }
+    sm.sort((a, b) => a - b); cel = sm.length ? sm[Math.floor(sm.length * 0.5)] : 100; cel = Math.max(10, Math.min(500, Math.round(cel / 5) * 5)); }
+  const nx = Math.max(3, Math.ceil((x1 - x0) / cel) + 1), ny = Math.max(3, Math.ceil((y1 - y0) / cel) + 1), N = nx * ny;
+  const Z = new Float64Array(N).fill(NaN), cxy = i => [x0 + (i % nx) * cel, y0 + Math.floor(i / nx) * cel];
+  const idw = (x, y) => { const c = viz(x, y, 8, Math.max(4 * cel, 600)); if (!c.length) return NaN; const d = c.map(k => [Math.hypot(pts[k][0] - x, pts[k][1] - y), k]).sort((a, b) => a[0] - b[0]).slice(0, 8);
+    if (d[0][0] < 0.5) return pts[d[0][1]][2]; let s = 0, w = 0; d.forEach(([dd, k]) => { const q = 1 / (dd * dd); s += q * pts[k][2]; w += q; }); return s / w; };
+  for (let i = 0; i < N; i++) { const [x, y] = cxy(i); if (lev27Dentro(x, y, pol)) Z[i] = idw(x, y); }
+  const ok = i => i >= 0 && i < N && isFinite(Z[i]), cellA = cel * cel / 1e6, NB = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
+  const nbr = i => { const ix = i % nx, iy = Math.floor(i / nx), o = []; NB.forEach(([a, b]) => { const jx = ix + a, jy = iy + b; if (jx >= 0 && jx < nx && jy >= 0 && jy < ny) o.push(jy * nx + jx); }); return o; };
+  const dd = (i, j) => Math.hypot((i % nx) - (j % nx), Math.floor(i / nx) - Math.floor(j / nx)) * cel;
+  const valid = []; for (let i = 0; i < N; i++) if (ok(i)) valid.push(i);
+  if (valid.length < 9) throw new Error('A malha tem poucos pontos dentro da poligonal.');
+  /* deságue */
+  let o0 = -1, outPt = lv.out && lv.out.length === 2 ? U(lv.out[0], lv.out[1]) : null;
+  if (outPt) { let best = null; valid.forEach(i => { const [x, y] = cxy(i), d = Math.hypot(x - outPt[0], y - outPt[1]); if (d <= Math.max(1200, 3 * cel) && (!best || Z[i] < best[0])) best = [Z[i], i]; }); if (best) o0 = best[1]; }
+  if (o0 < 0) { let best = null; valid.forEach(i => { if (nbr(i).length < 8 || nbr(i).some(j => !ok(j))) if (!best || Z[i] < best[0]) best = [Z[i], i]; }); o0 = best[1]; }
+  /* priority-flood + D8 */
+  const done = new Uint8Array(N), recv = new Int32Array(N).fill(-1), Fz = new Float64Array(N).fill(Infinity), h = lev27Heap();
+  Fz[o0] = Z[o0]; h.push([Z[o0], o0]);
+  while (h.n) { const [z, i] = h.pop(); if (done[i]) continue; done[i] = 1; nbr(i).forEach(j => { if (!ok(j) || done[j]) return; const nz = Math.max(Z[j], z + 1e-3); if (nz < Fz[j]) { Fz[j] = nz; recv[j] = i; h.push([nz, j]); } }); }
+  const cells = valid.filter(i => done[i]), L = new Float64Array(N).fill(NaN); L[o0] = 0;
+  const flen = c => { const path = []; let cur = c; while (!isFinite(L[cur])) { path.push(cur); cur = recv[cur]; } let b = L[cur]; for (let k = path.length - 1; k >= 0; k--) { const p = path[k]; b += dd(p, recv[p]); L[p] = b; } };
+  cells.forEach(flen);
+  const order = cells.slice().sort((a, b) => L[b] - L[a]), acc = new Float64Array(N), upL = new Float64Array(N), farZ = new Float64Array(N);
+  cells.forEach(c => { acc[c] = 1; farZ[c] = Z[c]; });
+  order.forEach(c => { if (c === o0) return; const r = recv[c]; acc[r] += acc[c]; const cl = upL[c] + dd(c, r); if (cl > upL[r]) { upL[r] = cl; farZ[r] = farZ[c]; } });
+  let far = o0; cells.forEach(c => { if (L[c] > L[far]) far = c; });
+  const Lm = L[far], Hm = Math.max(1, Z[far] - Z[o0]), path = []; for (let c = far; c >= 0; c = c === o0 ? -1 : recv[c]) path.push(c);
+  const pd = path.map(c => L[c]).reverse(), pz = path.map(c => Z[c]).reverse(), interp = (x, X, Y) => { if (x <= X[0]) return Y[0]; for (let k = 1; k < X.length; k++) if (x <= X[k]) return Y[k - 1] + (Y[k] - Y[k - 1]) * (x - X[k - 1]) / ((X[k] - X[k - 1]) || 1); return Y[Y.length - 1]; };
+  const S1085 = (interp(0.85 * Lm, pd, pz) - interp(0.10 * Lm, pd, pz)) / (0.75 * Lm), Sout = (interp(Math.min(6000, Lm), pd, pz) - interp(0, pd, pz)) / Math.min(6000, Lm);
+  const zin = lv.pts.filter(p => lev27Dentro(p[0], p[1], lv.poly)).map(p => +p[2]).sort((a, b) => a - b), pct = q => zin.length ? zin[Math.min(zin.length - 1, Math.floor(q * zin.length))] : NaN;
+  let sg = 0, ng = 0; cells.forEach(c => { const ix = c % nx, iy = Math.floor(c / nx), e = ok(c + 1) && ix < nx - 1 ? c + 1 : c, w = ok(c - 1) && ix > 0 ? c - 1 : c, nn = ok(c + nx) && iy < ny - 1 ? c + nx : c, ss = ok(c - nx) && iy > 0 ? c - nx : c;
+    if (e !== w || nn !== ss) { const gx = e !== w ? (Z[e] - Z[w]) / ((e - w) * cel) : 0, gy = nn !== ss ? (Z[nn] - Z[ss]) / (((nn - ss) / nx) * cel) : 0; sg += Math.hypot(gx, gy); ng++; } });
+  const A = Apol, tcB = lev27TcBacia(A, Lm, Hm), Cb = par('Cbac'), Qb = {}, ib = {}; [2, 5, 10, 25, 50, 100].forEach(T => { ib[T] = lev27Idf(tcB.tc, T); Qb[T] = lev27Q(Cb, A, tcB.tc, T); });
+  const QbC = {}; [0.30, 0.40, 0.50].forEach(C => { QbC[C] = {}; [10, 25, 50, 100].forEach(T => { QbC[C][T] = lev27Q(C, A, tcB.tc, T); }); });
+  const bac = {A, Agrade: acc[o0] * cellA, L: Lm, H: Hm, S: Hm / Lm, S1085, Sout, tcK: tcB.k, tcV: tcB.v, tcP: tcB.p, tc: tcB.tc, C: Cb, phi: lev27Phi(A), i: ib, Q: Qb, QC: QbC,
+    zmin: zin[0], zmax: zin[zin.length - 1], zmed: zin.reduce((a, b) => a + b, 0) / (zin.length || 1), z10: pct(0.10), z85: pct(0.85), decl: ng ? sg / ng : NaN, nPts: lv.pts.length, nCel: cells.length, cel, zona,
+    far: (() => { const [x, y] = cxy(far), l = LL(x, y); return {lon: l[0], lat: l[1], z: Z[far]}; })(), perfilTalv: {d: pd, z: pz}};
+  /* talvegues (células com área drenada ≥ 0,5 km² ou 1 % da bacia) */
+  const tA = Math.max(0.5, 0.01 * A), talv = []; cells.forEach(c => { if (c === o0 || acc[c] * cellA < tA) return; const a = cxy(c), b = cxy(recv[c]); talv.push({p: [LL(a[0], a[1]), LL(b[0], b[1])], A: acc[c] * cellA}); });
+  const [ox, oy] = cxy(o0), oll = LL(ox, oy), out = {lon: oll[0], lat: oll[1], z: Z[o0]};
+  /* ---- estrada ---- */
+  let road = null, pools = [], canopy = [], along = [];
+  if (lv.road && lv.road.length > 1) {
+    const RU = lv.road.map(p => U(p[0], p[1])), seg = [0]; for (let k = 1; k < RU.length; k++) seg.push(seg[k - 1] + Math.hypot(RU[k][0] - RU[k - 1][0], RU[k][1] - RU[k - 1][1]));
+    const Ltot = seg[seg.length - 1], passo = par('passo'), ds = []; for (let s = 0; s < Ltot - 1e-6; s += passo) ds.push(s); ds.push(Ltot);
+    const at = s => { let k = 1; while (k < seg.length - 1 && seg[k] < s) k++; const t = (s - seg[k - 1]) / ((seg[k] - seg[k - 1]) || 1); return [RU[k - 1][0] + (RU[k][0] - RU[k - 1][0]) * t, RU[k - 1][1] + (RU[k][1] - RU[k - 1][1]) * t]; };
+    const xy = ds.map(at), n = ds.length, zraw = xy.map(p => idw(p[0], p[1]));
+    const zsm = lev27Mov(lev27Med(zraw, 5), 3), W = Math.max(1, Math.round(par('copaJan') / passo)), base = lev27Min(zsm, 2 * W + 1);
+    const cr0 = zsm.map((z, k) => z - base[k] >= par('copaLim')), crown = cr0.map((c, k) => c || cr0[k - 1] || cr0[k + 1]);
+    let zc = zsm.map((z, k) => Math.max(z - (crown[k] ? par('copa') : 0), base[k])); zc = lev27Mov(zc, 3);
+    for (let k = 0; k < n;) { if (crown[k]) { let j = k; while (j + 1 < n && crown[j + 1]) j++; canopy.push({s0: ds[k], s1: ds[j], zmax: Math.max(...zsm.slice(k, j + 1))}); k = j + 1; } else k++; }
+    /* pontos baixos */
+    const DEP = par('prof'), FOL = par('folga'), level = new Array(n).fill(NaN), cov = new Uint8Array(n), pl = [];
+    const mins = []; for (let k = 0; k < n; k++) { let m = Infinity; for (let q = Math.max(0, k - 3); q <= Math.min(n - 1, k + 3); q++) m = Math.min(m, zc[q]); if (zc[k] <= m) mins.push(k); }
+    mins.sort((a, b) => zc[a] - zc[b]);
+    mins.forEach(m => { if (cov[m]) return; const lvl = zc[m] + DEP; let l = m, r = m; while (l > 0 && zc[l - 1] < lvl) l--; while (r < n - 1 && zc[r + 1] < lvl) r++;
+      for (let k = l; k <= r; k++) if (cov[k]) return; for (let k = l; k <= r; k++) { if (!isFinite(level[k])) level[k] = lvl; cov[k] = 1; } pl.push([l, r, m, lvl]); });
+    pl.sort((a, b) => a[2] - b[2]);
+    const alt = zc.map((z, k) => isFinite(level[k]) ? Math.max(0, level[k] + FOL - z) : 0), gEst = zc.map((z, k) => z + alt[k]);
+    /* estrada × células */
+    const cellOf = p => { const ix = Math.round((p[0] - x0) / cel), iy = Math.round((p[1] - y0) / cel); let best = null; for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) { const jx = ix + a, jy = iy + b; if (jx < 0 || jy < 0 || jx >= nx || jy >= ny) continue; const c = jy * nx + jx; if (!done[c]) continue; const d = Math.abs(a) + Math.abs(b); if (!best || d < best[0]) best = [d, c]; } return best ? best[1] : -1; };
+    const rc = xy.map(cellOf), rset = new Set(rc.filter(c => c >= 0)), thr = par('rioA') / cellA, first = new Map();
+    cells.forEach(c => { if (rset.has(c)) return; let cur = c, okk = true, g = 0; while (!rset.has(cur)) { if (cur === o0 || acc[cur] > thr || cur < 0 || ++g > 100000) { okk = false; break; } cur = recv[cur]; } if (okk) first.set(c, cur); });
+    const pk = lev27Picos(zc, 1.0), bounds = [...new Set([0].concat(pk, [n - 1]))].sort((a, b) => a - b);
+    const segOf = k => { for (let t = 0; t < bounds.length - 1; t++) if (bounds[t] <= k && k <= bounds[t + 1]) return t; return bounds.length - 2; };
+    const segCells = bounds.slice(0, -1).map((b, t) => new Set(rc.slice(b, bounds[t + 1] + 1).filter(c => c >= 0)));
+    const usado = new Set(), trT = par('trTrav'), Cl = par('Cloc'), S = par('Strav'), nT = +P.crit.nTubo || 0.013;
+    pl.forEach(([l, r, m, lvl]) => {
+      const t = segOf(m), zone = segCells[t], loc = []; first.forEach((tg, c) => { if (zone.has(tg)) loc.push(c); });
+      const shared = usado.has(t); usado.add(t);
+      const Aloc = (loc.length + zone.size) * cellA; let Ll, Hl;
+      if (loc.length) { let cf = loc[0]; loc.forEach(c => { if (L[c] - L[first.get(c)] > L[cf] - L[first.get(cf)]) cf = c; }); Ll = L[cf] - L[first.get(cf)] + 0.5 * cel; Hl = Math.max(1, Z[cf] - Z[first.get(cf)]); }
+      else { Ll = 0.5 * cel; Hl = 2; }
+      let cm = [...zone][0]; zone.forEach(c => { if (acc[c] > acc[cm]) cm = c; }); const Am = cm >= 0 ? acc[cm] * cellA : 0;
+      /* lado da bacia (+1 = esquerda do sentido do estaqueamento) */
+      const k1 = Math.min(n - 1, m + 1), k0 = Math.max(0, m - 1), ux = xy[k1][0] - xy[k0][0], uy = xy[k1][1] - xy[k0][1]; let sd = 0;
+      loc.forEach(c => { const [x, y] = cxy(c); sd += Math.sign(ux * (y - xy[m][1]) - uy * (x - xy[m][0])); });
+      if (!loc.length) { const nb = nbr(rc[m] >= 0 ? rc[m] : 0).filter(ok); let hi = null; nb.forEach(j => { if (!hi || Z[j] > Z[hi]) hi = j; }); if (hi != null) { const [x, y] = cxy(hi); sd = Math.sign(ux * (y - xy[m][1]) - uy * (x - xy[m][0])); } }
+      const tc = Math.max(10, lev27Kirpich(Ll, Hl)), Q = lev27Q(Cl, Aloc, tc, trT), Q25 = lev27Q(Cl, Aloc, tc, 25), ll = LL(xy[m][0], xy[m][1]);
+      const rio = Am >= par('rioA'); let tcR = null, QR = null; if (rio && cm >= 0) { tcR = lev27TcBacia(Am, upL[cm] || cel, Math.max(1, farZ[cm] - Z[cm])).tc; QR = lev27Q(Cb, Am, tcR, par('trPonte')); }
+      const cand = lev27Secoes(Q, S, nT), sec = cand.tubo || cand.gal;
+      pools.push({k: m, s: ds[m], s0: ds[l], s1: ds[r], lon: ll[0], lat: ll[1], x: xy[m][0], y: xy[m][1], zf: zc[m], nivel: lvl, alt: lvl + FOL - zc[m], crista0: ds[bounds[t]], crista1: ds[bounds[t + 1]],
+        seg: t, comp: shared, A: Aloc, Lloc: Ll, Hloc: Hl, tc, Q, Q25, C: Cl, phi: lev27Phi(Aloc), Am, Lm: cm >= 0 ? upL[cm] : 0, Hm: cm >= 0 ? Math.max(1, farZ[cm] - Z[cm]) : 0, rio, tcR, QR, lado: sd >= 0 ? 1 : -1, cand, sec, secTxt: sec ? sec.txt : 'acima de 4 células 3,00 × 3,00 — ponte'});
+    });
+    /* greide final: estudo + cobertura das travessias (rampas). Tubo sem proteção pede o recobrimento do programa
+       (crit.recPA1, 1,00 m); galeria de aduelas pede o recobrimento informado (0,30 m). Fica a opção que exige MENOS aterro. */
+    const g2 = gEst.slice(), rec = par('recob'), larg = par('larg'), tal = par('talude'), ramp = par('rampa'), recT = Math.max(rec, +P.crit.recPA1 || 1.0), mg = 0.02;
+    const reqDe = (q, sec, Lb) => q.zf + S * Lb / 2 + sec.H + sec.e + (sec.tipo === 'tubo' ? recT : rec) + 0.02 * larg / 2 + mg;
+    const LbDe = (q, g) => Math.max(10, Math.ceil(larg + 2 * tal * Math.max(0.5, g - q.zf)));
+    pools.forEach(q => { const c = q.cand; if (!c || (!c.tubo && !c.gal)) return; const Lb = LbDe(q, gEst[q.k]);
+      const rt = c.tubo ? reqDe(q, c.tubo, Lb) : Infinity, rg = c.gal ? reqDe(q, c.gal, Lb) : Infinity;
+      q.sec = rt <= rg + 0.10 ? c.tubo : c.gal; q.secTxt = q.sec.txt; q.reqTubo = rt; q.reqGal = rg; });
+    for (let it = 0; it < 4; it++) pools.forEach(q => { if (!q.sec) return; q.Lb = LbDe(q, Math.max(g2[q.k], gEst[q.k])); q.greideReq = reqDe(q, q.sec, q.Lb);
+      for (let k = 0; k < n; k++) g2[k] = Math.max(g2[k], q.greideReq - ramp * Math.abs(ds[k] - q.s)); });
+    pools.forEach(q => { q.greide = g2[q.k]; q.aterro = g2[q.k] - q.zf; if (q.sec) { q.Lb = LbDe(q, q.greide); q.cm = +(q.zf + S * q.Lb / 2).toFixed(3); q.cj = +(q.zf - S * q.Lb / 2).toFixed(3); } });
+    const at2 = g2.map((g, k) => g - zc[k]); let vol = 0, volE = 0; const Wt = larg; for (let k = 0; k < n - 1; k++) { const dl = ds[k + 1] - ds[k], a1 = (Wt + tal * at2[k]) * at2[k], a2 = (Wt + tal * at2[k + 1]) * at2[k + 1]; vol += (a1 + a2) / 2 * dl; const b1 = (Wt + tal * alt[k]) * alt[k], b2 = (Wt + tal * alt[k + 1]) * alt[k + 1]; volE += (b1 + b2) / 2 * dl; }
+    for (let t = 0; t < bounds.length - 1; t++) { const z = segCells[t]; let cm = [...z][0]; z.forEach(c => { if (acc[c] > acc[cm]) cm = c; }); along.push({s0: ds[bounds[t]], s1: ds[bounds[t + 1]], A: cm >= 0 ? acc[cm] * cellA : 0, L: cm >= 0 ? upL[cm] : 0, H: cm >= 0 ? Math.max(1, farZ[cm] - Z[cm]) : 0}); }
+    road = {ds, xy, ll: xy.map(p => LL(p[0], p[1])), zraw, zsm, zc, level, alt, gEst, greide: g2, aterro: at2, L: Ltot, vol, volEst: volE, altMax: Math.max(...at2), extAlag: level.filter(isFinite).length * passo, crown};
+  }
+  /* ponte */
+  const pB = par('ponteB'), pH = par('ponteH'), pn = par('ponteN'), pS = par('ponteS') > 0 ? par('ponteS') : Math.max(0.0005, Sout), pf = par('ponteFolga'), trP = par('trPonte');
+  const qRet = (Bw, y) => { const a = Bw * y, pp = Bw + 2 * y; return a * Math.pow(a / pp, 2 / 3) * Math.sqrt(pS) / pn; };
+  const Qd = lev27Q(Cb, A, tcB.tc, trP), yF = Math.max(0.1, pH - pf), Qf = qRet(pB, yF), Qc = qRet(pB, pH);
+  const yN = (() => { let lo = 0.01, hi = 30; for (let k = 0; k < 80; k++) { const m = (lo + hi) / 2; if (qRet(pB, m) < Qd) lo = m; else hi = m; } return (lo + hi) / 2; })();
+  const Bn = (() => { let lo = 0.5, hi = 500; for (let k = 0; k < 80; k++) { const m = (lo + hi) / 2; if (qRet(m, yF) < Qd) lo = m; else hi = m; } return (lo + hi) / 2; })();
+  const ponte = {B: pB, H: pH, n: pn, S: pS, folga: pf, tr: trP, Qd, Qf, Qc, yN, VN: Qd / (pB * yN), Vf: Qf / (pB * yF), Bn, ok: Qf >= Qd - 1e-6, okCheia: Qc >= Qd - 1e-6,
+    tab: [10, 25, 50, 100].map(T => { const q = lev27Q(Cb, A, tcB.tc, T); let lo = 0.01, hi = 30; for (let k = 0; k < 70; k++) { const m = (lo + hi) / 2; if (qRet(pB, m) < q) lo = m; else hi = m; } return {T, Q: q, y: (lo + hi) / 2, V: q / (pB * (lo + hi) / 2)}; })};
+  return {zona, cel, bac, talv, out, road, pools, canopy, along, ponte, grade: {nx, ny, x0, y0, cel, n: cells.length}, zAt: idw};
+}
+/* seções candidatas da travessia: tubo único até Ø1500 e galeria de MENOR ALTURA (funções hidráulicas do programa);
+   fora da faixa de Froude 0,86–1,13 (superfície instável) quando houver outra opção */
+function lev27Secoes(Q, S, n) {
+  const lim = h => (typeof yDlim === 'function' ? Math.min(yDlim(h), +P.crit.yD || 0.75) : (+P.crit.yD || 0.75)) + 1e-9, vmx = +P.crit.vmax || 5, frOk = h => !(isNum(h.Fr) && h.Fr > 0.86 && h.Fr < 1.13);
+  let tubo = null, gal = null, galFr = null;
+  for (const D of DIAMS.filter(d => d >= Math.max(+P.crit.dmin || 400, 600) && d <= 1500)) { const h = partFlow(Q, D, S, n); if (!h.carga && isNum(h.yD) && h.yD <= lim(h) && h.V <= vmx) { tubo = {tipo: 'tubo', D, H: D / 1000, e: D / 1000 * (+P.crit.espF || 0.10), V: h.V, yD: h.yD, Fr: h.Fr, txt: 'Tubo Ø' + D + ' · V ' + fmt(h.V, 2) + ' m/s · y/D ' + fmt(h.yD, 2)}; break; } }
+  const Hs = [...new Set(GAL_PAD.map(x => x[1]))].sort((a, b) => a - b);
+  busca: for (const H of Hs) for (let N = 1; N <= 4; N++) for (const [Bw] of GAL_PAD.filter(x => x[1] === H).sort((a, b) => a[0] - b[0])) {
+    const g = galOf({sec: 'gal', galB: Bw, galH: H, galN: N, galE: ''}); if (!g) continue; const h = rectFlow(Q, g, S, n);
+    if (!h.carga && isNum(h.yD) && h.yD <= lim(h) && h.V <= vmx) { const o = {tipo: 'gal', B: Bw, H, N, e: g.e, V: h.V, yD: h.yD, Fr: h.Fr, txt: 'Galeria ' + (N > 1 ? N + ' células ' : '') + fmt(Bw, 2) + ' × ' + fmt(H, 2) + ' m · V ' + fmt(h.V, 2) + ' m/s · y/H ' + fmt(h.yD, 2)};
+      if (frOk(h)) { gal = o; break busca; } if (!galFr) galFr = o; }
+  }
+  return {tubo, gal: gal || galFr};
+}
+function lev27Secao(Q, S, n) { const c = lev27Secoes(Q, S, n); return c.tubo || c.gal; }
+/* ---------- criar o projeto pela estrada ---------- */
+function lev27DP(pts, tol) { if (pts.length < 3) return [0, pts.length - 1]; const keep = new Uint8Array(pts.length); keep[0] = keep[pts.length - 1] = 1; const st = [[0, pts.length - 1]];
+  while (st.length) { const [a, b] = st.pop(); let dm = -1, im = -1; const ax = pts[a][0], ay = pts[a][1], bx = pts[b][0], by = pts[b][1], l = Math.hypot(bx - ax, by - ay) || 1;
+    for (let k = a + 1; k < b; k++) { const d = Math.abs((bx - ax) * (ay - pts[k][1]) - (ax - pts[k][0]) * (by - ay)) / l; if (d > dm) { dm = d; im = k; } } if (dm > tol) { keep[im] = 1; st.push([a, im], [im, b]); } }
+  const o = []; keep.forEach((v, k) => { if (v) o.push(k); }); return o; }
+function lev27Projeto(silencioso) {
+  const E = lev27Estudo(); if (!E || E.erro) return toast('Calcule o estudo antes (falta malha, poligonal ou estrada).');
+  if (!E.road) return toast('Importe a linha da estrada (KML com LineString) para criar o projeto.');
+  if (!silencioso && (P.ruas.length || P.pvs.length) && !confirm('Isto SUBSTITUI as ruas, estacas, PVs, trechos, caixas e bacias deste projeto pelos da estrada do levantamento. Continuar?')) return;
+  const rd = E.road, nome = (P.lev27.estrada || 'Estrada'), larg = lev27Par('larg'), S = lev27Par('Strav');
+  const idx = lev27DP(rd.xy, lev27Par('dp'));
+  /* trechos retos: precisam de comprimento ≥ 20 m (junta pontos muito próximos) */
+  const cut = [idx[0]]; idx.slice(1).forEach(k => { if (rd.ds[k] - rd.ds[cut[cut.length - 1]] >= 20 || k === idx[idx.length - 1]) cut.push(k); });
+  if (cut.length > 2 && rd.ds[cut[cut.length - 1]] - rd.ds[cut[cut.length - 2]] < 20) cut.splice(cut.length - 2, 1);
+  const ruas = [], est = [], segs = [];
+  for (let t = 0; t < cut.length - 1; t++) {
+    const a = cut[t], b = cut[t + 1], A = rd.xy[a], Bp = rd.xy[b], Ls = Math.hypot(Bp[0] - A[0], Bp[1] - A[1]), az = Math.atan2(Bp[1] - A[1], Bp[0] - A[0]) * 180 / Math.PI, id = 'E' + String(t + 1).padStart(2, '0');
+    ruas.push(Object.assign({id, nome: 'Estrada T' + String(t + 1).padStart(2, '0'), larg, passeio: 0, it: 2, x0: +A[0].toFixed(3), y0: +A[1].toFixed(3), az: +az.toFixed(4), raio: 0, mf: 'mf15', obs: nome + ' — trecho reto de ' + estLabel(rd.ds[a]) + ' a ' + estLabel(rd.ds[b]) + ' da estrada (' + fmt(rd.ds[a], 2) + ' a ' + fmt(rd.ds[b], 2) + ' m)'}, {mfH: 0.15, sjW: 0, sjI: ''}));
+    segs.push({id, a, b, s0: rd.ds[a], s1: rd.ds[b], L: Ls, f: Ls / ((rd.ds[b] - rd.ds[a]) || 1), A, az});
+    for (let k = a; k <= b; k++) { if (t > 0 && k === a) { /* a estaca de início repete a do fim do trecho anterior */ }
+      const d = (rd.ds[k] - rd.ds[a]) * Ls / ((rd.ds[b] - rd.ds[a]) || 1); est.push({rua: id, dist: +d.toFixed(2), cota: +rd.greide[k].toFixed(3), tn: +rd.zc[k].toFixed(3), obs: k === a || k === b ? 'Est. ' + estLabel(rd.ds[k]) : ''}); }
+  }
+  const segDe = s => segs.find(q => s >= q.s0 - 1e-6 && s <= q.s1 + 1e-6) || segs[segs.length - 1];
+  const pvs = [], trs = [], bacs = [];
+  E.pools.forEach((q, i) => {
+    if (!q.sec) return; const k = i + 1, sg = segDe(q.s), dl = +((q.s - sg.s0) * sg.f).toFixed(2), id = 'X' + String(k).padStart(2, '0'), Lb = q.Lb, h2 = Lb / 2;
+    ruas.push({id, nome: 'Bueiro ' + k, obs2: 'Travessia ' + k + ' — bueiro na estaca ' + estLabel(q.s) + ' da estrada', larg: 1.0, passeio: 0, it: 2, ref: sg.id, refDist: dl, ang: 90, dist0: 20, raio: 0, mf: 'mf15', mfH: 0.15, sjW: 0, sjI: '', obs: 'Rua auxiliar só para posicionar o bueiro sob a estrada (não é pavimentada).'});
+    const gE = q.greide - 0.02 * larg / 2;   // borda da pista (2 % do eixo para a borda)
+    [[0, q.zf + 0.5], [20 - h2, q.zf], [20, q.greide], [20 + h2, q.zf], [40, q.zf - 0.2]].forEach(([d, z]) => est.push({rua: id, dist: +d.toFixed(2), cota: +z.toFixed(3), tn: +(d === 20 ? q.zf : z).toFixed(3), obs: d === 20 ? 'eixo da estrada' : ''}));
+    const up = q.lado > 0 ? 20 + h2 : 20 - h2, dn = q.lado > 0 ? 20 - h2 : 20 + h2, sec = q.sec, gal = sec.tipo === 'gal';
+    const Wd = gal ? sec.N * sec.B + (sec.N + 1) * sec.e : sec.D / 1000 * 1.2;
+    pvs.push({id: id + '-E', rua: id, dist: +up.toFixed(2), tipo: PVTIPOS[5], dpv: Math.max(1500, Math.ceil((Wd + 0.4) * 10) * 100), tampaCl: TAMPAS[1], tampa: +gE.toFixed(3), defl: 'ini', na: '', obs: 'Entrada do bueiro (caixa de cabeceira) — lado da bacia local'});
+    pvs.push({id: id + '-S', rua: id, dist: +dn.toFixed(2), tipo: PVTIPOS[5], dpv: Math.max(1500, Math.ceil((Wd + 0.4) * 10) * 100), tampaCl: TAMPAS[1], tampa: +gE.toFixed(3), defl: 'reta', na: '', obs: 'Saída do bueiro — deságue no talvegue a jusante'});
+    const t = {id: 'BT-' + String(k).padStart(2, '0'), m: id + '-E', j: id + '-S', L: Lb, D: gal ? Math.round(sec.H * 1000) : sec.D, cm: q.cm, cj: q.cj, mat: MATS[1], aL: '', cL: '', tcL: ''};
+    if (gal) Object.assign(t, {sec: 'gal', galB: sec.B, galH: sec.H, galN: sec.N, galE: ''}); else t.sec = 'circ';
+    trs.push(t);
+    bacs.push({id: 'BL' + String(k).padStart(2, '0'), nome: 'Bacia local do ponto baixo ' + k + ' (est. ' + estLabel(q.s) + ') · A ' + fmt(q.A, 3) + ' km² · φ ' + fmt(q.phi, 3) + ' · C ' + fmt(q.C, 2) + '×φ',
+      A: +(q.A * 100).toFixed(3), C: +(q.C * q.phi).toFixed(4), dest: id + '-E', tcMode: 'man', tc: +q.tc.toFixed(1), kL: +q.Lloc.toFixed(0), kH: +q.Hloc.toFixed(1)});
+  });
+  Object.assign(P, {ruas, estacas: est, pvs, trechos: trs, bacias: bacs, bls: []});
+  P.idf = P.idf || {}; if (P.lev27.idfMacae !== false && (!P.idf.fonte || /Jardim Botânico/.test(P.idf.fonte))) Object.assign(P.idf, {a: 1270, b: 0.2477, c: 18.9, d: 0.8277, fonte: 'Macaé / RJ — CPRM (Davis & Naghettini, 2001)'});
+  Object.assign(P.crit, {tr: lev27Par('trTrav'), recob: lev27Par('recob')});
+  P.georef = Object.assign(P.georef || {}, {utm: true, zona: E.zona, hem: 'S', fix: true});
+  P.proj.obs = 'Projeto criado pelo 🏔 Levantamento da bacia (DR-27): ' + ruas.filter(r => r.id[0] === 'E').length + ' trechos retos da estrada (' + fmt(E.road.L, 0) + ' m), ' + trs.length + ' travessias nos pontos baixos, greide com aterro máx. ' + fmt(E.road.altMax, 2) + ' m. Bacia ' + fmt(E.bac.A, 2) + ' km², Tc ' + fmt(E.bac.tc, 0) + ' min, Q' + lev27Par('trPonte') + ' = ' + fmt(E.ponte.Qd, 1) + ' m³/s no deságue (' + lev27Par('ponteNome') + ').';
+  save(); calc(); if (!silencioso) { renderTab(); toast('Projeto criado: ' + ruas.length + ' ruas, ' + trs.length + ' travessias. Confira a aba 13 (Verificação).'); }
+  return {ruas: ruas.length, trechos: trs.length};
+}
+/* ---------- verificação: ponte do deságue ---------- */
+function checks27(res) {
+  const E = lev27Estudo(); if (!E || E.erro) return; const p = E.ponte, nm = lev27Par('ponteNome');
+  res.checks.push({tab: 'bacias', el: nm, par: 'Ponte do deságue — capacidade (TR ' + p.tr + ')', val: 'Q ' + fmt(p.Qd, 1) + ' m³/s × capacidade ' + fmt(p.Qf, 1) + ' m³/s (folga ' + fmt(p.folga, 2) + ' m)',
+    lim: 'vão ' + fmt(p.B, 2) + ' × ' + fmt(p.H, 2) + ' m · n ' + fmt(p.n, 3) + ' · S ' + fmt(p.S * 100, 3) + ' %', st: p.ok ? 'ok' : p.okCheia ? 'warn' : 'err',
+    nota: p.ok ? '' : 'A ponte não passa a cheia de projeto com a folga sob a viga: lâmina necessária ' + fmt(p.yN, 2) + ' m (altura ' + fmt(p.H, 2) + ' m). Para passar com folga, vão de cerca de ' + fmt(p.Bn, 1) + ' m (mesma altura) ou estudo hidráulico detalhado (HEC-RAS) com levantamento do canal.'});
+  res.checks.push({tab: 'bacias', el: 'Bacia', par: 'Bacia do deságue — método', val: fmt(E.bac.A, 2) + ' km², Tc ' + fmt(E.bac.tc, 0) + ' min', lim: 'racional modificado (φ = A^-0,15)', st: E.bac.A > 2 ? 'warn' : 'ok',
+    nota: 'Bacia grande: o racional modificado é estimativa; para o projeto executivo da ponte use hidrograma unitário (SCS) e confirme com o DNIT.'});
+}
+(function () { if (typeof POS_CALC !== 'undefined') POS_CALC.push(['Ponte e bacia (DR-27)', 'checks27']); })();
+
+/* dados do exemplo: SRTM 30 m (opentopodata), malha de 0,0025° (~260 m) + perfil da estrada a cada 25 m; poligonal e estrada do KML Aldeia_Bacia_e_Estrada.kml (16/11/2026) */
+const LEV27_ALDEIA = {"nome":"Bacia de Aldeia Velha","estrada":"Estrada de Aldeia Velha","pts":[[-42.2885,-22.5065,19.0],[-42.286,-22.5065,19.0],[-42.2835,-22.5065,19.0],[-42.281,-22.5065,17.0],[-42.2785,-22.5065,19.0],[-42.2885,-22.504,47.0],[-42.286,-22.504,23.0],[-42.2835,-22.504,20.0],[-42.281,-22.504,48.0],[-42.2785,-22.504,21.0],[-42.276,-22.504,67.0],[-42.2735,-22.504,23.0],[-42.2885,-22.5015,20.0],[-42.286,-22.5015,24.0],[-42.2835,-22.5015,35.0],[-42.281,-22.5015,21.0],[-42.2785,-22.5015,80.0],[-42.276,-22.5015,43.0],[-42.2735,-22.5015,23.0],[-42.271,-22.5015,47.0],[-42.291,-22.499,21.0],[-42.2885,-22.499,54.0],[-42.286,-22.499,24.0],[-42.2835,-22.499,52.0],[-42.281,-22.499,24.0],[-42.2785,-22.499,23.0],[-42.276,-22.499,43.0],[-42.2735,-22.499,71.0],[-42.271,-22.499,51.0],[-42.2685,-22.499,23.0],[-42.291,-22.4965,33.0],[-42.2885,-22.4965,36.0],[-42.286,-22.4965,20.0],[-42.2835,-22.4965,25.0],[-42.281,-22.4965,24.0],[-42.2785,-22.4965,61.0],[-42.276,-22.4965,27.0],[-42.2735,-22.4965,45.0],[-42.271,-22.4965,33.0],[-42.2685,-22.4965,24.0],[-42.2935,-22.494,50.0],[-42.291,-22.494,104.0],[-42.2885,-22.494,36.0],[-42.286,-22.494,23.0],[-42.2835,-22.494,44.0],[-42.281,-22.494,52.0],[-42.2785,-22.494,149.0],[-42.276,-22.494,74.0],[-42.2735,-22.494,25.0],[-42.271,-22.494,27.0],[-42.2685,-22.494,29.0],[-42.266,-22.494,23.0],[-42.2935,-22.4915,45.0],[-42.291,-22.4915,27.0],[-42.2885,-22.4915,41.0],[-42.286,-22.4915,23.0],[-42.2835,-22.4915,43.0],[-42.281,-22.4915,98.0],[-42.2785,-22.4915,124.0],[-42.276,-22.4915,69.0],[-42.2735,-22.4915,54.0],[-42.271,-22.4915,23.0],[-42.2685,-22.4915,25.0],[-42.266,-22.4915,23.0],[-42.2635,-22.4915,23.0],[-42.296,-22.489,147.0],[-42.2935,-22.489,48.0],[-42.291,-22.489,43.0],[-42.2885,-22.489,82.0],[-42.286,-22.489,27.0],[-42.2835,-22.489,91.0],[-42.281,-22.489,120.0],[-42.2785,-22.489,55.0],[-42.276,-22.489,74.0],[-42.2735,-22.489,71.0],[-42.271,-22.489,37.0],[-42.2685,-22.489,25.0],[-42.266,-22.489,26.0],[-42.2635,-22.489,26.0],[-42.261,-22.489,29.0],[-42.2985,-22.4865,185.0],[-42.296,-22.4865,210.0],[-42.2935,-22.4865,114.0],[-42.291,-22.4865,120.0],[-42.2885,-22.4865,59.0],[-42.286,-22.4865,51.0],[-42.2835,-22.4865,173.0],[-42.281,-22.4865,156.0],[-42.2785,-22.4865,119.0],[-42.276,-22.4865,94.0],[-42.2735,-22.4865,65.0],[-42.271,-22.4865,26.0],[-42.2685,-22.4865,26.0],[-42.266,-22.4865,35.0],[-42.2635,-22.4865,60.0],[-42.261,-22.4865,69.0],[-42.301,-22.484,139.0],[-42.2985,-22.484,96.0],[-42.296,-22.484,182.0],[-42.2935,-22.484,264.0],[-42.291,-22.484,154.0],[-42.2885,-22.484,57.0],[-42.286,-22.484,50.0],[-42.2835,-22.484,103.0],[-42.281,-22.484,56.0],[-42.2785,-22.484,59.0],[-42.276,-22.484,27.0],[-42.2735,-22.484,27.0],[-42.271,-22.484,26.0],[-42.2685,-22.484,32.0],[-42.266,-22.484,82.0],[-42.2635,-22.484,33.0],[-42.261,-22.484,97.0],[-42.3035,-22.4815,192.0],[-42.301,-22.4815,146.0],[-42.2985,-22.4815,86.0],[-42.296,-22.4815,51.0],[-42.2935,-22.4815,125.0],[-42.291,-22.4815,193.0],[-42.2885,-22.4815,63.0],[-42.286,-22.4815,32.0],[-42.2835,-22.4815,33.0],[-42.281,-22.4815,39.0],[-42.2785,-22.4815,29.0],[-42.276,-22.4815,25.0],[-42.2735,-22.4815,25.0],[-42.271,-22.4815,27.0],[-42.2685,-22.4815,36.0],[-42.266,-22.4815,71.0],[-42.2635,-22.4815,83.0],[-42.261,-22.4815,72.0],[-42.306,-22.479,230.0],[-42.3035,-22.479,180.0],[-42.301,-22.479,152.0],[-42.2985,-22.479,127.0],[-42.296,-22.479,86.0],[-42.2935,-22.479,36.0],[-42.291,-22.479,58.0],[-42.2885,-22.479,51.0],[-42.286,-22.479,54.0],[-42.2835,-22.479,27.0],[-42.281,-22.479,28.0],[-42.2785,-22.479,28.0],[-42.276,-22.479,27.0],[-42.2735,-22.479,27.0],[-42.271,-22.479,30.0],[-42.2685,-22.479,33.0],[-42.266,-22.479,42.0],[-42.2635,-22.479,37.0],[-42.261,-22.479,50.0],[-42.311,-22.4765,249.0],[-42.3085,-22.4765,284.0],[-42.306,-22.4765,312.0],[-42.3035,-22.4765,219.0],[-42.301,-22.4765,269.0],[-42.2985,-22.4765,143.0],[-42.296,-22.4765,61.0],[-42.2935,-22.4765,34.0],[-42.291,-22.4765,31.0],[-42.2885,-22.4765,42.0],[-42.286,-22.4765,28.0],[-42.2835,-22.4765,30.0],[-42.281,-22.4765,30.0],[-42.2785,-22.4765,29.0],[-42.276,-22.4765,28.0],[-42.2735,-22.4765,28.0],[-42.271,-22.4765,34.0],[-42.2685,-22.4765,35.0],[-42.266,-22.4765,57.0],[-42.2635,-22.4765,135.0],[-42.261,-22.4765,151.0],[-42.316,-22.474,136.0],[-42.3135,-22.474,202.0],[-42.311,-22.474,158.0],[-42.3085,-22.474,149.0],[-42.306,-22.474,163.0],[-42.3035,-22.474,103.0],[-42.301,-22.474,94.0],[-42.2985,-22.474,90.0],[-42.296,-22.474,34.0],[-42.2935,-22.474,28.0],[-42.291,-22.474,27.0],[-42.2885,-22.474,30.0],[-42.286,-22.474,31.0],[-42.2835,-22.474,30.0],[-42.281,-22.474,30.0],[-42.2785,-22.474,34.0],[-42.276,-22.474,31.0],[-42.2735,-22.474,58.0],[-42.271,-22.474,34.0],[-42.2685,-22.474,32.0],[-42.266,-22.474,41.0],[-42.2635,-22.474,109.0],[-42.321,-22.4715,227.0],[-42.3185,-22.4715,178.0],[-42.316,-22.4715,108.0],[-42.3135,-22.4715,80.0],[-42.311,-22.4715,84.0],[-42.3085,-22.4715,73.0],[-42.306,-22.4715,72.0],[-42.3035,-22.4715,50.0],[-42.301,-22.4715,45.0],[-42.2985,-22.4715,101.0],[-42.296,-22.4715,119.0],[-42.2935,-22.4715,80.0],[-42.291,-22.4715,88.0],[-42.2885,-22.4715,52.0],[-42.286,-22.4715,31.0],[-42.2835,-22.4715,30.0],[-42.281,-22.4715,30.0],[-42.2785,-22.4715,30.0],[-42.276,-22.4715,50.0],[-42.2735,-22.4715,58.0],[-42.271,-22.4715,107.0],[-42.2685,-22.4715,102.0],[-42.326,-22.469,502.0],[-42.3235,-22.469,404.0],[-42.321,-22.469,369.0],[-42.3185,-22.469,267.0],[-42.316,-22.469,168.0],[-42.3135,-22.469,172.0],[-42.311,-22.469,75.0],[-42.3085,-22.469,53.0],[-42.306,-22.469,44.0],[-42.3035,-22.469,41.0],[-42.301,-22.469,38.0],[-42.2985,-22.469,86.0],[-42.296,-22.469,160.0],[-42.2935,-22.469,183.0],[-42.291,-22.469,67.0],[-42.2885,-22.469,31.0],[-42.286,-22.469,31.0],[-42.2835,-22.469,32.0],[-42.281,-22.469,32.0],[-42.2785,-22.469,45.0],[-42.276,-22.469,74.0],[-42.2735,-22.469,96.0],[-42.271,-22.469,128.0],[-42.3335,-22.4665,506.0],[-42.331,-22.4665,614.0],[-42.3285,-22.4665,439.0],[-42.326,-22.4665,331.0],[-42.3235,-22.4665,386.0],[-42.321,-22.4665,357.0],[-42.3185,-22.4665,245.0],[-42.316,-22.4665,277.0],[-42.3135,-22.4665,170.0],[-42.311,-22.4665,104.0],[-42.3085,-22.4665,46.0],[-42.306,-22.4665,47.0],[-42.3035,-22.4665,40.0],[-42.301,-22.4665,40.0],[-42.2985,-22.4665,35.0],[-42.296,-22.4665,32.0],[-42.2935,-22.4665,39.0],[-42.291,-22.4665,33.0],[-42.2885,-22.4665,32.0],[-42.286,-22.4665,34.0],[-42.2835,-22.4665,40.0],[-42.281,-22.4665,34.0],[-42.2785,-22.4665,32.0],[-42.276,-22.4665,38.0],[-42.2735,-22.4665,51.0],[-42.271,-22.4665,105.0],[-42.2685,-22.4665,113.0],[-42.3335,-22.464,361.0],[-42.331,-22.464,384.0],[-42.3285,-22.464,461.0],[-42.326,-22.464,305.0],[-42.3235,-22.464,229.0],[-42.321,-22.464,242.0],[-42.3185,-22.464,196.0],[-42.316,-22.464,140.0],[-42.3135,-22.464,125.0],[-42.311,-22.464,57.0],[-42.3085,-22.464,54.0],[-42.306,-22.464,51.0],[-42.3035,-22.464,46.0],[-42.301,-22.464,84.0],[-42.2985,-22.464,74.0],[-42.296,-22.464,69.0],[-42.2935,-22.464,35.0],[-42.291,-22.464,49.0],[-42.2885,-22.464,68.0],[-42.286,-22.464,58.0],[-42.2835,-22.464,58.0],[-42.281,-22.464,45.0],[-42.2785,-22.464,49.0],[-42.276,-22.464,61.0],[-42.2735,-22.464,43.0],[-42.271,-22.464,45.0],[-42.2685,-22.464,50.0],[-42.336,-22.4615,251.0],[-42.3335,-22.4615,242.0],[-42.331,-22.4615,250.0],[-42.3285,-22.4615,325.0],[-42.326,-22.4615,316.0],[-42.3235,-22.4615,235.0],[-42.321,-22.4615,166.0],[-42.3185,-22.4615,119.0],[-42.316,-22.4615,89.0],[-42.3135,-22.4615,66.0],[-42.311,-22.4615,59.0],[-42.3085,-22.4615,53.0],[-42.306,-22.4615,54.0],[-42.3035,-22.4615,51.0],[-42.301,-22.4615,68.0],[-42.2985,-22.4615,72.0],[-42.296,-22.4615,126.0],[-42.2935,-22.4615,117.0],[-42.291,-22.4615,134.0],[-42.2885,-22.4615,146.0],[-42.286,-22.4615,100.0],[-42.2835,-22.4615,88.0],[-42.281,-22.4615,148.0],[-42.2785,-22.4615,83.0],[-42.276,-22.4615,88.0],[-42.2735,-22.4615,101.0],[-42.271,-22.4615,54.0],[-42.2685,-22.4615,55.0],[-42.266,-22.4615,62.0],[-42.3385,-22.459,303.0],[-42.336,-22.459,230.0],[-42.3335,-22.459,191.0],[-42.331,-22.459,180.0],[-42.3285,-22.459,205.0],[-42.326,-22.459,167.0],[-42.3235,-22.459,137.0],[-42.321,-22.459,103.0],[-42.3185,-22.459,81.0],[-42.316,-22.459,74.0],[-42.3135,-22.459,65.0],[-42.311,-22.459,84.0],[-42.3085,-22.459,67.0],[-42.306,-22.459,78.0],[-42.3035,-22.459,59.0],[-42.301,-22.459,80.0],[-42.2985,-22.459,76.0],[-42.296,-22.459,121.0],[-42.2935,-22.459,228.0],[-42.291,-22.459,254.0],[-42.2885,-22.459,233.0],[-42.286,-22.459,146.0],[-42.2835,-22.459,135.0],[-42.281,-22.459,148.0],[-42.2785,-22.459,184.0],[-42.276,-22.459,133.0],[-42.2735,-22.459,137.0],[-42.271,-22.459,158.0],[-42.2685,-22.459,95.0],[-42.266,-22.459,70.0],[-42.2635,-22.459,83.0],[-42.3385,-22.4565,273.0],[-42.336,-22.4565,222.0],[-42.3335,-22.4565,194.0],[-42.331,-22.4565,188.0],[-42.3285,-22.4565,162.0],[-42.326,-22.4565,124.0],[-42.3235,-22.4565,107.0],[-42.321,-22.4565,100.0],[-42.3185,-22.4565,92.0],[-42.316,-22.4565,91.0],[-42.3135,-22.4565,87.0],[-42.311,-22.4565,186.0],[-42.3085,-22.4565,205.0],[-42.306,-22.4565,120.0],[-42.3035,-22.4565,67.0],[-42.301,-22.4565,108.0],[-42.2985,-22.4565,111.0],[-42.296,-22.4565,153.0],[-42.2935,-22.4565,245.0],[-42.291,-22.4565,361.0],[-42.2885,-22.4565,283.0],[-42.286,-22.4565,296.0],[-42.2835,-22.4565,188.0],[-42.281,-22.4565,249.0],[-42.2785,-22.4565,225.0],[-42.276,-22.4565,236.0],[-42.2735,-22.4565,199.0],[-42.271,-22.4565,235.0],[-42.2685,-22.4565,200.0],[-42.266,-22.4565,145.0],[-42.341,-22.454,313.0],[-42.3385,-22.454,286.0],[-42.336,-22.454,286.0],[-42.3335,-22.454,236.0],[-42.331,-22.454,247.0],[-42.3285,-22.454,233.0],[-42.326,-22.454,215.0],[-42.3235,-22.454,133.0],[-42.321,-22.454,197.0],[-42.3185,-22.454,225.0],[-42.316,-22.454,243.0],[-42.3135,-22.454,160.0],[-42.311,-22.454,124.0],[-42.3085,-22.454,268.0],[-42.306,-22.454,192.0],[-42.3035,-22.454,102.0],[-42.301,-22.454,82.0],[-42.2985,-22.454,203.0],[-42.296,-22.454,191.0],[-42.2935,-22.454,162.0],[-42.291,-22.454,276.0],[-42.2885,-22.454,413.0],[-42.286,-22.454,351.0],[-42.2835,-22.454,268.0],[-42.281,-22.454,372.0],[-42.2785,-22.454,296.0],[-42.276,-22.454,343.0],[-42.2735,-22.454,325.0],[-42.271,-22.454,296.0],[-42.2685,-22.454,306.0],[-42.3435,-22.4515,449.0],[-42.341,-22.4515,412.0],[-42.3385,-22.4515,379.0],[-42.336,-22.4515,397.0],[-42.3335,-22.4515,313.0],[-42.331,-22.4515,308.0],[-42.3285,-22.4515,264.0],[-42.326,-22.4515,311.0],[-42.3235,-22.4515,188.0],[-42.321,-22.4515,221.0],[-42.3185,-22.4515,343.0],[-42.316,-22.4515,338.0],[-42.3135,-22.4515,203.0],[-42.311,-22.4515,146.0],[-42.3085,-22.4515,243.0],[-42.306,-22.4515,303.0],[-42.3035,-22.4515,182.0],[-42.301,-22.4515,89.0],[-42.2985,-22.4515,111.0],[-42.296,-22.4515,244.0],[-42.2935,-22.4515,294.0],[-42.291,-22.4515,244.0],[-42.2885,-22.4515,275.0],[-42.286,-22.4515,383.0],[-42.2835,-22.4515,422.0],[-42.281,-22.4515,521.0],[-42.2785,-22.4515,449.0],[-42.276,-22.4515,495.0],[-42.2735,-22.4515,486.0],[-42.271,-22.4515,459.0],[-42.3435,-22.449,559.0],[-42.341,-22.449,560.0],[-42.3385,-22.449,531.0],[-42.336,-22.449,519.0],[-42.3335,-22.449,446.0],[-42.331,-22.449,433.0],[-42.3285,-22.449,387.0],[-42.326,-22.449,395.0],[-42.3235,-22.449,305.0],[-42.321,-22.449,292.0],[-42.3185,-22.449,308.0],[-42.316,-22.449,242.0],[-42.3135,-22.449,199.0],[-42.311,-22.449,221.0],[-42.3085,-22.449,284.0],[-42.306,-22.449,263.0],[-42.3035,-22.449,181.0],[-42.301,-22.449,109.0],[-42.2985,-22.449,95.0],[-42.296,-22.449,167.0],[-42.2935,-22.449,295.0],[-42.291,-22.449,385.0],[-42.2885,-22.449,329.0],[-42.286,-22.449,302.0],[-42.2835,-22.449,353.0],[-42.281,-22.449,545.0],[-42.2785,-22.449,596.0],[-42.276,-22.449,555.0],[-42.2735,-22.449,601.0],[-42.346,-22.4465,453.0],[-42.3435,-22.4465,543.0],[-42.341,-22.4465,657.0],[-42.3385,-22.4465,813.0],[-42.336,-22.4465,733.0],[-42.3335,-22.4465,541.0],[-42.331,-22.4465,568.0],[-42.3285,-22.4465,445.0],[-42.326,-22.4465,404.0],[-42.3235,-22.4465,412.0],[-42.321,-22.4465,378.0],[-42.3185,-22.4465,347.0],[-42.316,-22.4465,290.0],[-42.3135,-22.4465,277.0],[-42.311,-22.4465,334.0],[-42.3085,-22.4465,337.0],[-42.306,-22.4465,259.0],[-42.3035,-22.4465,168.0],[-42.301,-22.4465,193.0],[-42.2985,-22.4465,129.0],[-42.296,-22.4465,174.0],[-42.2935,-22.4465,209.0],[-42.291,-22.4465,288.0],[-42.2885,-22.4465,332.0],[-42.286,-22.4465,468.0],[-42.2835,-22.4465,462.0],[-42.281,-22.4465,562.0],[-42.2785,-22.4465,556.0],[-42.276,-22.4465,454.0],[-42.3485,-22.444,599.0],[-42.346,-22.444,580.0],[-42.3435,-22.444,610.0],[-42.341,-22.444,695.0],[-42.3385,-22.444,878.0],[-42.336,-22.444,831.0],[-42.3335,-22.444,724.0],[-42.331,-22.444,619.0],[-42.3285,-22.444,568.0],[-42.326,-22.444,526.0],[-42.3235,-22.444,489.0],[-42.321,-22.444,430.0],[-42.3185,-22.444,358.0],[-42.316,-22.444,440.0],[-42.3135,-22.444,360.0],[-42.311,-22.444,410.0],[-42.3085,-22.444,342.0],[-42.306,-22.444,296.0],[-42.3035,-22.444,281.0],[-42.301,-22.444,244.0],[-42.2985,-22.444,145.0],[-42.296,-22.444,143.0],[-42.2935,-22.444,200.0],[-42.291,-22.444,270.0],[-42.2885,-22.444,304.0],[-42.286,-22.444,518.0],[-42.2835,-22.444,639.0],[-42.281,-22.444,679.0],[-42.2785,-22.444,622.0],[-42.3485,-22.4415,486.0],[-42.346,-22.4415,641.0],[-42.3435,-22.4415,756.0],[-42.341,-22.4415,760.0],[-42.3385,-22.4415,839.0],[-42.336,-22.4415,953.0],[-42.3335,-22.4415,792.0],[-42.331,-22.4415,673.0],[-42.3285,-22.4415,676.0],[-42.326,-22.4415,680.0],[-42.3235,-22.4415,638.0],[-42.321,-22.4415,506.0],[-42.3185,-22.4415,417.0],[-42.316,-22.4415,534.0],[-42.3135,-22.4415,527.0],[-42.311,-22.4415,400.0],[-42.3085,-22.4415,314.0],[-42.306,-22.4415,309.0],[-42.3035,-22.4415,271.0],[-42.301,-22.4415,227.0],[-42.2985,-22.4415,229.0],[-42.296,-22.4415,133.0],[-42.2935,-22.4415,237.0],[-42.291,-22.4415,405.0],[-42.2885,-22.4415,421.0],[-42.286,-22.4415,501.0],[-42.2835,-22.4415,745.0],[-42.281,-22.4415,793.0],[-42.2785,-22.4415,747.0],[-42.351,-22.439,489.0],[-42.3485,-22.439,513.0],[-42.346,-22.439,641.0],[-42.3435,-22.439,784.0],[-42.341,-22.439,860.0],[-42.3385,-22.439,913.0],[-42.336,-22.439,988.0],[-42.3335,-22.439,1066.0],[-42.331,-22.439,826.0],[-42.3285,-22.439,861.0],[-42.326,-22.439,823.0],[-42.3235,-22.439,799.0],[-42.321,-22.439,645.0],[-42.3185,-22.439,529.0],[-42.316,-22.439,502.0],[-42.3135,-22.439,569.0],[-42.311,-22.439,473.0],[-42.3085,-22.439,438.0],[-42.306,-22.439,373.0],[-42.3035,-22.439,334.0],[-42.301,-22.439,378.0],[-42.2985,-22.439,304.0],[-42.296,-22.439,182.0],[-42.2935,-22.439,220.0],[-42.291,-22.439,379.0],[-42.2885,-22.439,595.0],[-42.286,-22.439,576.0],[-42.2835,-22.439,695.0],[-42.281,-22.439,874.0],[-42.3535,-22.4365,517.0],[-42.351,-22.4365,503.0],[-42.3485,-22.4365,601.0],[-42.346,-22.4365,675.0],[-42.3435,-22.4365,803.0],[-42.341,-22.4365,970.0],[-42.3385,-22.4365,1088.0],[-42.3285,-22.4365,942.0],[-42.326,-22.4365,896.0],[-42.3235,-22.4365,849.0],[-42.321,-22.4365,771.0],[-42.3185,-22.4365,647.0],[-42.316,-22.4365,550.0],[-42.3135,-22.4365,660.0],[-42.311,-22.4365,573.0],[-42.3085,-22.4365,543.0],[-42.306,-22.4365,458.0],[-42.3035,-22.4365,437.0],[-42.301,-22.4365,394.0],[-42.2985,-22.4365,283.0],[-42.296,-22.4365,244.0],[-42.2935,-22.4365,171.0],[-42.291,-22.4365,311.0],[-42.2885,-22.4365,549.0],[-42.286,-22.4365,625.0],[-42.2835,-22.4365,776.0],[-42.281,-22.4365,894.0],[-42.326,-22.434,734.0],[-42.3235,-22.434,685.0],[-42.321,-22.434,670.0],[-42.3185,-22.434,613.0],[-42.316,-22.434,600.0],[-42.3135,-22.434,614.0],[-42.311,-22.434,526.0],[-42.3085,-22.434,465.0],[-42.306,-22.434,435.0],[-42.3035,-22.434,362.0],[-42.301,-22.434,296.0],[-42.2985,-22.434,271.0],[-42.296,-22.434,235.0],[-42.2935,-22.434,212.0],[-42.291,-22.434,271.0],[-42.2885,-22.434,403.0],[-42.286,-22.434,709.0],[-42.2835,-22.434,847.0],[-42.281,-22.434,795.0],[-42.3235,-22.4315,748.0],[-42.321,-22.4315,752.0],[-42.3185,-22.4315,688.0],[-42.316,-22.4315,667.0],[-42.3135,-22.4315,685.0],[-42.311,-22.4315,603.0],[-42.3085,-22.4315,473.0],[-42.306,-22.4315,417.0],[-42.3035,-22.4315,414.0],[-42.301,-22.4315,370.0],[-42.2985,-22.4315,306.0],[-42.296,-22.4315,285.0],[-42.2935,-22.4315,229.0],[-42.291,-22.4315,291.0],[-42.2885,-22.4315,427.0],[-42.286,-22.4315,556.0],[-42.2835,-22.4315,779.0],[-42.281,-22.4315,701.0],[-42.321,-22.429,716.0],[-42.3185,-22.429,744.0],[-42.316,-22.429,806.0],[-42.3135,-22.429,770.0],[-42.311,-22.429,616.0],[-42.3085,-22.429,543.0],[-42.306,-22.429,514.0],[-42.3035,-22.429,429.0],[-42.301,-22.429,376.0],[-42.2985,-22.429,347.0],[-42.296,-22.429,331.0],[-42.2935,-22.429,255.0],[-42.291,-22.429,270.0],[-42.2885,-22.429,315.0],[-42.286,-22.429,452.0],[-42.2835,-22.429,603.0],[-42.281,-22.429,711.0],[-42.3185,-22.4265,848.0],[-42.316,-22.4265,946.0],[-42.3135,-22.4265,854.0],[-42.311,-22.4265,723.0],[-42.3085,-22.4265,645.0],[-42.306,-22.4265,508.0],[-42.3035,-22.4265,423.0],[-42.301,-22.4265,439.0],[-42.2985,-22.4265,490.0],[-42.296,-22.4265,466.0],[-42.2935,-22.4265,379.0],[-42.291,-22.4265,316.0],[-42.2885,-22.4265,303.0],[-42.286,-22.4265,383.0],[-42.2835,-22.4265,483.0],[-42.281,-22.4265,601.0],[-42.316,-22.424,1038.0],[-42.3135,-22.424,996.0],[-42.311,-22.424,751.0],[-42.3085,-22.424,620.0],[-42.306,-22.424,521.0],[-42.3035,-22.424,562.0],[-42.301,-22.424,627.0],[-42.2985,-22.424,622.0],[-42.296,-22.424,506.0],[-42.2935,-22.424,392.0],[-42.291,-22.424,367.0],[-42.2885,-22.424,337.0],[-42.286,-22.424,346.0],[-42.2835,-22.424,502.0],[-42.281,-22.424,689.0],[-42.3135,-22.4215,914.0],[-42.311,-22.4215,840.0],[-42.3085,-22.4215,697.0],[-42.306,-22.4215,696.0],[-42.3035,-22.4215,720.0],[-42.301,-22.4215,679.0],[-42.2985,-22.4215,656.0],[-42.296,-22.4215,560.0],[-42.2935,-22.4215,464.0],[-42.291,-22.4215,439.0],[-42.2885,-22.4215,461.0],[-42.286,-22.4215,365.0],[-42.2835,-22.4215,439.0],[-42.281,-22.4215,572.0],[-42.306,-22.419,894.0],[-42.3035,-22.419,853.0],[-42.301,-22.419,844.0],[-42.2985,-22.419,751.0],[-42.296,-22.419,707.0],[-42.2935,-22.419,600.0],[-42.291,-22.419,523.0],[-42.2885,-22.419,509.0],[-42.286,-22.419,442.0],[-42.2835,-22.419,392.0],[-42.2985,-22.4165,865.0],[-42.296,-22.4165,763.0],[-42.2935,-22.4165,641.0],[-42.291,-22.4165,687.0],[-42.2885,-22.4165,619.0],[-42.286,-22.4165,491.0],[-42.2935,-22.414,871.0],[-42.291,-22.414,896.0],[-42.305034,-22.465,46.0],[-42.304854,-22.465152,45.0],[-42.304661,-22.465289,45.0],[-42.304461,-22.465417,44.0],[-42.304264,-22.465548,42.0],[-42.304065,-22.465677,41.0],[-42.303866,-22.465807,40.0],[-42.303662,-22.465929,41.0],[-42.303451,-22.466041,41.0],[-42.303238,-22.466148,42.0],[-42.303023,-22.466252,43.0],[-42.302804,-22.466351,43.0],[-42.302585,-22.466449,43.0],[-42.302366,-22.466544,42.0],[-42.302143,-22.466634,41.0],[-42.301924,-22.466731,41.0],[-42.301705,-22.46683,40.0],[-42.301485,-22.466925,39.0],[-42.301255,-22.466995,39.0],[-42.301024,-22.467066,38.0],[-42.300793,-22.467136,37.0],[-42.300563,-22.467206,38.0],[-42.300332,-22.467276,39.0],[-42.300101,-22.467345,39.0],[-42.299867,-22.467407,38.0],[-42.299634,-22.467468,37.0],[-42.2994,-22.46753,36.0],[-42.299167,-22.467591,35.0],[-42.298933,-22.467653,36.0],[-42.298699,-22.467714,37.0],[-42.298466,-22.467776,40.0],[-42.298234,-22.467844,42.0],[-42.298003,-22.467912,45.0],[-42.297769,-22.46797,49.0],[-42.29754,-22.467917,51.0],[-42.297334,-22.467798,53.0],[-42.297133,-22.467671,54.0],[-42.296933,-22.467544,52.0],[-42.296732,-22.467417,49.0],[-42.296539,-22.46728,45.0],[-42.296349,-22.46714,42.0],[-42.296165,-22.466993,41.0],[-42.295939,-22.466911,44.0],[-42.295715,-22.466825,43.0],[-42.295493,-22.466734,40.0],[-42.295262,-22.466665,39.0],[-42.295026,-22.466614,39.0],[-42.294786,-22.466584,40.0],[-42.294556,-22.466513,40.0],[-42.29433,-22.46643,39.0],[-42.294098,-22.466367,39.0],[-42.293859,-22.466326,38.0],[-42.293619,-22.466295,36.0],[-42.293378,-22.46627,33.0],[-42.293136,-22.466273,35.0],[-42.292893,-22.466287,36.0],[-42.292652,-22.466312,36.0],[-42.292418,-22.46636,35.0],[-42.292204,-22.466467,34.0],[-42.291998,-22.466587,36.0],[-42.291793,-22.466707,37.0],[-42.291587,-22.466827,37.0],[-42.291382,-22.466948,36.0],[-42.291176,-22.467068,37.0],[-42.290971,-22.467188,39.0],[-42.290769,-22.467313,37.0],[-42.290615,-22.46748,34.0],[-42.290517,-22.467686,33.0],[-42.290433,-22.467898,35.0],[-42.290349,-22.468109,38.0],[-42.290268,-22.468322,39.0],[-42.290187,-22.468535,39.0],[-42.290109,-22.468748,38.0],[-42.290032,-22.468962,38.0],[-42.289953,-22.469176,38.0],[-42.289872,-22.469389,39.0],[-42.289776,-22.469596,39.0],[-42.28965,-22.469786,39.0],[-42.289451,-22.469908,36.0],[-42.289227,-22.469997,37.0],[-42.289011,-22.470098,40.0],[-42.28882,-22.470237,43.0],[-42.288641,-22.470389,46.0],[-42.288493,-22.470568,48.0],[-42.28839,-22.47077,48.0],[-42.288318,-22.470985,45.0],[-42.288246,-22.471201,44.0],[-42.288208,-22.471424,43.0],[-42.288224,-22.471649,44.0],[-42.288257,-22.471872,41.0],[-42.288298,-22.472094,37.0],[-42.288366,-22.47231,34.0],[-42.288475,-22.47251,34.0],[-42.288612,-22.472696,35.0],[-42.288801,-22.472837,34.0],[-42.288994,-22.472974,32.0],[-42.289202,-22.47309,30.0],[-42.289411,-22.473205,30.0],[-42.28962,-22.47332,30.0],[-42.289816,-22.473454,30.0],[-42.290011,-22.473587,29.0],[-42.290207,-22.47372,28.0],[-42.290369,-22.473884,28.0],[-42.290475,-22.474087,27.0],[-42.290551,-22.474301,27.0],[-42.290625,-22.474516,28.0],[-42.290697,-22.474732,28.0],[-42.290771,-22.474947,28.0],[-42.290845,-22.475162,29.0],[-42.290919,-22.475376,29.0],[-42.290995,-22.475591,29.0],[-42.291073,-22.475805,29.0],[-42.29115,-22.476019,28.0],[-42.291222,-22.476234,28.0],[-42.291292,-22.47645,29.0],[-42.291362,-22.476666,32.0],[-42.291425,-22.476884,34.0],[-42.291415,-22.477107,34.0],[-42.291368,-22.477325,34.0],[-42.291252,-22.477524,34.0],[-42.291112,-22.477707,34.0],[-42.290926,-22.477848,33.0],[-42.290719,-22.477964,32.0],[-42.290486,-22.478026,30.0],[-42.290249,-22.478073,30.0],[-42.29001,-22.478112,32.0],[-42.289767,-22.478122,31.0],[-42.289524,-22.478117,31.0],[-42.289282,-22.478105,33.0],[-42.28904,-22.478089,33.0],[-42.288798,-22.478071,33.0],[-42.288556,-22.478053,34.0],[-42.288314,-22.478036,34.0],[-42.288072,-22.478018,35.0],[-42.28783,-22.478,35.0],[-42.287587,-22.477985,32.0],[-42.287345,-22.477981,31.0],[-42.287103,-22.478001,30.0],[-42.286865,-22.478044,30.0],[-42.286638,-22.47812,30.0],[-42.286409,-22.478197,30.0],[-42.28618,-22.478271,30.0],[-42.285948,-22.478338,31.0],[-42.285715,-22.4784,33.0],[-42.285487,-22.478477,34.0],[-42.285265,-22.478567,35.0],[-42.285045,-22.478662,32.0],[-42.284866,-22.478807,31.0],[-42.284767,-22.479012,30.0],[-42.284621,-22.479192,29.0],[-42.284429,-22.479328,28.0],[-42.284238,-22.479468,29.0],[-42.284032,-22.479587,29.0],[-42.283829,-22.47971,29.0],[-42.28363,-22.479839,29.0],[-42.283423,-22.479958,29.0],[-42.283212,-22.48007,28.0],[-42.283009,-22.480193,28.0],[-42.282801,-22.480309,27.0],[-42.282592,-22.480425,27.0],[-42.282364,-22.480493,29.0],[-42.282143,-22.480421,32.0],[-42.281964,-22.480269,31.0],[-42.281762,-22.480144,29.0],[-42.281545,-22.480044,28.0],[-42.281331,-22.479938,30.0],[-42.281117,-22.479832,32.0],[-42.280898,-22.479736,33.0],[-42.280668,-22.479663,33.0],[-42.28043,-22.479625,33.0],[-42.280191,-22.479652,34.0],[-42.279952,-22.479694,36.0],[-42.279718,-22.479751,39.0],[-42.279492,-22.47983,39.0],[-42.279269,-22.479919,40.0],[-42.279029,-22.479892,38.0],[-42.278788,-22.479867,36.0],[-42.278557,-22.479927,35.0],[-42.278428,-22.480108,34.0],[-42.278401,-22.480331,33.0],[-42.278433,-22.480554,32.0],[-42.278478,-22.480776,31.0],[-42.278514,-22.480999,30.0],[-42.278529,-22.481224,29.0],[-42.278535,-22.48145,29.0],[-42.278533,-22.481675,29.0],[-42.278526,-22.481901,28.0],[-42.278504,-22.482125,27.0],[-42.278442,-22.482343,27.0],[-42.27834,-22.482547,27.0],[-42.278225,-22.482746,26.0],[-42.27808,-22.482927,27.0],[-42.277925,-22.4831,28.0],[-42.277756,-22.483262,30.0],[-42.277533,-22.483342,33.0],[-42.277291,-22.483347,32.0],[-42.277049,-22.483363,31.0],[-42.276841,-22.483473,31.0],[-42.276681,-22.483641,33.0],[-42.27655,-22.483831,34.0],[-42.276404,-22.484011,35.0],[-42.276224,-22.484162,34.0],[-42.276017,-22.484275,31.0],[-42.275783,-22.484333,28.0],[-42.275544,-22.484375,28.0],[-42.275304,-22.484409,28.0],[-42.27508,-22.484495,29.0],[-42.274868,-22.484602,30.0],[-42.274651,-22.484703,29.0],[-42.27444,-22.484815,29.0],[-42.274235,-22.484935,30.0],[-42.27403,-22.485057,31.0],[-42.273845,-22.485202,31.0],[-42.273664,-22.485352,31.0],[-42.273473,-22.485488,31.0],[-42.273243,-22.485563,30.0],[-42.273012,-22.485631,31.0],[-42.272785,-22.485712,31.0],[-42.272567,-22.48581,30.0],[-42.272389,-22.485958,30.0],[-42.272342,-22.486176,30.0],[-42.27234,-22.486401,30.0],[-42.272359,-22.486626,29.0],[-42.272396,-22.486849,29.0],[-42.272393,-22.487074,30.0],[-42.272353,-22.487297,32.0],[-42.272259,-22.487499,32.0],[-42.272114,-22.48768,34.0],[-42.271909,-22.487798,34.0],[-42.271674,-22.487853,33.0],[-42.271434,-22.487884,31.0],[-42.271193,-22.48791,30.0],[-42.270955,-22.487953,29.0],[-42.270785,-22.488109,30.0],[-42.270717,-22.488322,29.0],[-42.270735,-22.488546,31.0],[-42.270817,-22.488758,32.0],[-42.270872,-22.488977,33.0],[-42.27087,-22.489203,32.0],[-42.270876,-22.489427,31.0],[-42.27089,-22.489652,31.0],[-42.270902,-22.489877,31.0],[-42.270934,-22.490101,32.0],[-42.270999,-22.490316,32.0],[-42.271135,-22.490501,31.0],[-42.271304,-22.490663,30.0],[-42.271464,-22.490832,27.0],[-42.271602,-22.491018,24.0],[-42.27173,-22.491209,23.0],[-42.271842,-22.491409,23.0],[-42.27196,-22.491606,26.0],[-42.27202,-22.491822,27.0],[-42.272031,-22.492047,28.0],[-42.271976,-22.492264,28.0],[-42.271846,-22.492452,27.0],[-42.271705,-22.492636,26.0],[-42.271568,-22.492823,26.0],[-42.271431,-22.493009,27.0],[-42.271289,-22.493192,26.0],[-42.271153,-22.493379,26.0],[-42.271021,-22.493568,27.0],[-42.270896,-22.493761,28.0],[-42.270776,-22.493958,29.0],[-42.270742,-22.494177,28.0],[-42.270794,-22.494397,27.0],[-42.270841,-22.494618,27.0],[-42.270879,-22.494841,26.0],[-42.270892,-22.495065,26.0],[-42.270881,-22.495291,26.0],[-42.270865,-22.495516,27.0],[-42.270841,-22.49574,28.0],[-42.270818,-22.495965,28.0],[-42.270808,-22.49619,28.0],[-42.270803,-22.496416,28.0],[-42.270799,-22.496641,29.0],[-42.270792,-22.496867,30.0],[-42.270769,-22.497092,30.0],[-42.270702,-22.497306,29.0],[-42.270563,-22.49749,30.0],[-42.270384,-22.497638,28.0],[-42.27019,-22.497774,26.0],[-42.270019,-22.497933,25.0],[-42.269918,-22.498136,24.0],[-42.269854,-22.498353,23.0],[-42.269784,-22.498569,23.0],[-42.26967,-22.498768,24.0],[-42.26955,-22.498964,24.0],[-42.269448,-22.499169,24.0],[-42.269359,-22.499379,24.0],[-42.26931,-22.499598,24.0],[-42.269277,-22.499822,25.0],[-42.269272,-22.499852,25.0]],"poly":[[-42.2690293,-22.5002885],[-42.2682537,-22.4992359],[-42.2626922,-22.4915517],[-42.2595851,-22.4893918],[-42.2607196,-22.476107],[-42.2697827,-22.4683766],[-42.2622081,-22.4595747],[-42.2725208,-22.448394],[-42.2790723,-22.4404376],[-42.2808202,-22.4194039],[-42.2904186,-22.412735],[-42.3148347,-22.421847],[-42.330174,-22.4372439],[-42.3555621,-22.4347025],[-42.3334488,-22.4666841],[-42.3099806,-22.4774597],[-42.2947524,-22.4911658],[-42.2880294,-22.5087738],[-42.2773556,-22.5062633],[-42.2729566,-22.5045298]],"road":[[-42.3050336,-22.4650004],[-42.3048027,-22.4651945],[-42.3045695,-22.4653505],[-42.3044507,-22.4654235],[-42.3042202,-22.4655768],[-42.3039118,-22.4657758],[-42.3037685,-22.4658716],[-42.3035155,-22.4660088],[-42.3030845,-22.4662245],[-42.3026115,-22.4664371],[-42.3023286,-22.4665605],[-42.3021226,-22.4666421],[-42.3015083,-22.4669182],[-42.3001401,-22.4673347],[-42.2984265,-22.4677864],[-42.2980924,-22.467887],[-42.2977892,-22.4679705],[-42.2976283,-22.4679643],[-42.2974312,-22.4678594],[-42.2967332,-22.4674184],[-42.2965346,-22.4672768],[-42.2963953,-22.4671771],[-42.296157,-22.4669868],[-42.2958292,-22.4668721],[-42.2954002,-22.4666963],[-42.2950392,-22.4666154],[-42.2948127,-22.4665912],[-42.2946235,-22.4665385],[-42.2942178,-22.4663879],[-42.2938221,-22.4663201],[-42.2935687,-22.4662885],[-42.2933074,-22.4662632],[-42.2928399,-22.4662895],[-42.2924836,-22.4663315],[-42.2923531,-22.4663884],[-42.2922407,-22.4664461],[-42.291902,-22.4666428],[-42.29084,-22.467265],[-42.2906741,-22.4673776],[-42.2905619,-22.467574],[-42.2903296,-22.4681585],[-42.2901675,-22.4685863],[-42.2899713,-22.4691302],[-42.2899246,-22.4692473],[-42.2898701,-22.4693934],[-42.2898138,-22.4695232],[-42.2897037,-22.4697324],[-42.2896284,-22.4698079],[-42.289565,-22.4698621],[-42.2891203,-22.4700398],[-42.2889962,-22.4701056],[-42.2887601,-22.4702824],[-42.2886539,-22.4703745],[-42.2884607,-22.4706069],[-42.2884191,-22.4706826],[-42.2882417,-22.4712142],[-42.2882078,-22.4714157],[-42.2882292,-22.4717253],[-42.2883134,-22.4721741],[-42.2884063,-22.4724143],[-42.2886074,-22.4726922],[-42.2889539,-22.4729521],[-42.2896208,-22.4733211],[-42.2902394,-22.4737424],[-42.2903402,-22.4738315],[-42.2904676,-22.4740662],[-42.2905787,-22.4743792],[-42.2907486,-22.4748833],[-42.2909442,-22.4754485],[-42.2911805,-22.4761041],[-42.2913023,-22.4764823],[-42.2913638,-22.4766701],[-42.2914357,-22.4769198],[-42.2913972,-22.4772731],[-42.2913182,-22.4774134],[-42.2912098,-22.4775947],[-42.2910631,-22.4777628],[-42.2907549,-22.4779547],[-42.290407,-22.4780462],[-42.2900213,-22.4781117],[-42.2897577,-22.4781227],[-42.2894142,-22.4781138],[-42.2889607,-22.4780835],[-42.2885068,-22.4780497],[-42.2878211,-22.4779997],[-42.2874664,-22.4779781],[-42.2872366,-22.4779829],[-42.2869935,-22.478016],[-42.2867892,-22.4780602],[-42.2866123,-22.4781305],[-42.2862404,-22.4782526],[-42.2860163,-22.478322],[-42.2858084,-22.4783695],[-42.2854712,-22.4784819],[-42.2851311,-22.4786228],[-42.2849494,-22.4787062],[-42.2848613,-22.4788128],[-42.2848245,-22.4788971],[-42.2847595,-22.4790269],[-42.2846972,-22.479113],[-42.2846054,-22.4792089],[-42.284319,-22.4794025],[-42.2842258,-22.4794772],[-42.2840829,-22.4795595],[-42.2839913,-22.4796102],[-42.2838565,-22.4796927],[-42.2837116,-22.4797829],[-42.283618,-22.4798474],[-42.283437,-22.4799501],[-42.2831994,-22.480077],[-42.2830206,-22.4801858],[-42.2828462,-22.4802825],[-42.2826543,-22.4803933],[-42.282506,-22.480468],[-42.2824167,-22.480486],[-42.2823323,-22.4804979],[-42.2822178,-22.4804722],[-42.2821413,-22.4804202],[-42.281978,-22.480278],[-42.281881,-22.4802115],[-42.2817601,-22.4801427],[-42.2816195,-22.4800743],[-42.2814191,-22.4799919],[-42.2812991,-22.4799189],[-42.2810854,-22.4798173],[-42.2809473,-22.4797519],[-42.2807919,-22.4797006],[-42.2806791,-22.4796662],[-42.280585,-22.4796365],[-42.2804421,-22.4796265],[-42.2803772,-22.4796197],[-42.2799303,-22.4796976],[-42.2798159,-22.4797257],[-42.2795781,-22.4797871],[-42.2794202,-22.479866],[-42.2792674,-22.4799198],[-42.2790871,-22.4799021],[-42.2789487,-22.4798775],[-42.2787657,-22.479865],[-42.2786741,-22.4798786],[-42.2785459,-22.4799323],[-42.278477,-22.479989],[-42.2784389,-22.4800665],[-42.2784112,-22.480168],[-42.2783969,-22.4802655],[-42.2784067,-22.4804185],[-42.2784522,-22.4806496],[-42.2784988,-22.4808822],[-42.2785203,-22.48105],[-42.2785347,-22.4813361],[-42.2785358,-22.4815513],[-42.2785303,-22.48176],[-42.2785248,-22.4819323],[-42.2785068,-22.4821113],[-42.2784799,-22.4822377],[-42.2784448,-22.4823376],[-42.2783921,-22.4824617],[-42.2783154,-22.4825889],[-42.2782179,-22.4827584],[-42.2780516,-22.4829619],[-42.2779267,-22.4830978],[-42.2777658,-22.4832567],[-42.2777115,-22.4832895],[-42.2775782,-22.4833411],[-42.2772823,-22.4833472],[-42.2771019,-22.4833526],[-42.2770074,-22.4833712],[-42.2769127,-22.4834194],[-42.2767976,-22.4835063],[-42.2767063,-22.4836034],[-42.2765313,-22.4838594],[-42.2764115,-22.4840036],[-42.2762701,-22.4841304],[-42.2760966,-22.4842492],[-42.2759073,-22.48431],[-42.2755979,-22.4843671],[-42.2754141,-22.4843926],[-42.2753055,-22.4844088],[-42.2751653,-22.4844531],[-42.2750412,-22.4845137],[-42.2749731,-22.484558],[-42.2747685,-22.4846433],[-42.2745206,-22.4847682],[-42.2742156,-22.4849466],[-42.2741015,-22.4850133],[-42.273974,-22.4850916],[-42.2738849,-22.4851625],[-42.2738314,-22.4852152],[-42.273739,-22.4852861],[-42.2736604,-22.485355],[-42.2735996,-22.4854082],[-42.2734979,-22.4854797],[-42.2733804,-22.4855197],[-42.273253,-22.4855599],[-42.2731006,-22.4856041],[-42.2730033,-22.4856342],[-42.2727554,-22.4857222],[-42.2727009,-22.4857438],[-42.2725539,-22.4858166],[-42.2725033,-22.485844],[-42.2724756,-22.4858618],[-42.2723967,-22.4859425],[-42.2723652,-22.4860014],[-42.2723449,-22.4860779],[-42.2723366,-22.486368],[-42.2723525,-22.4865392],[-42.2723587,-22.4866239],[-42.2723979,-22.4868614],[-42.2723983,-22.487044],[-42.2723902,-22.4870894],[-42.2723351,-22.4873953],[-42.2721906,-22.4875938],[-42.2721124,-22.4876825],[-42.2719437,-22.4877873],[-42.2717866,-22.4878358],[-42.2715637,-22.4878705],[-42.2710576,-22.487924],[-42.2709614,-22.4879489],[-42.270876,-22.4880022],[-42.2707938,-22.4880909],[-42.2707318,-22.4882113],[-42.2707126,-22.4883588],[-42.2707301,-22.4885329],[-42.2707859,-22.4886829],[-42.2708267,-22.4887819],[-42.2708709,-22.4889441],[-42.2708756,-22.4891529],[-42.2708606,-22.4892899],[-42.2708877,-22.4895311],[-42.2708923,-22.4897942],[-42.2709226,-22.4900514],[-42.2709731,-22.4902712],[-42.271072,-22.4904405],[-42.2714214,-22.4907745],[-42.2716784,-22.4911218],[-42.2717852,-22.4913035],[-42.2718802,-22.4914798],[-42.2719811,-22.491639],[-42.2720165,-22.4917762],[-42.2720352,-22.4919997],[-42.2720184,-22.4921786],[-42.2719365,-22.492344],[-42.2718023,-22.4925043],[-42.2714588,-22.4929723],[-42.2712159,-22.493287],[-42.2709546,-22.4936651],[-42.2707761,-22.493957],[-42.2707359,-22.494062],[-42.2707434,-22.4941935],[-42.2707918,-22.4943852],[-42.2708467,-22.4946453],[-42.2708967,-22.4949502],[-42.2708804,-22.4953125],[-42.2708695,-22.4954679],[-42.2708116,-22.4960219],[-42.2707947,-22.496839],[-42.2707596,-22.4971849],[-42.2706948,-22.4973216],[-42.2705168,-22.4975491],[-42.2703224,-22.4976794],[-42.2701797,-22.4977809],[-42.2700801,-22.4978644],[-42.2699814,-22.4979757],[-42.2699246,-22.4981153],[-42.2698873,-22.4982281],[-42.2698489,-22.498371],[-42.2698202,-22.4984704],[-42.2697728,-22.4985985],[-42.2696872,-22.4987425],[-42.2695919,-22.4988869],[-42.2695062,-22.499047],[-42.2694053,-22.4992598],[-42.2693288,-22.4994561],[-42.2692987,-22.4996816],[-42.2692724,-22.4998524]],"out":[-42.2693,-22.4998],"par":{},"fonte":"SRTM 30 m (opentopodata), malha de 0,0025° (~260 m) + perfil da estrada a cada 25 m; poligonal e estrada do KML Aldeia_Bacia_e_Estrada.kml (16/11/2026)"};
+
+/* ---------- DR-27: janela 🏔 Levantamento da bacia ---------- */
+const LEV27_CAMPOS = [
+  ['cel', 'Espaçamento da grade (m) — 0 = o da malha', 5], ['copa', 'Redução de copa nos topos (m)', 0.5], ['copaLim', 'Topo é copa se ficar acima do mínimo local (m)', 0.5], ['copaJan', 'Janela do mínimo local (± m)', 25],
+  ['prof', 'Água acumulada hoje nos pontos baixos (m)', 0.1], ['folga', 'Folga do greide acima da cheia (m)', 0.05],
+  ['Cbac', 'C — bacia / rio principal', 0.05], ['Cloc', 'C — bacias locais (encostas)', 0.05], ['trTrav', 'TR das travessias (anos)', 1], ['trPonte', 'TR da ponte (anos)', 1], ['rioA', 'Rio principal a partir de (km²)', 0.5],
+  ['passo', 'Estacas do perfil a cada (m)', 5], ['Strav', 'Declividade das travessias (m/m)', 0.001], ['recob', 'Recobrimento sobre a travessia (m)', 0.05], ['rampa', 'Rampa do greide junto à travessia (m/m)', 0.01],
+  ['larg', 'Largura da pista (m)', 0.5], ['talude', 'Talude do aterro (H : 1V)', 0.5], ['dp', 'Tolerância dos trechos retos da estrada (m)', 1],
+  ['ponteNome', 'Nome do deságue', null], ['ponteB', 'Ponte — largura do vão (m)', 0.5], ['ponteH', 'Ponte — altura livre (m)', 0.5], ['ponteN', 'Ponte — n de Manning do canal', 0.005], ['ponteS', 'Ponte — declividade do canal (m/m, 0 = do talvegue)', 0.0001], ['ponteFolga', 'Ponte — folga sob a viga (m)', 0.1]];
+function lev27G() { if (!P.lev27) P.lev27 = {nome: '', pts: [], poly: [], road: [], out: null, par: {}}; if (!P.lev27.par) P.lev27.par = {}; return P.lev27; }
+const LEV27_CSS = `.lev27-ov{position:fixed;inset:0;z-index:8500;background:var(--bg,#f1f5f9);overflow:auto}
+.lev27-top{position:sticky;top:0;z-index:2;background:#0b3a66;color:#fff;display:flex;gap:.5rem;align-items:center;padding:.55rem .9rem;flex-wrap:wrap}
+.lev27-top b{font-size:1.05rem}.lev27-top .sp{flex:1}.lev27-pg{max-width:1200px;margin:0 auto;padding:.8rem}
+.lev27-ov .card{margin-bottom:.8rem}.lev27-k{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:.5rem}
+.lev27-k div{background:var(--surface,#fff);border:1px solid var(--line,#cbd5e1);border-radius:8px;padding:.45rem .6rem}.lev27-k small{display:block;color:var(--muted,#64748b);font-size:.72rem}.lev27-k b{font-size:1.02rem}
+.lev27-t{width:100%;border-collapse:collapse;font-size:.8rem}.lev27-t th{background:#1a3a5c;color:#fff;padding:4px 6px;text-align:left;position:sticky;top:0}.lev27-t td{border-bottom:1px solid #e2e8f0;padding:3px 6px}
+.lev27-t tr.err td{background:#fee2e2}.lev27-t tr.warn td{background:#fef3c7}.lev27-tw{overflow:auto;max-height:420px}
+.lev27-f{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:.35rem .8rem;font-size:.8rem}.lev27-f label{display:flex;justify-content:space-between;gap:.4rem;align-items:center}.lev27-f input{width:90px}
+.lev27-ok{color:#166534;font-weight:700}.lev27-no{color:#b91c1c;font-weight:700}`;
+(function () { const s = document.createElement('style'); s.textContent = LEV27_CSS; document.head.appendChild(s); })();
+function lev27Abrir() {
+  let ov = document.getElementById('lev27-ov');
+  if (!ov) { ov = document.createElement('div'); ov.id = 'lev27-ov'; ov.className = 'lev27-ov'; document.body.appendChild(ov); }
+  document.body.classList.add('ov27');
+  lev27Render();
+}
+function lev27Fechar() { const o = document.getElementById('lev27-ov'); if (o) o.remove(); document.body.classList.remove('ov27'); save(); try { calc(); renderTab(); } catch (e) {} }
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.getElementById('lev27-ov') && !document.getElementById('geo26-ov')) { lev27Fechar(); e.stopPropagation(); } }, true);
+function lev27Render() {
+  const ov = document.getElementById('lev27-ov'); if (!ov) return; const lv = lev27G(), E = lev27Estudo();
+  const Lr = (() => { if (!lv.road || lv.road.length < 2) return 0; let s = 0; for (let k = 1; k < lv.road.length; k++) { const a = lv.road[k - 1], b = lv.road[k]; s += Math.hypot((b[0] - a[0]) * 111320 * Math.cos(a[1] * Math.PI / 180), (b[1] - a[1]) * 110574); } return s; })();
+  const campo = ([k, t, st]) => `<label>${t}<input ${st == null ? 'type="text" style="width:150px"' : 'type="number" step="' + st + '"'} value="${esc(lev27Par(k))}" onchange="lev27Set('${k}', this.value)"></label>`;
+  let h = `<div class="lev27-top"><b>🏔 Levantamento da bacia</b><span style="font-size:.8rem;opacity:.85">${esc(lv.nome || P.proj.nome || '')}</span><span class="sp"></span>
+    <button class="btn btn-secondary btn-sm" onclick="geo26Abrir()">🛰 Ver no mapa</button><button class="btn btn-secondary btn-sm" onclick="lev27Fechar()">✕ Fechar</button></div><div class="lev27-pg">
+  <div class="card"><h4>1. Dados do levantamento</h4>
+    <p style="font-size:.82rem;margin:.2rem 0 .6rem">Malha de pontos do terreno (lon, lat, cota — ou E, N, cota em UTM) dentro da poligonal da bacia, a poligonal e a linha da estrada (KML do Google Earth). O deságue é o ponto por onde sai toda a água da bacia (ex.: a ponte).</p>
+    <div class="lev27-k"><div><small>Pontos da malha</small><b>${(lv.pts || []).length.toLocaleString('pt-BR')}</b></div><div><small>Vértices da poligonal</small><b>${(lv.poly || []).length}</b></div>
+      <div><small>Estrada</small><b>${Lr ? fmt(Lr, 0) + ' m' : '—'}</b></div><div><small>Deságue (lat, lon)</small><b style="font-size:.85rem">${lv.out ? (+lv.out[1]).toFixed(5) + ', ' + (+lv.out[0]).toFixed(5) : 'automático (mais baixo da borda)'}</b></div></div>
+    <div class="bar-btns" style="margin-top:.6rem;flex-wrap:wrap;gap:.4rem">
+      <button class="btn btn-primary btn-sm" onclick="lev27Importar('malha')">📂 Importar malha (CSV, TXT ou KML)</button>
+      <button class="btn btn-primary btn-sm" onclick="lev27Importar('kml')">📂 Importar poligonal e estrada (KML)</button>
+      <button class="btn btn-secondary btn-sm" onclick="lev27Desague()">📍 Deságue</button>
+      <button class="btn btn-secondary btn-sm" onclick="lev27PaginaMalha()" title="Gera uma página que baixa as altitudes (SRTM 30 m) numa malha dentro da poligonal e ao longo da estrada, e devolve o CSV para importar aqui">⬇ Página para baixar a malha (SRTM)</button>
+      <button class="btn btn-secondary btn-sm" onclick="lev27Exemplo()">🗂 Exemplo: Estrada de Aldeia Velha</button>
+      <button class="btn btn-secondary btn-sm" onclick="lev27Limpar()">🗑 Limpar</button></div>
+    <div style="margin-top:.4rem"><label style="font-size:.82rem">Nome do levantamento <input type="text" value="${esc(lv.nome || '')}" onchange="lev27G().nome=this.value;save()" style="width:240px"></label> &nbsp; <label style="font-size:.82rem">Nome da estrada <input type="text" value="${esc(lv.estrada || '')}" onchange="lev27G().estrada=this.value;save()" style="width:240px"></label></div></div>
+  <div class="card"><h4>2. Parâmetros</h4><div class="lev27-f">${LEV27_CAMPOS.map(campo).join('')}</div>
+    <p style="font-size:.76rem;color:var(--muted);margin:.5rem 0 0">Chuva: IDF da aba 2 (${esc(P.idf.fonte || '')}: i = ${fmt(+P.idf.a, 1)}·TR^${fmt(+P.idf.b, 4)}/(t + ${fmt(+P.idf.c, 1)})^${fmt(+P.idf.d, 4)}). Para a Região Serrana / Macaé use a equação da CPRM de Macaé.
+      <button class="btn btn-secondary btn-sm" onclick="lev27IdfMacae()">Usar IDF de Macaé (CPRM)</button></p></div>`;
+  if (!E) h += `<div class="card"><p>Importe a malha e a poligonal para calcular o estudo (ou abra o exemplo de Aldeia Velha).</p></div>`;
+  else if (E.erro) h += `<div class="card"><p class="msg err">Não foi possível calcular: ${esc(E.erro)}</p></div>`;
+  else h += lev27Resultados(E);
+  h += '</div>';
+  ov.innerHTML = h;
+}
+function lev27Set(k, v) { const lv = lev27G(); lv.par[k] = LEV27_PAR[k] != null && typeof LEV27_PAR[k] === 'number' ? (v === '' ? '' : +String(v).replace(',', '.')) : v; save(); lev27Render(); }
+function lev27IdfMacae() { Object.assign(P.idf, {a: 1270, b: 0.2477, c: 18.9, d: 0.8277, fonte: 'Macaé / RJ — CPRM (Davis & Naghettini, 2001)'}); save(); lev27Render(); toast('IDF de Macaé aplicada ao projeto (aba 2).'); }
+function lev27Limpar() { if (!confirm('Apagar a malha, a poligonal e a estrada do levantamento deste projeto? (as ruas e a rede continuam)')) return; delete P.lev27; save(); lev27Render(); }
+function lev27Desague() {
+  const lv = lev27G(), t = prompt('Coordenada do deságue (ponte), em graus: lat, lon — ex.: -22.4998, -42.2693. Deixe vazio para automático.', lv.out ? lv.out[1] + ', ' + lv.out[0] : ''); if (t === null) return;
+  const v = geo26Nums(t); if (v.length < 2) { lv.out = null; } else if (Math.abs(v[0]) <= 90 && Math.abs(v[1]) <= 180) lv.out = [v[1], v[0]]; else { const z = v[2] || (LEV27_CACHE.E && LEV27_CACHE.E.zona) || 23, ll = geo26DeUTM(v[0], v[1], z, true); lv.out = [ll[1], ll[0]]; }
+  save(); lev27Render();
+}
+function lev27Resultados(E) {
+  const b = E.bac, p = E.ponte, r = E.road, trP = lev27Par('trPonte'), trT = lev27Par('trTrav');
+  let h = `<div class="card"><h4>3. Bacia até o deságue — ${esc(lev27Par('ponteNome'))}</h4><div class="lev27-k">
+    <div><small>Área da poligonal</small><b>${fmt(b.A, 2)} km²</b></div><div><small>Área drenada (grade)</small><b>${fmt(b.Agrade, 2)} km²</b></div>
+    <div><small>Talvegue mais longo L</small><b>${fmt(b.L / 1000, 2)} km</b></div><div><small>Desnível H</small><b>${fmt(b.H, 0)} m</b></div>
+    <div><small>Declividade média do talvegue</small><b>${fmt(b.S * 100, 2)} %</b></div><div><small>Declividade 10–85 %</small><b>${fmt(b.S1085 * 100, 2)} %</b></div>
+    <div><small>Declividade média do terreno</small><b>${fmt(b.decl * 100, 1)} %</b></div><div><small>Cotas (mín. / média / máx.)</small><b>${fmt(b.zmin, 0)} / ${fmt(b.zmed, 0)} / ${fmt(b.zmax, 0)} m</b></div>
+    <div><small>Grade de cálculo</small><b>${fmt(b.cel, 0)} m · ${b.nCel} células</b></div><div><small>Pontos da malha</small><b>${b.nPts.toLocaleString('pt-BR')}</b></div>
+    <div><small>Projeção</small><b>UTM SIRGAS 2000 ${b.zona}S</b></div><div><small>Coef. de distribuição φ</small><b>${fmt(b.phi, 3)}</b></div></div>
+    <h5 style="margin:.8rem 0 .3rem">Tempo de concentração</h5><table class="lev27-t"><tr><th>Método</th><th>Tc (min)</th><th>Tc (h)</th></tr>
+      <tr><td>Kirpich</td><td>${fmt(b.tcK, 0)}</td><td>${fmt(b.tcK / 60, 2)}</td></tr><tr><td>Ventura</td><td>${fmt(b.tcV, 0)}</td><td>${fmt(b.tcV / 60, 2)}</td></tr>
+      <tr><td>Pasini</td><td>${fmt(b.tcP, 0)}</td><td>${fmt(b.tcP / 60, 2)}</td></tr><tr><td><b>Adotado (média)</b></td><td><b>${fmt(b.tc, 0)}</b></td><td><b>${fmt(b.tc / 60, 2)}</b></td></tr></table>
+    <h5 style="margin:.8rem 0 .3rem">Vazões no deságue — racional modificado Q = 0,278·C·φ·i·A</h5><table class="lev27-t"><tr><th>TR (anos)</th><th>i (mm/h)</th>${[0.30, 0.40, 0.50].map(c => `<th>Q com C = ${fmt(c, 2)} (m³/s)</th>`).join('')}</tr>
+      ${[10, 25, 50, 100].map(T => `<tr${T === trP ? ' style="font-weight:700"' : ''}><td>${T}</td><td>${fmt(b.i[T], 1)}</td>${[0.30, 0.40, 0.50].map(c => `<td>${fmt(b.QC[c][T], 1)}</td>`).join('')}</tr>`).join('')}</table>
+    <p style="font-size:.78rem;color:var(--muted)">C adotado para a bacia: ${fmt(b.C, 2)} (mata, pasto e relevo forte). Bacia grande (> 2 km²): o racional é estimativa — para o projeto executivo da ponte use hidrograma unitário (SCS) e confirme com o DNIT.</p></div>
+  <div class="card"><h4>4. ${esc(lev27Par('ponteNome'))} — verificação hidráulica</h4><div class="lev27-k">
+    <div><small>Vão × altura livre</small><b>${fmt(p.B, 2)} × ${fmt(p.H, 2)} m</b></div><div><small>Q de projeto (TR ${p.tr})</small><b>${fmt(p.Qd, 1)} m³/s</b></div>
+    <div><small>Capacidade com folga ${fmt(p.folga, 2)} m</small><b>${fmt(p.Qf, 1)} m³/s</b></div><div><small>Capacidade cheia (sem folga)</small><b>${fmt(p.Qc, 1)} m³/s</b></div>
+    <div><small>Lâmina para a cheia de projeto</small><b>${fmt(p.yN, 2)} m</b></div><div><small>Velocidade</small><b>${fmt(p.VN, 2)} m/s</b></div>
+    <div><small>Canal: n · S</small><b>${fmt(p.n, 3)} · ${fmt(p.S * 100, 3)} %</b></div><div><small>Vão necessário (mesma altura, com folga)</small><b>${fmt(p.Bn, 1)} m</b></div></div>
+    <p style="margin:.5rem 0" class="${p.ok ? 'lev27-ok' : 'lev27-no'}">${p.ok ? '✔ A ponte passa a cheia de TR ' + p.tr + ' com a folga sob a viga.' : '✖ A ponte NÃO passa a cheia de TR ' + p.tr + ' com folga de ' + fmt(p.folga, 2) + ' m' + (p.okCheia ? ' (passa só trabalhando cheia, sem folga).' : ' (nem trabalhando cheia: a água sobe ' + fmt(p.yN - p.H, 2) + ' m acima da altura livre e represa a montante).')}</p>
+    <table class="lev27-t"><tr><th>TR (anos)</th><th>Q (m³/s)</th><th>Lâmina na ponte (m)</th><th>Velocidade (m/s)</th><th>Situação</th></tr>${p.tab.map(x => `<tr class="${x.y > p.H ? 'err' : x.y > p.H - p.folga ? 'warn' : ''}"><td>${x.T}</td><td>${fmt(x.Q, 1)}</td><td>${fmt(x.y, 2)}</td><td>${fmt(x.V, 2)}</td><td>${x.y > p.H ? 'acima da viga' : x.y > p.H - p.folga ? 'sem folga' : 'ok'}</td></tr>`).join('')}</table>
+    <p style="font-size:.78rem;color:var(--muted)">Escoamento uniforme (Manning) em seção retangular com a largura do vão; não considera remanso da BR-101, pilares nem o canal a jusante. Para decidir, faça levantamento topobatimétrico do canal e modelagem (HEC-RAS).</p></div>`;
+  if (r) {
+    h += `<div class="card"><h4>5. Estrada — perfil, pontos baixos e greide</h4><div class="lev27-k">
+      <div><small>Extensão</small><b>${fmt(r.L, 0)} m</b></div><div><small>Pontos baixos (alagam)</small><b>${E.pools.length}</b></div><div><small>Extensão alagada hoje</small><b>${fmt(r.extAlag, 0)} m</b></div>
+      <div><small>Aterro máx. (só cheia)</small><b>${fmt(Math.max(...r.alt), 2)} m</b></div><div><small>Aterro máx. (com travessias)</small><b>${fmt(r.altMax, 2)} m</b></div>
+      <div><small>Volume de aterro (só cheia)</small><b>${fmt(r.volEst, 0)} m³</b></div><div><small>Volume com as travessias</small><b>${fmt(r.vol, 0)} m³</b></div>
+      <div><small>Topos de copa corrigidos</small><b>${E.canopy.length}</b></div></div>
+      <div style="overflow-x:auto;margin-top:.6rem">${lev27SvgPerfil(E)}</div>
+      <h5 style="margin:.8rem 0 .3rem">Pontos baixos — bacia local, vazão (TR ${trT}) e travessia</h5><div class="lev27-tw"><table class="lev27-t"><tr><th>Nº</th><th>Estaca</th><th>Fundo (m)</th><th>Cheia (m)</th><th>Greide (m)</th><th>Aterro (m)</th><th>A local (km²)</th><th>L (m)</th><th>H (m)</th><th>Tc (min)</th><th>Q${trT} (m³/s)</th><th>Travessia</th><th>Rio junto (Q${trP})</th></tr>
+      ${E.pools.map((q, i) => `<tr class="${!q.sec ? 'err' : q.rio ? 'warn' : ''}"><td>${i + 1}</td><td>${estLabel(q.s)}</td><td>${fmt(q.zf, 2)}</td><td>${fmt(q.nivel, 2)}</td><td>${fmt(q.greide, 2)}</td><td>${fmt(q.aterro, 2)}</td><td>${fmt(q.A, 3)}${q.comp ? ' *' : ''}</td><td>${fmt(q.Lloc, 0)}</td><td>${fmt(q.Hloc, 0)}</td><td>${fmt(q.tc, 0)}</td><td>${fmt(q.Q, 2)}</td><td>${esc(q.secTxt)}</td><td>${q.rio ? fmt(q.Am, 1) + ' km² · ' + fmt(q.QR, 0) + ' m³/s' : '—'}</td></tr>`).join('')}</table></div>
+      <p style="font-size:.76rem;color:var(--muted)">* trecho entre cristas já contado em outro ponto baixo (a mesma área local; não somar). Linhas amarelas: o rio principal (&gt; ${fmt(lev27Par('rioA'), 1)} km²) passa junto da estrada — além do bueiro da encosta, confira se o rio cruza a estrada (ponte ou galeria). Linhas vermelhas: a vazão passa de 4 células 3,00 × 3,00 m — ponte.</p>
+      ${E.canopy.length ? `<h5 style="margin:.8rem 0 .3rem">Topos de copa corrigidos (−${fmt(lev27Par('copa'), 1)} m)</h5><p style="font-size:.8rem">${E.canopy.map(c => estLabel(c.s0) + ' a ' + estLabel(c.s1) + ' (máx. ' + fmt(c.zmax, 1) + ' m)').join(' · ')}</p>` : ''}
+      <h5 style="margin:.8rem 0 .3rem">Trechos entre cristas — área que chega à estrada</h5><div class="lev27-tw" style="max-height:220px"><table class="lev27-t"><tr><th>De</th><th>Até</th><th>Área (km²)</th><th>L (m)</th><th>H (m)</th></tr>${E.along.map(a => `<tr><td>${estLabel(a.s0)}</td><td>${estLabel(a.s1)}</td><td>${fmt(a.A, 2)}</td><td>${fmt(a.L, 0)}</td><td>${fmt(a.H, 0)}</td></tr>`).join('')}</table></div></div>`;
+  }
+  h += `<div class="card"><h4>6. Usar no projeto</h4><div class="bar-btns" style="flex-wrap:wrap;gap:.4rem">
+    ${r ? '<button class="btn btn-primary btn-sm" onclick="lev27Projeto();lev27Render()">🛣 Criar o projeto pela estrada (ruas, greide, travessias, bacias)</button>' : ''}
+    <button class="btn btn-secondary btn-sm" onclick="lev27Xlsx()">📊 Planilha do estudo (.xlsx)</button>
+    ${r ? '<button class="btn btn-secondary btn-sm" onclick="lev27EstradaCSV()">⬇ Estrada: estacas, terreno e greide (.csv)</button><button class="btn btn-secondary btn-sm" onclick="lev27Intertravado()">⬇ Estrada para o Pavimento Intertravado (.json)</button>' : ''}
+    <button class="btn btn-secondary btn-sm" onclick="geo26Abrir()">🛰 Ver no mapa</button></div>
+    <p style="font-size:.78rem;color:var(--muted);margin:.5rem 0 0">“Criar o projeto” substitui ruas, estacas, PVs, trechos e bacias pelos da estrada: cada ponto baixo vira uma travessia (caixa de entrada → bueiro → saída), com a bacia local ligada a ela. Depois confira as abas 7 (Rede), 12 (Custos) e 13 (Verificação). O arquivo do Intertravado leva a estrada com ${fmt(lev27Par('larg'), 1)} m de pista, terreno, greide e caimento de 2 % do eixo para as bordas, com as coordenadas de cada estaca (abre georreferenciado).</p></div>`;
+  return h;
+}
+function lev27SvgPerfil(E) {
+  const r = E.road, W = 1150, H = 330, m = {l: 52, r: 14, t: 14, b: 34}, n = r.ds.length;
+  const z0 = Math.floor(Math.min(...r.zc, ...r.zraw) - 2), z1 = Math.ceil(Math.max(...r.zraw, ...r.greide) + 2), X = s => m.l + (W - m.l - m.r) * s / r.L, Y = z => H - m.b - (H - m.t - m.b) * (z - z0) / ((z1 - z0) || 1);
+  const pl = (arr, cor, w, dash) => `<polyline fill="none" stroke="${cor}" stroke-width="${w}"${dash ? ' stroke-dasharray="' + dash + '"' : ''} points="${arr.map((z, k) => X(r.ds[k]).toFixed(1) + ',' + Y(z).toFixed(1)).join(' ')}"/>`;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" style="max-width:100%;background:#fff;border:1px solid #e2e8f0;border-radius:6px;font-family:Arial;font-size:10px">`;
+  for (let z = Math.ceil(z0 / 10) * 10; z <= z1; z += (z1 - z0 > 120 ? 20 : 10)) s += `<line x1="${m.l}" x2="${W - m.r}" y1="${Y(z)}" y2="${Y(z)}" stroke="#eef2f7"/><text x="${m.l - 4}" y="${Y(z) + 3}" text-anchor="end" fill="#64748b">${z}</text>`;
+  for (let d = 0; d <= r.L; d += 500) s += `<line x1="${X(d)}" x2="${X(d)}" y1="${m.t}" y2="${H - m.b}" stroke="#eef2f7"/><text x="${X(d)}" y="${H - m.b + 13}" text-anchor="middle" fill="#64748b">${fmt(d / 1000, 1)}</text>`;
+  /* água acumulada */
+  for (let k = 0; k < n - 1; k++) if (isFinite(r.level[k]) && isFinite(r.level[k + 1])) s += `<polygon fill="#93c5fd" fill-opacity=".7" points="${X(r.ds[k])},${Y(r.level[k])} ${X(r.ds[k + 1])},${Y(r.level[k + 1])} ${X(r.ds[k + 1])},${Y(r.zc[k + 1])} ${X(r.ds[k])},${Y(r.zc[k])}"/>`;
+  s += pl(r.zraw, '#94a3b8', 1, '3 3') + pl(r.zc, '#92400e', 1.6) + pl(r.greide, '#dc2626', 1.6);
+  E.pools.forEach((q, i) => { s += `<circle cx="${X(q.s)}" cy="${Y(q.zf)}" r="3" fill="#1d4ed8"/><text x="${X(q.s)}" y="${Y(q.greide) - 6}" text-anchor="middle" fill="#1d4ed8" font-weight="700">${i + 1}</text>`; });
+  s += `<text x="${m.l}" y="${H - 6}" fill="#334155">km</text><text x="12" y="${m.t + 8}" fill="#334155">m</text>
+    <g transform="translate(${W - 430},${m.t + 4})"><rect width="416" height="18" fill="#fff" stroke="#e2e8f0"/><line x1="8" x2="28" y1="9" y2="9" stroke="#94a3b8" stroke-dasharray="3 3"/><text x="32" y="12">terreno (com copas)</text>
+    <line x1="128" x2="148" y1="9" y2="9" stroke="#92400e" stroke-width="1.6"/><text x="152" y="12">terreno corrigido</text><rect x="240" y="4" width="16" height="10" fill="#93c5fd"/><text x="260" y="12">água hoje</text>
+    <line x1="318" x2="338" y1="9" y2="9" stroke="#dc2626" stroke-width="1.6"/><text x="342" y="12">greide proposto</text></g></svg>`;
+  return s;
+}
+/* ---------- importação ---------- */
+function lev27Importar(tipo) {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = tipo === 'kml' ? '.kml,.xml' : '.csv,.txt,.tsv,.xyz,.kml,.xml';
+  inp.onchange = () => { const f = inp.files[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => { try { lev27Ler(f.name, String(rd.result), tipo); } catch (e) { toast('Não consegui ler o arquivo: ' + e.message); } }; rd.readAsText(f); };
+  inp.click();
+}
+function lev27Ler(nome, txt, tipo) {
+  const lv = lev27G(); let msg = [];
+  if (/\.(kml|xml)$/i.test(nome) || /<kml/i.test(txt)) {
+    const doc = new DOMParser().parseFromString(txt, 'text/xml'), pms = [...doc.getElementsByTagName('Placemark')], pts = [], polys = [], lines = [];
+    const co = el => (el ? el.textContent.trim().split(/\s+/) : []).map(c => c.split(',').map(Number)).filter(c => c.length >= 2 && isFinite(c[0]) && isFinite(c[1]));
+    pms.forEach(pm => { const nm = (pm.getElementsByTagName('name')[0] || {}).textContent || '';
+      [...pm.getElementsByTagName('Point')].forEach(p => co(p.getElementsByTagName('coordinates')[0]).forEach(c => { if (c.length > 2 && c[2] !== 0) pts.push([c[0], c[1], c[2]]); }));
+      [...pm.getElementsByTagName('Polygon')].forEach(p => { const ob = p.getElementsByTagName('outerBoundaryIs')[0] || p; polys.push({nm, c: co(ob.getElementsByTagName('coordinates')[0])}); });
+      [...pm.getElementsByTagName('LineString')].forEach(p => lines.push({nm, c: co(p.getElementsByTagName('coordinates')[0])})); });
+    if (pts.length) { lv.pts = (tipo === 'malha' ? [] : (lv.pts || [])).concat(pts); msg.push(pts.length + ' pontos com cota'); }
+    if (polys.length) { const big = polys.sort((a, b) => b.c.length - a.c.length)[0]; lv.poly = big.c.map(c => [c[0], c[1]]); if (lv.poly.length > 2 && lv.poly[0][0] === lv.poly[lv.poly.length - 1][0] && lv.poly[0][1] === lv.poly[lv.poly.length - 1][1]) lv.poly.pop(); msg.push('poligonal com ' + lv.poly.length + ' vértices'); if (!lv.nome) lv.nome = big.nm; }
+    if (lines.length) { const est = lines.find(l => /estrada|rua|eixo|road|via/i.test(l.nm)) || lines.sort((a, b) => b.c.length - a.c.length)[0]; lv.road = est.c.map(c => [c[0], c[1]]); if (!lv.estrada && est.nm) lv.estrada = est.nm; msg.push('estrada “' + (est.nm || 'linha') + '” com ' + lv.road.length + ' pontos'); }
+    if (!msg.length) throw new Error('o KML não tem pontos com cota, polígono nem linha.');
+  } else {
+    const L = txt.split(/\r?\n/).filter(l => l.trim()), sep = L.slice(0, 5).some(l => l.includes(';')) ? ';' : L.slice(0, 5).some(l => l.includes('\t')) ? '\t' : L.slice(0, 5).every(l => l.split(',').length >= 3) ? ',' : /\s+/;
+    const cab = /[a-zA-Z]/.test(L[0]) ? L[0].toLowerCase().split(sep).map(s => s.trim()) : null, rows = (cab ? L.slice(1) : L).map(l => l.split(sep).map(s => +s.trim().replace(sep === ';' ? ',' : /$^/, '.')));
+    let ix = 0, iy = 1, iz = 2;
+    if (cab) { const f = re => cab.findIndex(c => re.test(c)); const a = f(/^(lon|lng|long|longitude|x|e|este|leste)$/), b = f(/^(lat|latitude|y|n|norte)$/), c = f(/^(z|cota|alt|altitude|elev|elevacao|elevação|h|cota \(m\))$/);
+      if (a >= 0) ix = a; if (b >= 0) iy = b; if (c >= 0) iz = c; }
+    let pts = rows.filter(r => isFinite(r[ix]) && isFinite(r[iy]) && isFinite(r[iz])).map(r => [r[ix], r[iy], r[iz]]); if (!pts.length) throw new Error('nenhuma linha com 3 números (x, y, cota).');
+    const geo = pts.every(p => Math.abs(p[0]) <= 180 && Math.abs(p[1]) <= 180);
+    if (geo) { if (!cab && pts.every(p => Math.abs(p[0]) <= 90) && pts[0] && Math.abs(pts[0][0]) < Math.abs(pts[0][1])) pts = pts.map(p => [p[1], p[0], p[2]]); }
+    else { const z = +prompt('As coordenadas estão em UTM (E, N). Qual a zona UTM (SIRGAS 2000, hemisfério sul)? Aldeia Velha / Casimiro: 23 · Rio das Ostras litoral: 24', '23') || 23; pts = pts.map(p => { const l = geo26DeUTM(p[0], p[1], z, true); return [l[1], l[0], p[2]]; }); }
+    lv.pts = pts; msg.push(pts.length.toLocaleString('pt-BR') + ' pontos da malha');
+  }
+  if (lv.pts && lv.pts.length > 40000) { const st = Math.ceil(lv.pts.length / 40000); lv.pts = lv.pts.filter((p, k) => k % st === 0); msg.push('malha reduzida para ' + lv.pts.length + ' pontos (limite do navegador)'); }
+  lv.pts = (lv.pts || []).map(p => [+(+p[0]).toFixed(6), +(+p[1]).toFixed(6), +(+p[2]).toFixed(2)]);
+  save(); lev27Render(); toast('Importado: ' + msg.join(', ') + '.');
+}
+/* página que baixa a malha (SRTM 30 m / Open-Meteo) dentro da poligonal e ao longo da estrada */
+function lev27PaginaMalha() {
+  const lv = lev27G(); if (!lv.poly || lv.poly.length < 3) return toast('Importe a poligonal (KML) antes.');
+  const esp = +prompt('Espaçamento da malha em metros (30 a 250). Menor = mais pontos e mais tempo (80 m ≈ 8 mil pontos numa bacia de 50 km²):', '80') || 80;
+  const S = '<' + 'script>', Se = '</' + 'script>';
+  const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Malha de altitudes — ${esc(lv.nome || P.proj.nome || '')}</title>
+<style>body{font-family:Arial,sans-serif;max-width:640px;margin:20px auto;padding:0 14px;color:#14202e}button{padding:12px 16px;font-size:1rem;border-radius:8px;border:0;background:#0b6bcb;color:#fff;margin:6px 6px 6px 0}button:disabled{background:#9aa}#bar{height:16px;background:#dde;border-radius:8px;overflow:hidden}#bi{height:100%;width:0;background:#16a34a}#log{font-size:.85rem;color:#445;white-space:pre-wrap;margin-top:8px}</style></head><body>
+<h2>Malha de altitudes dentro da poligonal</h2><p>${esc(lv.nome || P.proj.nome || '')}. Esta página baixa as altitudes (SRTM 30 m) numa malha dentro da poligonal e ao longo da estrada. No fim baixe o CSV e importe no Drenagem Pluvial 2 (🏔 Levantamento da bacia › Importar malha).</p>
+<label>Espaçamento (m): <input id="esp" type="number" value="${esp}" min="30" max="250" style="width:70px;font-size:1rem"></label><br><button id="go">▶ Baixar altitudes</button><button id="dl" disabled>⬇ Baixar CSV</button><div id="bar"><div id="bi"></div></div><div id="log">Pronto.</div>
+${S}const POLY=${JSON.stringify(lv.poly)},ROAD=${JSON.stringify(lv.road || [])};const $=i=>document.getElementById(i);let OUT=[],ft=0;
+function pip(x,y){let c=false;for(let i=0,j=POLY.length-1;i<POLY.length;j=i++){const a=POLY[i],b=POLY[j];if((a[1]>y)!=(b[1]>y)&&x<(b[0]-a[0])*(y-a[1])/(b[1]-a[1])+a[0])c=!c}return c}
+function rs(){const o=[];for(let k=1;k<ROAD.length;k++){const a=ROAD[k-1],b=ROAD[k],d=Math.hypot((b[0]-a[0])*111320*Math.cos(a[1]*Math.PI/180),(b[1]-a[1])*110574),n=Math.max(1,Math.ceil(d/25));for(let j=0;j<n;j++)o.push([+(a[0]+(b[0]-a[0])*j/n).toFixed(6),+(a[1]+(b[1]-a[1])*j/n).toFixed(6)])}if(ROAD.length)o.push(ROAD[ROAD.length-1]);return o}
+function malha(esp){const la=POLY.map(p=>p[1]),lo=POLY.map(p=>p[0]),c=Math.cos(la.reduce((a,b)=>a+b,0)/la.length*Math.PI/180),dla=esp/110574,dlo=esp/(111320*c),p=[];for(let y=Math.min(...la);y<=Math.max(...la);y+=dla)for(let x=Math.min(...lo);x<=Math.max(...lo);x+=dlo)if(pip(x,y))p.push([+x.toFixed(6),+y.toFixed(6)]);return p}
+async function pega(l){try{const r=await fetch('https://api.opentopodata.org/v1/srtm30m?locations='+l.map(p=>p[1]+','+p[0]).join('|'));const j=await r.json();if(j.status==='OK')return j.results.map(x=>x.elevation)}catch(e){}
+try{const r=await fetch('https://api.open-meteo.com/v1/elevation?latitude='+l.map(p=>p[1]).join(',')+'&longitude='+l.map(p=>p[0]).join(','));const j=await r.json();if(j.elevation){ft=1;return j.elevation}}catch(e){}return null}
+$('go').onclick=async()=>{$('go').disabled=true;OUT=[];const t=malha(+$('esp').value||80).concat(rs());$('log').textContent='Pontos: '+t.length;
+for(let i=0;i<t.length;i+=100){const l=t.slice(i,i+100);let z=null;for(let k=0;k<4&&!z;k++){z=await pega(l);if(!z)await new Promise(r=>setTimeout(r,2500))}
+if(!z){$('log').textContent+='\\nFalhou no lote '+(i/100+1)+'. Clique em Baixar de novo.';$('go').disabled=false;return}
+l.forEach((p,k)=>OUT.push([p[0],p[1],z[k]]));$('bi').style.width=(100*Math.min(1,(i+100)/t.length))+'%';await new Promise(r=>setTimeout(r,1100))}
+$('log').textContent+='\\nConcluído: '+OUT.length+' pontos'+(ft?' (fonte: Open-Meteo 90 m)':' (fonte: SRTM 30 m)');$('dl').disabled=false;$('go').disabled=false};
+$('dl').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['lon,lat,z\\n'+OUT.map(p=>p.join(',')).join('\\n')],{type:'text/csv'}));a.download='malha_levantamento.csv';document.body.appendChild(a);a.click();a.remove()};${Se}</body></html>`;
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([html], {type: 'text/html'})); a.download = 'baixar_malha_' + (lv.nome || 'bacia').replace(/[^\w\-]+/g, '_') + '.html'; document.body.appendChild(a); a.click(); a.remove();
+  toast('Página baixada: abra no navegador, toque em “Baixar altitudes” e depois importe o CSV aqui.');
+}
+/* ---------- saídas ---------- */
+function lev27Baixa(nome, txt, tipo) { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], {type: tipo})); a.download = nome; document.body.appendChild(a); a.click(); a.remove(); }
+function lev27LinhasEstrada(E) {
+  const r = E.road, larg = lev27Par('larg'), cai = 0.02;
+  return r.ds.map((d, k) => ({est: d, estaca: estLabel(d), lon: r.ll[k][0], lat: r.ll[k][1], tBruto: r.zraw[k], tn: r.zc[k], cheia: isFinite(r.level[k]) ? r.level[k] : null, greide: r.greide[k], bordaE: r.greide[k] - cai * larg / 2, bordaD: r.greide[k] - cai * larg / 2, aterro: r.aterro[k]}));
+}
+function lev27EstradaCSV() {
+  const E = lev27Estudo(); if (!E || !E.road) return; const f = (x, d) => isNum(x) ? x.toFixed(d).replace('.', ',') : '';
+  const t = 'Estaca;Distância (m);Latitude;Longitude;Terreno levantado (m);Terreno corrigido (m);Nível de cheia hoje (m);Greide no eixo (m);Borda esquerda 2% (m);Borda direita 2% (m);Aterro no eixo (m)\n' +
+    lev27LinhasEstrada(E).map(x => [x.estaca, f(x.est, 2), f(x.lat, 7), f(x.lon, 7), f(x.tBruto, 2), f(x.tn, 2), f(x.cheia, 2), f(x.greide, 3), f(x.bordaE, 3), f(x.bordaD, 3), f(x.aterro, 2)].join(';')).join('\n');
+  lev27Baixa('estrada_' + (lev27G().estrada || lev27G().nome || 'levantamento').replace(/[^\w\-]+/g, '_') + '.csv', '\ufeff' + t, 'text/csv');
+}
+/* arquivo de projeto do Pavimento Intertravado (📂 Abrir): uma rua com terreno nas bordas e no eixo, greide, largura e coordenadas */
+function lev27Intertravado() {
+  const E = lev27Estudo(); if (!E || !E.road) return; const r = E.road, larg = lev27Par('larg'), nome = lev27G().estrada || 'Estrada';
+  const nx = k => { const a = r.xy[Math.max(0, k - 1)], b = r.xy[Math.min(r.xy.length - 1, k + 1)], l = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1; return [-(b[1] - a[1]) / l, (b[0] - a[0]) / l]; };
+  /* terreno nas bordas = terreno corrigido do eixo + variação lateral da malha (IDW) até a borda — só com malha densa (≤ 30 m); com malha mais aberta a variação lateral seria inventada pela interpolação, então usa o terreno do eixo */
+  const tB = (k, sg) => { if (!(E.cel <= 30)) return +r.zc[k].toFixed(3); const n = nx(k), x = r.xy[k][0] + sg * n[0] * larg / 2, y = r.xy[k][1] + sg * n[1] * larg / 2, d = E.zAt(x, y) - E.zAt(r.xy[k][0], r.xy[k][1]); return +(r.zc[k] + (isFinite(d) ? d : 0)).toFixed(3); };
+  const rows = r.ds.map((d, k) => ({est: +d.toFixed(3), tEsq: tB(k, 1), tEixo: +r.zc[k].toFixed(3), tDir: tB(k, -1), greide: +r.greide[k].toFixed(3), larg, lat: +r.ll[k][1].toFixed(7), lng: +r.ll[k][0].toFixed(7)}));
+  const proj = {v: 1, ident: {logradouro: nome, responsavel: ''}, topo: {caiEsq: '2', caiDir: '2', largPad: String(larg), rows, ruas: [{id: 'r1', nome: nome, paralela: null, geo: null, rows, obj: []}], ruaAtiva: 0},
+    secoes: {talCorte: '1', talAterro: String(lev27Par('talude')), berma: '0.5', ev: ''},
+    georef: {lat: r.ll[Math.floor(r.ll.length / 2)][1], lng: r.ll[Math.floor(r.ll.length / 2)][0], rot: 0, esc: 100, opD: 70, opS: 100, base: 'sat', modo: 'dec'},
+    _meta: {formato: 'pint-projeto-completo', versao: 1, programa: 'Drenagem Pluvial 2 · 🏔 Levantamento da bacia (DR-27)', exportadoEm: new Date().toISOString(),
+      obs: 'Estrada com ' + fmt(larg, 1) + ' m de pista (sugestão: 6,00 m de blocos + 2 × 1,00 m de piso-grama junto ao meio-fio), caimento de 2 % do eixo para as bordas, greide do estudo de drenagem (cheia + folga e cobertura das travessias). Terreno = terreno levantado com correção de copa.'}};
+  lev27Baixa('intertravado_' + nome.replace(/[^\w\-]+/g, '_') + '.json', JSON.stringify(proj, null, 1), 'application/json');
+  toast('Arquivo baixado: no Pavimento Intertravado use 📂 Abrir e escolha este .json.');
+}
+async function lev27Xlsx() {
+  const E = lev27Estudo(); if (!E || E.erro) return toast('Calcule o estudo antes.');
+  try { await loadScript(LIB_XLSX); } catch (e) { return toast('Sem internet para gerar o .xlsx.'); }
+  const wb = XLSX.utils.book_new(), b = E.bac, p = E.ponte, add = (nome, aoa, w) => { const s = XLSX.utils.aoa_to_sheet(aoa); if (w) s['!cols'] = w.map(x => ({wch: x})); XLSX.utils.book_append_sheet(wb, s, nome); };
+  const r2 = (x, d) => isNum(x) ? +x.toFixed(d) : '';
+  add('Bacia', [['Estudo da bacia — ' + (lev27G().nome || P.proj.nome)], [], ['Área da poligonal (km²)', r2(b.A, 3)], ['Área drenada na grade (km²)', r2(b.Agrade, 3)], ['Talvegue L (m)', r2(b.L, 0)], ['Desnível H (m)', r2(b.H, 1)], ['Declividade média (m/m)', r2(b.S, 5)], ['Declividade 10–85 % (m/m)', r2(b.S1085, 5)],
+    ['Cota mínima (m)', r2(b.zmin, 1)], ['Cota média (m)', r2(b.zmed, 1)], ['Cota máxima (m)', r2(b.zmax, 1)], ['Grade (m)', r2(b.cel, 0)], ['Pontos da malha', b.nPts], [], ['Tc Kirpich (min)', r2(b.tcK, 1)], ['Tc Ventura (min)', r2(b.tcV, 1)], ['Tc Pasini (min)', r2(b.tcP, 1)], ['Tc adotado (min)', r2(b.tc, 1)], [],
+    ['IDF', P.idf.fonte, 'a', +P.idf.a, 'b', +P.idf.b, 'c', +P.idf.c, 'd', +P.idf.d], ['φ = A^-0,15', r2(b.phi, 4)], [], ['TR (anos)', 'i (mm/h)', 'Q C=0,30', 'Q C=0,40', 'Q C=0,50']].concat([10, 25, 50, 100].map(T => [T, r2(b.i[T], 2), r2(b.QC[0.3][T], 2), r2(b.QC[0.4][T], 2), r2(b.QC[0.5][T], 2)])), [34, 30, 12, 12, 12]);
+  add('Ponte', [[lev27Par('ponteNome')], ['Vão (m)', p.B], ['Altura livre (m)', p.H], ['n', p.n], ['S (m/m)', r2(p.S, 5)], ['Folga (m)', p.folga], ['TR', p.tr], ['Q de projeto (m³/s)', r2(p.Qd, 2)], ['Capacidade com folga (m³/s)', r2(p.Qf, 2)], ['Capacidade cheia (m³/s)', r2(p.Qc, 2)], ['Lâmina necessária (m)', r2(p.yN, 2)], ['Vão necessário com folga (m)', r2(p.Bn, 1)], ['Situação', p.ok ? 'atende' : 'NÃO atende'], [], ['TR', 'Q (m³/s)', 'Lâmina (m)', 'V (m/s)']].concat(p.tab.map(x => [x.T, r2(x.Q, 2), r2(x.y, 2), r2(x.V, 2)])), [30, 14, 12, 12]);
+  if (E.road) {
+    add('Pontos baixos', [['Nº', 'Estaca', 'Distância (m)', 'Lat', 'Lon', 'Fundo (m)', 'Cheia (m)', 'Greide (m)', 'Aterro (m)', 'A local (km²)', 'L (m)', 'H (m)', 'Tc (min)', 'C', 'φ', 'Q TR trav. (m³/s)', 'Q25 (m³/s)', 'Travessia', 'V (m/s)', 'y/D ou y/H', 'Comprimento (m)', 'Cota montante', 'Cota jusante', 'Rio junto (km²)', 'Q rio TR ponte (m³/s)']]
+      .concat(E.pools.map((q, i) => [i + 1, estLabel(q.s), r2(q.s, 1), r2(q.lat, 6), r2(q.lon, 6), r2(q.zf, 2), r2(q.nivel, 2), r2(q.greide, 2), r2(q.aterro, 2), r2(q.A, 3), r2(q.Lloc, 0), r2(q.Hloc, 1), r2(q.tc, 1), q.C, r2(q.phi, 3), r2(q.Q, 2), r2(q.Q25, 2), q.secTxt, q.sec ? r2(q.sec.V, 2) : '', q.sec ? r2(q.sec.yD, 2) : '', q.Lb || '', q.cm || '', q.cj || '', q.rio ? r2(q.Am, 2) : '', q.rio ? r2(q.QR, 1) : ''])));
+    add('Perfil da estrada', [['Estaca', 'Distância (m)', 'Lat', 'Lon', 'Terreno levantado', 'Terreno corrigido', 'Cheia hoje', 'Greide eixo', 'Borda esq. 2%', 'Borda dir. 2%', 'Aterro']].concat(lev27LinhasEstrada(E).map(x => [x.estaca, r2(x.est, 2), r2(x.lat, 7), r2(x.lon, 7), r2(x.tBruto, 2), r2(x.tn, 2), x.cheia == null ? '' : r2(x.cheia, 2), r2(x.greide, 3), r2(x.bordaE, 3), r2(x.bordaD, 3), r2(x.aterro, 2)])));
+  }
+  add('Malha', [['Lon', 'Lat', 'Cota (m)']].concat(lev27G().pts));
+  XLSX.writeFile(wb, 'estudo_bacia_' + (lev27G().nome || 'levantamento').replace(/[^\w\-]+/g, '_') + '.xlsx');
+}
+/* ---------- exemplo: Estrada de Aldeia Velha (16/11/2026) ---------- */
+function lev27Exemplo() {
+  if (!(P.ruas.length || P.pvs.length) || confirm('Abrir o exemplo da Estrada de Aldeia Velha como um PROJETO NOVO? (o projeto atual fica salvo na lista)')) {
+    saveNow(); const id = uid(); P = migrate(blankProject('Estrada de Aldeia Velha — bacia, travessias e ponte da BR-101'));
+    Object.assign(P.proj, {municipio: 'Rio das Ostras / RJ', local: 'Aldeia Velha — estrada até a BR-101'});
+    P.lev27 = JSON.parse(JSON.stringify(LEV27_ALDEIA)); lev27IdfMacae(); DB.cur = id;
+    lev27Projeto(true); saveNow(); afterLoad(); lev27Abrir();
+    toast('Exemplo de Aldeia Velha criado como projeto novo (malha SRTM de ~250 m; importe a malha densa para refinar).');
+  }
+}
+/* aba 4 (Bacias) e lista de projetos: acesso ao levantamento */
+(function () {
+  const v0 = vBacias;
+  vBacias = function () { const h = v0.apply(this, arguments), E = P.lev27 ? lev27Estudo() : null;
+    return `<div class="card" style="margin-bottom:.8rem;border-left:4px solid #0b6bcb"><h4 style="margin-top:0">🏔 Estudo da bacia pelo levantamento (malha de pontos)</h4>
+      <p style="font-size:.85rem;margin:.2rem 0 .5rem">${E && !E.erro ? 'Bacia de ' + fmt(E.bac.A, 2) + ' km² · Tc ' + fmt(E.bac.tc, 0) + ' min · Q' + lev27Par('trPonte') + ' = ' + fmt(E.ponte.Qd, 1) + ' m³/s no deságue (' + esc(lev27Par('ponteNome')) + ': ' + (E.ponte.ok ? 'atende' : 'NÃO atende') + ')' + (E.road ? ' · ' + E.pools.length + ' pontos baixos na estrada' : '') : 'Importe a malha de pontos do terreno, a poligonal e a linha da estrada para o estudo completo da bacia (talvegues, Tc, vazões, pontos baixos, travessias e ponte).'}</p>
+      <div class="bar-btns"><button class="btn btn-primary btn-sm" onclick="lev27Abrir()">🏔 Abrir o levantamento da bacia</button><button class="btn btn-secondary btn-sm" onclick="geo26Abrir()">🛰 Ver no mapa</button></div></div>` + h; };
+  const add = () => { const bb = document.querySelector('#modal-projetos .bar-btns'); if (!bb || document.getElementById('lev27-ex-btn')) return; const b = document.createElement('button'); b.id = 'lev27-ex-btn'; b.className = 'btn btn-secondary btn-sm'; b.textContent = '＋ Exemplo — Estrada de Aldeia Velha (bacia e ponte)'; b.onclick = () => { closeModal('modal-projetos'); lev27Exemplo(); }; bb.appendChild(b); };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', add); else add();
+})();
+
+</script>
 <!-- GUIA-IA:INICIO — skill e guia de cálculos da Drenagem Pluvial 2 guardados no programa (não aparecem na tela).
      Para IAs e projetistas: leia #guia-ia-skill (como trabalhar no programa) e #guia-ia-calculos (fórmulas, critérios, normas, decisões).
      Gerado por scripts/embutir_guia.py a partir de .claude/skills/drenagem/. -->
@@ -12545,6 +13368,22 @@ A sessão não abriu os PDFs (rede bloqueada para `fundacaorioaguas.prefeitura.r
 5. Classe do tubo (PA-1 a PA-4) pela altura de aterro (NBR 8890), não só pelo recobrimento mínimo.
 6. ✔ PV de queda (DR-24, alerta acima de 1,00 m).
 7. Conferir na IT Rio-Águas (§3.1.2–3.1.4, Tabela 2) e ajustar os padrões `vmin`, `recob`, `dmin` e o tc inicial.
+
+---
+
+## 9. Levantamento da bacia e georreferenciamento (DR-26 / DR-27, 17/11/2026)
+- **🛰 Georreferenciar (DR-26)** — botão na aba 11 (3D), barra acima do desenho. Estado em `P.georef` = {lat, lng, rot, esc, opD, opS, base, fix, modo, ctrl[], niv{}, utm, zona, hem}. `geo26LL(x, y)`: projeto em UTM (`utm` + `zona`) → exato (`geo26DeUTM`); senão giro + escala em torno do centro da planta (`geo26Centro`, `plantaBBox`). Pontos de controle = PVs com coordenada (mínimos quadrados, `geo26Ajustar`). Feições: `geo26Feicoes` (ruas pela `geoRuas`/`extRua`, trechos entre `posPV`, PVs, caixas, ramais, deságues). KMZ/KML: `geo26KmlTexto` (projeto + levantamento). Só desenho.
+- **🏔 Levantamento da bacia (DR-27)** — `P.lev27` = {nome, estrada, pts:[[lon,lat,z]], poly:[[lon,lat]], road:[[lon,lat]], out:[lon,lat], par{}}; padrões em `LEV27_PAR`, leitura por `lev27Par(k)`. Estudo = `lev27Estudo()` (cache; `lev27Calcula`):
+  1. UTM SIRGAS (zona pelo centro); grade quadrada dentro da poligonal com o espaçamento da malha (mediana da distância ao vizinho mais próximo, 10–500 m) ou `par.cel`; cota por IDW (8 vizinhos, potência 2).
+  2. D8 com priority-flood a partir do deságue (célula mais baixa a ≤ 1,2 km do `out`; sem `out`, a mais baixa da borda). L (talvegue mais longo), H = z(cabeceira) − z(deságue), S, S10–85, hipsometria, declividade média.
+  3. Tc da bacia = média de Kirpich [57·(L³/H)^0,385], Ventura [0,127·√(A/S)·60] e Pasini [0,107·(A·L)^(1/3)/√S·60] (A km², L km nos dois últimos, S m/m). Q = 0,278·C·φ·i·A, φ = A^-0,15 (A > 1 km²), i pela IDF do projeto SEM o fator de chuva do 3D (`lev27Idf`).
+  4. Estrada a cada `passo` (25 m): mediana 5 + média 3; copa = (z − mínimo de ±`copaJan`) ≥ `copaLim` (+1 amostra de cada lado) → −`copa` m, nunca abaixo do mínimo local; média 3. Pontos baixos: mínimos locais (±3 amostras) do mais fundo para o mais raso, água até `prof`; descarta o que engloba poça já tratada. Greide mín. = cheia + `folga`.
+  5. Bacia local: células cuja água chega primeiro à estrada no trecho entre cristas (picos com proeminência ≥ 1 m) sem passar pelo rio (acúmulo > `rioA` km²) nem pelo deságue; A = (células locais + células da estrada do trecho)·área da célula. Tc = máx(10; Kirpich). Q do `trTrav` com `Cloc`·φ.
+  6. Travessia (`lev27Secoes`): tubo único Ø600–1500 e galeria de MENOR ALTURA (GAL_PAD, 1–4 células) que passam com y/D ≤ mín(`yDlim`, crit.yD), V ≤ vmax e fora de Froude 0,86–1,13 (se houver opção). Fica a que exige menos greide: tubo pede `crit.recPA1` (1,00 m, sem proteção), galeria pede `par.recob` (0,30 m); + 2 % até a borda + 2 cm. Greide = máx(greide de cheia; exigido − `rampa`·|s − s₀|), 4 iterações com o comprimento do bueiro L = larg + 2·talude·aterro (mín. 10 m).
+  7. Ponte: retangular B × H, Manning (n, S = `ponteS` ou a do talvegue nos últimos 6 km); Qf com lâmina H − folga; Qc cheia; lâmina e vão necessários por bisseção. Verificação `checks27` (POS_CALC): erro se não passa nem cheia, alerta se só cheia; alerta “Bacia do deságue — método” (> 2 km²).
+- **Criar o projeto (`lev27Projeto`)**: estrada → Douglas-Peucker (`par.dp`, trechos ≥ 20 m) → ruas LIVRES `E01…` (x0, y0 UTM, az), estacas a cada 25 m (cota = greide, tn = terreno corrigido); por ponto baixo uma rua auxiliar `Xnn` (ref no trecho, ang 90°, dist0 20, larg 1 m, não pavimentada) com PVs `Xnn-E` (entrada, lado da bacia local) e `Xnn-S` (saída/deságue), tampa = borda da pista (greide − 2 %·larg/2), trecho `BT-nn` (galeria ou tubo, cotas do estudo) e bacia `BLnn` (A em ha, C = Cloc·φ, Tc manual) ligada à entrada. IDF de Macaé, `crit.tr` = `trTrav`, `crit.recob` = `par.recob`, `P.georef` UTM exato. Exemplo embutido: `LEV27_ALDEIA` (SRTM 731 + 292 pontos, KML original), `lev27Exemplo()`.
+- Saídas: planilha (`lev27Xlsx`), estrada CSV (`lev27EstradaCSV`), arquivo do Pavimento Intertravado (`lev27Intertravado`: `topo.ruas[0].rows` com est, tEsq, tEixo, tDir, greide, larg, lat, lng; caimento 2 %), página que baixa a malha SRTM dentro da poligonal (`lev27PaginaMalha`).
+- Limitações: SRTM mede copas (±5–10 m); grade de 255 m só serve para estudo preliminar; racional modificado em 52 km² é estimativa (usar SCS na ponte); a ponte é verificada em regime uniforme, sem remanso nem pilares.
 </script>
 <script>(function () { const ler = id => ((document.getElementById(id) || {}).textContent || "").replace(/<\\(\/?script|!--)/gi, "<$1"); window.TC_GUIA_IA = {skill: ler("guia-ia-skill"), calculos: ler("guia-ia-calculos")}; })();</script>
 <!-- GUIA-IA:FIM -->
