@@ -79,7 +79,7 @@ function plDirE(d,e){ return d.lay.dirAt?d.lay.dirAt(e):d.lay.d; }
 
 /* ── 1) ADAPTADOR ───────────────────────────────────────────────────── */
 var ruas=[];
-let _cal={ativo:false,tipo:'concreto',larg:0,esp:10,decl:2};
+let _cal={ativo:false,tipo:'concreto',larg:2,esp:10,decl:2,limLong:8.33};
 const PL_T_PADRAO={fundo:[],transv:[],sinal:{on:1,eixo:'LFO-2',vel:40,lbo:1,ftp:1,lre:1,placa:'R-1',r19:1,adv:1},eixo:null,raioBairro:6,geo:{modo:'ll',lat:'',lng:'',e:'',n:'',zona:24,rot:0,est2:'',lat2:'',lng2:'',e2:'',n2:''}};
 let _plT=JSON.parse(JSON.stringify(PL_T_PADRAO));
 function esc(t){ return String(t==null?'':t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
@@ -189,6 +189,8 @@ function plTopoLinhas(rows){
     const E=typeof estruturaLinha==='function'?estruturaLinha((princ||comN)&&Nv>0?Nv:0):null;
     const L={i,est:+row.est||0,estr:E,te:num(row.tEsq),tc:num(row.tEixo),td:num(row.tDir),gr:num(row.greide),larg:+row.larg||0,na:null,sit:'—',form:null,gE:null,gD:null,calE:0,calD:0,calFimE:0,calFimD:0};
     if(L.gr!==null){ const hb=L.larg/2; L.form=L.gr-(E?(E.e_total||0)/100:P.eTot); L.gE=num(row.gEsq)!==null?+row.gEsq:+(L.gr-hb*P.cEsq).toFixed(3); L.gD=num(row.gDir)!==null?+row.gDir:+(L.gr-hb*P.cDir).toFixed(3); }
+    /* PAV-CAL: calçada de largura e declividade transversal escolhidas (sem cota de muro no Flexível): começa no espelho do meio-fio e sobe w·i */
+    if(_cal.ativo&&L.gr!==null&&+_cal.larg>0){ const w=+_cal.larg, hm=((P.mf&&+P.mf.esp)?+P.mf.esp/100:0.15)+0.015, i=(+_cal.decl||0)/100; L.calE=L.calD=w; L.calFimE=L.gE+hm+w*i; L.calFimD=L.gD+hm+w*i; }
     const m=TL.find(x=>Math.abs((+x.est)-L.est)<0.005); if(m&&m.sit) L.sit=m.sit;
     return L;
   });
@@ -319,6 +321,7 @@ function plPainel(){
     ck('Quadro de camadas (esp., área, volume)',v.quadro,o('quadro'))+ck('Legenda',v.legenda,o('legenda'))+ck('Carimbo',v.carimbo,o('carimbo'))+
     '<div style="margin-top:4px;font-size:12px">Rótulos a cada <select onchange="plSet(\'passo\',0,+this.value)" style="font-size:12px">'+[1,2,5,10].map(x=>'<option value="'+x+'"'+(v.passo==x?' selected':'')+'>'+(x==1?'estaca':x+' estacas')+'</option>').join('')+'</select></div>';
   h+=tit('Só no 3D')+ck('Sombras',v.sombras,o('sombras'))+ck('Rótulos e medidas das camadas',v.rot3d,o('rot3d'))+ck('Lâmina do terreno natural sobre a pista (corte/aterro)',v.lamina,o('lamina'),'Película marrom translúcida na cota do terreno natural. Desligada deixa a cor do pavimento uniforme.');
+  h+=plPainelCal(tit,ck);
   h+=plPainelTransv(tit,ck);
   box.innerHTML=h;
 }
@@ -1673,8 +1676,9 @@ function plTSet(i,k,val){ const t=_plT.transv[i]; if(!t) return;
   plTMudou(); }
 function plSSet(k,val){ _plT.sinal[k]=val; plPainel(); plRedesenhar(); plMarcarSujo(); }
 /* projeto (.json e nuvem) */
-function plTExportar(){ return JSON.parse(JSON.stringify(_plT)); }
+function plTExportar(){ const o=JSON.parse(JSON.stringify(_plT)); o.cal=JSON.parse(JSON.stringify(_cal)); return o; }
 function plTImportar(o){ const p=JSON.parse(JSON.stringify(PL_T_PADRAO)); if(o&&typeof o==='object'){ if(Array.isArray(o.transv)) p.transv=o.transv.filter(t=>t&&typeof t==='object'); if(o.sinal&&typeof o.sinal==='object') Object.assign(p.sinal,o.sinal); if(Array.isArray(o.eixo)) p.eixo=o.eixo; if(Array.isArray(o.fundo)) p.fundo=o.fundo; if(o.raioBairro!=null&&isFinite(+o.raioBairro)) p.raioBairro=Math.max(0,Math.min(30,+o.raioBairro)); if(o.geo&&typeof o.geo==='object') Object.assign(p.geo,o.geo); }
+  _cal=Object.assign({ativo:false,tipo:'concreto',larg:2,esp:10,decl:2,limLong:8.33},(o&&o.cal&&typeof o.cal==='object')?o.cal:{});
   _plT=p; ruasSinc(); _pl.vb=null; if(_pl.t3) _pl.t3.pronto=false; }
 
 /* ── GEORREFERENCIAMENTO: coordenadas das estacas (UTM SIRGAS 2000 e lat/lon) ── */
@@ -2246,4 +2250,55 @@ function plEsquinasBairro(D){
     }));
   });
   _pl.esqB={sig,v:out}; return out;
+}
+
+
+/* ══════════════════════════════════════════════════════════════════════
+   PAV-CAL · calçada no Pavimento Flexível: largura e declividade transversal escolhidas pelo usuário,
+   com alertas das normas e conselho de degraus.
+   Base (pesquisada em 17/11/2026): ABNT NBR 9050 (calçadas e passeios) — inclinação TRANSVERSAL da faixa livre de no máximo 3 %;
+   inclinação LONGITUDINAL acompanha a da rua: até 5 % é calçada comum, de 5 % a 8,33 % (1:12) é tratada como rampa e acima de 8,33 %
+   não é acessível (precisa de patamares/degraus ou de outro traçado); faixa livre de pelo menos 1,20 m; degrau (espelho) de 16 a 18 cm.
+   Observação: algumas prefeituras (ex.: Rio, Livreto Calçadas Cariocas) pedem transversal de no máximo 2 % — o campo é livre.
+══════════════════════════════════════════════════════════════════════ */
+function plCalAlertas(){
+  const out=[], c=_cal, lim=+c.limLong||8.33;
+  if(!c.ativo) return out;
+  if(+c.decl>3) out.push({n:'erro',t:'Declividade transversal de '+(+c.decl).toLocaleString('pt-BR')+' % acima do máximo de 3 % da NBR 9050 para a faixa livre da calçada. Use 3 % ou menos (2 % é o usual; algumas prefeituras exigem no máximo 2 %).'});
+  else if(+c.decl<0.5) out.push({n:'aviso',t:'Declividade transversal abaixo de 0,5 %: a água da chuva pode empoçar na calçada. O usual é 2 %.'});
+  if(+c.larg<1.2) out.push({n:'aviso',t:'Largura de '+(+c.larg).toLocaleString('pt-BR')+' m: a faixa livre da NBR 9050 pede pelo menos 1,20 m (recomendável 1,50 m).'});
+  let D=[]; try{ D=plDados(); }catch(e){}
+  D.forEach(d=>{ const L=d.L||[]; let ini=null, fim=null, dh=0, mx=0, rampa=null;
+    const fecha=()=>{ if(ini===null) return; const len=fim-ini, exc=Math.max(0,Math.abs(dh)-lim/100*len), n=Math.ceil(exc/0.18-1e-9);
+      out.push({n:'erro',t:'<b>'+esc(d.nome)+'</b>, estacas '+estacaTxt(ini)+' a '+estacaTxt(fim)+': a calçada acompanha a rua e fica com até '+mx.toFixed(1).replace('.',',')+' % de inclinação longitudinal (limite '+lim.toString().replace('.',',')+' %). <b>Conselho:</b> fazer a calçada em <b>degraus/patamares</b> neste trecho — vencer cerca de '+exc.toFixed(2).replace('.',',')+' m por '+n+' degrau'+(n>1?'s':'')+' de até 18 cm (espelho de 16 a 18 cm), com patamares planos e uma rampa ou outra rota acessível ao lado.'}); ini=null; dh=0; mx=0; };
+    for(let i=0;i<L.length-1;i++){ const a=L[i], b=L[i+1]; if(a.gr==null||b.gr==null) continue; const len=b.est-a.est; if(len<=0.01) continue; const g=Math.abs((b.gr-a.gr)/len)*100;
+      if(g>lim){ if(ini===null){ ini=a.est; dh=0; mx=0; } fim=b.est; dh+=b.gr-a.gr; if(g>mx) mx=g; } else fecha();
+      if(g>5&&g<=lim&&!rampa) rampa={d,a:a.est}; }
+    fecha();
+    if(rampa) out.push({n:'aviso',t:'<b>'+esc(d.nome)+'</b>: a partir da estaca '+estacaTxt(rampa.a)+' a inclinação longitudinal da rua passa de 5 % — pela NBR 9050 a calçada passa a ser tratada como rampa (máx. 8,33 %): piso antiderrapante e, se houver trechos acima disso, degraus.'});
+  });
+  return out;
+}
+function plPainelCal(tit,ck){
+  const c=_cal, al=plCalAlertas();
+  let h=tit('Calçada');
+  h+=ck('Incluir calçada (do meio-fio para fora)',c.ativo,"plCalSet('ativo',this.checked)",'Desenha a calçada ao lado do meio-fio, na planta, no 3D e no mapa. Sem a calçada ligada, só aparecem pista e meio-fio.');
+  if(c.ativo){
+    const num=(k,val,st)=>'<input type="number" value="'+val+'" step="'+st+'" style="width:64px;font-size:11px" onchange="plCalSet(\''+k+'\',this.value)">';
+    h+='<div style="font-size:11px;display:grid;grid-template-columns:1fr auto;gap:3px 6px;margin:4px 0;align-items:center">'+
+      '<span>Tipo</span><select style="font-size:11px" onchange="plCalSet(\'tipo\',this.value)"><option value="concreto"'+(c.tipo==='concreto'?' selected':'')+'>Concreto</option><option value="intertravado"'+(c.tipo==='intertravado'?' selected':'')+'>Intertravado</option></select>'+
+      '<span title="Largura total da calçada, do meio-fio ao alinhamento do lote. A faixa livre mínima da NBR 9050 é 1,20 m.">Largura (m)</span>'+num('larg',c.larg,0.1)+
+      '<span title="Inclinação transversal (do alinhamento do lote para o meio-fio, para escoar a água). NBR 9050: no máximo 3 %. Usual 2 %. Você escolhe o valor; acima de 3 % o programa avisa.">Declividade transversal (%)</span>'+num('decl',c.decl,0.1)+
+      '<span title="Inclinação da rua acima da qual a calçada não deve acompanhar o greide e o programa aconselha degraus (escada). NBR 9050: 8,33 % (1:12).">Inclinação limite para degraus (%)</span>'+num('limLong',c.limLong,0.01)+
+      '<span>Espessura (cm)</span>'+num('esp',c.esp,1)+'</div>';
+    h+=al.length?al.map(a=>'<div style="font-size:11px;line-height:1.35;margin:4px 0;padding:5px 7px;border-radius:5px;background:'+(a.n==='erro'?'#fdecea;color:#8a1c14;border:1px solid #f0b4ae':'#fff6e0;color:#7a5600;border:1px solid #ecd49a')+'">'+(a.n==='erro'?'⛔ ':'⚠ ')+a.t+'</div>').join(''):'<div style="font-size:11px;color:#1d6b34;margin:4px 0">✔ Calçada dentro dos limites da NBR 9050 (transversal até 3 %, longitudinal até o limite escolhido).</div>';
+    h+='<div style="font-size:10.5px;color:var(--fg2);line-height:1.35">NBR 9050: transversal ≤ 3 %; longitudinal acompanha a rua (até 5 %) e é rampa até 8,33 %; faixa livre ≥ 1,20 m. Os degraus aconselhados ainda não são desenhados no 3D.</div>';
+  }
+  return h;
+}
+function plCalSet(k,val){
+  if(k==='ativo') _cal.ativo=!!val; else if(k==='tipo') _cal.tipo=val; else { const x=parseFloat(String(val).replace(',','.')); if(isFinite(x)) _cal[k]=Math.max(0,x); }
+  _pl.amC=null; _pl.esqB=null; plPainel();
+  if(_pl.modo==='planta') plDesenhar(true); else { if(_pl.t3) _pl.t3.pronto=false; pl3D(); }
+  if(typeof plTMudou==='function') plTMudou();
 }
