@@ -435,35 +435,6 @@ body.cel table.t-cel td[data-l]::before{content:attr(data-l);font-size:.8rem;fon
   #memorial-print h2{page-break-after:avoid}
   .tab-panel{display:block!important}
 }
-
-/* ── PATCH FZ-14 (17/11/2026) — tamanhos de letra do memorial (aba 14) ──
-   Antes cada parte usava rem (tamanho fixo da tela): na impressão só o corpo
-   ia para 10pt e tabelas, títulos e notas ficavam desproporcionais; as tabelas
-   ficavam pequenas demais e os números em fonte monoespaçada maior que o resto.
-   Agora tudo é relativo ao corpo do memorial (em), na tela e no PDF. */
-#memorial-print{font-size:.95rem;line-height:1.55}
-#memorial-print h1{font-size:1.6em;line-height:1.2}
-#memorial-print h2{font-size:1.22em}
-#memorial-print h3{font-size:1.06em}
-#memorial-print h4{font-size:1em;color:#12355F;margin:.8em 0 .35em}
-#memorial-print p{font-size:1em}
-#memorial-print table{font-size:.86em;width:100%;border-collapse:collapse}
-#memorial-print th,#memorial-print td{font-size:1em;line-height:1.35}
-#memorial-print thead th{font-weight:700}
-#memorial-print .td-num{font-family:inherit;font-size:1em;font-variant-numeric:tabular-nums}
-#memorial-print .tbl-wrap{overflow-x:auto}
-#memorial-print .fig .cap{font-size:.86em}
-#memorial-print .assin div{font-size:.95em}
-#memorial-print .mfoot{font-size:.78em}
-#memorial-print sub,#memorial-print sup{font-size:.72em}
-@media(max-width:600px){#memorial-print{font-size:.9rem}#memorial-print table{font-size:.82em}}
-@media print{
-  #memorial-print{font-size:10.5pt;line-height:1.45}
-  #memorial-print table{font-size:.84em}
-  #memorial-print table.mt-larga{font-size:.74em}
-  #memorial-print .tbl-wrap{overflow:visible;border:0}
-  #memorial-print th,#memorial-print td{padding:.18em .3em}
-}
 </style>
 <script src="/assistente-abas.js" data-tabs="#tabs-list .tab-btn" data-auxilio="proprio"></script>
 <script src="/estado-pagina.js"></script>
@@ -2566,11 +2537,12 @@ function T3poligono(K, pts, zf, cor, op, comp, dy) {
 const T3COR = {pista: 0x2b2f35, sarjeta: 0xb9b4a8, meioFio: 0xd8d2c4, passeio: 0x8d8a83, base: 0x7a6f5d, sub: 0x9c8f7a};
 function T3ruas(K) {
   const G = K.G, CR = cruzamentos(G), pav = P.pav || {}, eR = pav.rev != null ? +pav.rev || 0 : 0.05, eB = pav.base != null ? +pav.base || 0 : 0.15, eS = pav.sub != null ? +pav.sub || 0 : 0.20;
-  const gs = P.ruas.map(r => G[r.id]).filter(Boolean);
+  const gs = P.ruas.filter(r => !ehTrav(r)).map(r => G[r.id]).filter(Boolean);
   // trecho de pista que já é coberto pela rua transversal (desenhado só uma vez no cruzamento)
   const cobre = {};
   for (let i = 0; i < gs.length; i++) for (let j = i + 1; j < gs.length; j++) {
     const g1 = gs[i], g2 = gs[j], k = g1.ux * g2.nx + g1.uy * g2.ny; if (Math.abs(k) < 0.2) continue;
+    if ((CR.curvas || []).some(c => (c.r1 === g1.r.id && c.r2 === g2.r.id) || (c.r1 === g2.r.id && c.r2 === g1.r.id))) continue;
     const s1c = -g2.loc(g1.at(0)).off / k, s2c = g2.loc(g1.at(s1c)).s;
     const [a1, b1] = extRua(G, g1), [a2, b2] = extRua(G, g2); if (s1c < a1 - 1 || s1c > b1 + 1 || s2c < a2 - 1 || s2c > b2 + 1) continue;
     const h = T3sec(g1.r).a / Math.abs(k); (cobre[g2.r.id] = cobre[g2.r.id] || []).push([s2c - h, s2c + h]);
@@ -2599,6 +2571,24 @@ function T3ruas(K) {
       // passeio
       T3segs(p0, p1, cuts).forEach(([a, b]) => T3faixa(K, g, T3samp(a, b), [sg * c.a, sg * c.w], (s) => T3zPe(r, s, sg) + c.mfH, T3COR.passeio, 0.7, 'passeio'));
     });
+  });
+  // curvas do eixo (DR-28): pista, meio-fio e passeio em anéis concêntricos (bordas paralelas ao eixo)
+  (CR.curvas || []).forEach(c => {
+    const g1 = G[c.r1], g2 = G[c.r2]; if (!g1 || !g2) return; const n = c.eixo.length - 1, sd = c.sg;
+    const zI = f => { const a = T3zPista(g1.r, c.sT1, sd * c.a), b = T3zPista(g2.r, c.sT2, sd * c.a); return a + (b - a) * f; };
+    const zO = f => { const a = T3zPista(g1.r, c.sT1, -sd * c.a), b = T3zPista(g2.r, c.sT2, -sd * c.a); return a + (b - a) * f; };
+    const zP = (f, lado) => { const a = T3zPe(g1.r, c.sT1, lado), b = T3zPe(g2.r, c.sT2, lado); return a + (b - a) * f; };
+    if (![zI(0), zO(0), zI(1), zO(1)].every(isNum)) return;
+    const ao = c.bo.length - 1;
+    // pista: anel entre o raio interno e o externo
+    const ptsP = c.bo.concat(c.bi ? c.bi.slice().reverse() : [c.O]), np = c.bo.length;
+    T3poligono(K, ptsP, (p, i) => i < np ? zO(i / ao) : (c.bi ? zI((ptsP.length - 1 - i) / ao) : zI(1)), T3COR.pista, 0.6, 'pavRev');
+    // meio-fio nas duas bordas (espelho + topo)
+    [[c.bo, zO, -sd], [c.bi, zI, sd]].forEach(([arc, zf, lado]) => { if (!arc) return; const m = Math.max(T3sec(g1.r).mfH, T3sec(g2.r).mfH), q = arc.length - 1, zz = i => zP(i / q, lado) ;
+      T3parede(K, arc, zz, i => zz(i) + m, T3COR.meioFio, 0.95, 'meioFio'); });
+    // passeio: anéis externos (entre a borda do meio-fio e o alinhamento)
+    [[c.bo, c.po, -sd], [c.bi, c.pi, sd]].forEach(([a0, a1, lado]) => { if (!a0 || !a1) return; const q = a0.length - 1, m = Math.max(T3sec(g1.r).mfH, T3sec(g2.r).mfH), pts = a0.concat(a1.slice().reverse());
+      T3poligono(K, pts, (p, i) => zP((i <= q ? i : 2 * q + 1 - i) / q, lado) + m, T3COR.passeio, 0.7, 'passeio'); });
   });
   // esquinas: pista até a curva, meio-fio no raio e passeio da quadra
   (CR.esq || []).forEach(q => {
@@ -2919,7 +2909,7 @@ function vRuas() {
   const ruas = P.ruas.map((r, i) => `<div class="item" id="it-ruas-${i}"><div class="item-h"><span class="t">${esc(r.nome || r.id)}</span><span class="sp"></span>
     <button class="btn-icon" title="Excluir" onclick="delItem('ruas',${i})">✕</button></div><div class="item-b"><div class="fgrid">
     ${fld(`ruas.${i}.id`, 'Código', {type: 'txt'})}${fld(`ruas.${i}.nome`, 'Nome da rua', {type: 'txt', w2: true})}
-    ${fld(`ruas.${i}.larg`, 'Largura da pista (m)', {step: 0.1})}${fld(`ruas.${i}.passeio`, 'Passeio (m/lado)', {step: 0.1})}${fld(`ruas.${i}.raio`, 'Raio das esquinas (m)', {step: 0.5, hint: 'Em branco = ' + RAIO_ESQ_PAD + ' m'})}${fld(`ruas.${i}.it`, 'Inclinação transversal (%)', {step: 0.5})}${fld(`ruas.${i}.cai`, 'Caimento da pista', {type: 'sel', opts: [['', 'Dois lados (abaulada)'], ['E', 'Um lado — para a esquerda'], ['D', 'Um lado — para a direita']]})}
+    ${fld(`ruas.${i}.larg`, 'Largura da pista (m)', {step: 0.1})}${fld(`ruas.${i}.passeio`, 'Passeio (m/lado)', {step: 0.1})}${fld(`ruas.${i}.raio`, 'Raio das esquinas (m)', {step: 0.5, hint: 'Esquinas: raio do meio-fio. Emenda de trechos da estrada: raio do EIXO (bordas paralelas: R − e R + meia largura). Em branco = ' + RAIO_ESQ_PAD + ' m'})}${fld(`ruas.${i}.it`, 'Inclinação transversal (%)', {step: 0.5})}${fld(`ruas.${i}.cai`, 'Caimento da pista', {type: 'sel', opts: [['', 'Dois lados (abaulada)'], ['E', 'Um lado — para a esquerda'], ['D', 'Um lado — para a direita']]})}
     </div><div class="section-title">Meio-fio e sarjeta</div><div class="fgrid">
     ${fld(`ruas.${i}.mf`, 'Tipo de meio-fio', {type: 'sel', w2: true, opts: Object.entries(MEIOFIO).map(([k, v]) => [k, v.nome])})}
     ${fld(`ruas.${i}.mfH`, 'Espelho do meio-fio (m)', {step: 0.01})}${fld(`ruas.${i}.sjW`, 'Largura da sarjeta (m)', {step: 0.05, ph: '0 = sem sarjeta'})}${(num(r.sjW) || 0) > 0 ? fld(`ruas.${i}.sjI`, 'Caimento da sarjeta (%)', {step: 0.5}) : ''}
@@ -3634,7 +3624,7 @@ async function exportDOCX() {
         children: [...tr.children].map(cell => new d.TableCell({
           shading: cell.tagName === 'TH' ? {type: d.ShadingType.CLEAR, color: 'auto', fill: 'E8EEF4'} : undefined,
           margins: {top: 30, bottom: 30, left: 50, right: 50},
-          children: [new d.Paragraph({spacing: {before: 0, after: 0}, children: runs(cell, {size: nc > 12 ? 15 : nc > 8 ? 16 : 18, bold: cell.tagName === 'TH' || undefined, color: cell.tagName === 'TH' ? AZUL : undefined})})]
+          children: [new d.Paragraph({spacing: {before: 0, after: 0}, children: runs(cell, {size: nc > 10 ? 12 : nc > 6 ? 14 : 16, bold: cell.tagName === 'TH' || undefined, color: cell.tagName === 'TH' ? AZUL : undefined})})]
         }))
       }))
     });
@@ -3646,7 +3636,7 @@ async function exportDOCX() {
       if (cl.includes('fig')) {
         const sv = n.querySelector('svg'), im = sv && imgs.get(sv);
         if (im) { const w = 640, h = Math.round(im.h / im.w * w); blocos.push(new d.Paragraph({alignment: d.AlignmentType.CENTER, keepNext: true, children: [new d.ImageRun({data: im.buf, transformation: {width: w, height: h}})]})); }
-        const cap = n.querySelector('.cap'); if (cap) blocos.push(new d.Paragraph({alignment: d.AlignmentType.CENTER, spacing: {after: 200}, children: runs(cap, {size: 18, italics: true, color: '555555'})}));
+        const cap = n.querySelector('.cap'); if (cap) blocos.push(new d.Paragraph({alignment: d.AlignmentType.CENTER, spacing: {after: 200}, children: runs(cap, {size: 16, italics: true, color: '555555'})}));
       } else if (cl.includes('mhead')) {
         const ch = [];
         if (logo) ch.push(new d.ImageRun({data: logo.buf, transformation: {width: Math.round(logo.w / logo.h * 48), height: 48}}), new d.TextRun({text: '   '}));
@@ -3655,22 +3645,22 @@ async function exportDOCX() {
         blocos.push(new d.Paragraph({children: ch, border: {bottom: {style: d.BorderStyle.SINGLE, size: 18, color: 'FF6B1A', space: 6}}, spacing: {after: 240}}));
       } else if (tg === 'H1') blocos.push(new d.Paragraph({heading: d.HeadingLevel.TITLE, children: runs(n, {color: AZUL})}));
       else if (tg === 'H2') blocos.push(new d.Paragraph({heading: d.HeadingLevel.HEADING_1, children: runs(n, {color: AGUA}), keepNext: true}));
-      else if (tg === 'H3' || tg === 'H4') blocos.push(new d.Paragraph({heading: d.HeadingLevel.HEADING_2, children: runs(n, {color: AZUL}), keepNext: true}));
-      else if (tg === 'P') blocos.push(new d.Paragraph({alignment: n.querySelector('br') ? d.AlignmentType.LEFT : d.AlignmentType.JUSTIFIED, spacing: {after: 120}, children: runs(n, /font-size/.test(n.getAttribute('style') || '') ? {size: 18} : {})}));
+      else if (tg === 'H3') blocos.push(new d.Paragraph({heading: d.HeadingLevel.HEADING_2, children: runs(n, {color: AZUL}), keepNext: true}));
+      else if (tg === 'P') blocos.push(new d.Paragraph({alignment: n.querySelector('br') ? d.AlignmentType.LEFT : d.AlignmentType.JUSTIFIED, spacing: {after: 120}, children: runs(n)}));
       else if (tg === 'TABLE') { blocos.push(tabela(n)); blocos.push(new d.Paragraph({text: '', spacing: {after: 80}})); }
       else if (cl.includes('assin')) blocos.push(new d.Paragraph({alignment: d.AlignmentType.CENTER, spacing: {before: 900}, children: [new d.TextRun({text: '_____________________________________________'}), new d.TextRun({break: 1, text: ''}), ...runs(n)]}));
-      else if (cl.includes('mfoot')) blocos.push(new d.Paragraph({alignment: d.AlignmentType.CENTER, spacing: {before: 400}, children: runs(n, {size: 16, color: '777777'})}));
+      else if (cl.includes('mfoot')) blocos.push(new d.Paragraph({alignment: d.AlignmentType.CENTER, spacing: {before: 400}, children: runs(n, {size: 14, color: '777777'})}));
       else if (tg === 'DIV') walk(n);
     });
   };
   walk(box);
   const doc = new d.Document({
     creator: P.proj.resp || CFG.empresa || 'Total Civil', title: 'Memorial — ' + P.proj.nome, description: 'Memorial descritivo e de cálculo — Drenagem Pluvial',
-    styles: {default: {document: {run: {font: 'Calibri', size: 22}}},
+    styles: {default: {document: {run: {font: 'Calibri', size: 20}}},
       paragraphStyles: [
-        {id: 'Title', name: 'Title', basedOn: 'Normal', next: 'Normal', run: {font: 'Cambria', size: 32, bold: true, color: AZUL}, paragraph: {spacing: {after: 120}}},
-        {id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: {font: 'Cambria', size: 27, bold: true, color: AGUA}, paragraph: {spacing: {before: 300, after: 120}, outlineLevel: 0}},
-        {id: 'Heading2', name: 'Heading 2', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: {font: 'Cambria', size: 24, bold: true, color: AZUL}, paragraph: {spacing: {before: 200, after: 80}, outlineLevel: 1}}]},
+        {id: 'Title', name: 'Title', basedOn: 'Normal', next: 'Normal', run: {font: 'Cambria', size: 34, bold: true, color: AZUL}, paragraph: {spacing: {after: 120}}},
+        {id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: {font: 'Cambria', size: 26, bold: true, color: AGUA}, paragraph: {spacing: {before: 300, after: 120}, outlineLevel: 0}},
+        {id: 'Heading2', name: 'Heading 2', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: {font: 'Cambria', size: 22, bold: true, color: AZUL}, paragraph: {spacing: {before: 200, after: 80}, outlineLevel: 1}}]},
     sections: [{
       properties: {page: {size: {width: 11906, height: 16838}, margin: {top: 1134, bottom: 1134, left: 1134, right: 1134}}},
       headers: {default: new d.Header({children: [new d.Paragraph({alignment: d.AlignmentType.RIGHT, children: [new d.TextRun({text: (P.proj.nome || '') + ' — Memorial de Drenagem Pluvial', size: 14, color: '888888'})]})]})},
@@ -3695,7 +3685,7 @@ async function svgPNG(sv) {
 }
 // alternativa sem internet: HTML que o Word abre como documento
 function exportDOC(box) {
-  const css = 'body{font-family:Calibri,Arial;font-size:11pt}h1{font-size:16pt}h2{font-size:13.5pt}h3,h4{font-size:12pt}h1{font-family:Cambria;color:#12355F}h2{font-family:Cambria;color:#0E7490;border-bottom:1.5pt solid #0E7490}h3{color:#12355F}table{border-collapse:collapse;width:100%;font-size:8.5pt}th{background:#E8EEF4;color:#12355F}td,th{border:.5pt solid #bbb;padding:2pt 3pt}.mhead{border-bottom:2pt solid #FF6B1A}.assin{text-align:center;margin-top:50pt}.mfoot{text-align:center;color:#777;font-size:8pt}';
+  const css = 'body{font-family:Calibri,Arial;font-size:10pt}h1{font-family:Cambria;color:#12355F}h2{font-family:Cambria;color:#0E7490;border-bottom:1.5pt solid #0E7490}h3{color:#12355F}table{border-collapse:collapse;width:100%;font-size:7.5pt}th{background:#E8EEF4;color:#12355F}td,th{border:.5pt solid #bbb;padding:2pt 3pt}.mhead{border-bottom:2pt solid #FF6B1A}.assin{text-align:center;margin-top:50pt}.mfoot{text-align:center;color:#777;font-size:8pt}';
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>Memorial</title><style>${css}</style></head><body>${box.innerHTML}</body></html>`;
   baixarBlob('memorial-drenagem-' + slug(P.proj.nome) + '-' + dataHoje() + '.doc', new Blob(['﻿' + html], {type: 'application/msword'}));
 }
@@ -3762,7 +3752,7 @@ function baixarBlob(nome, b) {
     const sobra = (e0, e1, cs) => { let seg = [[e0, e1]]; (cs || []).forEach(([a, z]) => { const nv = []; seg.forEach(([p, q]) => { if (z <= p || a >= q) nv.push([p, q]); else { if (a > p) nv.push([p, a]); if (z < q) nv.push([z, q]); } }); seg = nv; }); return seg.filter(([p, q]) => q - p > 0.01); };
     // ruas: eixo, meio-fio (interrompido nas esquinas) e alinhamento dos lotes
     P.ruas.forEach(r => {
-      const g = G[r.id]; if (!g) return;
+      const g = G[r.id]; if (!g || ehTrav(r)) return;
       const a = (+r.larg || 7) / 2, w = a + (+r.passeio || 2), [e0, e1] = extRua(G, g);
       const p0 = g.at(e0), p1 = g.at(e1);
       e += dLn('RUA-EIXO', p0.x, p0.y, p1.x, p1.y);
@@ -3776,6 +3766,10 @@ function baixarBlob(nome, b) {
       const m = g.at((e0 + e1) / 2, w * 0.5);
       const rot = ((g.az % 360) + 360) % 360; e += dTx('TEXTOS', m.x, m.y, 3 * FZ, r.nome, rot > 90 && rot <= 270 ? rot - 180 : rot);
     });
+    // curvas do EIXO (DR-28): eixo, meio-fio e alinhamento paralelos, sem vértices
+    (CR.curvas || []).forEach(c => { e += dPl('RUA-EIXO', c.eixo.map(p => [p.x, p.y]), false);
+      [c.bo, c.bi].forEach(l => { if (l) e += dPl('MEIO-FIO-RAIO-ESQUINA', l.map(p => [p.x, p.y]), false); });
+      [c.po, c.pi].forEach(l => { if (l) e += dPl('PASSEIO-ALINHAMENTO', l.map(p => [p.x, p.y]), false); }); });
     // curvas do meio-fio nas esquinas
     CR.cantos.forEach(c => { e += dPl('MEIO-FIO-RAIO-ESQUINA', c.arco.map(p => [p.x, p.y]), false); });
     (CR.muros || []).forEach(m => { e += dPl('PASSEIO-ALINHAMENTO', m.arco.map(p => [p.x, p.y]), false); });
@@ -4157,14 +4151,42 @@ function raioRua(r) { const v = num(r && r.raio); return isNum(v) && v >= 0 ? v 
 /* cruzamentos entre ruas: cantos com raio (curva do meio-fio), trechos do meio-fio interrompidos e
    limites de desenho das ruas que terminam num cruzamento (rua em T) */
 const _CRZ = new WeakMap();
+/* travessia/bueiro (DR-28): é um TUBO ou galeria, não uma rua — sem pista, meio-fio, passeio nem esquinas */
+function ehTrav(r) { return !!r && (r.trav === true || (/^X\d+$/.test(r.id || '') && !!r.ref && /travessia/i.test(r.obs2 || ''))); }
 function cruzamentos(G) {
   if (_CRZ.has(G)) return _CRZ.get(G);
   const out = {cantos: [], esq: [], muros: [], cortes: {}, cortesP: {}, clip: {}, clipP: {}};
-  const gs = P.ruas.map(r => G[r.id]).filter(Boolean);
+  const gs = P.ruas.filter(r => !ehTrav(r)).map(r => G[r.id]).filter(Boolean);
   const addCorte = (id, sg, a, b) => { const k = id + '|' + sg; (out.cortes[k] = out.cortes[k] || []).push([Math.min(a, b), Math.max(a, b)]); };
   const addClip = (id, lado, v, o = out.clip) => { const c = o[id] = o[id] || {lo: -Infinity, hi: Infinity}; if (lado > 0) c.hi = Math.min(c.hi, v); else c.lo = Math.max(c.lo, v); };
+  /* DR-28 — CURVAS DO EIXO: o fim de um trecho reto da estrada encosta no início do seguinte. O raio é do EIXO:
+     o eixo vira um arco de raio R e as bordas são PARALELAS a ele (raio R − meia largura na parte fechada e
+     R + meia largura na parte aberta; o passeio idem), sem vértices. Ex.: R 8 m, pista 10 m → 3 m e 13 m. */
+  out.curvas = []; const jun = new Set(), addP28 = (id, sg, a, b) => { const kk = id + '|' + sg; (out.cortesP[kk] = out.cortesP[kk] || []).push([Math.min(a, b), Math.max(a, b)]); };
+  const extE = g => { const d = estacasRua(g.r.id).map(e => +e.dist).filter(isNum); return d.length > 1 ? [Math.min(...d), Math.max(...d)] : null; };
+  gs.forEach(g1 => { const e1 = extE(g1); if (!e1) return;
+    gs.forEach(g2 => { if (g2 === g1) return; const e2 = extE(g2); if (!e2) return;
+      const V1 = g1.at(e1[1]), V2 = g2.at(e2[0]); if (Math.hypot(V1.x - V2.x, V1.y - V2.y) > 1.5) return;
+      const cr = g1.ux * g2.uy - g1.uy * g2.ux, dt = g1.ux * g2.ux + g1.uy * g2.uy, D = Math.atan2(Math.abs(cr), dt);
+      let R = Math.max(raioRua(g1.r), raioRua(g2.r)); if (D < 0.02 || R <= 0) return;   // alinhados ou sem raio: fica como antes
+      jun.add(g1.r.id + '|' + g2.r.id); jun.add(g2.r.id + '|' + g1.r.id);
+      const sg = cr > 0 ? 1 : -1, tn = Math.tan(D / 2), L1 = e1[1] - e1[0], L2 = e2[1] - e2[0];
+      R = Math.min(R, 0.49 * Math.min(L1, L2) / tn);          // a tangente nunca passa de metade do trecho
+      const T = R * tn, V = {x: (V1.x + V2.x) / 2, y: (V1.y + V2.y) / 2}, a1 = (+g1.r.larg || 7) / 2, w1 = a1 + (+g1.r.passeio || 2);
+      const T1 = {x: V.x - g1.ux * T, y: V.y - g1.uy * T}, T2 = {x: V.x + g2.ux * T, y: V.y + g2.uy * T};
+      const O = {x: T1.x - sg * g1.uy * R, y: T1.y + sg * g1.ux * R}, an1 = Math.atan2(T1.y - O.y, T1.x - O.x), da = sg * D;
+      const arc = rad => { const n = Math.max(6, Math.ceil(D / 0.08)), o = []; for (let q = 0; q <= n; q++) { const an = an1 + da * q / n; o.push({x: O.x + rad * Math.cos(an), y: O.y + rad * Math.sin(an)}); } return o; };
+      const Ri = Math.max(0, R - a1), Ro = R + a1, Rpi = Math.max(0, R - w1), Rpo = R + w1;
+      const ring = (ro, ri) => arc(ro).concat(ri > 0 ? arc(ri).reverse() : [O]);
+      const sT1 = g1.loc(T1).s, sT2 = g2.loc(T2).s;
+      addClip(g1.r.id, 1, sT1); addClip(g1.r.id, 1, sT1, out.clipP); addClip(g2.r.id, -1, sT2); addClip(g2.r.id, -1, sT2, out.clipP);
+      [1, -1].forEach(sd => { addCorte(g1.r.id, sd, sT1, g1.sMax + 50); addCorte(g2.r.id, sd, g2.sMin - 50, sT2); addP28(g1.r.id, sd, sT1, g1.sMax + 50); addP28(g2.r.id, sd, g2.sMin - 50, sT2); });
+      out.curvas.push({V, O, R, a: a1, w: w1, T1, T2, sT1, sT2, r1: g1.r.id, r2: g2.r.id, D, sg, Ri, Ro, Rpi, Rpo, aperto: R < a1,
+        eixo: arc(R), pav: ring(Ro, Ri), pas: ring(Rpo, Rpi), bo: arc(Ro), bi: Ri > 0 ? arc(Ri) : null, po: arc(Rpo), pi: Rpi > 0 ? arc(Rpi) : null});
+    }); });
   for (let i = 0; i < gs.length; i++) for (let j = i + 1; j < gs.length; j++) {
     const g1 = gs[i], g2 = gs[j], k = g1.ux * g2.nx + g1.uy * g2.ny;
+    if (jun.has(g1.r.id + '|' + g2.r.id)) continue;   // emendas do eixo: curva paralela (acima)
     if (Math.abs(k) < 0.2) continue;                 // ruas quase paralelas
     const k2 = -k, a1 = (+g1.r.larg || 7) / 2, a2 = (+g2.r.larg || 7) / 2;
     const s1c = -g2.loc(g1.at(0)).off / k, X = g1.at(s1c), s2c = g2.loc(X).s;
@@ -4309,10 +4331,14 @@ function svgPlanta(K, W, H, st, lay) {
   let s = `<svg ${SVGNS} viewBox="0 0 ${W} ${H}" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="${K.bg}"/>`;
   const poly = (pts, f, str, sw) => `<polygon points="${pts.map(p => { const q = S(p); return q.x.toFixed(1) + ',' + q.y.toFixed(1); }).join(' ')}" fill="${f}"${str ? ` stroke="${str}" stroke-width="${sw || 1}"` : ''}/>`;
   // passeios e pistas
-  P.ruas.forEach(r => { const g = G[r.id]; if (!g) return; const a = (+r.larg || 7) / 2, w = a + (+r.passeio || 2), [e0, e1] = extRua(G, g, true);
+  P.ruas.forEach(r => { const g = G[r.id]; if (!g || ehTrav(r)) return; const a = (+r.larg || 7) / 2, w = a + (+r.passeio || 2), [e0, e1] = extRua(G, g, true);
     s += poly([g.at(e0, w), g.at(e1, w), g.at(e1, -w), g.at(e0, -w)], K.pass); });
-  P.ruas.forEach(r => { const g = G[r.id]; if (!g) return; const a = (+r.larg || 7) / 2, [e0, e1] = extRua(G, g);
+  const CV = cruzamentos(G).curvas || [], pl28 = pts => pts.map(p => { const q = S(p); return q.x.toFixed(1) + ',' + q.y.toFixed(1); }).join(' ');
+  CV.forEach(c => { s += poly(c.pas, K.pass, K.pass, 0.7); });
+  P.ruas.forEach(r => { const g = G[r.id]; if (!g || ehTrav(r)) return; const a = (+r.larg || 7) / 2, [e0, e1] = extRua(G, g);
     s += poly([g.at(e0, a), g.at(e1, a), g.at(e1, -a), g.at(e0, -a)], K.pav); });
+  CV.forEach(c => { s += poly(c.pav, K.pav, K.pav, 0.7); [c.bo, c.bi].forEach(l => { if (l) s += `<polyline points="${pl28(l)}" fill="none" stroke="${K.ink}" stroke-width="0.8" opacity="0.55"/>`; });
+    s += `<polyline points="${pl28(c.eixo)}" fill="none" stroke="#f5d76e" stroke-width="1.2" stroke-dasharray="10 6"/>`; });
   // muros com raio: o canto do lote vira passeio, com a curva do alinhamento
   cruzamentos(G).muros.forEach(m => { s += poly([m.L].concat(m.arco), K.pass);
     s += `<polyline points="${m.arco.map(p => { const q = S(p); return q.x.toFixed(1) + ',' + q.y.toFixed(1); }).join(' ')}" fill="none" stroke="${K.ink}" stroke-width="0.8" opacity="0.45"/>`; });
@@ -4321,10 +4347,10 @@ function svgPlanta(K, W, H, st, lay) {
     const pts = c.arco.map(p => { const q = S(p); return q.x.toFixed(1) + ',' + q.y.toFixed(1); }).join(' ');
     s += `<polyline points="${pts}" fill="none" stroke="${K.ink}" stroke-width="0.8" opacity="0.55"/>`; });
   // eixo, estacas, nome
-  P.ruas.forEach(r => { const g = G[r.id]; if (!g) return; const a = (+r.larg || 7) / 2;
-    const [e0, e1] = extRua(G, g), p0 = S(g.at(e0)), p1 = S(g.at(e1)); s += ln(p0.x, p0.y, p1.x, p1.y, '#f5d76e', 1.2, '10 6');
+  P.ruas.forEach(r => { const g = G[r.id]; if (!g) return; const a = (+r.larg || 7) / 2, tv = ehTrav(r);
+    const [e0, e1] = extRua(G, g), p0 = S(g.at(e0)), p1 = S(g.at(e1)); if (!tv) s += ln(p0.x, p0.y, p1.x, p1.y, '#f5d76e', 1.2, '10 6');
     const ang = -g.az, fl = (ang > 90 || ang < -90);
-    if (lay.est) for (let d = Math.ceil(Math.max(0, g.sMin + 10) / 20) * 20; d <= g.sMax - 10 + 1e-6; d += 20) {
+    if (lay.est && !tv) for (let d = Math.ceil(Math.max(0, g.sMin + 10) / 20) * 20; d <= g.sMax - 10 + 1e-6; d += 20) {
       const q1 = S(g.at(d, a)), q2 = S(g.at(d, a + 1.2)); s += ln(q1.x, q1.y, q2.x, q2.y, K.ink, 1.2);
       if (20 * st.s > 26) { const q = S(g.at(d, a + 2.6)); s += tx(q.x, q.y + 4, String(Math.round(d / 20)), {fs: 11 * FZ, a: 'middle', c: K.ink, halo: K.bg}); }
     }
@@ -6201,20 +6227,6 @@ memorialHTML = function (sel) {
     `<p style="font-size:.75rem;color:#555">Escavação, berço e reaterro acima: só a vala da rede tronco (de face a face das cavas), ${esc(txtRegraVala())}. Ramais, cavas dos PVs e das caixas de ralo, bota-fora e empolamento no quadro seguinte.</p><h4 style="margin:.8rem 0 .3rem">Movimento de terra — critérios de quantitativos da EMOP</h4>${quantEmopHTML(true)}`);
   return h;
 };
-
-/* PATCH FZ-14 (17/11/2026) — letras do memorial proporcionais na tela, no PDF e no Word */
-(function () {
-  const _memFZ = memorialHTML;
-  memorialHTML = function () {
-    let h = _memFZ.apply(this, arguments);
-    h = h.replace(/font-size:\s*([\d.]+)rem/g, (m, v) => 'font-size:' + (Math.round(parseFloat(v) / 0.86 * 100) / 100) + 'em');
-    h = h.replace(/<table>(\s*<thead>\s*<tr>)((?:(?!<\/tr>)[\s\S])*?)<\/tr>/g, (m, a, cells) => {
-      const n = (cells.match(/<th\b/g) || []).length;
-      return (n > 9 ? '<table class="mt-larga">' : '<table>') + a + cells + '</tr>';
-    });
-    return h;
-  };
-})();
 const _tabMem1 = tabelasMemoria;
 tabelasMemoria = function () {
   const T = _tabMem1.apply(this, arguments), L = linhasQuantEmop();
@@ -12871,7 +12883,7 @@ function lev27Projeto(silencioso) {
   const pvs = [], trs = [], bacs = [];
   E.pools.forEach((q, i) => {
     if (!q.sec) return; const k = i + 1, sg = segDe(q.s), dl = +((q.s - sg.s0) * sg.f).toFixed(2), id = 'X' + String(k).padStart(2, '0'), Lb = q.Lb, h2 = Lb / 2;
-    ruas.push({id, nome: 'Bueiro ' + k, obs2: 'Travessia ' + k + ' — bueiro na estaca ' + estLabel(q.s) + ' da estrada', larg: 1.0, passeio: 0, it: 2, ref: sg.id, refDist: dl, ang: 90, dist0: 20, raio: 0, mf: 'mf15', mfH: 0.15, sjW: 0, sjI: '', obs: 'Rua auxiliar só para posicionar o bueiro sob a estrada (não é pavimentada).'});
+    ruas.push({id, trav: true, nome: 'Bueiro ' + k, obs2: 'Travessia ' + k + ' — bueiro na estaca ' + estLabel(q.s) + ' da estrada', larg: 1.0, passeio: 0, it: 2, ref: sg.id, refDist: dl, ang: 90, dist0: 20, raio: 0, mf: 'mf15', mfH: 0.15, sjW: 0, sjI: '', obs: 'Rua auxiliar só para posicionar o bueiro sob a estrada (não é pavimentada).'});
     const gE = q.greide - 0.02 * larg / 2;   // borda da pista (2 % do eixo para a borda)
     [[0, q.zf + 0.5], [20 - h2, q.zf], [20, q.greide], [20 + h2, q.zf], [40, q.zf - 0.2]].forEach(([d, z]) => est.push({rua: id, dist: +d.toFixed(2), cota: +z.toFixed(3), tn: +(d === 20 ? q.zf : z).toFixed(3), obs: d === 20 ? 'eixo da estrada' : ''}));
     const up = q.lado > 0 ? 20 + h2 : 20 - h2, dn = q.lado > 0 ? 20 - h2 : 20 + h2, sec = q.sec, gal = sec.tipo === 'gal';
