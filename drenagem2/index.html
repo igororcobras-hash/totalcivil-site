@@ -5191,13 +5191,14 @@ function orcamento() {
   return {linhas: L, sub, bdi, total: sub * (1 + bdi / 100), comBanco: Object.keys(cfg.precos || {}).length > 0};
 }
 const nomeItem = k => {
+  if (window.PAV_NAMES && window.PAV_NAMES[k]) return window.PAV_NAMES[k].nome;
   const [tp, a, b, c2, d] = k.split(':');
   if (tp === 'prot') return protItemNome(a) + (a === 'pa2' ? ' Ø' + b + ' mm' : '');
   if (tp === 'gal') return 'Galeria celular em aduelas pré-moldadas ' + (+a > 1 ? a + ' células ' : '') + fmt(+b, 2) + ' × ' + fmt(+c2, 2) + ' m (e = ' + fmt(+d, 2) + ' m), fornecimento e assentamento';
   if (tp === 'ala') return ALA_NOME[a] || k;
   const r = regras(custosCfg()).find(x => x.k === k); return r ? r.nome : k;
 };
-const unidItem = k => k === 'terra:transp' ? 'm³·km' : k.startsWith('terra:') ? 'm³' : k.startsWith('ala:') ? ALA_UN[k.split(':')[1]] : k.startsWith('prot:') ? ({pa2: 'm', aco: 'kg'}[k.split(':')[1]] || 'm³') : ({tubo: 'm', gal: 'm', esc: 'm³', reat: 'm³', escor: 'm²', berco: 'm³', pvbase: 'un', pvacr: 'm', pvq: 'un', pvqa: 'm', pvch: 'm', bl: 'un'})[k.split(':')[0]];
+const unidItem = k => window.PAV_NAMES && window.PAV_NAMES[k] ? window.PAV_NAMES[k].un : (k === 'terra:transp' ? 'm³·km' : k.startsWith('terra:') ? 'm³' : k.startsWith('ala:') ? ALA_UN[k.split(':')[1]] : k.startsWith('prot:') ? ({pa2: 'm', aco: 'kg'}[k.split(':')[1]] || 'm³') : ({tubo: 'm', gal: 'm', esc: 'm³', reat: 'm³', escor: 'm²', berco: 'm³', pvbase: 'un', pvacr: 'm', pvq: 'un', pvqa: 'm', pvch: 'm', bl: 'un'})[k.split(':')[0]]);
 
 /* -------- aba Custos -------- */
 function vCustos() {
@@ -13266,6 +13267,113 @@ plantaInfo = function (k) {
 };
 </script>
 
+<script>
+/* =====================================================================
+   PATCH DR-30 (17/11/2026) — exclusões sem apagar elementos dependentes.
+   Regras do usuário:
+   - Aba 6: excluir PV mantém todos os trechos/tubos; só limpa referências de
+     caixas e bacias que apontavam para o PV excluído.
+   - Aba 7: excluir trecho/rede atua somente em P.trechos; nunca remove PVs.
+   - Planta: clicar seleciona um elemento desenhado; Delete exclui o item
+     selecionado, com confirmação e desfazer. A tecla funciona fora de campos.
+   ===================================================================== */
+function dr30ExcluirPV(id, origem) {
+  const pv = P.pvs.find(p => p.id === id); if (!pv) return toast('PV não encontrado.');
+  if (!confirm('Excluir o PV ' + id + '? Os tubos/trechos serão mantidos para permitir travessias sob ruas ou pistas.')) return;
+  const antes = JSON.stringify(P); if (typeof plPush === 'function') plPush();
+  P.pvs = P.pvs.filter(p => p.id !== id);
+  // Os tubos permanecem deliberadamente. Ramais e bacias ficam sem destino,
+  // em vez de apontar para um PV que já não existe.
+  P.bls.forEach(b => { if (b.pv === id) b.pv = ''; });
+  P.bacias.forEach(b => { if (b.dest === id) b.dest = ''; });
+  if (JSON.stringify(P) === antes) { if (typeof PLED !== 'undefined') PLED.undo.pop(); return toast('PV não encontrado.'); }
+  save(); calc(); renderTab(); toast(id + ' excluído; tubos/trechos preservados.');
+}
+function dr30ExcluirTrecho(id) {
+  const t = P.trechos.find(x => x.id === id); if (!t) return toast('Trecho não encontrado.');
+  if (!confirm('Excluir o trecho ' + id + '? Os PVs ' + (t.m || '') + ' e ' + (t.j || '') + ' serão mantidos.')) return;
+  const antes = JSON.stringify(P); if (typeof plPush === 'function') plPush();
+  P.trechos = P.trechos.filter(x => x.id !== id);
+  if (JSON.stringify(P) === antes) { if (typeof PLED !== 'undefined') PLED.undo.pop(); return toast('Trecho não encontrado.'); }
+  save(); calc(); renderTab(); toast(id + ' excluído; PVs preservados.');
+}
+function dr30ExcluirRede() {
+  if (!P.trechos.length) return toast('Não há trechos de rede para excluir.');
+  if (!confirm('Excluir todos os trechos da rede tronco? Todos os PVs serão mantidos.')) return;
+  if (typeof plPush === 'function') plPush();
+  P.trechos = []; save(); calc(); renderTab(); toast('Rede tronco excluída; PVs preservados.');
+}
+function dr30ExcluirCaixa(id) {
+  const b = P.bls.find(x => x.id === id); if (!b) return toast('Caixa não encontrada.');
+  if (!confirm('Excluir a caixa ' + id + '? O PV e a rede tronco serão mantidos.')) return;
+  const antes = JSON.stringify(P); if (typeof plPush === 'function') plPush();
+  P.bls = P.bls.filter(x => x.id !== id);
+  P.bacias.forEach(x => { if (x.dest === id) x.dest = ''; });
+  P.bls.forEach(x => { if (x.prox === id) x.prox = ''; });
+  if (JSON.stringify(P) === antes) { if (typeof PLED !== 'undefined') PLED.undo.pop(); return toast('Caixa não encontrada.'); }
+  save(); calc(); renderTab(); toast(id + ' excluída.');
+}
+function dr30ExcluirSelecionado(k) {
+  const p = String(k || '').split(':'), tipo = p[0], id = p.slice(1).join(':');
+  if (tipo === 'pv') return dr30ExcluirPV(id, 'planta');
+  if (tipo === 'tr') return dr30ExcluirTrecho(id);
+  if (tipo === 'bl' || tipo === 'ram') return dr30ExcluirCaixa(id);
+  toast('Este item não possui exclusão direta.');
+}
+// A exclusão nas abas 6 e 7 fica explícita e mantém as regras de dependência.
+const _delItemDR30 = delItem;
+delItem = function (kind, i) {
+  const o = P[kind] && P[kind][i];
+  if (kind === 'pvs' && o) return dr30ExcluirPV(o.id, 'aba 6');
+  if (kind === 'trechos' && o) return dr30ExcluirTrecho(o.id);
+  return _delItemDR30.apply(this, arguments);
+};
+const _vPVsDR30 = vPVs;
+vPVs = function () {
+  return _vPVsDR30.apply(this, arguments).replace(
+    '<p class="lead">Uma linha por PV, localizado por estaca.',
+    '<p class="lead"><b>Excluir PV mantém os tubos/trechos</b> — isso permite representar travessias sob ruas ou pistas. As caixas/ramais que apontavam para o PV ficam sem destino e podem ser religados depois. Uma linha por PV, localizado por estaca.'
+  );
+};
+const _vRedeDR30 = vRede;
+vRede = function () {
+  return _vRedeDR30.apply(this, arguments).replace(
+    '<button class="btn btn-primary btn-sm" onclick="addItem(\'trechos\')">＋ Trecho</button>',
+    '<button class="btn btn-primary btn-sm" onclick="addItem(\'trechos\')">＋ Trecho</button><button class="btn btn-danger btn-sm" onclick="dr30ExcluirRede()">✕ Excluir rede (manter PVs)</button>'
+  ).replace(
+    '<p class="lead">Cada linha é um trecho entre dois PVs, localizado pelas estacas.',
+    '<p class="lead"><b>Excluir trecho/rede aqui mantém os PVs</b>. Use a planta para selecionar visualmente; uma linha é um trecho entre dois PVs, localizado pelas estacas.'
+  );
+};
+// O botão inserido pelo patch anterior na ficha da planta passa a usar as
+// mesmas regras: excluir PV nunca apaga trechos.
+plExcluir = function (tipo, id) {
+  if (tipo === 'pv') return dr30ExcluirPV(id, 'planta');
+  if (tipo === 'tr') return dr30ExcluirTrecho(id);
+  if (tipo === 'bl') return dr30ExcluirCaixa(id);
+};
+// Seleção visual e tecla Delete na planta baixa.
+let PLSEL30 = '';
+function dr30MarcarSelecao() {
+  const box = $('pl-box'); if (!box) return;
+  box.querySelectorAll('[data-k].pl-selected').forEach(x => x.classList.remove('pl-selected'));
+  if (!PLSEL30 || PLAY.sat) return;
+  [...box.querySelectorAll('[data-k]')].filter(x => x.getAttribute('data-k') === PLSEL30).forEach(x => x.classList.add('pl-selected'));
+}
+const _plInfoDR30 = plantaInfo;
+plantaInfo = function (k) {
+  const s = String(k || ''), q = s.startsWith('ram:') ? 'bl:' + s.slice(4) : s;
+  PLSEL30 = q; _plInfoDR30.apply(this, arguments); dr30MarcarSelecao();
+};
+const _drawPlantaDR30 = drawPlanta;
+drawPlanta = function () { const r = _drawPlantaDR30.apply(this, arguments); setTimeout(dr30MarcarSelecao, 0); return r; };
+window.addEventListener('keydown', e => {
+  if (TAB !== 'planta' || e.key !== 'Delete' || !PLSEL30 || /INPUT|SELECT|TEXTAREA/.test((document.activeElement || {}).tagName || '')) return;
+  e.preventDefault(); e.stopPropagation(); dr30ExcluirSelecionado(PLSEL30); PLSEL30 = '';
+}, true);
+(function () { const st = document.createElement('style'); st.textContent = '#pl-box [data-k].pl-selected{filter:drop-shadow(0 0 4px #f97316) drop-shadow(0 0 2px #f97316)}'; document.head.appendChild(st); })();
+</script>
+
 <!-- GUIA-IA:INICIO — skill e guia de cálculos da Drenagem Pluvial 2 guardados no programa (não aparecem na tela).
      Para IAs e projetistas: leia #guia-ia-skill (como trabalhar no programa) e #guia-ia-calculos (fórmulas, critérios, normas, decisões).
      Gerado por scripts/embutir_guia.py a partir de .claude/skills/drenagem/. -->
@@ -13542,4 +13650,104 @@ A sessão não abriu os PDFs (rede bloqueada para `fundacaorioaguas.prefeitura.r
 </script>
 <script>(function () { const ler = id => ((document.getElementById(id) || {}).textContent || "").replace(/<\\(\/?script|!--)/gi, "<$1"); window.TC_GUIA_IA = {skill: ler("guia-ia-skill"), calculos: ler("guia-ia-calculos")}; })();</script>
 <!-- GUIA-IA:FIM -->
+<script>
+/* =====================================================================
+   PATCH DR-31 (17/11/2026)
+   Pavimentação da estrada integrada à drenagem:
+   - seleção das vias, rolamento, ciclovias e camadas;
+   - aterro compactado reaproveitado como reforço do subleito, sem duplicar
+     o quantitativo de terraplenagem;
+   - quantitativos e orçamento no próprio programa;
+   - pergunta de consideração antes de imprimir/exportar/gerar orçamento.
+   ===================================================================== */
+(function () {
+  const PAV_DEFAULT = {ativo:false, tipo:'intertravado', ciclo:1.00, base:0.15, subbase:0.20, revest:0.08, reforco:0.30, vias:{}};
+  const pavEsc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  function pavCfg() {
+    P.pav = P.pav || {};
+    Object.keys(PAV_DEFAULT).forEach(k => { if (P.pav[k] == null) P.pav[k] = Array.isArray(PAV_DEFAULT[k]) ? [] : (typeof PAV_DEFAULT[k] === 'object' ? {} : PAV_DEFAULT[k]); });
+    P.pav.vias = P.pav.vias || {};
+    return P.pav;
+  }
+  function pavRuaRows() {
+    const by = {};
+    (P.estacas || []).forEach(e => { if (!e.rua) return; const a = by[e.rua] || (by[e.rua] = []); a.push(+e.dist || 0); });
+    return (P.ruas || []).map(r => { const a = by[r.id] || []; const L = a.length > 1 ? Math.max(...a) - Math.min(...a) : 0; return {r,L}; }).filter(x => x.L > 0 && +x.r.larg > 0 && !/^X/i.test(x.r.id) && !/aux|travess|bueiro/i.test(x.r.nome || ''));
+  }
+  function pavQuant() {
+    const c = pavCfg(), rows = pavRuaRows().filter(x => c.vias[x.r.id] !== false && (c.vias[x.r.id] === true || /^E/i.test(x.r.id)));
+    const pista = rows.reduce((s,x) => s + x.L * (+x.r.larg || 0), 0), ciclo = rows.reduce((s,x) => s + x.L * 2 * (+c.ciclo || 0), 0), area = c.ativo ? pista + ciclo : 0;
+    const T = typeof terraCalc === 'function' ? terraCalc() : null;
+    const aterro = T && T.aterro > 0 ? T.aterro : 0;
+    const reforco = Math.min(aterro, area * (+c.reforco || 0));
+    return {rows,pista,ciclo,area,aterro,reforco,base:area*(+c.base||0),subbase:area*(+c.subbase||0),revest:area*(+c.revest||0)};
+  }
+  function pavResumo() {
+    const q = pavQuant(), c = pavCfg();
+    return {ativo:!!c.ativo, tipo:c.tipo, area:q.area, pista:q.pista, ciclo:q.ciclo, base:q.base, subbase:q.subbase, revest:q.revest, reforco:q.reforco, aterro:q.aterro, vias:q.rows.length};
+  }
+  window.pavQuant = pavQuant; window.pavResumo = pavResumo;
+  function pavLinhas() {
+    const c = pavCfg(), q = pavQuant(); if (!c.ativo || !(q.area > 0)) return [];
+    const tipo = c.tipo === 'intertravado' ? 'piso intertravado de concreto' : c.tipo === 'asfalto' ? 'pavimento asfáltico' : 'pavimento definido pelo usuário';
+    const out = [
+      {k:'pav:subleito', nome:'Reforço de subleito com aterro compactado reaproveitado — já considerado na terraplenagem', un:'m³', q:q.reforco, preco:0, incluso:true, memo:'Parcela do aterro compactado da terraplenagem, limitada à área pavimentada × '+fmt(+c.reforco||0,2)+' m; não somar novamente'},
+      {k:'pav:subbase', nome:'Sub-base da pavimentação — '+fmt(+c.subbase||0,2)+' m', un:'m³', q:q.subbase, preco:REF_UNIT.pavSubbase || 145, memo:fmt(q.area,2)+' m² × '+fmt(+c.subbase||0,2)+' m'},
+      {k:'pav:base', nome:'Base de brita graduada da pavimentação — '+fmt(+c.base||0,2)+' m', un:'m³', q:q.base, preco:REF_UNIT.pavBase || 180, memo:fmt(q.area,2)+' m² × '+fmt(+c.base||0,2)+' m'},
+      {k:'pav:rev', nome:'Revestimento — '+tipo+' — '+fmt(+c.revest||0,2)+' m', un:'m²', q:q.area, preco:REF_UNIT.pavRev || (c.tipo === 'intertravado' ? 78 : 115), memo:fmt(q.area,2)+' m²; rolamento '+fmt(q.pista,2)+' m² + ciclovias '+fmt(q.ciclo,2)+' m²'}
+    ];
+    if (window.PAV_NAMES) out.forEach(x => { window.PAV_NAMES[x.k] = {nome:x.nome, un:x.un}; });
+    return out;
+  }
+  window.pavLinhas = pavLinhas;
+  const _orcamento31 = orcamento;
+  orcamento = function () {
+    const o = _orcamento31.apply(this, arguments), ps = pavLinhas();
+    ps.forEach(x => { if (x.incluso) return; const p = {cod:'—',descr:'Valor de referência da pavimentação integrada',unid:x.un,preco:x.preco,fonte:'referência'}; o.linhas.push({k:x.k,p,q:x.q,nome:x.nome,total:x.q*x.preco}); });
+    if (ps.length) { o.sub = o.linhas.reduce((s,x)=>s+(x.total||0),0); o.total=o.sub*(1+(+custosCfg().bdi||0)/100); }
+    return o;
+  };
+  window.PAV_NAMES = {};
+  const _terraLinhas31 = terraLinhasQuant;
+  terraLinhasQuant = function() {
+    const out = _terraLinhas31.apply(this, arguments), q = pavQuant();
+    if (pavCfg().ativo && q.area > 0) out.push(['Pavimentação — área total (rolamento + ciclovias)', 'm²', q.area], ['Pavimentação — sub-base', 'm³', q.subbase], ['Pavimentação — base', 'm³', q.base], ['Pavimentação — revestimento', 'm²', q.area], ['Reforço de subleito em aterro (já incluído no aterro da terraplenagem)', 'm³', q.reforco]);
+    return out;
+  };
+  function pavUI() {
+    const c=pavCfg(), q=pavQuant(), rs=pavRuaRows();
+    return `<div class="card" id="pav-card"><h4>🛣 Pavimentação da rua/estrada no mesmo projeto</h4>
+      <p class="hint" style="margin-top:0">Quando ativada, a área de rolamento e as faixas laterais de ciclovia entram nos quantitativos, orçamento, memorial e planilha. O aterro compactado da terraplenagem é contado como reforço do subleito, sem duplicar custo.</p>
+      <label style="display:flex;gap:.45rem;align-items:center;margin:.45rem 0"><input id="pav-ativo" type="checkbox" ${c.ativo?'checked':''} onchange="pavSet('ativo',this.checked)"> Considerar pavimentação neste projeto</label>
+      <div class="fgrid"><div class="field"><label>Tipo de revestimento</label><select onchange="pavSet('tipo',this.value)"><option value="intertravado" ${c.tipo==='intertravado'?'selected':''}>Piso intertravado de concreto</option><option value="asfalto" ${c.tipo==='asfalto'?'selected':''}>Pavimento asfáltico</option><option value="outro" ${c.tipo==='outro'?'selected':''}>Outro / definir em orçamento</option></select></div>
+      <div class="field"><label>Faixa lateral para ciclovia — cada lado (m)</label><input type="number" min="0" step="0.05" value="${c.ciclo}" onchange="pavSet('ciclo',this.value)"></div>
+      <div class="field"><label>Sub-base (m)</label><input type="number" min="0" step="0.01" value="${c.subbase}" onchange="pavSet('subbase',this.value)"></div>
+      <div class="field"><label>Base (m)</label><input type="number" min="0" step="0.01" value="${c.base}" onchange="pavSet('base',this.value)"></div>
+      <div class="field"><label>Revestimento (m)</label><input type="number" min="0" step="0.01" value="${c.revest}" onchange="pavSet('revest',this.value)"></div>
+      <div class="field"><label>Altura considerada de reforço (m)</label><input type="number" min="0" step="0.05" value="${c.reforco}" onchange="pavSet('reforco',this.value)"></div></div>
+      <details><summary>Vias consideradas (${q.rows.length})</summary><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:.2rem .7rem;margin-top:.5rem">${rs.map(x=>`<label><input type="checkbox" ${c.vias[x.r.id]===false?'':'checked'} onchange="pavVia('${pavEsc(x.r.id)}',this.checked)"> ${pavEsc(x.r.nome||x.r.id)} — ${fmt(x.L,1)} m × ${fmt(+x.r.larg||0,2)} m</label>`).join('')}</div></details>
+      <div class="msg ${c.ativo&&q.area?'ok':'info'}" style="margin-top:.6rem">${c.ativo&&q.area?'✓':''} Área: <b>${fmt(q.area,2)} m²</b> · rolamento ${fmt(q.pista,2)} m² · ciclovias ${fmt(q.ciclo,2)} m² · reforço de subleito aproveitado ${fmt(q.reforco,2)} m³.</div>
+      ${c.ativo&&q.area?`<div class="tbl-wrap" style="margin-top:.6rem"><table><thead><tr><th>Camada</th><th>Un.</th><th>Quantidade</th><th>Observação</th></tr></thead><tbody>${pavLinhas().map(x=>`<tr><td>${pavEsc(x.nome)}</td><td>${x.un}</td><td class="td-num">${fmt(x.q,2)}</td><td>${pavEsc(x.memo)}</td></tr>`).join('')}</tbody></table></div>`:''}
+    </div>`;
+  }
+  window.pavSet = function(k,v) { const c=pavCfg(); c[k]=['ciclo','base','subbase','revest','reforco'].includes(k)?Math.max(0,+String(v).replace(',','.')||0):v; save(); if(TAB==='custos') renderTab(); };
+  window.pavVia = function(k,v) { pavCfg().vias[k]=v; save(); if(TAB==='custos') renderTab(); };
+  const _vCustos31 = vCustos;
+  vCustos = function() { const h=_vCustos31.apply(this,arguments); return h + pavUI(); };
+  function pavModal(titulo, next) {
+    const c=pavCfg(), q=pavQuant(); let m=$('modal-pav-perg');
+    if(!m){m=document.createElement('div');m.id='modal-pav-perg';m.className='modal-backdrop';document.body.appendChild(m);}
+    m.innerHTML=`<div class="modal" style="max-width:640px"><div class="modal-header"><h3>🛣 ${titulo}</h3><button class="btn-icon" onclick="closeModal('modal-pav-perg')">✕</button></div><div class="modal-body"><p>Deseja considerar a pavimentação da rua/estrada neste procedimento?</p><div class="card" style="margin:0"><label style="display:flex;gap:.45rem;align-items:center"><input id="pav-perg-sim" type="checkbox" ${c.ativo?'checked':''}> Considerar pavimentação</label><p class="hint">${c.ativo&&q.area?`Serão incluídos ${fmt(q.area,2)} m², com ${fmt(q.ciclo,2)} m² de ciclovias e ${fmt(q.reforco,2)} m³ de aterro aproveitado como reforço do subleito.`:'Sem pavimentação, serão gerados apenas os itens da drenagem.'}</p></div></div><div class="modal-footer"><button class="btn btn-primary" onclick="pavPergConfirmar()">Continuar</button><button class="btn btn-secondary" onclick="closeModal('modal-pav-perg')">Cancelar</button></div></div>`;
+    window._pavNext=next; openModal('modal-pav-perg');
+  }
+  window.pavPergConfirmar=function(){ const x=$('pav-perg-sim'); pavCfg().ativo=!!(x&&x.checked); save(); closeModal('modal-pav-perg'); const n=window._pavNext; window._pavNext=null; if(n)n(); };
+  const _imp31=imprimir; imprimir=function(){ pavModal('Impressão do memorial',_imp31); };
+  const _xlsx31=exportXLSX; exportXLSX=async function(){ pavModal('Exportação para Excel',()=>_xlsx31.apply(this,arguments)); };
+  const _doc31=exportDOCX; exportDOCX=async function(){ pavModal('Exportação para Word',()=>_doc31.apply(this,arguments)); };
+  const _sol31=abrirSolucoes; abrirSolucoes=function(){ const a=arguments; pavModal('Orçamento comparativo',()=>_sol31.apply(this,a)); };
+  const _render31=renderTab;
+  renderTab=function(){ _render31.apply(this,arguments); if(TAB==='custos'){const box=$('pav-card'); if(box) box.scrollIntoView({block:'nearest'});} };
+  REF_UNIT.pavSubbase=145; REF_UNIT.pavBase=180; REF_UNIT.pavRev=78;
+})();
+</script>
 </body></html>
