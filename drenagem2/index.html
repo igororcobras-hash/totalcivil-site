@@ -435,6 +435,35 @@ body.cel table.t-cel td[data-l]::before{content:attr(data-l);font-size:.8rem;fon
   #memorial-print h2{page-break-after:avoid}
   .tab-panel{display:block!important}
 }
+
+/* ── PATCH FZ-14 (17/11/2026) — tamanhos de letra do memorial (aba 14) ──
+   Antes cada parte usava rem (tamanho fixo da tela): na impressão só o corpo
+   ia para 10pt e tabelas, títulos e notas ficavam desproporcionais; as tabelas
+   ficavam pequenas demais e os números em fonte monoespaçada maior que o resto.
+   Agora tudo é relativo ao corpo do memorial (em), na tela e no PDF. */
+#memorial-print{font-size:.95rem;line-height:1.55}
+#memorial-print h1{font-size:1.6em;line-height:1.2}
+#memorial-print h2{font-size:1.22em}
+#memorial-print h3{font-size:1.06em}
+#memorial-print h4{font-size:1em;color:#12355F;margin:.8em 0 .35em}
+#memorial-print p{font-size:1em}
+#memorial-print table{font-size:.86em;width:100%;border-collapse:collapse}
+#memorial-print th,#memorial-print td{font-size:1em;line-height:1.35}
+#memorial-print thead th{font-weight:700}
+#memorial-print .td-num{font-family:inherit;font-size:1em;font-variant-numeric:tabular-nums}
+#memorial-print .tbl-wrap{overflow-x:auto}
+#memorial-print .fig .cap{font-size:.86em}
+#memorial-print .assin div{font-size:.95em}
+#memorial-print .mfoot{font-size:.78em}
+#memorial-print sub,#memorial-print sup{font-size:.72em}
+@media(max-width:600px){#memorial-print{font-size:.9rem}#memorial-print table{font-size:.82em}}
+@media print{
+  #memorial-print{font-size:10.5pt;line-height:1.45}
+  #memorial-print table{font-size:.84em}
+  #memorial-print table.mt-larga{font-size:.74em}
+  #memorial-print .tbl-wrap{overflow:visible;border:0}
+  #memorial-print th,#memorial-print td{padding:.18em .3em}
+}
 </style>
 <script src="/assistente-abas.js" data-tabs="#tabs-list .tab-btn" data-auxilio="proprio"></script>
 <script src="/estado-pagina.js"></script>
@@ -3605,7 +3634,7 @@ async function exportDOCX() {
         children: [...tr.children].map(cell => new d.TableCell({
           shading: cell.tagName === 'TH' ? {type: d.ShadingType.CLEAR, color: 'auto', fill: 'E8EEF4'} : undefined,
           margins: {top: 30, bottom: 30, left: 50, right: 50},
-          children: [new d.Paragraph({spacing: {before: 0, after: 0}, children: runs(cell, {size: nc > 10 ? 12 : nc > 6 ? 14 : 16, bold: cell.tagName === 'TH' || undefined, color: cell.tagName === 'TH' ? AZUL : undefined})})]
+          children: [new d.Paragraph({spacing: {before: 0, after: 0}, children: runs(cell, {size: nc > 12 ? 15 : nc > 8 ? 16 : 18, bold: cell.tagName === 'TH' || undefined, color: cell.tagName === 'TH' ? AZUL : undefined})})]
         }))
       }))
     });
@@ -3617,7 +3646,7 @@ async function exportDOCX() {
       if (cl.includes('fig')) {
         const sv = n.querySelector('svg'), im = sv && imgs.get(sv);
         if (im) { const w = 640, h = Math.round(im.h / im.w * w); blocos.push(new d.Paragraph({alignment: d.AlignmentType.CENTER, keepNext: true, children: [new d.ImageRun({data: im.buf, transformation: {width: w, height: h}})]})); }
-        const cap = n.querySelector('.cap'); if (cap) blocos.push(new d.Paragraph({alignment: d.AlignmentType.CENTER, spacing: {after: 200}, children: runs(cap, {size: 16, italics: true, color: '555555'})}));
+        const cap = n.querySelector('.cap'); if (cap) blocos.push(new d.Paragraph({alignment: d.AlignmentType.CENTER, spacing: {after: 200}, children: runs(cap, {size: 18, italics: true, color: '555555'})}));
       } else if (cl.includes('mhead')) {
         const ch = [];
         if (logo) ch.push(new d.ImageRun({data: logo.buf, transformation: {width: Math.round(logo.w / logo.h * 48), height: 48}}), new d.TextRun({text: '   '}));
@@ -3626,22 +3655,22 @@ async function exportDOCX() {
         blocos.push(new d.Paragraph({children: ch, border: {bottom: {style: d.BorderStyle.SINGLE, size: 18, color: 'FF6B1A', space: 6}}, spacing: {after: 240}}));
       } else if (tg === 'H1') blocos.push(new d.Paragraph({heading: d.HeadingLevel.TITLE, children: runs(n, {color: AZUL})}));
       else if (tg === 'H2') blocos.push(new d.Paragraph({heading: d.HeadingLevel.HEADING_1, children: runs(n, {color: AGUA}), keepNext: true}));
-      else if (tg === 'H3') blocos.push(new d.Paragraph({heading: d.HeadingLevel.HEADING_2, children: runs(n, {color: AZUL}), keepNext: true}));
-      else if (tg === 'P') blocos.push(new d.Paragraph({alignment: n.querySelector('br') ? d.AlignmentType.LEFT : d.AlignmentType.JUSTIFIED, spacing: {after: 120}, children: runs(n)}));
+      else if (tg === 'H3' || tg === 'H4') blocos.push(new d.Paragraph({heading: d.HeadingLevel.HEADING_2, children: runs(n, {color: AZUL}), keepNext: true}));
+      else if (tg === 'P') blocos.push(new d.Paragraph({alignment: n.querySelector('br') ? d.AlignmentType.LEFT : d.AlignmentType.JUSTIFIED, spacing: {after: 120}, children: runs(n, /font-size/.test(n.getAttribute('style') || '') ? {size: 18} : {})}));
       else if (tg === 'TABLE') { blocos.push(tabela(n)); blocos.push(new d.Paragraph({text: '', spacing: {after: 80}})); }
       else if (cl.includes('assin')) blocos.push(new d.Paragraph({alignment: d.AlignmentType.CENTER, spacing: {before: 900}, children: [new d.TextRun({text: '_____________________________________________'}), new d.TextRun({break: 1, text: ''}), ...runs(n)]}));
-      else if (cl.includes('mfoot')) blocos.push(new d.Paragraph({alignment: d.AlignmentType.CENTER, spacing: {before: 400}, children: runs(n, {size: 14, color: '777777'})}));
+      else if (cl.includes('mfoot')) blocos.push(new d.Paragraph({alignment: d.AlignmentType.CENTER, spacing: {before: 400}, children: runs(n, {size: 16, color: '777777'})}));
       else if (tg === 'DIV') walk(n);
     });
   };
   walk(box);
   const doc = new d.Document({
     creator: P.proj.resp || CFG.empresa || 'Total Civil', title: 'Memorial — ' + P.proj.nome, description: 'Memorial descritivo e de cálculo — Drenagem Pluvial',
-    styles: {default: {document: {run: {font: 'Calibri', size: 20}}},
+    styles: {default: {document: {run: {font: 'Calibri', size: 22}}},
       paragraphStyles: [
-        {id: 'Title', name: 'Title', basedOn: 'Normal', next: 'Normal', run: {font: 'Cambria', size: 34, bold: true, color: AZUL}, paragraph: {spacing: {after: 120}}},
-        {id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: {font: 'Cambria', size: 26, bold: true, color: AGUA}, paragraph: {spacing: {before: 300, after: 120}, outlineLevel: 0}},
-        {id: 'Heading2', name: 'Heading 2', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: {font: 'Cambria', size: 22, bold: true, color: AZUL}, paragraph: {spacing: {before: 200, after: 80}, outlineLevel: 1}}]},
+        {id: 'Title', name: 'Title', basedOn: 'Normal', next: 'Normal', run: {font: 'Cambria', size: 32, bold: true, color: AZUL}, paragraph: {spacing: {after: 120}}},
+        {id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: {font: 'Cambria', size: 27, bold: true, color: AGUA}, paragraph: {spacing: {before: 300, after: 120}, outlineLevel: 0}},
+        {id: 'Heading2', name: 'Heading 2', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: {font: 'Cambria', size: 24, bold: true, color: AZUL}, paragraph: {spacing: {before: 200, after: 80}, outlineLevel: 1}}]},
     sections: [{
       properties: {page: {size: {width: 11906, height: 16838}, margin: {top: 1134, bottom: 1134, left: 1134, right: 1134}}},
       headers: {default: new d.Header({children: [new d.Paragraph({alignment: d.AlignmentType.RIGHT, children: [new d.TextRun({text: (P.proj.nome || '') + ' — Memorial de Drenagem Pluvial', size: 14, color: '888888'})]})]})},
@@ -3666,7 +3695,7 @@ async function svgPNG(sv) {
 }
 // alternativa sem internet: HTML que o Word abre como documento
 function exportDOC(box) {
-  const css = 'body{font-family:Calibri,Arial;font-size:10pt}h1{font-family:Cambria;color:#12355F}h2{font-family:Cambria;color:#0E7490;border-bottom:1.5pt solid #0E7490}h3{color:#12355F}table{border-collapse:collapse;width:100%;font-size:7.5pt}th{background:#E8EEF4;color:#12355F}td,th{border:.5pt solid #bbb;padding:2pt 3pt}.mhead{border-bottom:2pt solid #FF6B1A}.assin{text-align:center;margin-top:50pt}.mfoot{text-align:center;color:#777;font-size:8pt}';
+  const css = 'body{font-family:Calibri,Arial;font-size:11pt}h1{font-size:16pt}h2{font-size:13.5pt}h3,h4{font-size:12pt}h1{font-family:Cambria;color:#12355F}h2{font-family:Cambria;color:#0E7490;border-bottom:1.5pt solid #0E7490}h3{color:#12355F}table{border-collapse:collapse;width:100%;font-size:8.5pt}th{background:#E8EEF4;color:#12355F}td,th{border:.5pt solid #bbb;padding:2pt 3pt}.mhead{border-bottom:2pt solid #FF6B1A}.assin{text-align:center;margin-top:50pt}.mfoot{text-align:center;color:#777;font-size:8pt}';
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>Memorial</title><style>${css}</style></head><body>${box.innerHTML}</body></html>`;
   baixarBlob('memorial-drenagem-' + slug(P.proj.nome) + '-' + dataHoje() + '.doc', new Blob(['﻿' + html], {type: 'application/msword'}));
 }
@@ -6172,6 +6201,20 @@ memorialHTML = function (sel) {
     `<p style="font-size:.75rem;color:#555">Escavação, berço e reaterro acima: só a vala da rede tronco (de face a face das cavas), ${esc(txtRegraVala())}. Ramais, cavas dos PVs e das caixas de ralo, bota-fora e empolamento no quadro seguinte.</p><h4 style="margin:.8rem 0 .3rem">Movimento de terra — critérios de quantitativos da EMOP</h4>${quantEmopHTML(true)}`);
   return h;
 };
+
+/* PATCH FZ-14 (17/11/2026) — letras do memorial proporcionais na tela, no PDF e no Word */
+(function () {
+  const _memFZ = memorialHTML;
+  memorialHTML = function () {
+    let h = _memFZ.apply(this, arguments);
+    h = h.replace(/font-size:\s*([\d.]+)rem/g, (m, v) => 'font-size:' + (Math.round(parseFloat(v) / 0.86 * 100) / 100) + 'em');
+    h = h.replace(/<table>(\s*<thead>\s*<tr>)((?:(?!<\/tr>)[\s\S])*?)<\/tr>/g, (m, a, cells) => {
+      const n = (cells.match(/<th\b/g) || []).length;
+      return (n > 9 ? '<table class="mt-larga">' : '<table>') + a + cells + '</tr>';
+    });
+    return h;
+  };
+})();
 const _tabMem1 = tabelasMemoria;
 tabelasMemoria = function () {
   const T = _tabMem1.apply(this, arguments), L = linhasQuantEmop();
