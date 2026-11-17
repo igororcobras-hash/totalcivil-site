@@ -5904,8 +5904,9 @@ function salvarUsuario(uid, acao) {
   };
 })();
 </script>
-<script src="/levantamento.js?v=20261116c"></script>
-<script src="/planta3d.js?v=20261116c"></script>
+<script src="/levantamento.js?v=20261116d"></script>
+<script src="/alinhamento.js?v=20261116d"></script>
+<script src="/planta3d.js?v=20261116d"></script>
 <script>
 /* PATCH PF-LEV-01: importar levantamento planialtimétrico em PDF para a Topografia (levantamento.js) */
 /* PAV-LARG: os pontos do levantamento são do TERRENO; a pista asfáltica tem a largura projetada */
@@ -6067,7 +6068,7 @@ window.__pvCruzDel=function(rid,est,estO){const eu=ruas[ativa];eu.cruz=(eu.cruz|
 
 /* ---------- projeto: salvar / abrir ---------- */
 window.dadosDoProjeto=function(){const d=dp0();
-  try{if(ruas.length>1){sync();d.topo.ruas=ruas.map(r=>({id:r.id,nome:r.nome,rows:r.rows,cruz:r.cruz||[],eixo:r.eixo||undefined}));d.topo.ruaAtiva=ativa;}}catch(e){}
+  try{if(ruas.length>1){sync();d.topo.ruas=ruas.map(r=>({id:r.id,nome:r.nome,rows:r.rows,cruz:r.cruz||[],eixo:r.eixo||undefined,eixoProj:r.eixoProj||undefined}));d.topo.ruaAtiva=ativa;}}catch(e){}
   return d;};
 window.aplicarProjeto=function(p){
   const T=p&&p.topo,rs=T&&Array.isArray(T.ruas)&&T.ruas.length>1?T.ruas:null;
@@ -6076,10 +6077,10 @@ window.aplicarProjeto=function(p){
   const a=Math.min(Math.max(0,T.ruaAtiva|0),rs.length-1);
   const p2=Object.assign({},p,{topo:Object.assign({},T,{rows:rs[a].rows||[]})});
   window.__pvSemCalc=true;try{ap0(p2);}finally{window.__pvSemCalc=false;}
-  ruas=rs.map(r=>({id:String(r.id),nome:r.nome||'Rua',eixo:Array.isArray(r.eixo)&&r.eixo.length>1?r.eixo:undefined,rows:(r.rows||[]).map(x=>Object.assign({},x)),cruz:(r.cruz||[]).map(c=>({est:+c.est,rua:String(c.rua),estOutra:+c.estOutra}))}));
+  ruas=rs.map(r=>({id:String(r.id),nome:r.nome||'Rua',eixo:Array.isArray(r.eixo)&&r.eixo.length>1?r.eixo:undefined,eixoProj:!!r.eixoProj,rows:(r.rows||[]).map(x=>Object.assign({},x)),cruz:(r.cruz||[]).map(c=>({est:+c.est,rua:String(c.rua),estOutra:+c.estOutra}))}));
   ativa=a;seq=ruas.length+1;window.calcTopo();};
 /* PAV-TRACADO: ruas com o eixo real (para a Planta e o 3D mostrarem o bairro inteiro, cada rua no seu lugar) */
-window.__pvRuas=function(){if(ruas.length<2)return null;return ruas.map((r,i)=>({id:r.id,nome:r.nome,rows:i===ativa?getTopoData():r.rows,eixo:r.eixo,cruz:r.cruz||[]}));};
+window.__pvRuas=function(){if(ruas.length<2)return null;return ruas.map((r,i)=>({id:r.id,nome:r.nome,rows:i===ativa?getTopoData():r.rows,eixo:r.eixo,eixoProj:r.eixoProj,cruz:r.cruz||[]}));};
 /* a barra aparece já ao abrir o programa */
 setTimeout(function(){try{window.calcTopo();}catch(e){}},300);
 })();

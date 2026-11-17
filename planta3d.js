@@ -18,29 +18,41 @@
 function plLayCurva(){
   const E=_plT.eixo; if(!Array.isArray(E)||E.length<2) return null;
   const rm0=plLinhasMain(), s00=rm0.length?+rm0[0].est:0;
-  return plLayPts(E,s00,'main');
+  return plLayPts(E,s00,'main',false,plLargMed(rm0));
 }
+function plLargMed(rows){ const L=(rows||[]).map(r=>+r.larg).filter(x=>x>0).sort((a,b)=>a-b); return L.length?L[L.length>>1]:0; }
 /* PAV-TRACADO: layout de QUALQUER eixo em polilinha (cada rua do bairro tem o seu); E em metros, s00 = estaca do 1º ponto */
-function plLayPts(E,s00,chave){
-  _pl.lcm=_pl.lcm||{}; const ca=_pl.lcm[chave]; if(ca&&ca.E===E&&ca.s0===s00) return ca.lay;
-  /* reamostra a 1 m e suaviza (média móvel ±5 m, 3 passadas): tira os cantos vivos do desenho, que dobrariam a pista no lado de dentro da curva */
+function plLayPts(E,s00,chave,jaProj,larg){
+  _pl.lcm=_pl.lcm||{}; const v0=plVis(), alin=v0.alinha!==0&&typeof Alinh!=='undefined'&&!jaProj;
+  const ca=_pl.lcm[chave]; if(ca&&ca.E===E&&ca.s0===s00&&ca.alin===alin&&ca.jp===!!jaProj&&ca.lg===larg) return ca.lay;
   const Cr=[0]; for(let i=1;i<E.length;i++) Cr.push(Cr[i-1]+Math.hypot(E[i][0]-E[i-1][0],E[i][1]-E[i-1][1])); const Lr=Cr[Cr.length-1];
-  let Q=[]; { let j=0; for(let s=0;s<=Lr+1e-9;s+=1){ while(j<E.length-2&&Cr[j+1]<s) j++; const t=(s-Cr[j])/((Cr[j+1]-Cr[j])||1); Q.push([E[j][0]+(E[j+1][0]-E[j][0])*t,E[j][1]+(E[j+1][1]-E[j][1])*t]); } Q.push(E[E.length-1]); }
-  for(let it=0;it<3;it++){ Q=Q.map((p,i)=>{ if(i===0||i===Q.length-1) return p; const a=Math.max(0,i-5), b=Math.min(Q.length-1,i+5); let x=0,y=0; for(let k=a;k<=b;k++){ x+=Q[k][0]; y+=Q[k][1]; } return [x/(b-a+1),y/(b-a+1)]; }); }
-  const P=Q;
+  const reamostra=A=>{ const Ca=[0]; for(let i=1;i<A.length;i++) Ca.push(Ca[i-1]+Math.hypot(A[i][0]-A[i-1][0],A[i][1]-A[i-1][1])); const La=Ca[Ca.length-1]; const Q=[]; let j=0;
+    for(let s=0;s<=La+1e-9;s+=1){ while(j<A.length-2&&Ca[j+1]<s) j++; const t=(s-Ca[j])/((Ca[j+1]-Ca[j])||1); Q.push([A[j][0]+(A[j+1][0]-A[j][0])*t,A[j][1]+(A[j+1][1]-A[j][1])*t]); }
+    const u=A[A.length-1], q=Q[Q.length-1]; if(Math.hypot(u[0]-q[0],u[1]-q[1])>1e-6) Q.push(u); return Q; };
+  let P, fw=null, iv=null, al=null;
+  if(alin){ /* PAV-EIXO: eixo do PROJETO = tangentes retas + curvas circulares (alinhamento.js); os pontos levantados são só o terreno */
+    al=Alinh.alinhar(E,{larg:larg||0}); P=reamostra(al.eixo);
+    /* estaca: a dos pontos levantados (medida no zig-zag) passa para a medida ao longo do eixo do projeto */
+    const S=E.map(p=>al.proj(p).s); for(let i=1;i<S.length;i++) if(S[i]<S[i-1]+0.01) S[i]=S[i-1]+0.01;
+    const lin=(X,Y,x)=>{ const n=X.length; if(n<2) return x; if(x<=X[0]) return Y[0]+(x-X[0]); if(x>=X[n-1]) return Y[n-1]+(x-X[n-1]); let k=0; while(k<n-2&&X[k+1]<x) k++; const t=(x-X[k])/((X[k+1]-X[k])||1); return Y[k]+(Y[k+1]-Y[k])*t; };
+    fw=x=>lin(Cr,S,x); iv=y=>lin(S,Cr,y);
+  } else if(jaProj){ P=reamostra(E); }
+  else { /* sem alinhamento: reamostra a 1 m e suaviza (média móvel ±5 m, 3 passadas) */
+    let Q=reamostra(E);
+    for(let it=0;it<3;it++){ Q=Q.map((p,i)=>{ if(i===0||i===Q.length-1) return p; const a=Math.max(0,i-5), b=Math.min(Q.length-1,i+5); let x=0,y=0; for(let k=a;k<=b;k++){ x+=Q[k][0]; y+=Q[k][1]; } return [x/(b-a+1),y/(b-a+1)]; }); }
+    P=Q; }
   const C=[0]; for(let i=1;i<P.length;i++) C.push(C[i-1]+Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]));
   const Lt=C[C.length-1], s0=s00;
+  if(!fw){ const kL=(jaProj||Lr<=0)?1:Lt/Lr; fw=x=>x*kL; iv=y=>y/kL; }
   const seg=s=>{ let i=0; while(i<P.length-2&&C[i+1]<s) i++; return i; };
   const pt=s=>{ if(s<=0){ const d=dir(0); return [P[0][0]+d[0]*s,P[0][1]+d[1]*s]; } if(s>=Lt){ const d=dir(Lt); return [P[P.length-1][0]+d[0]*(s-Lt),P[P.length-1][1]+d[1]*(s-Lt)]; }
     const i=seg(s), t=(s-C[i])/((C[i+1]-C[i])||1); return [P[i][0]+(P[i+1][0]-P[i][0])*t,P[i][1]+(P[i+1][1]-P[i][1])*t]; };
   const raw=s=>{ const i=seg(Math.max(0,Math.min(Lt,s))); const dx=P[i+1][0]-P[i][0], dy=P[i+1][1]-P[i][1], l=Math.hypot(dx,dy)||1; return [dx/l,dy/l]; };
   function dir(s){ let x=0,y=0; for(const o of [-1.5,-0.75,0,0.75,1.5]){ const d=raw(s+o); x+=d[0]; y+=d[1]; } const l=Math.hypot(x,y)||1; return [x/l,y/l]; }
   const ch=[P[P.length-1][0]-P[0][0],P[P.length-1][1]-P[0][1]], cl=Math.hypot(ch[0],ch[1])||1, d=[ch[0]/cl,ch[1]/cl];
-  const pos=s=>{ const p=pt(s-s0); p._s=s; return p; };
-  /* o comprimento do eixo suavizado fica um pouco menor: as estacas seguem a distância ao longo do eixo original */
-  const kL=Lr>0?Lt/Lr:1, pos2=s=>{ const p=pt((s-s0)*kL); p._s=s; return p; };
-  const lay={curva:true,A:pos2(s0),sA:s0,d,n:[-d[1],d[0]],pos:pos2,dirAt:s=>dir((s-s0)*kL),nAt:s=>{ const q=dir((s-s0)*kL); return [-q[1],q[0]]; },P,C,s0,Lt,kL};
-  _pl.lcm[chave]={E,s0:s00,lay}; return lay;
+  const pos2=s=>{ const p=pt(fw(s-s0)); p._s=s; return p; };
+  const lay={curva:true,A:pos2(s0),sA:s0,d,n:[-d[1],d[0]],pos:pos2,dirAt:s=>dir(fw(s-s0)),nAt:s=>{ const q=dir(fw(s-s0)); return [-q[1],q[0]]; },P,C,s0,Lt,kL:1,fw,iv,alinh:al,E};
+  _pl.lcm[chave]={E,s0:s00,alin,jp:!!jaProj,lg:larg,lay}; return lay;
 }
 /* projeção de um ponto no eixo: estaca e afastamento (+ esquerda) */
 function plProj(ly,p){
@@ -50,7 +62,7 @@ function plProj(ly,p){
     let t=((p[0]-ax)*ex+(p[1]-ay)*ey)/l2; if(i>0) t=Math.max(0,t); if(i<P.length-2) t=Math.min(1,t);
     const qx=ax+ex*t, qy=ay+ey*t, dd=(p[0]-qx)**2+(p[1]-qy)**2;
     if(dd<best){ best=dd; const l=Math.sqrt(l2); s=C[i]+t*l; lat=((p[0]-ax)*(-ey)+(p[1]-ay)*ex)/l; } }
-  return {s:s/(ly.kL||1)+ly.s0,lat}; }
+  return {s:(ly.iv?ly.iv(s):s/(ly.kL||1))+ly.s0,lat}; }
 /* todas as projeções “de cada braço” da curva (mínimos locais da distância): o terreno mistura as duas
    no lado de dentro de uma curva, sem degrau onde o ponto mais próximo troca de braço */
 function plProjAll(ly,p){
@@ -60,7 +72,7 @@ function plProjAll(ly,p){
   let mn=1e18; for(let i=0;i<n;i++) mn=Math.min(mn,ds[i]); const lim=(Math.sqrt(mn)+40)**2, out=[]; /* peso some suave até 40 m além do braço mais próximo */
   for(let i=0;i<n;i++){ if(ds[i]>lim) continue; if((i>0&&ds[i-1]<=ds[i])||(i<n-1&&ds[i+1]<ds[i])) continue; /* empate no vértice conta uma vez só */
     const ax=P[i][0], ay=P[i][1], ex=P[i+1][0]-ax, ey=P[i+1][1]-ay, l=Math.hypot(ex,ey)||1e-9;
-    const fd=Math.max(0,1-(Math.sqrt(ds[i])-Math.sqrt(mn))/40); out.push({s:(C[i]+ts[i]*l)/(ly.kL||1)+ly.s0,lat:((p[0]-ax)*(-ey)+(p[1]-ay)*ex)/l,f:fd*fd*(3-2*fd)}); }
+    const fd=Math.max(0,1-(Math.sqrt(ds[i])-Math.sqrt(mn))/40); out.push({s:(ly.iv?ly.iv(C[i]+ts[i]*l):(C[i]+ts[i]*l)/(ly.kL||1))+ly.s0,lat:((p[0]-ax)*(-ey)+(p[1]-ay)*ex)/l,f:fd*fd*(3-2*fd)}); }
   return out.length?out:[plProj(ly,p)]; }
 function plNrm(d,s){ const L=d.lay; if(!L.curva) return L.n; const e=(s&&s.est!=null)?s.est:(s&&s.c&&s.c._s!=null?s.c._s:null); return e==null?L.n:L.nAt(e); }
 function plDirE(d,e){ return d.lay.dirAt?d.lay.dirAt(e):d.lay.d; }
@@ -139,7 +151,7 @@ function ruasSinc(){
     if(com.length>1){
       ruas=com.map(r=>{ const rows=(r.rows||[]).filter(x=>x.est!==''&&x.larg!==''&&+x.larg>0&&(x.gr!==''||x.tc!=='')).sort((a,b)=>a.est-b.est)
           .map(x=>({est:+x.est,tEsq:x.te,tEixo:x.tc,tDir:x.td,greide:x.gr!==''?x.gr:x.tc,larg:+x.larg,n:x.n}));
-        return {id:'m'+r.id,nome:r.nome,rows,eixo:r.eixo,multi:true,obj:(old['m'+r.id]&&old['m'+r.id].obj)||[]}; });
+        return {id:'m'+r.id,nome:r.nome,rows,eixo:r.eixo,eixoProj:!!r.eixoProj,multi:true,obj:(old['m'+r.id]&&old['m'+r.id].obj)||[]}; });
       return; } }
   const rm=plLinhasMain().map(r=>({est:+r.est,tEsq:r.te,tEixo:r.tc,tDir:r.td,greide:r.gr!==''?r.gr:r.tc,larg:+r.larg,n:r.n}));
   const nm=((document.getElementById('logradouro')||{}).value||'').trim()||'Via principal';
@@ -191,7 +203,7 @@ function plTopoLinhas(rows){
    Acender/apagar um nível mostra/oculta as cotas e o quadro na planta e a camada no 3D.
 ══════════════════════════════════════════════════════ */
 let _pl={modo:'planta',vis:null,vb:null,drag:null,t3:null};
-function plVisPadrao(){ return {ruas:{},fundo:1,entorno:1,pista:1,paginacao:0,eixo:1,mf:1,estacas:1,numeros:1,larguras:1,decl:1,cruz:0,corte:0,quadro:1,legenda:1,carimbo:1,sombras:1,rot3d:1,calcada:1,cenario:1,casas:0,muros:0,arvc:0,grama:0,objArv:0,objPoste:0,lamina:0,niv:{terreno:1},passo:1}; }
+function plVisPadrao(){ return {ruas:{},fundo:1,entorno:1,pista:1,paginacao:0,eixo:1,mf:1,estacas:1,numeros:1,larguras:1,decl:1,cruz:0,corte:0,quadro:1,legenda:1,carimbo:1,sombras:1,rot3d:1,calcada:1,cenario:1,casas:0,muros:0,arvc:0,grama:0,objArv:0,objPoste:0,lamina:0,niv:{terreno:1},passo:1,alinha:1}; }
 function plVis(){
   if(_pl.vis) return _pl.vis;
   let v=plVisPadrao();
@@ -227,7 +239,7 @@ function plLayout(){
   const res=new Array(ruas.length).fill(null);
   const mk=(A,sA,d)=>({A,sA,d,n:[-d[1],d[0]],pos:s=>[A[0]+(s-sA)*d[0],A[1]+(s-sA)*d[1]]});
   const e0=i=>{ const r=(ruas[i].rows||[])[0]; return r?+r.est:0; };
-  if(ruas.length&&ruas.every(r=>r.eixo)){ ruas.forEach((ru,i)=>{ res[i]=plLayPts(ru.eixo,e0(i),ru.id); }); return res; }
+  if(ruas.length&&ruas.every(r=>r.eixo)){ ruas.forEach((ru,i)=>{ res[i]=plLayPts(ru.eixo,e0(i),ru.id,ru.eixoProj,plLargMed(ru.rows)); }); return res; }
   res[0]=plLayCurva()||mk([0,0],e0(0),[1,0]);
   let restam=ruas.length-1, guard=0;
   while(restam>0&&guard++<30){
