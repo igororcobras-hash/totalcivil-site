@@ -13749,5 +13749,40 @@ A sessão não abriu os PDFs (rede bloqueada para `fundacaorioaguas.prefeitura.r
   renderTab=function(){ _render31.apply(this,arguments); if(TAB==='custos'){const box=$('pav-card'); if(box) box.scrollIntoView({block:'nearest'});} };
   REF_UNIT.pavSubbase=145; REF_UNIT.pavBase=180; REF_UNIT.pavRev=78;
 })();
+/* =====================================================================
+   PATCH DR-32 (18/11/2026) — aba 11 (3D): seletor "Raio das esquinas",
+   igual ao da aba 8 (planta baixa). Aplica o raio do meio-fio nas
+   esquinas a todas as ruas, recalcula a rede e refaz o desenho 3D sem
+   mexer na câmera. Para ajustar rua a rua continua valendo a aba 3.
+   ===================================================================== */
+(function () {
+  const RAIOS32 = [0, 3, 4, 5, 6, 8, 10, 12, 15];
+  function raio32Sel() {
+    const vs = [...new Set((P.ruas || []).map(r => raioRua(r)))];
+    const cur = vs.length === 1 ? String(vs[0]) : '';
+    const extra = cur && !RAIOS32.map(String).includes(cur) ? `<option value="${cur}" selected>${cur} m</option>` : '';
+    return `<label id="t3-raio-lbl" style="font-size:.85rem;display:inline-flex;gap:.3rem;align-items:center" title="Raio da curva do meio-fio nas esquinas (embocaduras). Aplica a todas as ruas; para ajustar rua a rua use a aba 3.">Raio das esquinas <select id="t3-raio" onchange="T3raio(this.value)">${(cur ? '' : '<option value="" selected>por rua</option>') + extra + RAIOS32.map(v => `<option value="${v}" ${String(v) === cur ? 'selected' : ''}>${v ? v + ' m' : 'sem raio'}</option>`).join('')}</select></label>`;
+  }
+  window.T3raio = function (v) {
+    if (v === '' || !P || !P.ruas) return;
+    P.ruas.forEach(r => { r.raio = +v; });
+    save();
+    try { calc(); } catch (e) { console.error(e); }
+    if (T3.scene) T3build();
+    if (typeof refreshRes === 'function') refreshRes();
+    const s = document.getElementById('t3-raio'); if (s) { const o = s.querySelector('option[value=""]'); if (o) o.remove(); }
+    toast('Raio das esquinas: ' + (+v ? v + ' m' : 'sem raio') + ' em todas as ruas');
+  };
+  const _vTresD32 = vTresD;
+  vTresD = function () {
+    const h = _vTresD32.apply(this, arguments), sel = raio32Sel();
+    const marca = '<label style="font-size:.85rem;display:inline-flex;gap:.3rem;align-items:center"><input id="t3-anim"';
+    let k = h.indexOf(marca);
+    if (k > 0) return h.slice(0, k) + sel + h.slice(k);
+    k = h.indexOf('<div id="t3-box"');
+    const bar = `<div class="bar-btns" style="margin-bottom:.5rem;flex-wrap:wrap;gap:.5rem;align-items:center">${sel}</div>`;
+    return k > 0 ? h.slice(0, k) + bar + h.slice(k) : h + bar;
+  };
+})();
 </script>
 </body></html>
