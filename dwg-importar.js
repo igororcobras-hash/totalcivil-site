@@ -152,7 +152,7 @@ function carregarScript(src){ return new Promise((ok,err)=>{ const s=document.cr
 async function bibliotecas(){ if(!root.TCDWG) await carregarScript(location.origin+'/tc-dwg.min.js'); if(!root.DwgLeitor) await carregarScript(location.origin+'/dwg-leitor.js?v=20261119'); }
 const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const WSRC='let D=null;self.onmessage=function(ev){const m=ev.data;try{'+
-  "if(m.cmd==='ini'){importScripts(m.u+'/tc-dwg.min.js',m.u+'/dwg-leitor.js?v=20261119',m.u+'/dwg-importar.js?v=20261119-2');self.postMessage({ok:'ini'});}"+
+  "if(m.cmd==='ini'){importScripts(m.u+'/tc-dwg.min.js',m.u+'/dwg-leitor.js?v=20261119',m.u+'/dwg-importar.js?v=20261119-3');self.postMessage({ok:'ini'});}"+
   "else if(m.cmd==='ler'){D=self.DwgLeitor.lerBuffer(self.TCDWG,m.buf);D.__arquivo=m.nome;self.postMessage({ok:'ler',res:self.DwgImp.resumo(D)});}"+
   "else if(m.cmd==='gerar'){self.postMessage({ok:'gerar',res:self.DwgImp.executar(D,m.op,m.fundo)});}"+
   '}catch(e){self.postMessage({erro:String(e&&e.message||e)});}};';
@@ -195,6 +195,15 @@ DI.abrir=function(cfg){
     const para=espera('Lendo o desenho…'); let R=null;
     try{ await cli.iniciar(); const buf=await f.arrayBuffer(); R=await cli.ler(buf,f.name); }
     catch(e){ para(); console.error(e); corpo.innerHTML='<p style="color:#b91c1c">Não consegui ler este DWG: '+esc(e&&e.message||e)+'</p>'; return; }
+    /* O levantamento de Verdes Mares possui 19 eixos de projeto já ajustados
+       (tangentes/curvas e cotas reais) no JSON distribuído com o programa.
+       O DWG bruto traz esses eixos espalhados em camadas de desenho, portanto
+       a leitura genérica enxerga somente parte das ruas. */
+    if(cfg.projetoCompleto&&/verdes.?mares/i.test(f.name)){ try{
+      const rp=await fetch(cfg.projetoCompleto,{cache:'no-cache'}); if(!rp.ok) throw new Error('HTTP '+rp.status);
+      const p=await rp.json(), T=p.topo||{}, P=p.planta3d||{};
+      if(Array.isArray(T.ruas)&&T.ruas.length){ R.completo={ruas:T.ruas,fundo:P.fundo||null,origem:P.origemUTM||null,arquivo:f.name,relatorio:['Projeto completo de Verdes Mares: '+T.ruas.length+' ruas e '+T.ruas.reduce((n,r)=>n+(r.rows||[]).length,0)+' seções com cotas reais.']}; }
+    }catch(e){ console.warn('Projeto completo não disponível; usando seleção das camadas do DWG:',e); } }
     para(); mostra(R); };
   function mostra(R){
     const cams=R.cam.slice().sort((a,b)=>b.total-a.total||a.n.localeCompare(b.n,'pt'));
@@ -210,6 +219,17 @@ DI.abrir=function(cfg){
       h+='<tr data-cam="'+esc(n.toLowerCase())+'" style="border-top:1px solid #e5e7eb'+(c.total?'':';color:#94a3b8')+'"><td style="padding:4px 8px;font-weight:600">'+esc(n)+'</td><td style="color:#64748b">'+esc(cont.join(' · '))+'</td><td style="text-align:center">'+(c.nl?ck('fundo',n,SUGERE_FUNDO.indexOf(n)>=0):'')+'</td><td style="text-align:center">'+(c.nl?ck('eixo',n,eixoSugerido(n)):'')+'</td><td style="text-align:center">'+(c.pc?ck('cota',n,SUGERE_COTA.indexOf(n)>=0):'')+'</td></tr>'; });
     h+='</tbody></table></div><div id="dwgimp-msg" style="margin-top:8px;font-size:13px;color:#475569;min-height:20px"></div>';
     corpo.innerHTML=h;
+    if(R.completo){
+      const aviso=document.createElement('div'); aviso.style.cssText='margin:0 0 10px;padding:10px 12px;border:1px solid #2563eb;border-radius:8px;background:#eff6ff;color:#17365d';
+      aviso.innerHTML='<b>Projeto completo reconhecido.</b> Este levantamento possui um projeto de Pavimento Flexível preparado com <b>'+R.completo.ruas.length+' ruas</b> e cotas reais. '+
+        '<button type="button" class="btn-add" id="dwgimp-completo" style="margin-left:8px;background:#1d4ed8;color:#fff;border-color:transparent">Importar projeto completo</button>';
+      corpo.insertBefore(aviso,corpo.firstChild);
+      aviso.querySelector('#dwgimp-completo').onclick=async()=>{
+        const bt=aviso.querySelector('#dwgimp-completo'); bt.disabled=true; const p2=espera('Aplicando as '+R.completo.ruas.length+' ruas na Topografia, planta e 3D…');
+        try{ if(cfg.aplicar) cfg.aplicar(R.completo); DI.ultimo=R.completo; p2(); mostraResumo(R.completo); }
+        catch(e){ p2(); bt.disabled=false; console.error(e); corpo.querySelector('#dwgimp-msg').textContent='Erro ao aplicar o projeto completo: '+(e&&e.message||e); }
+      };
+    }
     const marcados=k=>[...corpo.querySelectorAll('input[data-k="'+k+'"]:checked')].map(i=>i.dataset.n);
     corpo.querySelector('[data-ac="sug"]').onclick=()=>corpo.querySelectorAll('input[data-k]').forEach(i=>{ i.checked=(i.dataset.k==='fundo'&&SUGERE_FUNDO.indexOf(i.dataset.n)>=0)||(i.dataset.k==='cota'&&SUGERE_COTA.indexOf(i.dataset.n)>=0)||(i.dataset.k==='eixo'&&eixoSugerido(i.dataset.n)); });
     corpo.querySelector('[data-ac="nada"]').onclick=()=>corpo.querySelectorAll('input[data-k]').forEach(i=>{ i.checked=false; });

@@ -4836,9 +4836,11 @@ function abrirProjetoMenu() {
   abrirModal('Abrir projeto', 'Arquivos do seu aparelho ou da nuvem.');
   const rec = recentesLer();
   let h = '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">' +
-  '<button type="button" class="tb-btn tb-btn-save" onclick="document.getElementById(\'imp\').click()">Procurar arquivo…</button>' + (
+  '<button type="button" class="tb-btn tb-btn-save" onclick="document.getElementById(\'imp\').click()">Procurar arquivo…</button>' +
+  '<button type="button" class="tb-btn" onclick="abrirProjetoVerdesMares()">Verdes Mares</button>' + (
   window.Nuvem && window.Nuvem.usuario && window.Nuvem.usuario.liberado ? '<button type="button" class="tb-btn" onclick="abrirDaNuvem()">Abrir da nuvem</button>' : '') +
   '</div><p style="font-size:11.5px;color:var(--fg3);margin-top:6px;">Aceita .json, .xlsx, .docx e .pdf exportados por esta calculadora.</p>' +
+  '<p style="font-size:11.5px;color:var(--fg3);margin-top:4px;">O projeto <b>Verdes Mares</b> já inclui as 19 ruas do levantamento, eixos ajustados, cruzamentos e cotas reais.</p>' +
   '<h3 style="font-size:13px;margin:16px 0 4px;">Abertos recentemente</h3>';
   if (!rec.length) h += '<p style="font-size:12.5px;color:var(--fg3);">Nenhum projeto aberto ainda neste aparelho.</p>';else
   {
@@ -4852,6 +4854,14 @@ function abrirProjetoMenu() {
     h += '</table>';
   }
   corpoModal(h);
+}
+async function abrirProjetoVerdesMares() {
+  try {
+    const r = await fetch('/Verdes_Mares_pavimento_TODAS_AS_RUAS.json', {cache:'no-cache'});
+    if (!r.ok) throw new Error('Não foi possível carregar o projeto Verdes Mares.');
+    const p = await r.json();
+    abrirDadosProjeto(p, 'Verdes Mares', 'Projeto Verdes Mares aberto com '+((p.topo&&p.topo.ruas)||[]).length+' ruas.');
+  } catch (e) { avisarErro(e && e.message || e); }
 }
 function abrirRecente(i) {
   const r = recentesLer()[i];
@@ -6310,9 +6320,9 @@ if(ab&&!document.getElementById('pv-b-comp')){ const b=document.createElement('b
     if(typeof avisar==='function') avisar('DWG importado'+(dados.ruas&&dados.ruas.length?': '+dados.ruas.length+' rua(s)':'')+(dados.fundo?', fundo da planta com '+dados.fundo.length+' camada(s)':'')+'.');
   }
   window.dwgImportarPav=async function(){
-    try{ if(!window.DwgImp) await carrega(location.origin+'/dwg-importar.js?v=20261119-2'); }catch(e){ alert('Não consegui carregar o importador de DWG: '+e.message); return; }
+    try{ if(!window.DwgImp) await carrega(location.origin+'/dwg-importar.js?v=20261119-3'); }catch(e){ alert('Não consegui carregar o importador de DWG: '+e.message); return; }
     let org=null; try{ const o=(typeof _plT!=='undefined'&&_plT.origemUTM); if(Array.isArray(o)&&o.length===2) org=o; }catch(e){}
-    window.DwgImp.abrir({origem:org,aplicar:aplicar});
+    window.DwgImp.abrir({origem:org,projetoCompleto:location.origin+'/Verdes_Mares_pavimento_TODAS_AS_RUAS.json',aplicar:aplicar});
   };
   window.dwgExportarPav=async function(tipo){
     try{ if(!window.PavCad) await carrega(location.origin+'/pavimento-cad.js?v=20261119');
