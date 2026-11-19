@@ -13,22 +13,24 @@ const SUGERE_FUNDO=['Borda','GEO_PASSEIO PROJETADO','quadra','GEO_VIAS PROJETADA
 const SUGERE_COTA=['Borda','MURO','TN','Cal_da','Meio-fio','SARGETA','ASFALTO','MF','B'];
 const COR_FUNDO={'Borda':'#374151','GEO_PASSEIO PROJETADO':'#9ca3af','quadra':'#b45309','GEO_VIAS PROJETADAS':'#dc2626'};
 const r2=x=>Math.round(x*100)/100, r3=x=>Math.round(x*1000)/1000, z0=x=>x===0?0:x;
-const hyp=Math.hypot;
+const hyp=Math.hypot, LIM_RUA=30000, MAX_RUAS=300;
 
 /* ───────── geometria ───────── */
 function Eixo(E){ this.E=E; this.n=E.length-1; this.cum=[0]; this.sx=[]; this.sy=[]; this.L=[];
   for(let i=0;i<this.n;i++){ const dx=E[i+1][0]-E[i][0], dy=E[i+1][1]-E[i][1], l=hyp(dx,dy)||1e-9; this.sx.push(dx); this.sy.push(dy); this.L.push(l); this.cum.push(this.cum[i]+l); }
+  this.bx0=[]; this.bx1=[]; this.by0=[]; this.by1=[]; for(let i=0;i<this.n;i++){ this.bx0.push(Math.min(E[i][0],E[i+1][0])); this.bx1.push(Math.max(E[i][0],E[i+1][0])); this.by0.push(Math.min(E[i][1],E[i+1][1])); this.by1.push(Math.max(E[i][1],E[i+1][1])); }
   this.len=this.cum[this.n]; }
 /* estaca e afastamento (+esquerda) de um ponto; fora das pontas projeta nas retas de prolongamento */
 Eixo.prototype.proj=function(px,py){ let best=1e30, S=0, O=0;
-  for(let i=0;i<this.n;i++){ const ax=this.E[i][0], ay=this.E[i][1]; let t=((px-ax)*this.sx[i]+(py-ay)*this.sy[i])/(this.L[i]*this.L[i]);
+  for(let i=0;i<this.n;i++){ if(best<1e29&&i>0&&i<this.n-1){ const lx=Math.max(this.bx0[i]-px,px-this.bx1[i],0), ly=Math.max(this.by0[i]-py,py-this.by1[i],0); if(lx*lx+ly*ly>best) continue; }
+    const ax=this.E[i][0], ay=this.E[i][1]; let t=((px-ax)*this.sx[i]+(py-ay)*this.sy[i])/(this.L[i]*this.L[i]);
     if(i>0) t=Math.max(0,t); if(i<this.n-1) t=Math.min(1,t);
     const qx=ax+this.sx[i]*t, qy=ay+this.sy[i]*t, d2=(px-qx)*(px-qx)+(py-qy)*(py-qy);
     if(d2<best){ best=d2; S=this.cum[i]+t*this.L[i]; O=Math.sign(this.sx[i]*(py-qy)-this.sy[i]*(px-qx))*Math.sqrt(d2); } }
   return {s:S,o:O}; };
 Eixo.prototype.pt=function(s){ if(s<=0){ const u=[this.sx[0]/this.L[0],this.sy[0]/this.L[0]]; return [this.E[0][0]+u[0]*s,this.E[0][1]+u[1]*s]; }
   if(s>=this.len){ const k=this.n-1,u=[this.sx[k]/this.L[k],this.sy[k]/this.L[k]]; return [this.E[this.n][0]+u[0]*(s-this.len),this.E[this.n][1]+u[1]*(s-this.len)]; }
-  let i=0; while(i<this.n-1&&this.cum[i+1]<s) i++; const t=(s-this.cum[i])/this.L[i]; return [this.E[i][0]+this.sx[i]*t,this.E[i][1]+this.sy[i]*t]; };
+  let lo=0, hi=this.n-1; while(lo<hi){ const m=(lo+hi)>>1; if(this.cum[m+1]<s) lo=m+1; else hi=m; } const i=lo, t=(s-this.cum[i])/this.L[i]; return [this.E[i][0]+this.sx[i]*t,this.E[i][1]+this.sy[i]*t]; };
 Eixo.prototype.dirIni=function(){ return [this.sx[0]/this.L[0],this.sy[0]/this.L[0]]; };
 Eixo.prototype.dirFim=function(){ const k=this.n-1; return [this.sx[k]/this.L[k],this.sy[k]/this.L[k]]; };
 /* reamostra a 2 m e prolonga em reta (a no início, b no fim) */
@@ -71,7 +73,11 @@ DI.gerarRuas=function(D,op){
   /* pontos reais com cota das camadas marcadas (coordenadas locais) */
   const PT=(D.pontos||[]).filter(p=>p.cota!=null&&isFinite(p.cota)&&cotas.has(p.camada)).map(p=>({x:p.x-org[0],y:p.y-org[1],z:p.cota,c:p.camada}));
   /* uma rua por linha; remove linhas curtas */
-  let ruas=[]; brutas.forEach(l=>{ const P=l.pts.map(p=>[p[0]-org[0],p[1]-org[1]]); const E0=new Eixo(P); if(E0.len<15) return; ruas.push({P,E0}); });
+  let ruas=[], ign={absurda:0,vazia:0}; brutas.forEach(l=>{ const P=[]; l.pts.forEach(p=>{ const x=p[0]-org[0], y=p[1]-org[1]; if(!isFinite(x)||!isFinite(y)) return; const u=P[P.length-1]; if(!u||Math.abs(u[0]-x)>0.02||Math.abs(u[1]-y)>0.02) P.push([x,y]); }); if(P.length<2){ ign.vazia++; return; }
+    const E0=new Eixo(P); if(!isFinite(E0.len)||E0.len>LIM_RUA){ ign.absurda++; return; } if(E0.len<15) return; ruas.push({P,E0}); });
+  if(ign.absurda) rel.push('ATENÇÃO: '+ign.absurda+' linha(s) das camadas de eixo ignorada(s) por terem mais de '+(LIM_RUA/1000)+' km ou coordenadas absurdas (provável lixo no desenho ou camada que não é de eixo).');
+  if(ruas.length>MAX_RUAS){ ruas.sort((a,b)=>b.E0.len-a.E0.len); rel.push('ATENÇÃO: as camadas de eixo marcadas têm '+ruas.length+' linhas; só as '+MAX_RUAS+' maiores viraram ruas (confira se marcou camadas que não são eixo).'); ruas=ruas.slice(0,MAX_RUAS); }
+  if(!ruas.length) return {ruas:[],origem:org,relatorio:rel.concat(['Nenhuma linha com 15 m ou mais nas camadas de eixo marcadas.'])};
   ruas.forEach((r,i)=>{ r.id='R'+(i+1); const lg=larguraDaRua(D.textos||[],r.E0,org,op.larg); r.larg=lg.larg; r.hb=lg.larg/2; r.nome=nomeDaRua(D.textos||[],r.E0,org)||('Rua '+(i+1)); r.aviso=[]; r.a=0; r.b=0;
     if(!lg.doTexto) r.aviso.push('largura '+lg.larg+' m (padrão: o DWG não tem texto "pista / passeio" perto desta rua)'); });
   /* prolongamento até o cruzamento mais próximo à frente (até op.perto m) */
@@ -125,61 +131,101 @@ DI.fundo=function(D,camadas,org){ const set=new Set(camadas), por={};
   const pal=['#374151','#9ca3af','#b45309','#dc2626','#0e7490','#7c3aed','#15803d','#a16207'];
   return Object.keys(por).map((n,i)=>({n,c:COR_FUNDO[n]||pal[i%pal.length],w:0.7,l:por[n]})); };
 
+/* ───────── resumo e execução (rodam no Worker; sem Worker rodam na tela principal) ───────── */
+DI.resumo=function(D){ const nl={}, nt={}; (D.linhas||[]).forEach(l=>{ nl[l.camada]=(nl[l.camada]||0)+1; }); (D.textos||[]).forEach(t=>{ nt[t.camada]=(nt[t.camada]||0)+1; });
+  const nomes=new Set(Object.keys(D.camadas||{})); (D.todasCamadas||[]).forEach(n=>nomes.add(n));
+  const cam=[...nomes].map(n=>{ const c=(D.camadas&&D.camadas[n])||{total:0,pontosComCota:0}; return {n,total:c.total||0,pc:c.pontosComCota||0,nl:nl[n]||0,nt:nt[n]||0}; });
+  return {arquivo:D.__arquivo,xref:D.xrefIgnorados||0,cam,extensao:D.extensao||null,textos:(D.textos||[]).length,linhas:(D.linhas||[]).length,pontos:(D.pontos||[]).length}; };
+DI.executar=function(D,op,fundoCams){
+  const res=(op.eixos&&op.eixos.length)?DI.gerarRuas(D,op):{ruas:[],origem:op.origem||null,relatorio:[]};
+  let org=res.origem; if(!org){ const e=D.extensao||{minX:0,minY:0}; org=[Math.floor(e.minX/10)*10-300,Math.floor(e.minY/10)*10-300]; }
+  return {ruas:res.ruas,fundo:(fundoCams&&fundoCams.length)?DI.fundo(D,fundoCams,org):null,origem:org,relatorio:res.relatorio,arquivo:D.__arquivo}; };
+
 /* ───────── tela ───────── */
 function carregarScript(src){ return new Promise((ok,err)=>{ const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=()=>err(new Error('não carregou '+src)); document.head.appendChild(s); }); }
-async function bibliotecas(){ if(!root.TCDWG) await carregarScript(location.origin+'/tc-dwg.min.js'); if(!root.DwgLeitor) await carregarScript(location.origin+'/dwg-leitor.js'); }
+async function bibliotecas(){ if(!root.TCDWG) await carregarScript(location.origin+'/tc-dwg.min.js'); if(!root.DwgLeitor) await carregarScript(location.origin+'/dwg-leitor.js?v=20261119'); }
 const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const WSRC='let D=null;self.onmessage=function(ev){const m=ev.data;try{'+
+  "if(m.cmd==='ini'){importScripts(m.u+'/tc-dwg.min.js',m.u+'/dwg-leitor.js?v=20261119',m.u+'/dwg-importar.js?v=20261119');self.postMessage({ok:'ini'});}"+
+  "else if(m.cmd==='ler'){D=self.DwgLeitor.lerBuffer(self.TCDWG,m.buf);D.__arquivo=m.nome;self.postMessage({ok:'ler',res:self.DwgImp.resumo(D)});}"+
+  "else if(m.cmd==='gerar'){self.postMessage({ok:'gerar',res:self.DwgImp.executar(D,m.op,m.fundo)});}"+
+  '}catch(e){self.postMessage({erro:String(e&&e.message||e)});}};';
+/* cliente: tenta Worker (a tela nunca congela); se o navegador não deixar, roda na tela principal */
+function criaCliente(){
+  let w=null, espera=null, D=null, modo='worker';
+  const pergunta=(msg,transf)=>new Promise((ok,err)=>{ espera={ok,err}; w.postMessage(msg,transf||[]); });
+  const cli={
+    async iniciar(){ try{ const url=URL.createObjectURL(new Blob([WSRC],{type:'text/javascript'})); w=new Worker(url);
+        w.onmessage=ev=>{ const r=ev.data, e=espera; espera=null; if(!e) return; if(r&&r.erro) e.err(new Error(r.erro)); else e.ok(r.res); };
+        w.onerror=ev=>{ const e=espera; espera=null; if(e) e.err(new Error((ev&&ev.message)||'erro no processamento em segundo plano')); };
+        await Promise.race([pergunta({cmd:'ini',u:location.origin}),new Promise((_,no)=>setTimeout(()=>no(new Error('tempo')),20000))]); }
+      catch(e){ console.warn('Worker indisponível, usando a tela principal:',e); try{ if(w) w.terminate(); }catch(_){} w=null; modo='principal'; await bibliotecas(); } },
+    modo:()=>modo,
+    async ler(buf,nome){ if(w) return pergunta({cmd:'ler',buf,nome},[buf]);
+      await new Promise(r=>setTimeout(r,60)); D=root.DwgLeitor.lerBuffer(root.TCDWG,buf); D.__arquivo=nome; return DI.resumo(D); },
+    async gerar(op,fundo){ if(w) return pergunta({cmd:'gerar',op,fundo}); await new Promise(r=>setTimeout(r,60)); return DI.executar(D,op,fundo); },
+    fim(){ try{ if(w) w.terminate(); }catch(_){} w=null; D=null; } };
+  return cli; }
 
 DI.abrir=function(cfg){
-  cfg=cfg||{}; let D=null;
+  cfg=cfg||{}; const cli=criaCliente();
   const old=document.getElementById('dwgimp'); if(old) old.remove();
   const ov=document.createElement('div'); ov.id='dwgimp';
-  ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(15,22,32,.55);display:flex;align-items:center;justify-content:center;padding:14px;font-family:system-ui,sans-serif';
-  ov.innerHTML='<div style="background:var(--surface,#fff);color:var(--fg,#14202e);border-radius:12px;max-width:980px;width:100%;max-height:94vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4)">'+
-    '<div style="padding:14px 18px;border-bottom:1px solid #d6d9de;display:flex;align-items:center;gap:10px"><b style="font-size:16px;flex:1">📥 Importar DWG — escolha as camadas</b><button type="button" id="dwgimp-x" style="font-size:18px;border:0;background:none;cursor:pointer">✕</button></div>'+
-    '<div id="dwgimp-corpo" style="padding:14px 18px;overflow:auto;flex:1"></div>'+
-    '<div id="dwgimp-rod" style="padding:12px 18px;border-top:1px solid #d6d9de;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"></div></div>';
+  ov.style.cssText='position:fixed;inset:0;z-index:99999;background:rgba(15,22,32,.55);display:flex;align-items:center;justify-content:center;padding:8px;font-family:system-ui,sans-serif';
+  ov.innerHTML='<div style="background:var(--surface,#fff);color:var(--fg,#14202e);border-radius:12px;max-width:1040px;width:100%;height:calc(100vh - 16px);max-height:calc(100vh - 16px);display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.4)">'+
+    '<div style="padding:12px 18px;border-bottom:1px solid #d6d9de;display:flex;align-items:center;gap:10px"><b style="font-size:16px;flex:1">📥 Importar DWG — escolha as camadas</b><button type="button" id="dwgimp-x" style="font-size:18px;border:0;background:none;cursor:pointer">✕</button></div>'+
+    '<div id="dwgimp-corpo" style="padding:12px 18px;overflow:auto;flex:1;min-height:0;display:flex;flex-direction:column"></div>'+
+    '<div id="dwgimp-rod" style="padding:10px 18px;border-top:1px solid #d6d9de;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"></div></div>';
   document.body.appendChild(ov);
   const corpo=ov.querySelector('#dwgimp-corpo'), rod=ov.querySelector('#dwgimp-rod');
-  const fechar=()=>ov.remove(); ov.querySelector('#dwgimp-x').onclick=fechar;
+  const fechar=()=>{ cli.fim(); ov.remove(); }; ov.querySelector('#dwgimp-x').onclick=fechar;
+  /* mensagem de espera com cronômetro (mostra que o programa não travou) */
+  function espera(txt){ const t0=Date.now(); const el=corpo.querySelector('#dwgimp-msg')||corpo; const pinta=()=>{ el.innerHTML='<span style="display:inline-block;width:12px;height:12px;border:2px solid #94a3b8;border-top-color:#1d4ed8;border-radius:50%;animation:dwgimpg 0.8s linear infinite;vertical-align:-2px;margin-right:6px"></span>'+txt+' <b>'+Math.round((Date.now()-t0)/1000)+' s</b>'; };
+    if(!document.getElementById('dwgimp-css')){ const st=document.createElement('style'); st.id='dwgimp-css'; st.textContent='@keyframes dwgimpg{to{transform:rotate(360deg)}}'; document.head.appendChild(st); }
+    pinta(); const iv=setInterval(pinta,500); return ()=>clearInterval(iv); }
   corpo.innerHTML='<p style="margin:0 0 10px">Escolha o arquivo <b>.dwg</b> (AutoCAD 2000 a 2018). O arquivo é lido no seu computador; nada é enviado.</p><input type="file" id="dwgimp-arq" accept=".dwg">';
   ov.querySelector('#dwgimp-arq').onchange=async ev=>{ const f=ev.target.files&&ev.target.files[0]; if(!f) return;
-    corpo.innerHTML='<p>Lendo <b>'+esc(f.name)+'</b> ('+(f.size/1048576).toFixed(1)+' MB)… pode levar alguns segundos.</p>';
-    try{ await bibliotecas(); const buf=await f.arrayBuffer(); await new Promise(r=>setTimeout(r,60)); D=root.DwgLeitor.lerBuffer(root.TCDWG,buf); D.__arquivo=f.name; }
-    catch(e){ console.error(e); corpo.innerHTML='<p style="color:#b91c1c">Não consegui ler este DWG: '+esc(e&&e.message||e)+'</p>'; return; }
-    mostra(); };
-  function mostra(){
-    const nl={}; (D.linhas||[]).forEach(l=>{ nl[l.camada]=(nl[l.camada]||0)+1; });
-    const nt={}; (D.textos||[]).forEach(t=>{ nt[t.camada]=(nt[t.camada]||0)+1; });
-    const cams=Object.keys(D.camadas||{}).filter(n=>D.camadas[n].total>0).sort((a,b)=>D.camadas[b].total-D.camadas[a].total);
+    corpo.innerHTML='<p>Lendo <b>'+esc(f.name)+'</b> ('+(f.size/1048576).toFixed(1)+' MB)… arquivos grandes levam de 10 a 60 segundos; a tela continua livre.</p><div id="dwgimp-msg"></div>';
+    const para=espera('Lendo o desenho…'); let R=null;
+    try{ await cli.iniciar(); const buf=await f.arrayBuffer(); R=await cli.ler(buf,f.name); }
+    catch(e){ para(); console.error(e); corpo.innerHTML='<p style="color:#b91c1c">Não consegui ler este DWG: '+esc(e&&e.message||e)+'</p>'; return; }
+    para(); mostra(R); };
+  function mostra(R){
+    const cams=R.cam.slice().sort((a,b)=>b.total-a.total||a.n.localeCompare(b.n,'pt'));
     const ck=(k,n,on)=>'<input type="checkbox" data-k="'+k+'" data-n="'+esc(n)+'"'+(on?' checked':'')+'>';
-    let h='<p style="margin:0 0 8px"><b>'+esc(D.__arquivo)+'</b> — '+cams.length+' camadas'+(D.xrefIgnorados?' · '+D.xrefIgnorados+' referência(s) externa(s) ignorada(s)':'')+'. Marque o que vai ser importado.</p>'+
-      '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button type="button" class="btn-add" data-ac="sug">Marcar sugeridas</button><button type="button" class="btn-add" data-ac="nada">Limpar tudo</button>'+
+    const vazias=cams.filter(c=>!c.total).length;
+    let h='<p style="margin:0 0 8px"><b>'+esc(R.arquivo)+'</b> — '+cams.length+' camadas'+(vazias?' ('+vazias+' sem desenho)':'')+(R.xref?' · '+R.xref+' referência(s) externa(s) ignorada(s)':'')+'. Marque o que vai ser importado.</p>'+
+      '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><button type="button" class="btn-add" data-ac="sug">Marcar sugeridas</button><button type="button" class="btn-add" data-ac="nada">Limpar tudo</button>'+
+      '<input id="dwgimp-filtro" type="search" placeholder="Filtrar camada…" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;width:170px">'+
       '<label style="margin-left:auto;font-size:13px">Largura da pista padrão (m) <input id="dwgimp-larg" type="number" step="0.1" value="7" style="width:60px"></label>'+
       '<label style="font-size:13px"><input id="dwgimp-est" type="checkbox" checked> Estender cada rua até o cruzamento mais próximo (até 80 m)</label></div>'+
-      '<div style="overflow:auto;max-height:52vh;border:1px solid #d6d9de;border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead style="position:sticky;top:0;background:var(--surface2,#f1f3f5)"><tr><th style="text-align:left;padding:6px 8px">Camada</th><th style="text-align:left">Conteúdo</th><th title="Desenho de fundo da planta">Fundo</th><th title="Cada linha da camada vira uma rua">Eixo de rua</th><th title="Pontos com cota real usados nas seções">Cotas</th></tr></thead><tbody>';
-    cams.forEach(n=>{ const c=D.camadas[n], cont=[]; if(nl[n]) cont.push(nl[n]+' linhas'); if(c.pontosComCota) cont.push(c.pontosComCota+' pontos c/ cota'); if(nt[n]) cont.push(nt[n]+' textos'); const ob=c.total-(nl[n]||0)-(nt[n]||0)-(c.pontosComCota||0); if(ob>0) cont.push(ob+' outros');
-      h+='<tr style="border-top:1px solid #e5e7eb"><td style="padding:4px 8px;font-weight:600">'+esc(n)+'</td><td style="color:#64748b">'+esc(cont.join(' · '))+'</td><td style="text-align:center">'+(nl[n]?ck('fundo',n,SUGERE_FUNDO.indexOf(n)>=0):'')+'</td><td style="text-align:center">'+(nl[n]?ck('eixo',n,/eixo/i.test(n)):'')+'</td><td style="text-align:center">'+(c.pontosComCota?ck('cota',n,SUGERE_COTA.indexOf(n)>=0):'')+'</td></tr>'; });
-    h+='</tbody></table></div><div id="dwgimp-msg" style="margin-top:8px;font-size:13px;color:#475569"></div>';
+      '<div style="overflow:auto;flex:1;min-height:180px;border:1px solid #d6d9de;border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead style="position:sticky;top:0;background:var(--surface2,#f1f3f5);z-index:1"><tr><th style="text-align:left;padding:6px 8px">Camada</th><th style="text-align:left">Conteúdo</th><th title="Desenho de fundo da planta">Fundo</th><th title="Cada linha da camada vira uma rua">Eixo de rua</th><th title="Pontos com cota real usados nas seções">Cotas</th></tr></thead><tbody>';
+    cams.forEach(c=>{ const n=c.n, cont=[]; if(c.nl) cont.push(c.nl+' linhas'); if(c.pc) cont.push(c.pc+' pontos c/ cota'); if(c.nt) cont.push(c.nt+' textos'); const ob=c.total-c.nl-c.nt-c.pc; if(ob>0) cont.push(ob+' outros'); if(!c.total) cont.push('sem desenho');
+      h+='<tr data-cam="'+esc(n.toLowerCase())+'" style="border-top:1px solid #e5e7eb'+(c.total?'':';color:#94a3b8')+'"><td style="padding:4px 8px;font-weight:600">'+esc(n)+'</td><td style="color:#64748b">'+esc(cont.join(' · '))+'</td><td style="text-align:center">'+(c.nl?ck('fundo',n,SUGERE_FUNDO.indexOf(n)>=0):'')+'</td><td style="text-align:center">'+(c.nl?ck('eixo',n,/eixo/i.test(n)):'')+'</td><td style="text-align:center">'+(c.pc?ck('cota',n,SUGERE_COTA.indexOf(n)>=0):'')+'</td></tr>'; });
+    h+='</tbody></table></div><div id="dwgimp-msg" style="margin-top:8px;font-size:13px;color:#475569;min-height:20px"></div>';
     corpo.innerHTML=h;
     const marcados=k=>[...corpo.querySelectorAll('input[data-k="'+k+'"]:checked')].map(i=>i.dataset.n);
     corpo.querySelector('[data-ac="sug"]').onclick=()=>corpo.querySelectorAll('input[data-k]').forEach(i=>{ i.checked=(i.dataset.k==='fundo'&&SUGERE_FUNDO.indexOf(i.dataset.n)>=0)||(i.dataset.k==='cota'&&SUGERE_COTA.indexOf(i.dataset.n)>=0)||(i.dataset.k==='eixo'&&/eixo/i.test(i.dataset.n)); });
     corpo.querySelector('[data-ac="nada"]').onclick=()=>corpo.querySelectorAll('input[data-k]').forEach(i=>{ i.checked=false; });
+    corpo.querySelector('#dwgimp-filtro').oninput=ev=>{ const q=ev.target.value.trim().toLowerCase(); corpo.querySelectorAll('tr[data-cam]').forEach(tr=>{ tr.style.display=(!q||tr.dataset.cam.indexOf(q)>=0)?'':'none'; }); };
     rod.innerHTML='<button type="button" class="btn-add" id="dwgimp-canc">Cancelar</button><button type="button" class="btn-add" id="dwgimp-ok" style="background:var(--accent,#1d4ed8);color:#fff;border-color:transparent">Importar camadas marcadas</button>';
     rod.querySelector('#dwgimp-canc').onclick=fechar;
-    rod.querySelector('#dwgimp-ok').onclick=()=>{ const msg=corpo.querySelector('#dwgimp-msg'); const fundo=marcados('fundo'), eixo=marcados('eixo'), cota=marcados('cota');
+    const bt=rod.querySelector('#dwgimp-ok');
+    bt.onclick=async()=>{ const msg=corpo.querySelector('#dwgimp-msg'); const fundo=marcados('fundo'), eixo=marcados('eixo'), cota=marcados('cota');
       if(!fundo.length&&!eixo.length) return msg.textContent='Marque pelo menos uma camada em Fundo ou Eixo de rua.';
       if(eixo.length&&!cota.length) return msg.textContent='Para gerar as ruas, marque também as camadas de Cotas (pontos com cota real).';
       const op={eixos:eixo,cotas:cota,larg:parseFloat(corpo.querySelector('#dwgimp-larg').value)||7,estender:corpo.querySelector('#dwgimp-est').checked,origem:cfg.origem||null};
-      let res=null; try{ res=eixo.length?DI.gerarRuas(D,op):{ruas:[],origem:cfg.origem||null,relatorio:[]}; }catch(e){ console.error(e); return msg.textContent='Erro ao gerar as ruas: '+(e&&e.message||e); }
-      if(eixo.length&&!res.ruas.length) return msg.textContent=res.relatorio.join(' ')||'Nenhuma rua gerada.';
-      let org=res.origem; if(!org){ const e=D.extensao||{minX:0,minY:0}; org=[Math.floor(e.minX/10)*10-300,Math.floor(e.minY/10)*10-300]; }
-      const dados={ruas:res.ruas,fundo:fundo.length?DI.fundo(D,fundo,org):null,origem:org,relatorio:res.relatorio,arquivo:D.__arquivo};
-      try{ if(cfg.aplicar) cfg.aplicar(dados); }catch(e){ console.error(e); return msg.textContent='Erro ao aplicar no projeto: '+(e&&e.message||e); }
-      DI.ultimo=dados; mostraResumo(dados); }; }
+      bt.disabled=true; const para=espera('Gerando as ruas e o fundo da planta…'); let dados=null;
+      try{ dados=await cli.gerar(op,fundo); }
+      catch(e){ para(); bt.disabled=false; console.error(e); return msg.textContent='Erro ao gerar: '+(e&&e.message||e); }
+      para();
+      if(eixo.length&&!dados.ruas.length){ bt.disabled=false; return msg.textContent=dados.relatorio.join(' ')||'Nenhuma rua gerada.'; }
+      const p2=espera('Aplicando no projeto (tabela de topografia, planta e 3D)…'); await new Promise(r=>setTimeout(r,50));
+      try{ if(cfg.aplicar) cfg.aplicar(dados); }catch(e){ p2(); bt.disabled=false; if(e&&e.message==='cancelado') return msg.textContent='Importação cancelada; nada foi alterado.'; console.error(e); return msg.textContent='Erro ao aplicar no projeto: '+(e&&e.message||e); }
+      p2(); DI.ultimo=dados; mostraResumo(dados); }; }
   function mostraResumo(dados){
-    corpo.innerHTML='<p style="margin:0 0 8px"><b>Importado.</b> '+(dados.ruas.length?dados.ruas.length+' rua(s) gerada(s). ':'')+(dados.fundo?dados.fundo.length+' camada(s) de fundo na planta.':'')+'</p>'+
-      (dados.relatorio.length?'<div style="max-height:50vh;overflow:auto;font-size:12.5px;border:1px solid #d6d9de;border-radius:8px;padding:8px 10px"><b>Relatório (confira as pontas):</b><ul style="margin:6px 0 0 16px;padding:0">'+dados.relatorio.map(l=>'<li>'+esc(l)+'</li>').join('')+'</ul></div>':'');
+    corpo.innerHTML='<p style="margin:0 0 8px"><b>Importado.</b> '+(dados.ruas.length?dados.ruas.length+' rua(s) gerada(s) e a tabela de Topografia preenchida. ':'')+(dados.fundo?dados.fundo.length+' camada(s) de fundo na planta.':'')+'</p>'+
+      (dados.relatorio.length?'<div style="flex:1;min-height:0;overflow:auto;font-size:12.5px;border:1px solid #d6d9de;border-radius:8px;padding:8px 10px"><b>Relatório (confira as pontas):</b><ul style="margin:6px 0 0 16px;padding:0">'+dados.relatorio.map(l=>'<li>'+esc(l)+'</li>').join('')+'</ul></div>':'');
     rod.innerHTML='<button type="button" class="btn-add" id="dwgimp-fim" style="background:var(--accent,#1d4ed8);color:#fff;border-color:transparent">Fechar</button>'; rod.querySelector('#dwgimp-fim').onclick=fechar; }
 };
 root.DwgImp=DI; if(typeof module!=='undefined'&&module.exports) module.exports=DI;

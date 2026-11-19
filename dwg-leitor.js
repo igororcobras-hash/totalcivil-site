@@ -94,6 +94,7 @@ DwgLeitor.normalizar=function(doc){
   const soZ=out.pontos.filter(p=>p.fonte==='z').length;
   if(soZ) out.avisos.push(soZ+' ponto(s) só têm o Z do desenho como cota (sem texto): confira antes de usar.');
   out.extensao=mn[0]<1e17?{minX:mn[0],minY:mn[1],maxX:mx[0],maxY:mx[1]}:null;
+  try{ out.todasCamadas=[...doc.layers].map(l=>l&&l.name).filter(Boolean).filter(n=>n.indexOf('|')<0); }catch(_){ out.todasCamadas=[]; }   /* DWG-08: tabela de camadas inteira (inclui as vazias), sem as de xref */
   return out;
 };
 
