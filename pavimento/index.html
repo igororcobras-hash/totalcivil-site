@@ -6299,6 +6299,9 @@ if(ab&&!document.getElementById('pv-b-comp')){ const b=document.createElement('b
       const tem=((d.topo.ruas&&d.topo.ruas.length>1)||(d.topo.rows||[]).some(r=>r&&r.est!=null&&r.est!==''));
       if(tem&&!confirm('Gerar as ruas do DWG substitui as estacas e as ruas do projeto aberto. Continuar?')) throw new Error('cancelado');
       d.topo=Object.assign({},d.topo,{ruas:dados.ruas,rows:dados.ruas[0].rows,ruaAtiva:0});
+      /* preenche a Topografia: largura de projeto da rua 1 e, se for uma rua só, o logradouro */
+      { const l0=dados.ruas[0].rows[0]&&dados.ruas[0].rows[0].larg; if(l0>0) d.topo.larg_proj=l0;
+        if(dados.ruas.length===1){ d.ident=Object.assign({},d.ident||{}); if(!d.ident.logradouro) d.ident.logradouro=dados.ruas[0].nome; } }
       d.planta3d.transv=[]; d.planta3d.eixo=null;
     }
     d.planta3d.origemUTM=dados.origem;
@@ -6307,11 +6310,18 @@ if(ab&&!document.getElementById('pv-b-comp')){ const b=document.createElement('b
     if(typeof avisar==='function') avisar('DWG importado'+(dados.ruas&&dados.ruas.length?': '+dados.ruas.length+' rua(s)':'')+(dados.fundo?', fundo da planta com '+dados.fundo.length+' camada(s)':'')+'.');
   }
   window.dwgImportarPav=async function(){
-    try{ if(!window.DwgImp) await carrega(location.origin+'/dwg-importar.js?v=20261117'); }catch(e){ alert('Não consegui carregar o importador de DWG: '+e.message); return; }
+    try{ if(!window.DwgImp) await carrega(location.origin+'/dwg-importar.js?v=20261119'); }catch(e){ alert('Não consegui carregar o importador de DWG: '+e.message); return; }
     let org=null; try{ const o=(typeof _plT!=='undefined'&&_plT.origemUTM); if(Array.isArray(o)&&o.length===2) org=o; }catch(e){}
     window.DwgImp.abrir({origem:org,aplicar:aplicar});
   };
+  window.dwgExportarPav=async function(tipo){
+    try{ if(!window.PavCad) await carrega(location.origin+'/pavimento-cad.js?v=20261119');
+      await window.PavCad.exportar(tipo,dadosDoProjeto(),{aviso:m=>{ if(typeof avisar==='function') avisar(m); else alert(m); }}); }
+    catch(e){ console.error(e); alert('Não consegui exportar: '+(e&&e.message||e)); } };
+  function mk(id,cls,txt,tit,fn,ref,antes){ if(document.getElementById(id)||!ref) return null; const b=document.createElement('button'); b.type='button'; b.id=id; b.className=cls; b.textContent=txt; b.title=tit; b.onclick=fn; if(antes) ref.parentNode.insertBefore(b,ref); else ref.parentNode.insertBefore(b,ref.nextSibling); return b; }
   function botoes(){
+    { const imp=document.getElementById('btn-dwg'); if(imp&&!document.getElementById('btn-dwg-x')){ const b1=mk('btn-dwg-x',imp.className,'⬇ DWG','Exporta planta, estacas, pista, cruzamentos, fundo e perfis em DWG (AutoCAD 2000)',()=>window.dwgExportarPav('dwg'),imp); mk('btn-dxf-x',imp.className,'⬇ DXF','Exporta o mesmo desenho em DXF',()=>window.dwgExportarPav('dxf'),b1||imp); if(b1&&imp.style.cssText) b1.style.cssText=imp.style.cssText; const d=document.getElementById('btn-dxf-x'); if(d&&imp.style.cssText) d.style.cssText=imp.style.cssText; } }
+    { const imp=document.getElementById('pl-b-dwg'); if(imp&&!document.getElementById('pl-b-dwg-x')){ const b1=mk('pl-b-dwg-x',imp.className,'⬇ DWG','Exporta a planta e os perfis em DWG (AutoCAD 2000)',()=>window.dwgExportarPav('dwg'),imp); mk('pl-b-dxf-x',imp.className,'⬇ DXF','Exporta a planta e os perfis em DXF',()=>window.dwgExportarPav('dxf'),b1||imp); } }
     const pdf=document.getElementById('btn-lev-pdf');
     if(pdf&&!document.getElementById('btn-dwg')){ const b=document.createElement('button'); b.type='button'; b.id='btn-dwg'; b.className=pdf.className; b.style.cssText=pdf.style.cssText; b.title='Lê um DWG, deixa escolher as camadas e importa fundo da planta e ruas com cotas reais'; b.textContent='📥 Importar DWG'; b.onclick=window.dwgImportarPav; pdf.parentNode.insertBefore(b,pdf.nextSibling); }
     const g=document.getElementById('pl-b-geo');
