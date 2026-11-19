@@ -137,6 +137,22 @@ DI.fundo=function(D,camadas,org){ const set=new Set(camadas), por={};
   const pal=['#374151','#9ca3af','#b45309','#dc2626','#0e7490','#7c3aed','#15803d','#a16207'];
   return Object.keys(por).map((n,i)=>({n,c:COR_FUNDO[n]||pal[i%pal.length],w:0.7,l:por[n]})); };
 
+/* Aplica a mesma regra de extensão ao projeto completo pré-calculado.
+   Os cruzamentos já vêm registrados em estacas; quando a estaca do
+   cruzamento está além da ponta atual, prolongamos a tangente da ponta até
+   ele, respeitando a distância digitada pelo usuário. */
+DI.estenderProjeto=function(dados,limite){
+  const max=isFinite(+limite)&&+limite>=0?+limite:80;
+  const out=JSON.parse(JSON.stringify(dados||{})), rel=(out.relatorio||[]).slice();
+  (out.ruas||[]).forEach(r=>{ const E=r.eixo; if(!Array.isArray(E)||E.length<2) return; const ax=new Eixo(E); let pre=0,pos=0;
+    (r.cruz||[]).forEach(c=>{ const s=+c.est; if(!isFinite(s)) return; if(s<0&&-s<=max) pre=pre?Math.min(pre,-s):-s; if(s>ax.len&&s-ax.len<=max) pos=pos?Math.min(pos,s-ax.len):s-ax.len; });
+    if(!pre&&!pos) return; const P=E.map(p=>p.slice());
+    if(pre){ const u=ax.dirIni(); P.unshift([P[0][0]-u[0]*pre,P[0][1]-u[1]*pre]); }
+    if(pos){ const u=ax.dirFim(), q=P[P.length-1]; P.push([q[0]+u[0]*pos,q[1]+u[1]*pos]); }
+    r.eixo=P; rel.push(r.nome+': eixo estendido '+(pre?pre.toFixed(2)+' m no início':'')+(pre&&pos?' e ':'')+(pos?pos.toFixed(2)+' m no fim':'')); });
+  out.relatorio=rel; return out;
+};
+
 /* ───────── resumo e execução (rodam no Worker; sem Worker rodam na tela principal) ───────── */
 DI.resumo=function(D){ const nl={}, nt={}; (D.linhas||[]).forEach(l=>{ nl[l.camada]=(nl[l.camada]||0)+1; }); (D.textos||[]).forEach(t=>{ nt[t.camada]=(nt[t.camada]||0)+1; });
   const nomes=new Set(Object.keys(D.camadas||{})); (D.todasCamadas||[]).forEach(n=>nomes.add(n));
@@ -152,7 +168,7 @@ function carregarScript(src){ return new Promise((ok,err)=>{ const s=document.cr
 async function bibliotecas(){ if(!root.TCDWG) await carregarScript(location.origin+'/tc-dwg.min.js'); if(!root.DwgLeitor) await carregarScript(location.origin+'/dwg-leitor.js?v=20261119'); }
 const esc=t=>String(t==null?'':t).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const WSRC='let D=null;self.onmessage=function(ev){const m=ev.data;try{'+
-  "if(m.cmd==='ini'){importScripts(m.u+'/tc-dwg.min.js',m.u+'/dwg-leitor.js?v=20261119',m.u+'/dwg-importar.js?v=20261119-3');self.postMessage({ok:'ini'});}"+
+  "if(m.cmd==='ini'){importScripts(m.u+'/tc-dwg.min.js',m.u+'/dwg-leitor.js?v=20261119',m.u+'/dwg-importar.js?v=20261119-4');self.postMessage({ok:'ini'});}"+
   "else if(m.cmd==='ler'){D=self.DwgLeitor.lerBuffer(self.TCDWG,m.buf);D.__arquivo=m.nome;self.postMessage({ok:'ler',res:self.DwgImp.resumo(D)});}"+
   "else if(m.cmd==='gerar'){self.postMessage({ok:'gerar',res:self.DwgImp.executar(D,m.op,m.fundo)});}"+
   '}catch(e){self.postMessage({erro:String(e&&e.message||e)});}};';
@@ -213,7 +229,7 @@ DI.abrir=function(cfg){
       '<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><button type="button" class="btn-add" data-ac="sug">Marcar sugeridas</button><button type="button" class="btn-add" data-ac="nada">Limpar tudo</button>'+
       '<input id="dwgimp-filtro" type="search" placeholder="Filtrar camada…" style="padding:4px 8px;border:1px solid #cbd5e1;border-radius:6px;width:170px">'+
       '<label style="margin-left:auto;font-size:13px">Largura da pista padrão (m) <input id="dwgimp-larg" type="number" step="0.1" value="7" style="width:60px"></label>'+
-      '<label style="font-size:13px"><input id="dwgimp-est" type="checkbox" checked> Estender cada rua até o cruzamento mais próximo (até 80 m)</label></div>'+
+      '<label style="font-size:13px"><input id="dwgimp-est" type="checkbox" checked> Estender cada rua até o cruzamento mais próximo, no máximo <input id="dwgimp-perto" type="number" min="0" step="1" value="80" title="Distância máxima para procurar o próximo cruzamento, em metros" style="width:64px"> m</label></div>'+
       '<div style="overflow:auto;flex:1;min-height:180px;border:1px solid #d6d9de;border-radius:8px"><table style="width:100%;border-collapse:collapse;font-size:13px"><thead style="position:sticky;top:0;background:var(--surface2,#f1f3f5);z-index:1"><tr><th style="text-align:left;padding:6px 8px">Camada</th><th style="text-align:left">Conteúdo</th><th title="Desenho de fundo da planta">Fundo</th><th title="Cada linha da camada vira uma rua">Eixo de rua</th><th title="Pontos com cota real usados nas seções">Cotas</th></tr></thead><tbody>';
     cams.forEach(c=>{ const n=c.n, cont=[]; if(c.nl) cont.push(c.nl+' linhas'); if(c.pc) cont.push(c.pc+' pontos c/ cota'); if(c.nt) cont.push(c.nt+' textos'); const ob=c.total-c.nl-c.nt-c.pc; if(ob>0) cont.push(ob+' outros'); if(!c.total) cont.push('sem desenho');
       h+='<tr data-cam="'+esc(n.toLowerCase())+'" style="border-top:1px solid #e5e7eb'+(c.total?'':';color:#94a3b8')+'"><td style="padding:4px 8px;font-weight:600">'+esc(n)+'</td><td style="color:#64748b">'+esc(cont.join(' · '))+'</td><td style="text-align:center">'+(c.nl?ck('fundo',n,SUGERE_FUNDO.indexOf(n)>=0):'')+'</td><td style="text-align:center">'+(c.nl?ck('eixo',n,eixoSugerido(n)):'')+'</td><td style="text-align:center">'+(c.pc?ck('cota',n,SUGERE_COTA.indexOf(n)>=0):'')+'</td></tr>'; });
@@ -222,11 +238,12 @@ DI.abrir=function(cfg){
     if(R.completo){
       const aviso=document.createElement('div'); aviso.style.cssText='margin:0 0 10px;padding:10px 12px;border:1px solid #2563eb;border-radius:8px;background:#eff6ff;color:#17365d';
       aviso.innerHTML='<b>Projeto completo reconhecido.</b> Este levantamento possui um projeto de Pavimento Flexível preparado com <b>'+R.completo.ruas.length+' ruas</b> e cotas reais. '+
+        '<label style="margin-left:8px">Extensão máxima (m) <input id="dwgimp-perto-completo" type="number" min="0" step="1" value="80" style="width:64px"></label> '+
         '<button type="button" class="btn-add" id="dwgimp-completo" style="margin-left:8px;background:#1d4ed8;color:#fff;border-color:transparent">Importar projeto completo</button>';
       corpo.insertBefore(aviso,corpo.firstChild);
       aviso.querySelector('#dwgimp-completo').onclick=async()=>{
-        const bt=aviso.querySelector('#dwgimp-completo'); bt.disabled=true; const p2=espera('Aplicando as '+R.completo.ruas.length+' ruas na Topografia, planta e 3D…');
-        try{ if(cfg.aplicar) cfg.aplicar(R.completo); DI.ultimo=R.completo; p2(); mostraResumo(R.completo); }
+        const bt=aviso.querySelector('#dwgimp-completo'); const n0=parseFloat(aviso.querySelector('#dwgimp-perto-completo').value); const perto=isFinite(n0)&&n0>=0?n0:80; bt.disabled=true; const p2=espera('Aplicando as '+R.completo.ruas.length+' ruas na Topografia, planta e 3D…');
+        try{ const completo=DI.estenderProjeto(R.completo,perto); if(cfg.aplicar) cfg.aplicar(completo); DI.ultimo=completo; p2(); mostraResumo(completo); }
         catch(e){ p2(); bt.disabled=false; console.error(e); corpo.querySelector('#dwgimp-msg').textContent='Erro ao aplicar o projeto completo: '+(e&&e.message||e); }
       };
     }
@@ -240,7 +257,8 @@ DI.abrir=function(cfg){
     bt.onclick=async()=>{ const msg=corpo.querySelector('#dwgimp-msg'); const fundo=marcados('fundo'), eixo=marcados('eixo'), cota=marcados('cota');
       if(!fundo.length&&!eixo.length) return msg.textContent='Marque pelo menos uma camada em Fundo ou Eixo de rua.';
       if(eixo.length&&!cota.length) return msg.textContent='Para gerar as ruas, marque também as camadas de Cotas (pontos com cota real).';
-      const op={eixos:eixo,cotas:cota,larg:parseFloat(corpo.querySelector('#dwgimp-larg').value)||7,estender:corpo.querySelector('#dwgimp-est').checked,origem:cfg.origem||null};
+      const pertoRaw=parseFloat(corpo.querySelector('#dwgimp-perto').value); const perto=isFinite(pertoRaw)&&pertoRaw>=0?pertoRaw:80;
+      const op={eixos:eixo,cotas:cota,larg:parseFloat(corpo.querySelector('#dwgimp-larg').value)||7,estender:corpo.querySelector('#dwgimp-est').checked,perto,origem:cfg.origem||null};
       bt.disabled=true; const para=espera('Gerando as ruas e o fundo da planta…'); let dados=null;
       try{ dados=await cli.gerar(op,fundo); }
       catch(e){ para(); bt.disabled=false; console.error(e); return msg.textContent='Erro ao gerar: '+(e&&e.message||e); }
