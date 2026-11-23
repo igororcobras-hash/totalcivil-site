@@ -1315,8 +1315,10 @@ function renderMarcacoes(){ renderMini(); renderCoresForm(); renderCoresPadrao()
    4. KML / KMZ
    ============================================================ */
 function abgr(hex, alfa){ const h = hex.replace('#', ''); return (alfa || 'ff') + h.slice(4, 6) + h.slice(2, 4) + h.slice(0, 2); }
-function xml(s){ return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-function cdata(s){ return '<![CDATA[' + String(s).replace(/\]\]>/g, ']]&gt;') + ']]>'; }
+/* caracteres que o XML não aceita (ex.: quebra vertical do Word, U+000B): o Google Earth recusa o arquivo */
+function semInvalido(s){ return String(s == null ? '' : s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g, ''); }
+function xml(s){ return semInvalido(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function cdata(s){ return '<![CDATA[' + semInvalido(s).replace(/\]\]>/g, ']]&gt;') + ']]>'; }
 function fotosLivres(){ return S.fotos.filter(f => !marcDaFoto(f.id)); }
 function itensExportacao(){
   const itens = S.marc.map(m => ({m, g: geometriaMarc(m)}));
@@ -1381,10 +1383,11 @@ async function montarKML(modo, aoAvancar){
     const fsIds = fotosOrdenadas(m.fotos).map(f => f.id);
     const urlDe = id => { const o = fotos.get(id); if(!o || o.falta) return ''; return modo === 'url' ? base + o.nome : modo === 'data' ? o.data : 'files/' + o.nome; };
     const onde = S.exp.fotosEm || 'carrossel';   // 'carrossel' | 'descricao' | 'ambos'
-    const car = (fsIds.length && onde !== 'descricao') ? '<gx:Carousel>' + fsIds.map(id => {
+    const imgs = (fsIds.length && onde !== 'descricao') ? fsIds.map(id => {
       const url = urlDe(id); if(!url) return '';
       return '<gx:Image kml:id="img_' + id + '"><gx:imageUrl>' + xml(url) + '</gx:imageUrl></gx:Image>';
-    }).join('') + '</gx:Carousel>' : '';
+    }).join('') : '';
+    const car = imgs ? '<gx:Carousel>' + imgs + '</gx:Carousel>' : '';   // sem foto disponível, não gera carrossel vazio
     const imgsDesc = (fsIds.length && onde !== 'carrossel') ? fsIds.map(urlDe).filter(Boolean).map(u => '<p><img src="' + esc(u) + '" width="400"></p>').join('') : '';
     let geo = '', pts = [];
     if(g.tipo === 'ponto'){ pts = [g.pt]; geo = '<Point><coordinates>' + coordsTxt(pts) + '</coordinates></Point>'; }
@@ -2034,6 +2037,238 @@ function iniciar(){
 }
 if(window.TC_ACESSO === 'liberado' || !document.documentElement.classList.contains('tc-trava')) iniciar();
 else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
+</script>
+<script>
+/* ============================================================
+   PATCH GE-01 (23/11/2026): botão único “✨ Completar endereços”
+   Faz, em ordem, tudo o que antes eram 3 botões separados:
+     1. propriedades do arquivo (GPS, XMP, coordenada ou endereço escritos no Título/Assunto/Comentários);
+     2. tarja da foto (texto escrito pela câmera: coordenada, endereço, data) — recortes do SP-13 do
+        Serviços Públicos (canto de baixo à direita ampliado, faixa de baixo, faixa de cima) e, se não achar
+        coordenada, a leitura antiga deste programa;
+     3. endereço → coordenada (OpenStreetMap);
+     4. coordenada → endereço (para as fotos que já têm local e não têm endereço).
+   No fim mostra QUAIS fotos não foram georreferenciadas e por quê, com “📍 Marcar no mapa” em cada uma.
+   Gerar KMZ/KML faz o mesmo sozinho antes de montar o arquivo e lista as fotos que ficaram de fora.
+   Também lê a coordenada com a letra ANTES do número (“S 22° 28' 39.307" W 41° 54' 40.747"”).
+   Os botões antigos continuam em “Passos separados”.
+   ============================================================ */
+(function(){
+  const num = s => parseFloat(String(s).replace(',', '.'));
+  const dms = (g, m, s) => num(g) + num(m) / 60 + num(s) / 3600;
+
+  /* ---------- 1. coordenada do carimbo das câmeras com GPS ---------- */
+  function coordsCarimbo(txt){
+    const t = String(txt || '').replace(/[“”″]/g, '"').replace(/[’′‘`]/g, "'").replace(/º/g, '°');
+    // S 22° 28' 39.307" W 41° 54' 40.747"  (letra antes do número)
+    let m = t.match(/([SN])\s*(\d{1,2})\s*°\s*(\d{1,2})\s*'\s*(\d{1,2}(?:[.,]\d+)?)\s*"?[\s,;]*([WOEL])\s*(\d{1,3})\s*°\s*(\d{1,2})\s*'\s*(\d{1,2}(?:[.,]\d+)?)/);
+    if(m){ let la = dms(m[2], m[3], m[4]), lo = dms(m[6], m[7], m[8]); if(m[1] === 'S') la = -la; if(/[WO]/.test(m[5])) lo = -lo; const v = valida(la, lo); if(v) return v; }
+    // leitura por OCR com símbolos trocados (S lido como 5/8/$, ° como o/*, W como VV): duas trincas seguidas; só vale no Brasil (sul/oeste)
+    m = t.match(/(?:^|[^\d])(\d{1,2})\D{1,3}(\d{1,2})\D{1,3}(\d{1,2}(?:[.,]\d+)?)\D{1,6}?(\d{2,3})\D{1,3}(\d{1,2})\D{1,3}(\d{1,2}(?:[.,]\d+)?)/);
+    if(m){
+      const la = dms(m[1], m[2], m[3]), lo = dms(m[4], m[5], m[6]);
+      if(+m[2] < 60 && +m[5] < 60 && num(m[3]) < 60 && num(m[6]) < 60 && la > 0 && la < 34 && lo > 28 && lo < 75){ const v = valida(-la, -lo); if(v) return v; }
+    }
+    return null;
+  }
+  const lerCoordOrig = lerCoordenadas;
+  lerCoordenadas = function(t){ return lerCoordOrig(t) || coordsCarimbo(t); };
+
+  /* endereço do carimbo (SP-13): reserva quando a leitura deste programa não acha a rua */
+  const LIXO = /^(rio das ostras|rio de janeiro|rj|brasil|brazil)$/i;
+  function endereco1(t){
+    const L = String(t || '').split(/\n/).map(x => x.replace(/[|“”"]/g, ' ').replace(/\s+/g, ' ').trim()).filter(Boolean);
+    for(let i = 0; i < L.length; i++){
+      const m = L[i].match(/(?:^|[^A-Za-zÀ-ÿ])(R\.|Rua|Av\.|Avenida|Rod\.|Rodovia|Estr\.|Estrada|Alameda|Al\.|Travessa|Tv\.|Praça|Pça\.)\s*[A-Za-zÀ-ÿ0-9].*/i); if(!m) continue;
+      let s = m[0].replace(/^[^A-Za-zÀ-ÿ]+/, '').split(/[;|]/)[0], bairro = '';
+      const mb = s.match(/\s[-–]\s*([^,\-–]+?)\s*,\s*Rio(\s+das)?\b/i) || s.match(/,\s*([A-Za-zÀ-ÿ][^,\d]{2,}?)\s*,\s*Rio(\s+das)?\b/i); if(mb) bairro = mb[1].trim();
+      s = s.replace(/\s[-–]\s.*$/, '').replace(/,\s*Rio(\s+das)?\b.*$/i, '').replace(bairro ? new RegExp(',\\s*' + bairro.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '.*$') : /$^/, '').replace(/,\s*\d{5}-?\d{3}.*$/, '').trim();
+      if(!bairro && L[i + 1] && !LIXO.test(L[i + 1]) && !/\d{5}-?\d{3}|altitude|velocidade|índice|indice/i.test(L[i + 1])) bairro = L[i + 1].replace(/,.*$/, '').replace(/^[^A-Za-zÀ-ÿ]+/, '').trim();
+      s = s.replace(/[^A-Za-zÀ-ÿ0-9]+$/, '').trim();
+      if(s.split(' ').length > 8) continue; if(bairro.split(' ').length > 5) bairro = '';
+      if(s.length >= 5){ const mn = s.match(/,\s*(\d{1,5})$/); const rua = mn ? s.slice(0, mn.index).trim() : s; const nume = mn ? mn[1] : '';
+        bairro = bairro.length >= 3 ? bairro : '';
+        return {rua, num: nume, bairro, cep: (String(t).match(/\b(\d{5})-?(\d{3})\b/) || [])[0] || '', texto: [rua + (nume ? ', ' + nume : ''), bairro].filter(Boolean).join(' - ')}; }
+    }
+    return null;
+  }
+  const lerEndOrig = lerEnderecoTarja;
+  lerEnderecoTarja = function(t){ return lerEndOrig(t) || endereco1(t); };
+
+  /* ---------- 2. leitura da tarja com os recortes do SP-13 ---------- */
+  async function recortes(blob){
+    const bmp = await abrirImagem(blob), W = bmp.width, H = bmp.height, out = [];
+    [[.76, 1, .4, 1], [.58, 1, 0, 1], [0, .36, 0, 1]].forEach(([a, b, x0, x1]) => {
+      const sy = Math.round(H * a), sh = Math.round(H * (b - a)), sx = Math.round(W * x0), sw = Math.round(W * (x1 - x0)), k = Math.min(2.2, 1500 / sw);
+      const c = document.createElement('canvas'); c.width = Math.round(sw * k); c.height = Math.round(sh * k);
+      const g = c.getContext('2d', {willReadFrequently: true}); g.drawImage(bmp, sx, sy, sw, sh, 0, 0, c.width, c.height);
+      const d = g.getImageData(0, 0, c.width, c.height), p = d.data; let n = 0;
+      for(let i = 0; i < p.length; i += 4){ const r = p[i], gg = p[i + 1], bb = p[i + 2]; const tx = (r > 205 && gg > 205 && bb > 205) || (r > 200 && gg > 165 && bb < 140); if(tx) n++; const v = tx ? 0 : 255; p[i] = p[i + 1] = p[i + 2] = v; p[i + 3] = 255; }
+      if(n / (p.length / 4) > .22) return;   // faixa quase toda clara (céu, asfalto claro) não é carimbo
+      g.putImageData(d, 0, 0); out.push(c);
+    });
+    if(bmp.close) bmp.close();
+    return out;
+  }
+  const textoOrig = textoDaFoto;
+  textoDaFoto = async function(blob){
+    let txt = '';
+    try{
+      const w = await motorOCR();
+      try{ await w.setParameters({tessedit_pageseg_mode: '3'}); }catch(e){}
+      const t0 = Date.now();
+      for(const c of await recortes(blob)){
+        if(Date.now() - t0 > 15000) break;
+        const r = await w.recognize(c); txt += '\n' + (r && r.data ? r.data.text : '');
+        if(lerCoordenadas(txt) && lerEnderecoTarja(txt)) break;
+      }
+    }catch(e){ if(/leitor de texto/.test(e.message || '')) throw e; console.warn('GE-01 recortes:', e); }
+    if(!lerCoordenadas(txt)){ try{ txt += '\n' + await textoOrig(blob); }catch(e){ if(!txt.trim()) throw e; } }
+    return txt;
+  };
+
+  /* ---------- 3. o botão único ---------- */
+  const PROP_END = ['local', 'titulo', 'assunto', 'comentario', 'descricao', 'palavras'];
+  let rodando = false;
+  async function completarEnderecos(auto){
+    if(rodando) return null; rodando = true;
+    const sel = S.fotos.filter(f => f.sel);
+    const alvo = auto ? S.fotos.slice() : (sel.length ? sel : S.fotos.slice());
+    const bts = ['bt-completar', 'bt-completar2'].map($).filter(Boolean); bts.forEach(b => b.disabled = true);
+    let espelho = null;
+    if(auto) espelho = setInterval(() => { const t = $('txt-acao').textContent; if(t) ['msg-exp', 'msg-exp2'].forEach(id => { const el = $(id); if(el) el.innerHTML = '<div class="msg info">' + esc(t) + '</div>'; }); }, 400);
+    const falha = {ocr: '', end: ''};
+    // ao gerar o arquivo, não repete a leitura das fotos que o botão já tentou e não achou (elas só entram na lista)
+    const tentar = auto ? alvo.filter(f => !f.semGeo) : alvo;
+    const semL = () => tentar.filter(f => !temLocal(f));
+    try{
+      // 1. propriedades do arquivo
+      $('txt-acao').textContent = 'Lendo as propriedades das fotos…';
+      for(const f of semL()){
+        const b = BLOBS.get(f.id); if(!b) continue;
+        try{
+          const ex = await lerExif(b);
+          if(ex.props && Object.keys(ex.props).length) f.props = Object.assign({}, ex.props, f.props || {});
+          if(ex.lat != null && !temLocal(f)){ f.lat = ex.lat; f.lon = ex.lon; f.orig = ex.via === 'prop' ? 'prop' : 'gps'; }
+          if(!f.end){ const p = f.props || {}; const e = lerEnderecoTarja(PROP_END.map(k => p[k]).filter(Boolean).join('\n')); if(e){ f.end = e.texto; f.endOrig = 'prop'; } }
+        }catch(e){ console.warn('GE-01 propriedades:', f.nome, e); }
+      }
+      salvar(); renderFotos();
+      // 2. tarja
+      const paraOcr = semL().filter(f => BLOBS.get(f.id));
+      if(paraOcr.length){
+        paraOcr.forEach(f => f.geTarja = true);
+        await ocrFotos(paraOcr);   // lê tarja e já busca as coordenadas dos endereços lidos
+        const t = $('txt-acao').textContent; if(/^Erro na leitura da tarja/.test(t)) falha.ocr = t.replace(/^Erro na leitura da tarja:\s*/, '');
+      }
+      // 3. endereço → coordenada (endereço digitado ou das propriedades)
+      const jaTentou = new Set(paraOcr.map(f => f.id));
+      const comEnd = semL().filter(f => f.end && !jaTentou.has(f.id));
+      if(comEnd.length){ await geocodificar(comEnd); const t = $('txt-acao').textContent; if(/^Erro ao buscar endereço/.test(t)) falha.end = t; }
+      if(semL().some(f => f.end) && /^Erro ao buscar endereço/.test($('txt-acao').textContent)) falha.end = $('txt-acao').textContent;
+      // 4. coordenada → endereço
+      const semEnd = tentar.filter(f => temLocal(f) && !f.end);
+      if(semEnd.length) await enderecosPorCoord(semEnd, true);
+    }finally{
+      rodando = false; if(espelho) clearInterval(espelho); bts.forEach(b => b.disabled = false); progresso('prog-acao', null);
+    }
+    // 5. por que cada foto não foi localizada
+    tentar.forEach(f => {
+      if(temLocal(f)){ delete f.semGeo; return; }
+      f.semGeo = !BLOBS.get(f.id) ? 'o arquivo original da foto não está neste aparelho (remova e anexe a foto de novo)'
+        : falha.ocr && !f.end ? 'o leitor da tarja não funcionou (' + falha.ocr + ')'
+        : f.end ? (falha.end ? 'o serviço de endereços não respondeu; tente de novo em alguns minutos (endereço: “' + f.end + '”)' : 'o endereço “' + f.end + '” não foi encontrado no mapa (confira o nome da rua no campo Endereço)')
+        : 'a foto não tem GPS e não foi possível ler coordenada nem endereço na tarja (nem nas propriedades do arquivo)';
+    });
+    salvar(); renderFotos();
+    const rel = relatorio(alvo);
+    $('txt-acao').textContent = rel.resumo;
+    return rel;
+  }
+  window.completarEnderecos = completarEnderecos;
+
+  function relatorio(alvo){
+    alvo = alvo || S.fotos;
+    const sem = alvo.filter(f => !temLocal(f)), semEnd = alvo.filter(f => temLocal(f) && !f.end);
+    const ok = alvo.length - sem.length;
+    const resumo = ok + ' de ' + alvo.length + ' foto(s) georreferenciada(s)' + (sem.length ? ' · ' + sem.length + ' sem local' : '') + (semEnd.length ? ' · ' + semEnd.length + ' sem endereço' : '') + '.';
+    let html = '';
+    if(sem.length){
+      html += '<div class="msg bad"><b>⚠ ' + sem.length + ' foto(s) não georreferenciada(s)</b> — ficam fora do KMZ até terem local:' +
+        '<ul class="ge01-lista">' + sem.map(f => '<li><img src="' + f.thumb + '" alt=""><span><b>' + esc(f.nome) + '</b><br>' + esc(f.semGeo || 'sem coordenada') + '</span>' +
+        '<button type="button" class="bt peq" data-ge01-marcar="' + f.id + '">📍 Marcar no mapa</button></li>').join('') + '</ul>' +
+        '<button type="button" class="bt peq" data-ge01-sel="sem">Selecionar estas fotos</button></div>';
+    }
+    if(semEnd.length) html += '<div class="msg warn">' + semEnd.length + ' foto(s) com local mas sem endereço (o serviço de endereços não respondeu ou o ponto não tem rua): ' + esc(semEnd.map(f => f.nome).join(', ')) + '. Elas entram no KMZ; o nome do ponto fica o nome do arquivo.</div>';
+    if(!html && alvo.length) html = '<div class="msg ok">Todas as ' + alvo.length + ' foto(s) têm local e endereço.</div>';
+    const el = $('rel-geo'); if(el) el.innerHTML = html;
+    return {resumo, html, sem};
+  }
+
+  /* ---------- 4. gerar KMZ/KML: completa tudo antes e lista o que ficou de fora ---------- */
+  let feitoNesteGerar = false;
+  completarLocais = async function(){ feitoNesteGerar = true; await completarEnderecos(true); };
+  const montarOrig = montarKML;
+  montarKML = async function(modo, aoAvancar){
+    if(!feitoNesteGerar && S.fotos.some(f => temLocal(f) && !f.end)){ feitoNesteGerar = true; await completarEnderecos(true); }
+    return montarOrig(modo, aoAvancar);
+  };
+  const gerarOrig = gerar;
+  gerar = function(){
+    feitoNesteGerar = false;
+    const p = gerarOrig.apply(this, arguments);   // chamado na hora: a janela “Salvar como” ainda conta com o clique
+    return p.then(() => {
+      const sem = S.fotos.filter(f => !temLocal(f));
+      if(!sem.length) return;
+      const r = relatorio(S.fotos);
+      ['msg-exp', 'msg-exp2'].forEach(id => { const el = $(id); if(el && !el.querySelector('.ge01-lista')) el.insertAdjacentHTML('beforeend', r.html); });
+    });
+  };
+
+  /* ---------- 5. tela ---------- */
+  const css = document.createElement('style');
+  css.textContent = '.ge01-lista{list-style:none;padding:0;margin:8px 0}.ge01-lista li{display:flex;gap:10px;align-items:center;padding:6px 0;border-top:1px solid rgba(0,0,0,.08)}' +
+    '.ge01-lista img{width:56px;height:42px;object-fit:cover;border-radius:4px;flex:none}.ge01-lista span{flex:1;font-size:13px;line-height:1.35}' +
+    'details.ge01-mais{display:inline-block}details.ge01-mais>summary{cursor:pointer;font-size:12px;color:var(--muted);padding:6px 4px}details.ge01-mais[open]{display:flex;flex-wrap:wrap;gap:6px;align-items:center}' +
+    '.det-props.ge01-semgeo{color:var(--bad);font-weight:600}';
+  document.head.appendChild(css);
+  const linha = $('bt-ocr').parentElement;
+  const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'bt pri'; bt.id = 'bt-completar';
+  bt.textContent = '✨ Completar endereços';
+  bt.title = 'Lê as propriedades e a tarja das fotos, busca coordenadas pelo endereço e endereços pelas coordenadas, e lista as fotos que não foram localizadas';
+  linha.insertBefore(bt, $('bt-ocr'));
+  const mais = document.createElement('details'); mais.className = 'ge01-mais';
+  mais.innerHTML = '<summary>Passos separados</summary>';
+  ['bt-ocr', 'bt-geo', 'bt-rev'].forEach(id => mais.appendChild($(id)));
+  linha.insertBefore(mais, bt.nextSibling);
+  const rel = document.createElement('div'); rel.id = 'rel-geo'; $('resumo').after(rel);
+  // no cartão “Gerar para o Google Earth”
+  const lin2 = $('bt-enviar').parentElement;
+  const bt2 = bt.cloneNode(true); bt2.id = 'bt-completar2'; bt2.className = 'bt';
+  lin2.insertBefore(bt2, lin2.firstChild);
+  const go = async () => { const r = await completarEnderecos(false); if(r) aviso(r.resumo, 6000); if(r && $('msg-exp2')) $('msg-exp2').innerHTML = r.html; };
+  bt.onclick = go; bt2.onclick = go;
+  $('bt-rev').onclick = () => {
+    const alvo = S.fotos.filter(f => !S.fotos.some(x => x.sel) || f.sel);
+    if(!alvo.some(temLocal)){ aviso('Nenhuma foto tem coordenada ainda. Use “✨ Completar endereços”, que também lê a tarja e as propriedades.', 6000); return; }
+    enderecosPorCoord(alvo);
+  };
+  document.addEventListener('click', e => {
+    const m = e.target.closest('[data-ge01-marcar]'); if(m){ iniciarMarcar(m.dataset.ge01Marcar); return; }
+    const s = e.target.closest('[data-ge01-sel]'); if(s){ S.fotos.forEach(f => f.sel = !temLocal(f)); salvar(); irAba('fotos'); renderFotos(); }
+  });
+  // motivo no cartão da foto e origem do endereço das propriedades
+  const renderOrig = renderFotos;
+  renderFotos = function(){
+    renderOrig.apply(this, arguments);
+    S.fotos.forEach(f => {
+      const card = document.querySelector('#grade .foto[data-id="' + f.id + '"]'); if(!card) return;
+      if(f.endOrig === 'prop') card.querySelectorAll('.det-props').forEach(d => { if(/^Endereço: —$/.test(d.textContent)) d.textContent = 'Endereço: das propriedades do arquivo'; });
+      if(!temLocal(f) && f.semGeo){ const c = card.querySelector('.corpo .nome'); if(c) c.insertAdjacentHTML('afterend', '<div class="det-props ge01-semgeo">⚠ Sem local: ' + esc(f.semGeo) + '</div>'); }
+    });
+    if($('rel-geo') && $('rel-geo').innerHTML) relatorio(S.fotos.some(f => f.sel) ? S.fotos.filter(f => f.sel) : S.fotos);
+  };
+})();
 </script>
 </body>
 </html>
