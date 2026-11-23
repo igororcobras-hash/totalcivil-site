@@ -6303,6 +6303,8 @@ if(ab&&!document.getElementById('pv-b-comp')){ const b=document.createElement('b
 (function(){
   if(window.__pvDwg) return; window.__pvDwg=true;
   function carrega(src){ return new Promise((ok,err)=>{ const t=document.createElement('script'); t.src=src; t.onload=ok; t.onerror=()=>err(new Error('não carregou '+src)); document.head.appendChild(t); }); }
+  /* planta3d.js só copia transv/sinal/eixo/fundo...: guarda também as cotas reais do DWG */
+  try{ if(typeof plTImportar==='function'&&typeof plTExportar==='function'){ const im=plTImportar; plTImportar=function(o){ const r=im.apply(this,arguments); try{ if(o&&Array.isArray(o.cotas)) _plT.cotas=o.cotas; }catch(e){} return r; }; } }catch(e){}
   function aplicar(dados){
     const d=dadosDoProjeto(); d.planta3d=Object.assign({},d.planta3d||{});
     if(dados.ruas&&dados.ruas.length){
@@ -6316,16 +6318,17 @@ if(ab&&!document.getElementById('pv-b-comp')){ const b=document.createElement('b
     }
     d.planta3d.origemUTM=dados.origem;
     if(dados.fundo) d.planta3d.fundo=dados.fundo;
+    if(Array.isArray(dados.cotas)&&dados.cotas.length) d.planta3d.cotas=dados.cotas;   /* todas as cotas reais do desenho (vão para o ⬇ DWG/DXF) */
     aplicarProjeto(d);
     if(typeof avisar==='function') avisar('DWG importado'+(dados.ruas&&dados.ruas.length?': '+dados.ruas.length+' rua(s)':'')+(dados.fundo?', fundo da planta com '+dados.fundo.length+' camada(s)':'')+'.');
   }
   window.dwgImportarPav=async function(){
-    try{ if(!window.DwgImp) await carrega(location.origin+'/dwg-importar.js?v=20261119-4'); }catch(e){ alert('Não consegui carregar o importador de DWG: '+e.message); return; }
+    try{ if(!window.DwgImp) await carrega(location.origin+'/dwg-importar.js?v=20261123'); }catch(e){ alert('Não consegui carregar o importador de DWG: '+e.message); return; }
     let org=null; try{ const o=(typeof _plT!=='undefined'&&_plT.origemUTM); if(Array.isArray(o)&&o.length===2) org=o; }catch(e){}
     window.DwgImp.abrir({origem:org,projetoCompleto:location.origin+'/Verdes_Mares_pavimento_TODAS_AS_RUAS.json',aplicar:aplicar});
   };
   window.dwgExportarPav=async function(tipo){
-    try{ if(!window.PavCad) await carrega(location.origin+'/pavimento-cad.js?v=20261119');
+    try{ if(!window.PavCad) await carrega(location.origin+'/pavimento-cad.js?v=20261123');
       await window.PavCad.exportar(tipo,dadosDoProjeto(),{aviso:m=>{ if(typeof avisar==='function') avisar(m); else alert(m); }}); }
     catch(e){ console.error(e); alert('Não consegui exportar: '+(e&&e.message||e)); } };
   function mk(id,cls,txt,tit,fn,ref,antes){ if(document.getElementById(id)||!ref) return null; const b=document.createElement('button'); b.type='button'; b.id=id; b.className=cls; b.textContent=txt; b.title=tit; b.onclick=fn; if(antes) ref.parentNode.insertBefore(b,ref); else ref.parentNode.insertBefore(b,ref.nextSibling); return b; }
