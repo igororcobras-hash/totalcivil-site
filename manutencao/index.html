@@ -4285,7 +4285,8 @@ function arvore(o, todas) { const cam = camada(o), of = off(), K = k => o.id + '
    ${ks.length ? cb('KML', '📁 Marcações do Google Earth' + (cam ? ' — ' + tit[cam] : ' (vindas de outra obra)'), nk, 0) + `<div style="columns:2;column-gap:20px">${ks.map(q => `<div style="break-inside:avoid">${cb(q[0], '📂 ' + esc(q[0].slice(4)), q[1] + (q[2] ? ' + ' + q[2] + ' foto(s) locada(s)' : ''), 22)}${on(q[0]) && on('KML') ? listaOc(o, q[0], q[1] + (q[2] || 0)) : ''}</div>`).join('')}</div>` : ''}
    ${nf ? cb('FC', '📁 Fotos de campo — WhatsApp (Igor Rabelo, 03 a 09/11/2026)', nf, 0) + (on('FC') ? fotos : '') : ''}
    ${(cam || (o.planejamentos || []).length) ? pastaPlan(o, cb, on) : ''}`;
-  if (!todas) return `<details open class="card" style="margin-bottom:12px;padding:10px 14px"><summary style="cursor:pointer;font-weight:700">📁 Pastas desta obra</summary><div style="margin-top:6px">${corpo}</div></details>`;
+  /* PATCH SP-35 (23/11/2026): “Pastas desta obra” abre FECHADA ao abrir o programa (não cobre “+ Novo relato” e “Minha localização”). window.__pastaAberta só lembra se o usuário abriu/fechou enquanto a página está aberta, para o redesenho ao marcar pastas não fechar a seção. */
+  if (!todas) return `<details ${window.__pastaAberta ? 'open' : ''} ontoggle="window.__pastaAberta=this.open" class="card" style="margin-bottom:12px;padding:10px 14px"><summary style="cursor:pointer;font-weight:700">📁 Pastas desta obra</summary><div style="margin-top:6px">${corpo}</div></details>`;
   return `<details open style="border-top:1px solid var(--line);padding:6px 0"><summary style="cursor:pointer"><label class="chk" style="display:inline-flex;margin:0" onclick="event.stopPropagation()"><input type="checkbox" data-chg="sp12Pasta" data-o="${o.id}" data-k="@obra" ${on('@obra') ? 'checked' : ''}></label> <b>📂 ${esc(o.nome)}</b> <span class="muted small">— ${na} ocorrência(s) atuais${(cam || nk) ? ' · ' + nk + ' marcação(ões) do Google Earth · ' + nf + ' foto(s) de campo' : nf ? ' · ' + nf + ' foto(s) de campo' : ''}</span></summary><div style="margin:6px 0 0 14px">${on('@obra') ? corpo : '<p class="small muted">Obra desmarcada.</p>'}</div></details>` }
 painelPastas = function (o) { return (camada(o) || (o && !o.demo && fcPasta(o).length)) ? arvore(o, false) : '' };
 CHG.sp12Pasta = el => { const o = el.dataset.o ? S.obras[el.dataset.o] : O(); if (!o) return; const of = off(), K = k => o.id + '§' + k, k = el.dataset.k, on = el.checked; of[K(k)] = !on;
@@ -5478,6 +5479,56 @@ const _cm = calcMed;
   const _r = _render; _render = function () { const r = _r.apply(this, arguments); try { monta() } catch (e) { console.warn('abas', e) } return r };
   window.addEventListener('resize', () => { const w = document.querySelector('#app .tabsw'); if (w) upd(w) });
   try { monta() } catch (e) { }
+})();
+</script>
+<script>
+/* PATCH SP-36 (23/11/2026): botão flutuante “📷 Foto rápida” em TODAS as telas (lista de obras e todas as abas).
+   Com obra aberta: igual ao “Minha localização · registro rápido” (ACTS.ocRapido). Sem obra aberta: abre a câmera na hora, pega o GPS em paralelo,
+   e DEPOIS da foto pergunta a obra; abre o relato com a foto e as coordenadas para preencher o resto. */
+(function () {
+  const RP = { files: null, gps: null, esperando: false };
+  const css = document.createElement('style');
+  css.textContent = '.rp-fab{position:fixed;right:14px;bottom:18px;z-index:60;border-radius:999px;padding:12px 16px;font-weight:700;font-size:15px;box-shadow:0 3px 12px rgba(0,0,0,.35)}body.noscroll .rp-fab{display:none!important}@media print{.rp-fab{display:none!important}}';
+  document.head.appendChild(css);
+  const fab = document.createElement('button');
+  fab.type = 'button'; fab.className = 'btn pri rp-fab'; fab.dataset.act = 'rpFoto';
+  fab.title = 'Foto rápida de um trabalho em andamento: abre a câmera agora e você preenche a obra e os dados depois';
+  fab.textContent = '📷 Foto rápida';
+  document.body.appendChild(fab);
+  const mostra = () => { fab.style.display = S && S.amb ? '' : 'none' };
+  const _r = _render; _render = function () { const r = _r.apply(this, arguments); try { mostra() } catch (e) { } return r };
+  mostra();
+  const obrasPode = () => Object.values(S.obras).filter(o => o && (!S.trava || (S.acessos && S.acessos[o.id] && PERM[S.acessos[o.id].perfil].includes('ocorr'))) && (S.trava || PERM[S.perfil].includes('ocorr')))
+    .sort((a, b) => (a.criadaEm || '').localeCompare(b.criadaEm || ''));
+  ACTS.rpFoto = function () {
+    if (S.obraId && O()) { if (!can('ocorr')) { toast('Seu perfil nesta obra não registra ocorrências.'); return } return ACTS.ocRapido() }
+    if (!obrasPode().length) { toast('Nenhuma obra liberada para registrar ocorrência.'); return }
+    RP.files = null; RP.gps = null; RP.esperando = true;
+    try { posicaoAtual().then(p => { RP.gps = p }).catch(() => { }) } catch (e) { }
+    const c = $('#fileCam'); if (c) c.click();
+  };
+  /* captura a foto ANTES do tratador antigo (que exige modal aberto) */
+  document.addEventListener('change', function (e) {
+    if (!RP.esperando || e.target.id !== 'fileCam') return;
+    const f = [...e.target.files]; if (!f.length) return;
+    e.stopImmediatePropagation(); e.target.value = ''; RP.esperando = false; RP.files = f;
+    const l = obrasPode();
+    M = { t: 'rpObra' };
+    abrirModal(`<div class="mh"><h3>📷 Foto feita. Em qual obra é?</h3><button class="x" data-act="rpCancela">×</button></div><div class="mb"><p class="muted small">${f.length} foto(s) aguardando. Escolha a obra para abrir o relato já com a foto${RP.gps ? ' e a sua localização' : ''}; o resto você preenche depois.</p>
+     <div style="display:grid;gap:8px;margin:10px 0">${l.map(o => `<button class="btn pri" data-act="rpObra" data-id="${esc(o.id)}" style="text-align:left">${esc(o.nome)}${o.contrato ? ' <span class="small">· ' + esc(o.contrato) + '</span>' : ''}</button>`).join('')}</div>
+     <div class="row gap"><button class="btn" data-act="rpCancela">Descartar a foto</button></div></div>`);
+  }, true);
+  ACTS.rpCancela = function () { RP.files = null; RP.gps = null; fecharModal(false) };
+  ACTS.rpObra = async function (d) {
+    const o = S.obras[d.id]; const f = RP.files, g = RP.gps; if (!o || !f) return;
+    fecharModal(false); S.obraId = o.id; S.tab = 'vistoria'; resetF(); try { semearOcMapa(o) } catch (e) { } render(); window.scrollTo(0, 0);
+    if (!can('ocorr')) { toast('Seu perfil nesta obra não registra ocorrências.'); RP.files = null; return }
+    ACTS.ocNew(); RP.files = null; RP.gps = null;
+    await addFotos(f, true);
+    if (g && M && M.t === 'oc' && M.d.lat == null) setCoord(g.lat, g.lng, 'gps-aparelho', { fly: true });
+    else if (M && M.t === 'oc' && M.d.lat == null) ACTS.usarGPS();
+    toast('Foto anexada ao novo relato. Complete as informações e salve.', 5000);
+  };
 })();
 </script>
 </body>
