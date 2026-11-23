@@ -140,9 +140,17 @@ DI.gerarRuas=function(D,op){
       if(est>L0+0.5&&(!pos||est<pos.est)) pos={est,rua:o}; if(est<-0.5&&(!ant||est>ant.est)) ant={est,rua:o}; });
     if(pos&&pos.est-L0<=op.perto){ r.b=pos.est-L0; r.aviso.push('fim estendido '+r2(r.b)+' m até '+pos.rua.nome); }
     if(ant&&-ant.est<=op.perto){ r.a=-ant.est; r.aviso.push('início estendido '+r2(r.a)+' m até '+ant.rua.nome); } });
+  /* ruas diagonais (30°–60° com a horizontal ou vertical): vão até o cruzamento com as avenidas principais, sem o limite de "perto" */
+  if(op.estender){ const grandes=ruas.filter(o=>o.E0.len>=500);
+    ruas.forEach(r=>{ if(grandes.indexOf(r)>=0) return; const P=r.P, d=[P[P.length-1][0]-P[0][0],P[P.length-1][1]-P[0][1]], ang=Math.abs(Math.atan2(d[1],d[0])*180/Math.PI)%90; if(ang<25||ang>65) return;
+      const L0=r.E0.len; let ant=null, pos=null; grandes.forEach(o=>{ const x=intersecao(r.ex,o.ex); if(!x) return; const est=x.sa-EXT;
+        if(est>L0+0.5&&(!pos||est<pos.est)) pos={est,rua:o}; if(est<-0.5&&(!ant||est>ant.est)) ant={est,rua:o}; });
+      r.diag=true; r.aviso=r.aviso.filter(t=>!/estendido/.test(t)); r.a=0; r.b=0;
+      if(pos&&pos.est-L0<=150){ r.b=pos.est-L0; r.aviso.push('rua diagonal: fim estendido '+r2(r.b)+' m até '+pos.rua.nome); }
+      if(ant&&-ant.est<=150){ r.a=-ant.est; r.aviso.push('rua diagonal: início estendido '+r2(r.a)+' m até '+ant.rua.nome); } }); }
   /* "LIMITE DA OBRA": se há esse texto à frente da ponta (até 60 m, a menos de 15 m da linha da rua), a rua vai até ele */
   if(op.estender){ const LIM=(D.textos||[]).filter(t=>/LIMITE\s+DA\s+OBRA/i.test(limpa(t.txt))).map(t=>[t.x-org[0],t.y-org[1]]);
-    if(LIM.length) ruas.forEach(r=>{ const n=r.P.length, fim=(ex)=>{ const E=new Eixo(reamostra(r.P,r.a,r.b)); const pts=ex?E.E[E.n]:E.E[0]; const u=ex?E.dirFim():E.dirIni().map(v=>-v); let melhor=null;
+    if(LIM.length) ruas.forEach(r=>{ if(r.diag) return; const n=r.P.length, fim=(ex)=>{ const E=new Eixo(reamostra(r.P,r.a,r.b)); const pts=ex?E.E[E.n]:E.E[0]; const u=ex?E.dirFim():E.dirIni().map(v=>-v); let melhor=null;
         LIM.forEach(L=>{ const dx=L[0]-pts[0], dy=L[1]-pts[1], ahead=dx*u[0]+dy*u[1], lat=Math.abs(dx*u[1]-dy*u[0]); if(ahead>1&&ahead<=60&&lat<=15&&(!melhor||ahead<melhor.ahead)) melhor={ahead,lat}; }); return melhor; };
       const f=fim(true); if(f){ r.b+=f.ahead; r.aviso.push('fim estendido +'+r2(f.ahead)+' m até o LIMITE DA OBRA'); }
       const i0=fim(false); if(i0){ r.a+=i0.ahead; r.aviso.push('início estendido +'+r2(i0.ahead)+' m até o LIMITE DA OBRA'); } }); }
@@ -178,6 +186,7 @@ DI.gerarRuas=function(D,op){
   ruas.forEach(r=>{ r.exf=new Eixo(reamostra(r.eixo,EXT,EXT)); });
   ruas.forEach(r=>{ r.cruz=[]; ruas.forEach(o=>{ if(o===r) return; const x=intersecao(r.exf,o.exf); if(!x) return; const ea=x.sa-EXT, eb=x.sb-EXT;
       if(ea>=-1.5&&ea<=r.ax.len+1.5&&eb>=-1.5&&eb<=o.ax.len+1.5) r.cruz.push({est:z0(r2(ea)),rua:o.id,estOutra:z0(r2(eb))}); }); r.cruz.sort((a,b)=>a.est-b.est); });
+  { const sem=ruas.filter(r=>r.rows.length<2); if(sem.length) rel.push('ATENÇÃO: '+sem.length+' rua(s) sem cotas reais suficientes (menos de 2 seções) não entraram: '+sem.map(r=>r.nome+' ['+Math.round(r.P[0][0]+org[0])+','+Math.round(r.P[0][1]+org[1])+']').join('; ')+'.'); }
   ruas=ruas.filter(r=>r.rows.length>=2);
   ruas.forEach(r=>rel.push(r.nome+': '+r2(r.ax.len)+' m, '+r.rows.length+' linhas, largura '+r.larg+' m'+(r.aviso.length?' — '+r.aviso.join('; '):'')));
   return {ruas:ruas.map(r=>({id:r.id,nome:r.nome,rows:r.rows,cruz:r.cruz,eixo:r.eixo.map(p=>[z0(r2(p[0])),z0(r2(p[1]))]),eixoProj:true})),origem:org,relatorio:rel,cotas:PT.map(p=>({x:r2(p.x),y:r2(p.y),z:r2(p.z),c:p.c}))};

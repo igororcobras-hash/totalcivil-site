@@ -231,3 +231,4 @@ Sem o push funcionando, entregue os arquivos prontos (SendUserFile) e o passo a 
 - `pavimento-cad.js`: exporta TODAS as cotas (camadas PAV-COTA-<camada>: cruz + texto); não desenha mais PAV-PISTA por deslocamento do eixo quando há fundo real (era a fonte das curvas inventadas).
 - `pavimento/index.html`: `planta3d.cotas` preservado em plTImportar/Exportar; ?v=20261123 nos scripts.
 - Limites conhecidos: Rodovia Amaral Peixoto tem só uma borda no desenho (sem eixo calculável); Rua 5 e Rua 16 têm poucas cotas reais próximas (nada interpolado).
+- (23/11, ajuste) Ruas diagonais (25°–65°) vão até o cruzamento com as avenidas principais (≥500 m), até 150 m, sem o limite de 25 m e sem "LIMITE DA OBRA": Rua 10 e a diagonal espelhada (Rua 16) ligam Av. dos Coqueiros a Av. das Palmeiras. Ruas sem 2 seções com cota real são listadas no relatório (ATENÇÃO), não somem em silêncio.
