@@ -2068,8 +2068,8 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
   function coordsCarimbo(txt){
     const t = String(txt || '').replace(/[“”″]/g, '"').replace(/[’′‘`]/g, "'").replace(/º/g, '°');
     // S 22° 28' 39.307" W 41° 54' 40.747"  (letra antes do número)
-    let m = t.match(/([SN])\s*(\d{1,2})\s*°\s*(\d{1,2})\s*'\s*(\d{1,2}(?:[.,]\d+)?)\s*"?[\s,;]*([WOEL])\s*(\d{1,3})\s*°\s*(\d{1,2})\s*'\s*(\d{1,2}(?:[.,]\d+)?)/);
-    if(m){ let la = dms(m[2], m[3], m[4]), lo = dms(m[6], m[7], m[8]); if(m[1] === 'S') la = -la; if(/[WO]/.test(m[5])) lo = -lo; const v = valida(la, lo); if(v) return v; }
+    let m = t.match(/([SN])\s*(\d{1,2})\s*°\s*(\d{2})\s*'\s*(\d{2}(?:[.,]\d+)?)\s*"?[\s,;]*([WOEL])\s*(\d{1,3})\s*°\s*(\d{2})\s*'\s*(\d{2}(?:[.,]\d+)?)/);
+    if(m && +m[3] < 60 && +m[7] < 60 && num(m[4]) < 60 && num(m[8]) < 60){ let la = dms(m[2], m[3], m[4]), lo = dms(m[6], m[7], m[8]); if(m[1] === 'S') la = -la; if(/[WO]/.test(m[5])) lo = -lo; const v = valida(la, lo); if(v) return v; }
     // leitura por OCR com símbolos trocados ou perdidos (S lido como 8, ° como ! ou ', segundos grudados: “22 2839115"”):
     // linha por linha, graus com 2 dígitos, faixas do Brasil (sul/oeste); nunca junta números de linhas diferentes
     const ok = (a, b, c, d, e, f) => { const la = dms(a, b, c), lo = dms(d, e, f);
@@ -2080,6 +2080,9 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
       // segundos com o ponto perdido: “22/28 39115"” = 22° 28' 39,115"
       q = lin.match(/(?:^|\D)(\d{2})\D{1,3}(\d{2})\D{1,3}(\d{2})(\d{3})(?!\d)\D{1,6}(\d{2})\D{1,3}(\d{2})\D{1,3}(\d{2}(?:[.,]\d{1,4})?)(?!\d)/);
       if(q){ const v = ok(q[1], q[2], q[3] + '.' + q[4], q[5], q[6], q[7]); if(v) return v; }
+      // S lido como 8/5/$ e tudo grudado: “8222839115"” ou “822º 2839115"” = S 22° 28' 39,115"
+      q = lin.match(/(?:^|[^\d])[8S5$]\D{0,2}(\d{2})\D{0,2}(\d{2})\D{0,2}(\d{2})[.,]?(\d{3})(?!\d)\D{1,6}(\d{2})\D{1,3}(\d{2})\D{1,3}(\d{2}(?:[.,]\d{1,4})?)(?!\d)/);
+      if(q){ const v = ok(q[1], q[2], q[3] + '.' + q[4], q[5], q[6], q[7]); if(v) return v; }
       // minutos e segundos grudados: “22 2839115"” = 22° 28' 39,115"
       q = lin.match(/(?:^|\D)(\d{2})\D{1,3}(\d{2})(\d{2})[.,]?(\d{1,4})\D{1,6}(\d{2})\D{1,3}(\d{2})\D{1,3}(\d{2}(?:[.,]\d{1,4})?)(?!\d)/);
       if(q){ const v = ok(q[1], q[2], q[3] + '.' + q[4], q[5], q[6], q[7]); if(v) return v; }
@@ -2087,7 +2090,20 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
     return null;
   }
   const lerCoordOrig = lerCoordenadas;
-  lerCoordenadas = function(t){ return lerCoordOrig(t) || coordsCarimbo(t); };
+  /* texto lido da tarja → coordenada já conferida por textoDaFoto (2 leituras iguais); null = não confiável.
+     Assim a regra antiga e frouxa (minuto de 1 dígito: “41° 5' 42"” → ponto no mar) não age no texto do OCR. */
+  const COORD_TXT = new Map();
+  lerCoordenadas = function(t){ if(COORD_TXT.has(t)) return COORD_TXT.get(t); return lerCoordOrig(t) || coordsCarimbo(t); };
+  /* todas as coordenadas COMPLETAS de um texto do OCR (graus, minutos e segundos com 2 dígitos), linha por linha */
+  function candidatos(txt){
+    const out = [], t = String(txt || '').replace(/[“”″]/g, '"').replace(/[’′‘`]/g, "'").replace(/º/g, '°');
+    for(const lin of t.split(/\n/)){
+      const c = coordsCarimbo(lin.replace(/([SN])\s*(\d)\s*°/g, '$1 0$2°'));
+      if(c && Math.abs(c.lat) >= 1){ out.push({lat: c.lat, lon: c.lon, lin: lin.trim()}); }
+    }
+    return out;
+  }
+  window.__ge03 = {candidatos, COORD_TXT};
 
   /* endereço do carimbo (SP-13): reserva quando a leitura deste programa não acha a rua */
   const LIXO = /^(rio das ostras|rio de janeiro|rj|brasil|brazil)$/i;
@@ -2109,10 +2125,17 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
   }
   /* data da tarja com os erros comuns do OCR: “10.de nov.”, “now”/“n0v”, “2O26” */
   const lerDataOrig = lerDataTarja;
+  // só aceita data possível: dia escrito ≤ 31 (o OCR lê “190 de nov.”) e não no futuro
+  const dataBoa = (iso, lin) => { if(!iso) return false; const d = new Date(iso); if(isNaN(d) || d > new Date(Date.now() + 864e5) || d.getFullYear() < 2000) return false;
+    const m = String(lin).match(/(\d+)\s*(?:de\s*)?(?:jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)/i); return !m || +m[1] <= 31; };
   lerDataTarja = function(t){
-    const d = lerDataOrig(t); if(d) return d;
-    const u = String(t || '').replace(/(\d)\s*[.,;:]\s*(?=de\b)/gi, '$1 ').replace(/\bn[o0][wvyu]\b\.?/gi, 'nov').replace(/\b(\d)O(\d{2})\b/g, '$10$2').replace(/\b2O(\d{2})\b/g, '20$1');
-    return u !== t ? lerDataOrig(u) : '';
+    const lin = String(t || '').split(/\n/);
+    for(const l of lin){ const d = lerDataOrig(l); if(dataBoa(d, l)) return d; }
+    for(const l of lin){
+      const u = l.replace(/(\d)\s*[.,;:]\s*(?=de\b)/gi, '$1 ').replace(/\bn[o0][wvyu]\b\.?/gi, 'nov').replace(/\b(\d)O(\d{2})\b/g, '$10$2').replace(/\b2O(\d{2})\b/g, '20$1');
+      if(u !== l){ const d = lerDataOrig(u); if(dataBoa(d, u)) return d; }
+    }
+    const d = lerDataOrig(t); return dataBoa(d, t) ? d : '';
   };
   const lerEndOrig = lerEnderecoTarja;
   lerEnderecoTarja = function(t){
@@ -2130,46 +2153,147 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
      ampliado, só pixels quase brancos e sem cor (ou amarelos), em limiares 245 → 238 → 250 → 228,
      primeiro no alto à direita, depois embaixo à direita, depois faixas inteiras; para quando acha
      coordenada e endereço. Se nada servir, a leitura do SP-13 e a antiga continuam como reserva. */
-  function recorteBranco(bmp, [y0, y1, x0, x1], t, k){
-    const W = bmp.width, H = bmp.height, sx = W * x0, sy = H * y0, sw = W * (x1 - x0), sh = H * (y1 - y0);
-    k = Math.min(k, 2400 / sw);
+  /* modo 'lim': pixel quase branco (ou amarelo) sem cor.
+     modo 'cont': pixel claro COM contorno escuro por perto — o carimbo tem sombra preta em volta das letras;
+     o céu branco não tem, então o texto sai limpo mesmo quando o fundo tem a mesma cor do texto. */
+  function recorteBranco(bmp, [y0, y1, x0, x1], t, k, modo){
+    const W = bmp.width, H = bmp.height;
+    return binariza(bmp, W * x0, H * y0, W * (x1 - x0), H * (y1 - y0), Math.min(k, 2400 / (W * (x1 - x0))), modo, t);
+  }
+  function binariza(bmp, sx, sy, sw, sh, k, modo, t){
     const c = document.createElement('canvas'); c.width = Math.round(sw * k); c.height = Math.round(sh * k);
     const g = c.getContext('2d', {willReadFrequently: true}); g.imageSmoothingQuality = 'high'; g.drawImage(bmp, sx, sy, sw, sh, 0, 0, c.width, c.height);
-    const d = g.getImageData(0, 0, c.width, c.height), p = d.data; let n = 0;
-    for(let i = 0; i < p.length; i += 4){
-      const r = p[i], gg = p[i + 1], b = p[i + 2], mx = Math.max(r, gg, b), mn = Math.min(r, gg, b);
-      const tx = ((r + gg + b) / 3 > t && mx - mn < 40) || (r > 200 && gg > 165 && b < 140 && r - b > 90);
-      if(tx) n++; const v = tx ? 0 : 255; p[i] = p[i + 1] = p[i + 2] = v; p[i + 3] = 255;
+    const w = c.width, h = c.height, d = g.getImageData(0, 0, w, h), p = d.data, n = w * h;
+    const L = new Uint8ClampedArray(n); for(let i = 0; i < n; i++) L[i] = (p[4 * i] + p[4 * i + 1] + p[4 * i + 2]) / 3;
+    let M = null;
+    if(modo === 'cont'){   // mínimo da vizinhança (janela quadrada, separável)
+      const r = Math.max(2, Math.round(1.6 * k)), tmp = new Uint8ClampedArray(n); M = new Uint8ClampedArray(n);
+      for(let y = 0; y < h; y++) for(let x = 0; x < w; x++){ let m = 255; for(let q = Math.max(0, x - r); q <= Math.min(w - 1, x + r); q++){ const v = L[y * w + q]; if(v < m) m = v; } tmp[y * w + x] = m; }
+      for(let x = 0; x < w; x++) for(let y = 0; y < h; y++){ let m = 255; for(let q = Math.max(0, y - r); q <= Math.min(h - 1, y + r); q++){ const v = tmp[q * w + x]; if(v < m) m = v; } M[y * w + x] = m; }
+    }
+    let cl = 0;
+    for(let i = 0; i < n; i++){
+      const r = p[4 * i], gg = p[4 * i + 1], b = p[4 * i + 2], mx = Math.max(r, gg, b), mn = Math.min(r, gg, b);
+      const tx = modo === 'cont' ? (L[i] > t && mx - mn < 45 && M[i] < L[i] - 70)
+                                 : ((L[i] > t && mx - mn < 40) || (r > 200 && gg > 165 && b < 140 && r - b > 90));
+      if(tx) cl++; const v = tx ? 0 : 255; p[4 * i] = p[4 * i + 1] = p[4 * i + 2] = v; p[4 * i + 3] = 255;
     }
     g.putImageData(d, 0, 0);
-    return {c, claro: n / (p.length / 4)};
+    return {c, claro: cl / n, k, sx, sy};
   }
-  const CANTOS = [[0, .34, .2, 1], [.66, 1, .2, 1], [0, .34, 0, 1], [.66, 1, 0, 1]];
-  const LIMIARES = [[245, 2], [238, 3], [250, 2], [228, 2]];
+  /* linha da coordenada no resultado do OCR (tem W/°/' e 8+ dígitos, sem “:” de hora nem ano) */
+  function linhaCoord(linhas){
+    return (linhas || []).find(l => { const t = l.text || '', dg = (t.match(/\d/g) || []).length;
+      return dg >= 8 && !/:|20\d\d|BRT|nov|de\s/i.test(t) && /[WwV°º'"]/.test(t); });
+  }
+  // [limiar, modo do OCR, altura da linha em px, só números?]. O modo “contorno” lia 41→49 e 54→24 nesta linha: fica de fora.
+  const VAR_LINHA = [[245, '7', 40, 0], [245, '6', 40, 1], [245, '6', 60, 0], [238, '7', 40, 0], [250, '6', 60, 1], [232, '7', 60, 0], [245, '7', 60, 1]];
+  const SO_COORD = '0123456789SWNO°\'".,- ';
+  /* relê só a linha da coordenada, ampliada, com o OCR restrito a números e símbolos; devolve as leituras */
+  async function lerLinha(w, bmp, rec, bb, fora){
+    fora = fora || [];
+    const out = [], hL = (bb.y1 - bb.y0) / rec.k, pad = hL * .45;
+    const sx = rec.sx + Math.max(0, bb.x0 / rec.k - hL), sy = Math.max(0, rec.sy + bb.y0 / rec.k - pad);
+    const sw = Math.min(bmp.width - sx, (bb.x1 - bb.x0) / rec.k + 2 * hL), sh = Math.min(bmp.height - sy, hL + 2 * pad);
+    try{
+      for(const [t, pm, alvo, so] of VAR_LINHA){
+        const k = Math.min(alvo / hL, 3000 / sw);
+        try{ await w.setParameters({tessedit_pageseg_mode: pm, tessedit_char_whitelist: so ? SO_COORD : ''}); }catch(e){}
+        const {c, claro} = binariza(bmp, sx, sy, sw, sh, k, 'lim', t); if(claro < .005 || claro > .6) continue;
+        const r = await w.recognize(c), tx = (r && r.data ? r.data.text : '');
+        if(window.__ge03log) window.__ge03log.push('linha ' + t + '/' + pm + '/' + alvo + (so ? 'n' : '') + ': ' + tx.trim().replace(/\n/g, ' | '));
+        const cf = r && r.data ? r.data.confidence : 0;
+        candidatos(tx).slice(0, 1).forEach(x => { x.linha = true; x.conf = cf; out.push(x); });
+        if(!window.__ge03semParar && vencedora(votar(fora.concat(out)))) break;
+      }
+    }finally{ try{ await w.setParameters({tessedit_pageseg_mode: '6', tessedit_char_whitelist: ''}); }catch(e){} }
+    return out;
+  }
+  const CANTOS = [[0, .34, .2, 1], [.66, 1, .2, 1]], FAIXAS = [[0, .34, 0, 1], [.66, 1, 0, 1]];
+  const VARIANTES = [['lim', 245, 2], ['lim', 238, 3], ['lim', 250, 2], ['cont', 200, 2], ['lim', 228, 2], ['cont', 180, 3]];
+  const INFO = new WeakMap();   // blob → {votos, unico, recusada, cands}
+  /* agrupa as leituras: iguais até ~30 m contam como a mesma coordenada */
+  function votar(cands){
+    const grupos = [];
+    cands.forEach(c => { const g = grupos.find(g => Math.abs(g.lat - c.lat) < 3e-4 && Math.abs(g.lon - c.lon) < 3e-4); if(g) g.lista.push(c); else grupos.push({lat: c.lat, lon: c.lon, lista: [c]}); });
+    grupos.forEach(g => { g.pontos = g.lista.reduce((s, c) => s + Math.max(10, c.conf || 0), 0); });
+    grupos.sort((a, b) => b.pontos - a.pontos || b.lista.length - a.lista.length);
+    return grupos;
+  }
+  /* vencedora clara: 3+ leituras e o dobro da confiança somada da 2ª (para de ler) */
+  function vencedora(g){ return g.length && g[0].lista.length >= 3 && (g.length === 1 || g[0].pontos >= 2 * g[1].pontos); }
   const textoOrig = textoDaFoto;
   textoDaFoto = async function(blob){
-    let txt = '';
-    const achou = () => lerCoordenadas(txt) && lerEnderecoTarja(txt);
+    let txt = ''; const cands = [];
+    const confirmada = () => { if(window.__ge03semParar) return false; return vencedora(votar(cands)); };
+    const pronto = () => confirmada() && lerEnderecoTarja(txt);
     try{
       const w = await motorOCR();
       try{ await w.setParameters({tessedit_pageseg_mode: '6', preserve_interword_spaces: '1'}); }catch(e){}
       const bmp = await abrirImagem(blob), t0 = Date.now();
+      const feitas = new Set();
+      const ler = async (cr, [modo, lim, k]) => {
+        const rec = recorteBranco(bmp, cr, lim, k, modo);
+        if(rec.claro < .003 || rec.claro > .5) return;   // sem texto branco, ou quase tudo branco
+        const r = await w.recognize(rec.c), tx = (r && r.data ? r.data.text : '');
+        txt += '\n' + tx;
+        const lc = linhaCoord(r && r.data && r.data.lines);
+        candidatos(tx).slice(0, 1).forEach(x => { x.conf = lc ? lc.confidence : (r.data.confidence || 0); cands.push(x); });
+        if(window.__ge03log) window.__ge03log.push('[' + modo + lim + '] linhas: ' + (r.data.lines || []).map(l => l.text.trim()).join(' / ') + (lc ? '  => LINHA: ' + lc.text.trim() : ''));
+        if(lc && !feitas.has(cr) && !confirmada()){ feitas.add(cr); (await lerLinha(w, bmp, rec, lc.bbox, cands)).forEach(x => cands.push(x)); }
+      };
       try{
-        for(const [lim, k] of LIMIARES){
-          for(const cr of CANTOS){
-            if(Date.now() - t0 > 25000) break;
-            const {c, claro} = recorteBranco(bmp, cr, lim, k);
-            if(claro < .004 || claro > .5) continue;   // sem texto branco, ou quase tudo branco (céu estourado)
-            const r = await w.recognize(c); txt += '\n' + (r && r.data ? r.data.text : '');
-            if(achou()) break;
-          }
-          if(achou()) break;
-        }
+        for(const v of VARIANTES){ for(const cr of CANTOS){ if(pronto() || Date.now() - t0 > 30000) break; await ler(cr, v); } if(pronto()) break; }
+        if(!cands.length && !lerEnderecoTarja(txt)) for(const v of VARIANTES.slice(0, 2)) for(const cr of FAIXAS){ if(pronto() || Date.now() - t0 > 40000) break; await ler(cr, v); }
       }finally{ if(bmp.close) bmp.close(); }
-    }catch(e){ if(/leitor de texto/.test(e.message || '')) throw e; console.warn('GE-01 tarja:', e); }
-    if(!lerCoordenadas(txt) && !lerEnderecoTarja(txt)){ try{ txt += '\n' + await textoOrig(blob); }catch(e){ if(!txt.trim()) throw e; } }
+    }catch(e){ if(/leitor de texto/.test(e.message || '')) throw e; console.warn('GE-03 tarja:', e); }
+    if(!cands.length && !lerEnderecoTarja(txt)){ try{ txt += '\n' + await textoOrig(blob); candidatos(txt).forEach(x => cands.push(x)); }catch(e){ if(!txt.trim()) throw e; } }
+    // decisão: 2 leituras iguais = confirmada; 1 leitura só sem endereço = usa e pede conferência;
+    // leituras diferentes, ou 1 só com endereço legível = recusa a coordenada (vai pelo endereço)
+    const g = votar(cands), end = lerEnderecoTarja(txt);
+    let coord = null, info = {votos: g.length ? g[0].lista.length : 0, cands: cands.map(c => c.lin), confs: cands.map(c => Math.round(c.conf || 0)), coords: cands.map(c => c.lat.toFixed(5) + ',' + c.lon.toFixed(5)), unico: false, recusada: false};
+    if(g.length && g[0].lista.length >= 2 && (g.length === 1 || g[0].pontos >= 1.5 * g[1].pontos)){
+      const dig = c => (c.lin.match(/\d{2}[.,]\d{2,}/g) || []).length * 100 + (c.lin.match(/\d/g) || []).length;
+      const best = g[0].lista.slice().sort((x, y) => dig(y) - dig(x))[0];
+      coord = {lat: best.lat, lon: best.lon};
+    }else if(g.length === 1 && !end){ coord = {lat: g[0].lat, lon: g[0].lon}; info.unico = true; }
+    else if(g.length){ info.recusada = true; }
+    txt = txt.trim();
+    COORD_TXT.set(txt, coord); INFO.set(blob, info);
     return txt;
   };
+  /* depois de ler a tarja: avisos de conferência e trava de região */
+  const ocrOrig = ocrFotos;
+  ocrFotos = async function(lista, umaSo){
+    const r = await ocrOrig.apply(this, arguments);
+    (lista || []).forEach(f => {
+      const info = INFO.get(BLOBS.get(f.id)); if(!info) return;
+      if(info.unico && f.orig === 'tarja') f.conferencia = 'Coordenada da tarja lida uma vez só (não confirmada por outra leitura): confira no mapa.';
+      if(info.recusada && !temLocal(f)) f.conferencia = 'As leituras da coordenada na tarja não bateram (' + info.cands.slice(0, 3).join(' | ') + '): usado o endereço da tarja.';
+    });
+    const recusadas = regiao(lista); salvar(); renderFotos();
+    const comEnd = recusadas.filter(f => !temLocal(f) && f.end);
+    if(comEnd.length){ try{ await geocodificar(comEnd); }catch(e){ console.warn(e); } }
+    return r;
+  };
+  /* coordenada da tarja muito longe das outras fotos do trabalho (OCR perdeu um número) → recusada */
+  function regiao(lista){
+    const base = S.fotos.filter(f => temLocal(f) && /^(gps|prop|tarja|nome|manual)$/.test(f.orig || ''));
+    const fora = [];
+    if(base.length < 3) return fora;
+    const med = a => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)];
+    const cLat = med(base.map(f => f.lat)), cLon = med(base.map(f => f.lon));
+    (lista || S.fotos).forEach(f => {
+      if(!temLocal(f) || f.orig !== 'tarja') return;
+      const km = dist(cLat, cLon, f.lat, f.lon) / 1000;
+      if(km > 15){
+        f.conferencia = 'A coordenada lida na tarja (' + f.lat.toFixed(6) + ', ' + f.lon.toFixed(6) + ') fica a ' + Math.round(km) + ' km das outras fotos: o leitor deve ter perdido um número. Foi descartada' + (f.end ? ' e o local vem do endereço da tarja.' : '; marque no mapa.');
+        delete f.lat; delete f.lon; f.orig = null; fora.push(f);
+      }
+    });
+    return fora;
+  }
+  window.__ge03.regiao = regiao; window.__ge03.INFO = INFO; window.__ge03.binariza = binariza; window.__ge03.recorteBranco = recorteBranco; window.__ge03.linhaCoord = linhaCoord;
 
   /* ---------- 3. o botão único ---------- */
   const PROP_END = ['local', 'titulo', 'assunto', 'comentario', 'descricao', 'palavras'];
