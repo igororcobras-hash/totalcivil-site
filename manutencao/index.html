@@ -4522,11 +4522,12 @@ custoOc = function (o, x) { const r = custoReal(o, x); if (r > 0) return r; try 
 (function () {
 ORIGEM.carimbo = 'lidas na foto (texto escrito nela ou propriedades do arquivo)';
 const TV = '5.1.1';
-const TS = { js: `https://cdn.jsdelivr.net/npm/tesseract.js@${TV}/dist/tesseract.min.js`, worker: `https://cdn.jsdelivr.net/npm/tesseract.js@${TV}/dist/worker.min.js`,
+/* SP-37: no app offline (/ocorrencias/) o leitor vem dos arquivos guardados no aparelho (window.TC_TESS) */
+const TS = window.TC_TESS || { js: `https://cdn.jsdelivr.net/npm/tesseract.js@${TV}/dist/tesseract.min.js`, worker: `https://cdn.jsdelivr.net/npm/tesseract.js@${TV}/dist/worker.min.js`,
   core: `https://cdn.jsdelivr.net/npm/tesseract.js-core@${TV}`, lang: 'https://cdn.jsdelivr.net/npm/@tesseract.js-data/por@1.0.0/4.0.0_best_int' };
 let _wk = null;
 const carregaJs = src => new Promise((ok, er) => { if (window.Tesseract) return ok(); const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = er; document.head.appendChild(s) });
-async function leitor() { if (_wk) return _wk; _wk = (async () => { await carregaJs(TS.js); return Tesseract.createWorker('por', 1, { workerPath: TS.worker, corePath: TS.core, langPath: TS.lang, logger: () => { } }) })();
+async function leitor() { if (_wk) return _wk; _wk = (async () => { await carregaJs(TS.js); return Tesseract.createWorker('por', 1, { workerPath: TS.worker, corePath: TS.core, langPath: TS.lang, workerBlobURL: !TS.local, logger: () => { } }) })();
   try { return await _wk } catch (e) { _wk = null; throw e } }
 /* recorta as faixas de cima e de baixo (onde os apps escrevem o carimbo) e deixa só o texto claro (branco/amarelo) */
 async function faixas(file) {
@@ -5529,6 +5530,40 @@ const _cm = calcMed;
     else if (M && M.t === 'oc' && M.d.lat == null) ACTS.usarGPS();
     toast('Foto anexada ao novo relato. Complete as informações e salve.', 5000);
   };
+})();
+</script>
+<script>
+/* PATCH SP-37 (23/11/2026): botão “📴 Trabalhar offline”. Leva ao app /ocorrencias/ (“Ocorrências de Manutenção”), que guarda o programa,
+   o mapa e o leitor de OCR no celular, cria o ícone na tela e envia tudo para a nuvem quando o sinal volta (ocorrencias/dentro-do-app.js). */
+(function () {
+  const noApp = !!window.TC_OFFLINE_APP;
+  const _rt = renderTop;
+  renderTop = function () {
+    const r = _rt.apply(this, arguments);
+    try {
+      const top = $('#top'); if (!top || top.querySelector('.tcoff-bt')) return r;
+      const b = document.createElement(noApp ? 'span' : 'button');
+      b.className = noApp ? 'chip tcoff-bt' : 'btn sm tcoff-bt';
+      if (noApp) { b.textContent = '📱 App offline'; b.title = 'Aberto pelo app Ocorrências de Manutenção: funciona sem internet e envia tudo para a nuvem quando o sinal volta.'; }
+      else { b.type = 'button'; b.dataset.act = 'tcoffAbrir'; b.textContent = '📴 Trabalhar offline'; b.title = 'Prepara o celular para registrar ocorrências sem internet e cria o ícone “Ocorrências de Manutenção”'; }
+      const sp = top.querySelector('.sp'); sp ? sp.after(b) : top.appendChild(b);
+    } catch (e) { }
+    return r;
+  };
+  ACTS.tcoffAbrir = function () {
+    M = { t: 'tcoff' };
+    abrirModal(`<div class="mh"><h3>📴 Trabalhar offline</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+      <p>Prepara <b>este aparelho</b> para usar o Serviços Públicos <b>sem internet</b>:</p>
+      <ul class="small" style="margin:6px 0 10px 18px;padding:0">
+        <li>o programa, o mapa e o leitor de OCR das fotos ficam guardados no aparelho;</li>
+        <li>sem sinal: registre relatos, tire fotos, use o GPS ou marque o local no mapa;</li>
+        <li>com internet ou Wi-Fi: relatos, fotos e documentos vão <b>sozinhos para a nuvem</b>;</li>
+        <li>cria o ícone <b>“Ocorrências de Manutenção”</b> na tela do Android ou do iPhone.</li></ul>
+      <p class="small muted">Faça isto com internet (baixa cerca de 14 MB). O login fica salvo e o app abre direto; a cada 30 dias sem internet ele pede uma conexão para conferir o acesso.</p>
+      <div class="row gap" style="margin-top:12px"><button class="btn pri" data-act="tcoffIr">Preparar este aparelho</button><button class="btn" data-act="mClose">Agora não</button></div></div>`);
+  };
+  ACTS.tcoffIr = function () { [...NUV.pend].forEach(nuvDescarga); location.href = '/ocorrencias/?instalar=1'; };
+  try { renderTop() } catch (e) { }
 })();
 </script>
 </body>

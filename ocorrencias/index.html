@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Ocorrências de Manutenção · Total Civil</title>
+<!-- PATCH SP-37 (23/11/2026): app "Ocorrências de Manutenção" = Serviços Públicos funcionando sem internet. -->
+<link rel="manifest" href="/ocorrencias/manifest.webmanifest">
+<meta name="theme-color" content="#b8410e">
+<link rel="icon" href="/ocorrencias/icones/icone-192.png">
+<link rel="apple-touch-icon" href="/ocorrencias/icones/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ocorrências">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#F6F4EF;color:#1a2130;font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+#tc-app{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+.cx{max-width:460px;width:100%;background:#fff;border:1px solid #e3ded3;border-radius:14px;padding:22px;box-shadow:0 6px 24px rgba(0,0,0,.06)}
+.cab{display:flex;gap:12px;align-items:center;margin-bottom:12px}.cab img{width:48px;height:48px;border-radius:11px}
+h1{font-size:19px;margin:0}h1 small{display:block;font-size:13px;font-weight:500;color:#5a6075}
+p{margin:8px 0;color:#3a4255}.msg{font-weight:600;color:#1a2130}
+.barra{height:10px;background:#eee8dc;border-radius:6px;overflow:hidden;margin:10px 0 4px}.barra i{display:block;height:100%;width:0;background:#b8410e;transition:width .2s}
+.lst{margin:10px 0;padding:0;list-style:none}.lst li{padding:3px 0}.lst li.ok::before{content:"✅ "}.lst li.esp::before{content:"⏳ "}.lst li.err::before{content:"⚠️ "}
+.bts{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
+.bts a,.bts button{font:inherit;font-weight:600;border-radius:9px;padding:10px 16px;cursor:pointer;text-decoration:none;border:1px solid #b8410e;background:#fff;color:#b8410e}
+.bts .pri{background:#b8410e;color:#fff}
+.ios{background:#fff7ea;border:1px solid #f0d9b0;border-radius:10px;padding:10px 12px;font-size:14px;margin-top:10px}
+small.m{color:#6b7280}
+</style>
+</head>
+<body>
+<div id="tc-app"><div class="cx">
+  <div class="cab"><img src="/ocorrencias/icones/icone-192.png" alt=""><h1>Ocorrências de Manutenção<small>Serviços Públicos · Total Civil</small></h1></div>
+  <div id="corpo"><p class="msg">Abrindo…</p></div>
+</div></div>
+<script src="/firebase-config.js"></script>
+<script src="/ocorrencias/offline-lib.js"></script>
+<script>
+(function(){
+  'use strict';
+  var Q = new URLSearchParams(location.search);
+  if(TCOFF.LOCAL && Q.has('teste')) window.__tcoffTeste = 1;
+  var corpo = document.getElementById('corpo');
+  var PRINCIPAL = (location.hostname.replace(/^www\./, '') === 'totalcivil.com.br' || TCOFF.LOCAL ? '' : 'https://totalcivil.com.br') + '/';
+  var ehIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  var instalado = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  var pedidoInstalar = null;
+  window.addEventListener('beforeinstallprompt', function(e){ e.preventDefault(); pedidoInstalar = e; var b = document.getElementById('bt-icone'); if(b) b.hidden = false; });
+  window.addEventListener('appinstalled', function(){ var b = document.getElementById('bt-icone'); if(b){ b.hidden = true; } var m = document.getElementById('icone-ok'); if(m) m.hidden = false; });
+  function esc(t){ return String(t == null ? '' : t).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function tela(html){ corpo.innerHTML = html; }
+
+  /* ---------- service worker: guarda o app e as bibliotecas no aparelho ---------- */
+  var swPronto = ('serviceWorker' in navigator) ? navigator.serviceWorker.register('/ocorrencias/sw.js', {scope: '/ocorrencias/'})
+    .then(function(){ return navigator.serviceWorker.ready; }).catch(function(e){ console.warn('SW:', e); return null; }) : Promise.resolve(null);
+  function baixarBibliotecas(prog){
+    return swPronto.then(function(reg){
+      if(!reg || !reg.active) return {falhas: ['service worker indisponível neste navegador']};
+      return new Promise(function(res){
+        function ouvir(ev){ var d = ev.data || {}; if(d.tcoff !== 'progresso') return; prog(d.feito, d.total); if(d.fim){ navigator.serviceWorker.removeEventListener('message', ouvir); res(d); } }
+        navigator.serviceWorker.addEventListener('message', ouvir);
+        reg.active.postMessage({tcoff: 'baixar'});
+      });
+    });
+  }
+
+  /* ---------- abre o programa guardado ---------- */
+  function abrir(prog, acesso){
+    return TCOFF.texto(prog).then(function(html){
+      html = TCOFF.preparar(html, acesso);
+      document.open(); document.write(html); document.close();
+    });
+  }
+
+  function telaIcone(){
+    if(instalado) return '';
+    if(ehIOS) return '<div class="ios"><b>Criar o ícone no iPhone:</b> no Safari, toque em <b>Compartilhar</b> (quadrado com a seta ↑) › <b>Adicionar à Tela de Início</b> › <b>Adicionar</b>. O ícone “Ocorrências” aparece na tela.<br><b>Depois</b>, abra pelo ícone <b>uma vez com internet</b> e entre com seu login: no iPhone o app guarda os dados separados do Safari e prepara a sua própria cópia. A partir daí ele abre mesmo sem sinal.<br><small class="m">Use sempre pelo ícone. O que foi feito no Safari e no app se junta na nuvem.</small></div>';
+    return '<div class="bts"><button id="bt-icone" class="pri" ' + (pedidoInstalar ? '' : 'hidden') + '>📲 Criar o ícone “Ocorrências de Manutenção”</button></div>' +
+      '<p id="icone-ok" hidden>✅ Ícone criado na tela do celular.</p>' +
+      '<p id="icone-manual"><small class="m">Se o botão do ícone não aparecer: menu do Chrome (⋮) › <b>Adicionar à tela inicial</b> (ou “Instalar app”).</small></p>';
+  }
+  function ligarIcone(){
+    var b = document.getElementById('bt-icone');
+    if(b) b.onclick = function(){ if(!pedidoInstalar) return; pedidoInstalar.prompt(); pedidoInstalar.userChoice.then(function(){ pedidoInstalar = null; b.hidden = true; }); };
+  }
+
+  /* ---------- instalação (1ª vez, com internet) ---------- */
+  function instalar(){
+    if(!navigator.onLine){
+      tela('<p class="msg">Para preparar o uso sem internet, abra esta página uma vez COM internet (Wi-Fi ou dados).</p><p>Depois disso o programa abre e registra ocorrências mesmo sem sinal.</p><div class="bts"><button class="pri" onclick="location.reload()">Tentar de novo</button></div>');
+      return;
+    }
+    tela('<p class="msg">Preparando o programa para funcionar sem internet…</p>' +
+      '<ul class="lst"><li id="p1" class="esp">Login e liberação de acesso</li><li id="p2" class="esp">Programa Serviços Públicos</li><li id="p3" class="esp">Mapa, Excel, leitor de fotos e OCR (≈ 12 MB)</li></ul>' +
+      '<div class="barra"><i id="bar"></i></div><small class="m" id="det"></small>');
+    var bar = document.getElementById('bar'), det = document.getElementById('det');
+    function marca(id, cl, txt){ var e = document.getElementById(id); e.className = cl; if(txt) e.textContent = txt; }
+    var acesso;
+    var passo1 = window.__tcoffTeste ? Promise.resolve({f: null, u: {uid: 'teste', email: 'teste@local'}}) :
+      TCOFF.firebase().then(function(f){ return TCOFF.usuario(f).then(function(u){ return {f: f, u: u}; }); });
+    passo1.then(function(x){
+      if(!x.u){ location.replace(PRINCIPAL + '?entrar=1&voltar=' + encodeURIComponent('/ocorrencias/')); throw 'login'; }
+      return (window.__tcoffTeste ? Promise.resolve({ok: true, admin: true, obras: {}, uid: 'teste', email: 'teste@local', confirmadoEm: Date.now()}) : TCOFF.confirmar(x.f, x.u)).then(function(ac){
+        if(!ac.ok){ tela('<p class="msg">' + esc(ac.motivo) + '</p><div class="bts"><a class="pri" href="' + PRINCIPAL + '">Página principal</a></div>'); throw 'sem acesso'; }
+        acesso = ac; marca('p1', 'ok', 'Login: ' + (x.u.email || 'conferido'));
+        return TCOFF.put('acesso', ac).then(function(){ return TCOFF.baixar(x.f, function(i, n){ bar.style.width = Math.round(30 * i / n) + '%'; }); });
+      });
+    }).then(function(){
+      marca('p2', 'ok'); bar.style.width = '30%';
+      return baixarBibliotecas(function(i, n){ bar.style.width = (30 + Math.round(70 * i / n)) + '%'; det.textContent = i + ' de ' + n + ' arquivos'; });
+    }).then(function(r){
+      var falhas = (r && r.falhas) || [];
+      marca('p3', falhas.length ? 'err' : 'ok', falhas.length ? 'Faltaram ' + falhas.length + ' arquivo(s): serão baixados na próxima vez com internet' : null);
+      bar.style.width = '100%';
+      if(navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(function(){});
+      return TCOFF.put('instaladoEm', Date.now());
+    }).then(function(){
+      tela('<p class="msg">✅ Pronto para trabalhar sem internet.</p>' +
+        '<p>O programa, o mapa e o leitor de OCR ficaram guardados neste celular. Relatos, fotos e locais marcados sem sinal ficam no aparelho e vão sozinhos para a nuvem quando houver internet ou Wi-Fi.</p>' +
+        '<p><small class="m">Dica: antes de ir a campo, abra com internet o mapa da região: os pedaços vistos ficam guardados para usar sem sinal.</small></p>' +
+        telaIcone() + '<div class="bts"><button class="pri" id="bt-abrir">Abrir Ocorrências de Manutenção</button></div>');
+      ligarIcone();
+      document.getElementById('bt-abrir').onclick = function(){ Promise.all([TCOFF.get('programa'), TCOFF.get('acesso')]).then(function(v){ abrir(v[0], v[1]); }); };
+    }).catch(function(e){
+      if(e === 'login' || e === 'sem acesso') return;
+      console.error(e);
+      tela('<p class="msg">Não foi possível preparar o modo offline.</p><p><small class="m">' + esc(e && e.message || e) + '</small></p><div class="bts"><button class="pri" onclick="location.reload()">Tentar de novo</button><a href="' + PRINCIPAL + '">Página principal</a></div>');
+    });
+  }
+
+  /* ---------- início ---------- */
+  Promise.all([TCOFF.get('programa'), TCOFF.get('acesso')]).then(function(v){
+    var prog = v[0], ac = v[1];
+    if(Q.has('instalar') || !prog || !ac){ instalar(); return; }
+    if(ac.revogado){ tela('<p class="msg">' + esc(ac.motivo || 'Seu acesso ao Serviços Públicos não está liberado.') + '</p><p>Quando o acesso for liberado, abra com internet.</p><div class="bts"><button class="pri" onclick="location.href=\'/ocorrencias/?instalar=1\'">Conferir de novo</button><a href="' + PRINCIPAL + '">Página principal</a></div>'); return; }
+    if(!TCOFF.acessoValido(ac)){
+      if(navigator.onLine){ instalar(); return; }
+      tela('<p class="msg">Faz mais de ' + TCOFF.DIAS + ' dias que o acesso não é conferido.</p><p>Abra o app uma vez com internet para confirmar o login. Os dados guardados no aparelho continuam salvos.</p><div class="bts"><button class="pri" onclick="location.reload()">Tentar de novo</button></div>');
+      return;
+    }
+    /* abre na hora com a cópia guardada; a conferência do login e a versão nova rodam por dentro, com internet */
+    abrir(prog, ac).catch(function(e){ console.error(e); instalar(); });
+  }).catch(function(e){ console.error(e); instalar(); });
+})();
+</script>
+</body>
+</html>
