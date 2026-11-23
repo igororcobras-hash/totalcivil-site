@@ -34,12 +34,16 @@ PC.cena=function(P,opc){
   const fund=(P.planta3d&&P.planta3d.fundo)||[], usados={};
   fund.forEach(f=>{ const nm='PAV-FUNDO-'+nomeLay(f.n||'FUNDO'); if(!usados[nm]){ usados[nm]=1; LAY.push([nm,9]); }
     (f.l||[]).forEach(pl=>{ if(pl.length<2) return; const pts=pl.map(p=>[X(p),Y(p)]); Pl(nm,pts,false); pts.forEach(q=>ext(q[0],q[1])); }); });
+  /* TODAS as cotas reais do desenho (planta3d.cotas): cruz + texto, uma camada por camada de origem; nada interpolado */
+  const cot=(P.planta3d&&Array.isArray(P.planta3d.cotas))?P.planta3d.cotas:[], ucot={}; const ch=Math.max(0.6,Math.min(1.5,(x1>x0?Math.max(x1-x0,y1-y0):600)/900));
+  cot.forEach(c=>{ if(!isFinite(c.x)||!isFinite(c.y)||!isFinite(c.z)) return; const nm='PAV-COTA-'+nomeLay(c.c||'COTA'); if(!ucot[nm]){ ucot[nm]=1; LAY.push([nm,2]); }
+    const x=X([c.x]), y=Y([0,c.y]); Ln(nm,x-ch*0.5,y,x+ch*0.5,y); Ln(nm,x,y-ch*0.5,x,y+ch*0.5); Tx(nm,x+ch*0.7,y+ch*0.3,ch*0.8,(+c.z).toFixed(3),0); ext(x,y); });
   /* ruas */
   const ht0=Math.max(1,Math.min(3,(x1>x0?Math.max(x1-x0,y1-y0):600)/300));
   ruas.forEach((r,ri)=>{ const pts=r.eixo.map(p=>[X(p),Y(p)]); pts.forEach(q=>ext(q[0],q[1])); const ex=new Eixo(pts), ht=ht0, hb=((r.rows&&r.rows[0]&&+r.rows[0].larg)||(P.topo&&+P.topo.larg_proj)||7)/2;
     Pl('PAV-EIXO',pts,false);
     /* bordas da pista: deslocamento do eixo por vértice */
-    [1,-1].forEach(sg=>{ const bd=pts.map((q,i)=>{ const a=pts[Math.max(0,i-1)], b=pts[Math.min(pts.length-1,i+1)], dx=b[0]-a[0], dy=b[1]-a[1], l=Math.hypot(dx,dy)||1; return [q[0]-dy/l*hb*sg,q[1]+dx/l*hb*sg]; }); Pl('PAV-PISTA',bd,false); });
+    if(!fund.length) [1,-1].forEach(sg=>{ const bd=pts.map((q,i)=>{ const a=pts[Math.max(0,i-1)], b=pts[Math.min(pts.length-1,i+1)], dx=b[0]-a[0], dy=b[1]-a[1], l=Math.hypot(dx,dy)||1; return [q[0]-dy/l*hb*sg,q[1]+dx/l*hb*sg]; }); Pl('PAV-PISTA',bd,false); });
     /* nome da rua no meio, paralelo */
     { const m=ex.em(ex.len/2); let an=Math.atan2(m.uy,m.ux)*180/Math.PI; if(an>90) an-=180; if(an<-90) an+=180; const k=an*Math.PI/180;
       Tx('PAV-NOME',m.x-Math.sin(k)*(hb+ht*2),m.y+Math.cos(k)*(hb+ht*2),ht*1.4,String(r.nome||('Rua '+(ri+1))).toUpperCase(),an,'C'); }
