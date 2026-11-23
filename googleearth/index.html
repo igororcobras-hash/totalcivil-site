@@ -2058,16 +2058,31 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
   const dms = (g, m, s) => num(g) + num(m) / 60 + num(s) / 3600;
 
   /* ---------- 1. coordenada do carimbo das câmeras com GPS ---------- */
+  function coordsLetra(txt){
+    const t = String(txt || '').replace(/[“”″]/g, '"').replace(/[’′‘`]/g, "'").replace(/º/g, '°');
+    // S 22° 28' 39.307" W 41° 54' 40.747"  (letra antes do número)
+    const m = t.match(/([SN])\s*(\d{1,2})\s*°\s*(\d{1,2})\s*'\s*(\d{1,2}(?:[.,]\d+)?)\s*"?[\s,;]*([WOEL])\s*(\d{1,3})\s*°\s*(\d{1,2})\s*'\s*(\d{1,2}(?:[.,]\d+)?)/);
+    if(m){ let la = dms(m[2], m[3], m[4]), lo = dms(m[6], m[7], m[8]); if(m[1] === 'S') la = -la; if(/[WO]/.test(m[5])) lo = -lo; return valida(la, lo); }
+    return null;
+  }
   function coordsCarimbo(txt){
     const t = String(txt || '').replace(/[“”″]/g, '"').replace(/[’′‘`]/g, "'").replace(/º/g, '°');
     // S 22° 28' 39.307" W 41° 54' 40.747"  (letra antes do número)
     let m = t.match(/([SN])\s*(\d{1,2})\s*°\s*(\d{1,2})\s*'\s*(\d{1,2}(?:[.,]\d+)?)\s*"?[\s,;]*([WOEL])\s*(\d{1,3})\s*°\s*(\d{1,2})\s*'\s*(\d{1,2}(?:[.,]\d+)?)/);
     if(m){ let la = dms(m[2], m[3], m[4]), lo = dms(m[6], m[7], m[8]); if(m[1] === 'S') la = -la; if(/[WO]/.test(m[5])) lo = -lo; const v = valida(la, lo); if(v) return v; }
-    // leitura por OCR com símbolos trocados (S lido como 5/8/$, ° como o/*, W como VV): duas trincas seguidas; só vale no Brasil (sul/oeste)
-    m = t.match(/(?:^|[^\d])(\d{1,2})\D{1,3}(\d{1,2})\D{1,3}(\d{1,2}(?:[.,]\d+)?)\D{1,6}?(\d{2,3})\D{1,3}(\d{1,2})\D{1,3}(\d{1,2}(?:[.,]\d+)?)/);
-    if(m){
-      const la = dms(m[1], m[2], m[3]), lo = dms(m[4], m[5], m[6]);
-      if(+m[2] < 60 && +m[5] < 60 && num(m[3]) < 60 && num(m[6]) < 60 && la > 0 && la < 34 && lo > 28 && lo < 75){ const v = valida(-la, -lo); if(v) return v; }
+    // leitura por OCR com símbolos trocados ou perdidos (S lido como 8, ° como ! ou ', segundos grudados: “22 2839115"”):
+    // linha por linha, graus com 2 dígitos, faixas do Brasil (sul/oeste); nunca junta números de linhas diferentes
+    const ok = (a, b, c, d, e, f) => { const la = dms(a, b, c), lo = dms(d, e, f);
+      if(+b >= 60 || +e >= 60 || num(c) >= 60 || num(f) >= 60 || +a < 1 || +a > 34 || +d < 34 || +d > 74) return null; return valida(-la, -lo); };
+    for(const lin of t.split(/\n/)){
+      let q = lin.match(/(?:^|\D)(\d{2})\D{1,3}(\d{2})\D{1,3}(\d{2}(?:[.,]\d{1,4})?)\D{1,6}(\d{2})\D{1,3}(\d{2})\D{1,3}(\d{2}(?:[.,]\d{1,4})?)(?!\d)/);
+      if(q){ const v = ok(q[1], q[2], q[3], q[4], q[5], q[6]); if(v) return v; }
+      // segundos com o ponto perdido: “22/28 39115"” = 22° 28' 39,115"
+      q = lin.match(/(?:^|\D)(\d{2})\D{1,3}(\d{2})\D{1,3}(\d{2})(\d{3})(?!\d)\D{1,6}(\d{2})\D{1,3}(\d{2})\D{1,3}(\d{2}(?:[.,]\d{1,4})?)(?!\d)/);
+      if(q){ const v = ok(q[1], q[2], q[3] + '.' + q[4], q[5], q[6], q[7]); if(v) return v; }
+      // minutos e segundos grudados: “22 2839115"” = 22° 28' 39,115"
+      q = lin.match(/(?:^|\D)(\d{2})\D{1,3}(\d{2})(\d{2})[.,]?(\d{1,4})\D{1,6}(\d{2})\D{1,3}(\d{2})\D{1,3}(\d{2}(?:[.,]\d{1,4})?)(?!\d)/);
+      if(q){ const v = ok(q[1], q[2], q[3] + '.' + q[4], q[5], q[6], q[7]); if(v) return v; }
     }
     return null;
   }
@@ -2092,43 +2107,80 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
     }
     return null;
   }
+  /* data da tarja com os erros comuns do OCR: “10.de nov.”, “now”/“n0v”, “2O26” */
+  const lerDataOrig = lerDataTarja;
+  lerDataTarja = function(t){
+    const d = lerDataOrig(t); if(d) return d;
+    const u = String(t || '').replace(/(\d)\s*[.,;:]\s*(?=de\b)/gi, '$1 ').replace(/\bn[o0][wvyu]\b\.?/gi, 'nov').replace(/\b(\d)O(\d{2})\b/g, '$10$2').replace(/\b2O(\d{2})\b/g, '20$1');
+    return u !== t ? lerDataOrig(u) : '';
+  };
   const lerEndOrig = lerEnderecoTarja;
-  lerEnderecoTarja = function(t){ return lerEndOrig(t) || endereco1(t); };
+  lerEnderecoTarja = function(t){
+    const e = lerEndOrig(t) || endereco1(t); if(!e) return e;
+    // bairro lido pelo OCR com restos no começo (“o Tt EBedomino Praia Ancora” → “Praia Ancora”)
+    if(e.bairro){ const w = e.bairro.split(' '); while(w.length > 1 && (w[0].length <= 2 || /^[A-Z]{2,}[a-z]/.test(w[0]) || !/^[A-Za-zÀ-ÿ]/.test(w[0]))) w.shift(); e.bairro = w.join(' ');
+      e.texto = [e.rua + (e.num ? ', ' + e.num : ''), e.bairro].filter(Boolean).join(' - '); }
+    return e;
+  };
 
-  /* ---------- 2. leitura da tarja com os recortes do SP-13 ---------- */
-  async function recortes(blob){
-    const bmp = await abrirImagem(blob), W = bmp.width, H = bmp.height, out = [];
-    [[.76, 1, .4, 1], [.58, 1, 0, 1], [0, .36, 0, 1]].forEach(([a, b, x0, x1]) => {
-      const sy = Math.round(H * a), sh = Math.round(H * (b - a)), sx = Math.round(W * x0), sw = Math.round(W * (x1 - x0)), k = Math.min(2.2, 1500 / sw);
-      const c = document.createElement('canvas'); c.width = Math.round(sw * k); c.height = Math.round(sh * k);
-      const g = c.getContext('2d', {willReadFrequently: true}); g.drawImage(bmp, sx, sy, sw, sh, 0, 0, c.width, c.height);
-      const d = g.getImageData(0, 0, c.width, c.height), p = d.data; let n = 0;
-      for(let i = 0; i < p.length; i += 4){ const r = p[i], gg = p[i + 1], bb = p[i + 2]; const tx = (r > 205 && gg > 205 && bb > 205) || (r > 200 && gg > 165 && bb < 140); if(tx) n++; const v = tx ? 0 : 255; p[i] = p[i + 1] = p[i + 2] = v; p[i + 3] = 255; }
-      if(n / (p.length / 4) > .22) return;   // faixa quase toda clara (céu, asfalto claro) não é carimbo
-      g.putImageData(d, 0, 0); out.push(c);
-    });
-    if(bmp.close) bmp.close();
-    return out;
+  /* ---------- 2. leitura da tarja ----------
+     Carimbo das câmeras com GPS = texto BRANCO com contorno escuro, num canto (alto ou baixo, à direita).
+     Sobre céu claro/nublado o limiar antigo (>215) pegava o céu junto e o texto saía embaralhado
+     (foto do dono, 23/11/2026: “Rua das Camélias” lido como “Pya das EECA”). Agora: recorte do canto,
+     ampliado, só pixels quase brancos e sem cor (ou amarelos), em limiares 245 → 238 → 250 → 228,
+     primeiro no alto à direita, depois embaixo à direita, depois faixas inteiras; para quando acha
+     coordenada e endereço. Se nada servir, a leitura do SP-13 e a antiga continuam como reserva. */
+  function recorteBranco(bmp, [y0, y1, x0, x1], t, k){
+    const W = bmp.width, H = bmp.height, sx = W * x0, sy = H * y0, sw = W * (x1 - x0), sh = H * (y1 - y0);
+    k = Math.min(k, 2400 / sw);
+    const c = document.createElement('canvas'); c.width = Math.round(sw * k); c.height = Math.round(sh * k);
+    const g = c.getContext('2d', {willReadFrequently: true}); g.imageSmoothingQuality = 'high'; g.drawImage(bmp, sx, sy, sw, sh, 0, 0, c.width, c.height);
+    const d = g.getImageData(0, 0, c.width, c.height), p = d.data; let n = 0;
+    for(let i = 0; i < p.length; i += 4){
+      const r = p[i], gg = p[i + 1], b = p[i + 2], mx = Math.max(r, gg, b), mn = Math.min(r, gg, b);
+      const tx = ((r + gg + b) / 3 > t && mx - mn < 40) || (r > 200 && gg > 165 && b < 140 && r - b > 90);
+      if(tx) n++; const v = tx ? 0 : 255; p[i] = p[i + 1] = p[i + 2] = v; p[i + 3] = 255;
+    }
+    g.putImageData(d, 0, 0);
+    return {c, claro: n / (p.length / 4)};
   }
+  const CANTOS = [[0, .34, .2, 1], [.66, 1, .2, 1], [0, .34, 0, 1], [.66, 1, 0, 1]];
+  const LIMIARES = [[245, 2], [238, 3], [250, 2], [228, 2]];
   const textoOrig = textoDaFoto;
   textoDaFoto = async function(blob){
     let txt = '';
+    const achou = () => lerCoordenadas(txt) && lerEnderecoTarja(txt);
     try{
       const w = await motorOCR();
-      try{ await w.setParameters({tessedit_pageseg_mode: '3'}); }catch(e){}
-      const t0 = Date.now();
-      for(const c of await recortes(blob)){
-        if(Date.now() - t0 > 15000) break;
-        const r = await w.recognize(c); txt += '\n' + (r && r.data ? r.data.text : '');
-        if(lerCoordenadas(txt) && lerEnderecoTarja(txt)) break;
-      }
-    }catch(e){ if(/leitor de texto/.test(e.message || '')) throw e; console.warn('GE-01 recortes:', e); }
-    if(!lerCoordenadas(txt)){ try{ txt += '\n' + await textoOrig(blob); }catch(e){ if(!txt.trim()) throw e; } }
+      try{ await w.setParameters({tessedit_pageseg_mode: '6', preserve_interword_spaces: '1'}); }catch(e){}
+      const bmp = await abrirImagem(blob), t0 = Date.now();
+      try{
+        for(const [lim, k] of LIMIARES){
+          for(const cr of CANTOS){
+            if(Date.now() - t0 > 25000) break;
+            const {c, claro} = recorteBranco(bmp, cr, lim, k);
+            if(claro < .004 || claro > .5) continue;   // sem texto branco, ou quase tudo branco (céu estourado)
+            const r = await w.recognize(c); txt += '\n' + (r && r.data ? r.data.text : '');
+            if(achou()) break;
+          }
+          if(achou()) break;
+        }
+      }finally{ if(bmp.close) bmp.close(); }
+    }catch(e){ if(/leitor de texto/.test(e.message || '')) throw e; console.warn('GE-01 tarja:', e); }
+    if(!lerCoordenadas(txt) && !lerEnderecoTarja(txt)){ try{ txt += '\n' + await textoOrig(blob); }catch(e){ if(!txt.trim()) throw e; } }
     return txt;
   };
 
   /* ---------- 3. o botão único ---------- */
   const PROP_END = ['local', 'titulo', 'assunto', 'comentario', 'descricao', 'palavras'];
+  /* nome do arquivo sem extensão e sem os separadores (“_”) e sem o número de câmera (IMG_1234, WA0012, DSC…) */
+  function nomeLimpo(nome){
+    let t = String(nome || '').replace(/\.[a-z0-9]{2,5}$/i, '').replace(/_/g, ' ').replace(/\b(IMG|DSC|PXL|WA|VID|Screenshot)[ -]?\d[\d -]*\b/gi, ' ');
+    // “Rua dos Bougainvilles 120 - Praia Ancora” → “Rua dos Bougainvilles, 120 - Praia Ancora”
+    t = t.replace(/^(.*?[A-Za-zÀ-ÿ])\s+(\d{1,5})(?=\s*(?:-|$))/, '$1, $2');
+    return t.replace(/\s+/g, ' ').trim();
+  }
+  ORIGEM.nome = 'Nome do arquivo'; COR_ORIGEM.nome = '#0E7490';
   let rodando = false;
   async function completarEnderecos(auto){
     if(rodando) return null; rodando = true;
@@ -2152,6 +2204,13 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
           if(ex.lat != null && !temLocal(f)){ f.lat = ex.lat; f.lon = ex.lon; f.orig = ex.via === 'prop' ? 'prop' : 'gps'; }
           if(!f.end){ const p = f.props || {}; const e = lerEnderecoTarja(PROP_END.map(k => p[k]).filter(Boolean).join('\n')); if(e){ f.end = e.texto; f.endOrig = 'prop'; } }
         }catch(e){ console.warn('GE-01 propriedades:', f.nome, e); }
+      }
+      // 1b. nome do arquivo: coordenada (“-22.4775_-41.9113.jpg”) ou endereço (“Rua dos Bougainvilles 120.jpg”)
+      for(const f of semL()){
+        const n = nomeLimpo(f.nome);
+        const c = lerCoordOrig(n) || coordsLetra(n);
+        if(c){ f.lat = c.lat; f.lon = c.lon; f.orig = 'nome'; continue; }
+        if(!f.end){ const e = lerEnderecoTarja(n); if(e){ f.end = e.texto; f.endOrig = 'nome'; } }
       }
       salvar(); renderFotos();
       // 2. tarja
@@ -2178,7 +2237,7 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
       f.semGeo = !BLOBS.get(f.id) ? 'o arquivo original da foto não está neste aparelho (remova e anexe a foto de novo)'
         : falha.ocr && !f.end ? 'o leitor da tarja não funcionou (' + falha.ocr + ')'
         : f.end ? (falha.end ? 'o serviço de endereços não respondeu; tente de novo em alguns minutos (endereço: “' + f.end + '”)' : 'o endereço “' + f.end + '” não foi encontrado no mapa (confira o nome da rua no campo Endereço)')
-        : 'a foto não tem GPS e não foi possível ler coordenada nem endereço na tarja (nem nas propriedades do arquivo)';
+        : 'a foto não tem GPS e não foi possível ler coordenada nem endereço na tarja, nas propriedades nem no nome do arquivo';
     });
     salvar(); renderFotos();
     const rel = relatorio(alvo);
@@ -2204,6 +2263,21 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
     const el = $('rel-geo'); if(el) el.innerHTML = html;
     return {resumo, html, sem};
   }
+
+  /* ---------- 3b. data e hora de cada foto na descrição do ponto (pedido do dono, 23/11/2026) ---------- */
+  const DORIG = {exif: 'da foto', tarja: 'da tarja', manual: 'digitada', arquivo: 'data do arquivo — confira'};
+  function dataHora(iso){ const d = new Date(iso); if(isNaN(d)) return ''; const p2 = n => String(n).padStart(2, '0');
+    return d.toLocaleDateString('pt-BR') + ' às ' + p2(d.getHours()) + ':' + p2(d.getMinutes()) + (d.getSeconds() ? ':' + p2(d.getSeconds()) : ''); }
+  const descOrig = descricao;
+  descricao = function(m){
+    const html = descOrig(m), fs = fotosOrdenadas(m.fotos || []).filter(f => f.data);
+    if(!fs.length) return html;
+    const lin = f => dataHora(f.data) + (DORIG[f.dataOrig] ? ' <i>(' + DORIG[f.dataOrig] + ')</i>' : '');
+    const bloco = fs.length === 1 ? '<p><b>Data e hora:</b> ' + lin(fs[0]) + '</p>'
+      : '<p><b>Data e hora das fotos:</b><br>' + fs.map((f, i) => (i + 1) + '. ' + lin(f)).join('<br>') + '</p>';
+    return html + bloco;
+  };
+  window.__ge01DataHora = dataHora;
 
   /* ---------- 4. gerar KMZ/KML: completa tudo antes e lista o que ficou de fora ---------- */
   let feitoNesteGerar = false;
@@ -2235,7 +2309,7 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
   const linha = $('bt-ocr').parentElement;
   const bt = document.createElement('button'); bt.type = 'button'; bt.className = 'bt pri'; bt.id = 'bt-completar';
   bt.textContent = '✨ Completar endereços';
-  bt.title = 'Lê as propriedades e a tarja das fotos, busca coordenadas pelo endereço e endereços pelas coordenadas, e lista as fotos que não foram localizadas';
+  bt.title = 'Lê as propriedades, o nome do arquivo e a tarja das fotos, busca coordenadas pelo endereço e endereços pelas coordenadas, e lista as fotos que não foram localizadas';
   linha.insertBefore(bt, $('bt-ocr'));
   const mais = document.createElement('details'); mais.className = 'ge01-mais';
   mais.innerHTML = '<summary>Passos separados</summary>';
@@ -2261,9 +2335,14 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
   const renderOrig = renderFotos;
   renderFotos = function(){
     renderOrig.apply(this, arguments);
+    if(S.fotos.some(f => temLocal(f) && f.orig === 'nome')){   // conta também a origem “Nome do arquivo” no resumo
+      const cont = {}; S.fotos.forEach(f => { const o = origemDe(f); cont[o] = (cont[o] || 0) + 1; });
+      $('resumo').innerHTML = '<span class="pill">' + S.fotos.length + ' foto(s)</span>' + Object.keys(cont).map(k => '<span class="pill ' + k + '">' + ORIGEM[k] + ': ' + cont[k] + '</span>').join('') +
+        '<span class="pill">' + S.fotos.filter(f => f.sel).length + ' selecionada(s)</span>';
+    }
     S.fotos.forEach(f => {
       const card = document.querySelector('#grade .foto[data-id="' + f.id + '"]'); if(!card) return;
-      if(f.endOrig === 'prop') card.querySelectorAll('.det-props').forEach(d => { if(/^Endereço: —$/.test(d.textContent)) d.textContent = 'Endereço: das propriedades do arquivo'; });
+      if(f.endOrig === 'prop' || f.endOrig === 'nome') card.querySelectorAll('.det-props').forEach(d => { if(/^Endereço: —$/.test(d.textContent)) d.textContent = 'Endereço: ' + (f.endOrig === 'nome' ? 'do nome do arquivo' : 'das propriedades do arquivo'); });
       if(!temLocal(f) && f.semGeo){ const c = card.querySelector('.corpo .nome'); if(c) c.insertAdjacentHTML('afterend', '<div class="det-props ge01-semgeo">⚠ Sem local: ' + esc(f.semGeo) + '</div>'); }
     });
     if($('rel-geo') && $('rel-geo').innerHTML) relatorio(S.fotos.some(f => f.sel) ? S.fotos.filter(f => f.sel) : S.fotos);
