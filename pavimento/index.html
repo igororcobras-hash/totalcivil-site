@@ -426,9 +426,11 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
   <button class="tb-btn tb-btn-excel" onclick="exportarMemoriaExcel()">Excel</button>
   <button class="tb-btn tb-btn-word" translate="no" onclick="exportarMemoriaWord()">Word</button>
   <button class="tb-btn tb-btn-pdf"   onclick="exportarMemoriaPDF()">PDF</button>
+  <button class="tb-btn" id="btn-json-completo" onclick="exportarJsonCompleto()" title="Baixa o projeto COMPLETO em .json (todas as ruas, topografia, planta, cotas do levantamento, georreferenciamento, meio-fio, N por estaca...). Abre igual em qualquer computador.">JSON</button>
   <label class="tb-chk" title="Inclui o desenho da seção transversal de cada estaca no Word e no PDF"><input type="checkbox" class="exp-perfis" checked onchange="sincPerfis(this)"> Exportar perfis</label>
   <span class="tb-sep"></span>
-  <button class="tb-btn tb-btn-save" onclick="exportarTudo()" title="Gera Excel, Word e PDF da memória">Exportar tudo</button>
+  <button class="tb-btn tb-btn-save" onclick="exportarTudo()" title="Gera o projeto completo (.json), Excel, Word e PDF. Qualquer um dos 4 arquivos reabre o projeto inteiro em Importar tudo.">Exportar tudo</button>
+  <button class="tb-btn" id="btn-importar-tudo" onclick="importarTudo()" title="Abre o projeto completo a partir de um arquivo do Exportar tudo (.json, .xlsx, .docx ou .pdf). Pode escolher vários: usa o mais completo.">Importar tudo</button>
 </div>
 
 <div class="tabs-nav">
@@ -900,7 +902,7 @@ body.mode-ios .field select{-webkit-appearance:none;appearance:none;}
           <option value="2">2:1</option>
         </select>
       </div>
-      <div class="field" data-ajuda="c_berma"><label>Largura da Berma / Acostamento (m)</label><input type="number" id="c_berma" value="1.0" step="0.1" oninput="updateCorte()">
+      <div class="field" data-ajuda="c_berma"><label>Largura da Berma / Acostamento (m)</label><input type="number" id="c_berma" value="0" step="0.1" oninput="updateCorte()">
         <span class="unit">Cada lado, dentro da largura da plataforma da estaca</span></div>
     </div>
   </div>
@@ -1421,13 +1423,13 @@ Nuvem.listarProjetos = async function(todos){
   if(!u || !u.liberado) throw new Error('Acesso não liberado.');
   const col = fs.collection(d,'projetos');
   const q = (todos && u.admin) ? fs.query(col, fs.orderBy('atualizadoEm','desc'), fs.limit(200))
-                               : fs.query(col, fs.where('uid','==',u.uid), fs.orderBy('atualizadoEm','desc'), fs.limit(200));
+                               : fs.query(col, fs.where('uid','==',u.uid)); // PAV-EXP: sem orderBy — where+orderBy exigia índice composto no Firestore ("The query requires an index") para quem não é administrador; ordena aqui
   const snap = await fs.getDocs(q);
   return snap.docs.map(x=>{
     const v = x.data();
     return {id:x.id, nome:v.nome, usuario:v.usuario,
             atualizadoEm: v.atualizadoEm && v.atualizadoEm.toDate ? v.atualizadoEm.toDate() : null};
-  });
+  }).sort((a,b)=>(b.atualizadoEm||0)-(a.atualizadoEm||0)).slice(0,200);
 };
 
 Nuvem.abrirProjeto = async function(id){
@@ -2513,7 +2515,7 @@ let _secUid = 0;
    simples: base, altura total e parte aparente (espelho)
    conjugado: sarjeta (base e altura) + meio-fio (largura e espelho)
    ============================================================ */
-const MF_PADRAO = { tipo: 'nenhum', base: 15, alt: 30, esp: 15, sbase: 30, salt: 8, larg: 12 };
+const MF_PADRAO = { tipo: 'conjugado', base: 15, alt: 30, esp: 15, sbase: 30, salt: 8, larg: 12 }; // PAV-EXP: padrão = conjugado (sarjeta 30×8, espelho 15, largura 12)
 let _mf = Object.assign({}, MF_PADRAO);
 function mfTextoCurto(m) {
   if (!m || m.tipo === 'nenhum') return '';
@@ -2549,7 +2551,7 @@ function mfAlternar() {
 function aplicarMeioFio() {
   const g = (id) => {const n = parseFloat((document.getElementById('mfi_' + id) || {}).value);return isNaN(n) || n < 0 ? 0 : n;};
   const tipo = document.getElementById('mfi_tipo').value;
-  const n = { tipo: tipo };
+  const n = { tipo: tipo, escolhido: true }; // PAV-EXP: escolha do usuário (inclusive "sem meio-fio")
   if (tipo === 'simples') {n.base = g('base');n.alt = g('alt');n.esp = g('esp1');if (!(n.base > 0 && n.alt > 0)) {avisarErro('Informe a base e a altura do meio-fio.');return;}} else
   if (tipo === 'conjugado') {n.sbase = g('sbase');n.salt = g('salt');n.esp = g('esp2');n.larg = g('larg');if (!(n.sbase > 0 && n.salt > 0 && n.esp > 0 && n.larg > 0)) {avisarErro('Informe base e altura da sarjeta, o espelho e a largura do meio-fio.');return;}}
   _mf = Object.assign({}, MF_PADRAO, _mf, n);
@@ -4995,7 +4997,7 @@ document.addEventListener('DOMContentLoaded', () => {
   setVal('k_sb', '1.0');
   setVal('k_r', '1.0');
   setVal('c_talaterro', '1.5');
-  setVal('c_berma', '1');
+  setVal('c_berma', '0'); // PAV-EXP: padrão sem berma
   setVal('cbr_base', '80');
   setVal('incr', '10');
   setVal('emin_base', '15');
@@ -6342,6 +6344,132 @@ if(ab&&!document.getElementById('pv-b-comp')){ const b=document.createElement('b
   }
   new MutationObserver(botoes).observe(document.documentElement,{childList:true,subtree:true});
   document.addEventListener('DOMContentLoaded',botoes); setTimeout(botoes,800);
+})();
+</script>
+<script>
+/* =====================================================================
+   PATCH PAV-EXP (23/11/2026) — projeto completo em JSON, Importar tudo e novos padrões
+   (1) Botão "JSON" (barra Exportar memória) = exportarJsonCompleto(): baixa o dadosDoProjeto() inteiro
+       (todas as ruas com eixo e cruzamentos, topografia com N por estaca, planta3d com fundo, cotas do
+       levantamento, transversais, sinalização, georreferenciamento, calçada, meio-fio, critérios).
+       "Exportar tudo" agora baixa JSON + Word + Excel + PDF; os 4 trazem o projeto gravado por dentro.
+   (2) "Importar tudo" (importarTudo): escolhe 1 ou vários arquivos do Exportar tudo e abre o mais completo
+       (json > xlsx > docx > pdf); sem dados gravados cai na leitura pelos rótulos (importarArquivo).
+   (3) "Salvar projeto" passa a gravar o projeto completo (antes gravava só a rua ativa, sem as outras ruas).
+   (4) Caimento transversal esq./dir. da Topografia agora vai no projeto (topo.caim_esq / topo.caim_dir).
+   (5) Padrões (pedido do dono): SEM berma e meio-fio CONJUGADO (sarjeta 30×8 cm, espelho 15, largura 12).
+       Projeto antigo com "sem meio-fio" que não foi escolhido pelo usuário (sem meiofio.escolhido) abre conjugado;
+       berma = 1 m (o padrão antigo) sem corte.bermaEsc abre com 0. Berma digitada pelo usuário fica marcada.
+   ===================================================================== */
+(function(){
+  if(window.__pavExp) return; window.__pavExp=true;
+  const MF_CONJ={tipo:'conjugado',base:15,alt:30,esp:15,sbase:30,salt:8,larg:12};
+  let bermaEsc=false;
+  document.addEventListener('input',function(ev){ if(ev.target&&ev.target.id==='c_berma') bermaEsc=true; },true);
+  const num=x=>x!==''&&x!==null&&x!==undefined&&isFinite(+x);
+  const setNum=(id,val)=>{ const el=document.getElementById(id); if(el&&num(val)) el.value=val; };
+
+  const dp=window.dadosDoProjeto;
+  window.dadosDoProjeto=function(){
+    const d=dp.apply(this,arguments);
+    try{
+      d.topo=d.topo||{};
+      const ce=document.getElementById('topo_caim_esq'), cd=document.getElementById('topo_caim_dir');
+      if(ce&&ce.value!=='') d.topo.caim_esq=parseFloat(ce.value);
+      if(cd&&cd.value!=='') d.topo.caim_dir=parseFloat(cd.value);
+      d.corte=d.corte||{}; d.corte.bermaEsc=bermaEsc;
+    }catch(e){}
+    return d;
+  };
+
+  const ap=window.aplicarProjeto;
+  window.aplicarProjeto=function(p){
+    if(p&&typeof p==='object'){
+      try{
+        p=JSON.parse(JSON.stringify(p));
+        const m=p.meiofio;
+        if(!m||!m.tipo||(m.tipo==='nenhum'&&!m.escolhido)) p.meiofio=Object.assign({},MF_CONJ);
+        if(p.corte&&!p.corte.bermaEsc&&+p.corte.c_berma===1) p.corte.c_berma=0;
+        if(p.topo){ setNum('topo_caim_esq',p.topo.caim_esq); setNum('topo_caim_dir',p.topo.caim_dir); }
+      }catch(e){}
+    }
+    const r=ap.apply(this,[p]);
+    try{ bermaEsc=!!(p&&p.corte&&(p.corte.bermaEsc||+p.corte.c_berma>0));
+      const eb=document.getElementById('c_berma'); if(eb&&eb.value==='') eb.value='0'; }catch(e){}
+    return r;
+  };
+
+  function nomeArq(ext){
+    const z=n=>String(n).padStart(2,'0'), d=new Date();
+    const lg=(s('logradouro')||'projeto').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_+|_+$/g,'').slice(0,50)||'projeto';
+    return 'Projeto_Completo_Pavimento_Flexivel_'+lg+'_'+d.getFullYear()+z(d.getMonth()+1)+z(d.getDate())+'_'+z(d.getHours())+z(d.getMinutes())+z(d.getSeconds())+'.'+ext;
+  }
+  function resumo(d){
+    const t=d&&d.topo||{}, p3=d&&d.planta3d||{};
+    const ruas=(t.ruas&&t.ruas.length)?t.ruas:[{rows:t.rows||[]}];
+    const est=ruas.reduce((a,r)=>a+((r.rows||[]).filter(x=>x&&x.est!==''&&x.est!=null).length),0);
+    const p=[ruas.length+(ruas.length>1?' ruas':' rua'), est+' estacas'];
+    if(Array.isArray(p3.cotas)&&p3.cotas.length) p.push(p3.cotas.length+' cotas do levantamento');
+    if(Array.isArray(p3.fundo)&&p3.fundo.length) p.push('fundo da planta com '+p3.fundo.length+' camada(s)');
+    if(Array.isArray(p3.transv)&&p3.transv.length) p.push(p3.transv.length+' rua(s) transversal(is)');
+    if(p3.georef&&p3.georef.lat!=null||Array.isArray(p3.origemUTM)) p.push('georreferenciado');
+    return p.join(', ');
+  }
+  window.pavResumoProjeto=resumo;
+
+  window.exportarJsonCompleto=async function(){
+    try{
+      const d=dadosDoProjeto();
+      d.arquivo={programa:'Pavimento Flexível',tipo:'projeto completo',exportadoEm:new Date().toISOString()};
+      const nome=nomeArq('json');
+      await triggerDownload(new Blob([JSON.stringify(d)],{type:'application/json'}),nome);
+      try{ registrarRecente(dadosDoProjeto(),nomeDoProjeto(d,nome)); }catch(e){}
+      avisar('Projeto completo exportado ('+resumo(d)+'). Abre em "Importar tudo" ou "Abrir projeto".');
+      return nome;
+    }catch(e){ avisarErro('Não consegui exportar o JSON: '+(e&&e.message||e)); }
+  };
+
+  const et=window.exportarTudo;
+  window.exportarTudo=async function(){
+    await window.exportarJsonCompleto();
+    await new Promise(r=>setTimeout(r,500));
+    const r=await et.apply(this,arguments);
+    try{ avisar('Exportar tudo: projeto completo (.json), Word, Excel e PDF. Qualquer um deles reabre o projeto inteiro em "Importar tudo".'); }catch(e){}
+    return r;
+  };
+
+  window.salvarProjeto=function(){
+    const d=dadosDoProjeto();
+    triggerDownload(new Blob([JSON.stringify(d,null,1)],{type:'application/json'}),'pavimento_projeto.json');
+    try{ registrarRecente(dadosDoProjeto(),nomeDoProjeto(d,'pavimento_projeto.json')); _sujo=false; }catch(e){}
+  };
+
+  const ORDEM=['json','xlsx','xlsm','docx','pdf'];
+  const ext=f=>(f.name.split('.').pop()||'').toLowerCase();
+  window.importarTudoArquivos=async function(files){
+    const fs=[...files].filter(f=>ORDEM.indexOf(ext(f))>=0).sort((a,b)=>ORDEM.indexOf(ext(a))-ORDEM.indexOf(ext(b)));
+    if(!fs.length){ avisarErro('Escolha um arquivo .json, .xlsx, .docx ou .pdf exportado por esta calculadora.'); return false; }
+    const falhas=[];
+    for(const f of fs){
+      try{ const r=await lerArquivoProjeto(f);
+        if(r&&r.exato){ abrirDadosProjeto(r.dados,nomeDoProjeto(r.dados,f.name),'Projeto completo aberto de '+f.name+': '+resumo(r.dados)+'.'); return true; } }
+      catch(e){ falhas.push(f.name+': '+(e&&e.message||e)); }
+    }
+    /* nenhum traz o projeto gravado: leitura pelos rótulos, como no Abrir projeto */
+    await importarArquivo({target:{files:[fs[0]],value:''}});
+    if(falhas.length) console.warn('Importar tudo:',falhas);
+    return false;
+  };
+  window.importarTudo=function(){
+    const inp=document.createElement('input'); inp.type='file'; inp.multiple=true;
+    inp.accept='.json,application/json,.xlsx,.xlsm,.docx,.pdf'; inp.style.display='none';
+    inp.onchange=()=>{ const f=inp.files; inp.remove(); if(f&&f.length) window.importarTudoArquivos(f); };
+    document.body.appendChild(inp); inp.click();
+  };
+
+  /* mostra o meio-fio padrão já na abertura */
+  try{ if(typeof mfAtualizarResumo==='function') mfAtualizarResumo(); }catch(e){}
+  document.addEventListener('DOMContentLoaded',()=>{ try{ mfAtualizarResumo(); }catch(e){} });
 })();
 </script>
 </body>
