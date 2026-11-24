@@ -2276,7 +2276,7 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
     const confirmada = () => { if(window.__ge03semParar) return false; return vencedora(votar(cands)); };
     // GE-17: carimbo só com endereço (sem sinal de coordenada) e o mesmo endereço lido 2+ vezes: não precisa das 12 leituras
     const soEndereco = () => { if(!window.ge16 || /\d{1,2}\s*[°º*]\s*\d{2}|\d{2}[.,]\d{4,}/.test(txt)) return false; const e = window.ge16.lerEndereco(txt); return !!e && e.votos >= 2; };
-    const pronto = () => (confirmada() && lerEnderecoTarja(txt)) || soEndereco();
+    const pronto = () => confirmada() && lerEnderecoTarja(txt);   // GE-18: sem a parada antecipada do GE-17
     try{
       const w = await motorOCR();
       try{ await w.setParameters({tessedit_pageseg_mode: '6', preserve_interword_spaces: '1'}); }catch(e){}
@@ -2293,14 +2293,14 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
         if(lc && !feitas.has(cr) && !confirmada()){ feitas.add(cr); (await lerLinha(w, bmp, rec, lc.bbox, cands)).forEach(x => cands.push(x)); }
       };
       try{
-        for(const v of VARIANTES){ for(const cr of CANTOS){ if(pronto() || Date.now() - t0 > 30000) break; await ler(cr, v); } if(pronto()) break; }
-        if(!cands.length && !lerEnderecoTarja(txt)) for(const v of VARIANTES.slice(0, 2)) for(const cr of FAIXAS){ if(pronto() || Date.now() - t0 > 40000) break; await ler(cr, v); }
+        for(const v of VARIANTES){ for(const cr of CANTOS){ if(pronto() || Date.now() - t0 > 30000 * (window.__ge17 && window.__ge17.fator || 1)) break; await ler(cr, v); } if(pronto()) break; }
+        if(!cands.length && !lerEnderecoTarja(txt)) for(const v of VARIANTES.slice(0, 2)) for(const cr of FAIXAS){ if(pronto() || Date.now() - t0 > 40000 * (window.__ge17 && window.__ge17.fator || 1)) break; await ler(cr, v); }
       }finally{ if(bmp.close) bmp.close(); }
     }catch(e){ if(/leitor de texto/.test(e.message || '')) throw e; console.warn('GE-03 tarja:', e); }
     if(!cands.length && !lerEnderecoTarja(txt)){ try{ txt += '\n' + await textoOrig(blob); candidatos(txt).forEach(x => cands.push(x)); }catch(e){ if(!txt.trim()) throw e; } }
     // decisão: 2 leituras iguais = confirmada; 1 leitura só sem endereço = usa e pede conferência;
     // leituras diferentes, ou 1 só com endereço legível = recusa a coordenada (vai pelo endereço)
-    const g = votar(cands), end = lerEnderecoTarja(txt);
+    const g = votar(cands), end = (window.__ge16EndAntigo || lerEnderecoTarja)(txt);   // GE-18
     let coord = null, info = {votos: g.length ? g[0].lista.length : 0, cands: cands.map(c => c.lin), confs: cands.map(c => Math.round(c.conf || 0)), coords: cands.map(c => c.lat.toFixed(5) + ',' + c.lon.toFixed(5)), unico: false, recusada: false};
     if(g.length && g[0].lista.length >= 2 && (g.length === 1 || g[0].pontos >= 1.5 * g[1].pontos)){
       const dig = c => (c.lin.match(/\d{2}[.,]\d{2,}/g) || []).length * 100 + (c.lin.match(/\d/g) || []).length;
@@ -3255,6 +3255,7 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
   const G3 = window.__ge03; if(!G3 || !window.ge16) return;
   /* endereço: votação entre as leituras do OCR; o interpretador antigo só entra se o novo não achar nada e o resultado for plausível */
   const lerEndAnterior = lerEnderecoTarja;
+  window.__ge16EndAntigo = lerEndAnterior;   // GE-18: critério antigo para decidir a coordenada
   const plausivel = e => !!e && /^(rua|r\.|avenida|av|alameda|al|travessa|tv|estrada|estr|rodovia|rod|pra[çc]a|largo|servid|beco|via|viela|ladeira|caminho)\b/i.test(e.rua || '') &&
     (e.rua.match(/[A-Za-zÀ-ÿ]{4,}/g) || []).length >= 1 && !/[^A-Za-zÀ-ÿ0-9 .,'\-]/.test(e.rua) && (e.rua.match(/[A-Za-zÀ-ÿ]/g) || []).length / e.rua.replace(/\s/g, '').length > .85;
   lerEnderecoTarja = function(t){
@@ -3305,7 +3306,7 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
       };
       fim: for(const v of VARS){
         for(const cr of TILES){
-          if(Date.now() - t0 > 40000) break fim;
+          if(Date.now() - t0 > 40000 * (window.__ge17 && window.__ge17.fator || 1)) break fim;
           await ler(cr, v);
           if(G3.vencedora(G3.votar(cands)) && window.ge16.lerEndereco(txt + '\n' + extra.join('\n'))) break fim;
           { const todo = txt + '\n' + extra.join('\n'), e2 = window.ge16.lerEndereco(todo);   // GE-17: endereço lido 2+ vezes e nenhum sinal de coordenada na foto
@@ -3319,7 +3320,7 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
     finally{ if(bmp && bmp.close) bmp.close(); }
     if(!extra.length) return txt;
     const novo = (txt + '\n' + extra.join('\n')).trim();
-    const g = G3.votar(cands), info = G3.INFO.get(blob), end = window.ge16.lerEndereco(novo);
+    const g = G3.votar(cands), info = G3.INFO.get(blob), end = window.__ge16EndAntigo(novo);   // GE-18
     let coord = null, unico = false, recusada = false;
     if(g.length && g[0].lista.length >= 2 && (g.length === 1 || g[0].pontos >= 1.5 * g[1].pontos)) coord = {lat: g[0].lat, lon: g[0].lon};
     else if(g.length === 1 && !end){ coord = {lat: g[0].lat, lon: g[0].lon}; unico = true; }
@@ -3425,7 +3426,8 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
             $('txt-acao').textContent = 'Lendo a tarja: ' + feitas + ' de ' + blobs.length + ' fotos (' + n + ' leitores ao mesmo tempo)…';
           }
         };
-        await Promise.all(Array.from({length: n}, rodar));
+        window.__ge17.fator = n;
+        try{ await Promise.all(Array.from({length: n}, rodar)); }finally{ window.__ge17.fator = 1; }
         window.__ge17.ultimo = {fotos: blobs.length, leitores: n, seg: Math.round((Date.now() - t0) / 100) / 10};
       }catch(e){ console.warn('GE-17: leitura em paralelo falhou; seguindo foto a foto.', e); }
     }
