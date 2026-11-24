@@ -2148,10 +2148,13 @@ processarFoto = async function (file, camera) {
   // carimbo: data/hora e coordenadas (e o local, quando houver)
   const d = M && M.d, oc = d && (d.ocorrenciaId ? O().ocorrencias.find(x => x.id === d.ocorrenciaId) : (M.t === 'vf' || M.t === 'oc') ? d : null);
   const loc = oc ? (oc.num ? 'Ocorrência nº ' + oc.num + ' · ' : '') + [oc.rua || (oc.local && oc.local.rua), oc.bairro || (oc.local && oc.local.bairro)].filter(Boolean).join(' — ') : '';
+  if (window.__carimbo) await window.__carimbo(g, w, h, {quando, lat, lng, loc, oc});   /* SP-38: carimbo configurável (coordenadas e logotipo) */
+  else {
   const l1 = fHora(quando) + '   ·   ' + (lat != null ? fN(lat, 6) + ', ' + fN(lng, 6) : 'SEM COORDENADAS');
   const fs = Math.max(13, Math.round(w / 48)), lh = Math.round(fs * 1.35), lines = loc ? [l1, loc] : [l1], bh = lh * lines.length + Math.round(fs * 0.6);
   g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(0, h - bh, w, bh); g.fillStyle = '#fff'; g.font = '600 ' + fs + 'px system-ui, Arial, sans-serif'; g.textBaseline = 'top';
   lines.forEach((t, i) => { let s = t; while (g.measureText(s).width > w - fs && s.length > 4) s = s.slice(0, -2); g.fillText(s === t ? t : s + '…', Math.round(fs * 0.5), h - bh + Math.round(fs * 0.3) + i * lh); });
+  }
   const data = c.toDataURL('image/jpeg', FOTO_Q);
   const id = 'f' + uid(); await DB.put('fotos', id, {id, obraId: S.obraId, data}); fotoCache.set(id, data);
   return {id, lat: lat ?? null, lng: lng ?? null, origem, tiradaEm: quando, carimbo: true, legenda: '', fase: 'depois'};
@@ -5564,6 +5567,97 @@ const _cm = calcMed;
   };
   ACTS.tcoffIr = function () { [...NUV.pend].forEach(nuvDescarga); location.href = '/ocorrencias/?instalar=1'; };
   try { renderTop() } catch (e) { }
+})();
+</script>
+<script>
+/* PATCH SP-38 (23/11/2026): carimbo das fotos tiradas no programa/app configurável por obra: coordenadas (decimal ou graus/min/seg),
+   data e hora, local da ocorrência e LOGOTIPO (timbre da Secretaria, logotipo da contratada, outro enviado ou nenhum), canto e tamanho.
+   Configuração em o.carimbo (vai para a nuvem com a obra; logotipo guardado na obra → funciona sem internet). */
+(function () {
+  const PAD = { coord: true, fmt: 'dec', data: true, local: true, logo: 'pref', pos: 'sd', tam: 22, logoImg: null };
+  const cfgC = o => Object.assign({}, PAD, (o && o.carimbo) || {});
+  const pad = n => String(n).padStart(2, '0');
+  const fHora = iso => { const d = new Date(iso); return pad(d.getDate()) + '/' + pad(d.getMonth() + 1) + '/' + d.getFullYear() + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+  const gms = (v, pos, neg) => { const a = Math.abs(v), g = Math.floor(a), mf = (a - g) * 60, m = Math.floor(mf), sg = (mf - m) * 60;
+    return (v < 0 ? neg : pos) + ' ' + g + '° ' + pad(m) + "' " + sg.toFixed(2).replace('.', ',') + '"'; };
+  const coordTxt = (lat, lng, fmt) => fmt === 'gms' ? gms(lat, 'N', 'S') + '  ' + gms(lng, 'E', 'W') : fN(lat, 6) + ', ' + fN(lng, 6);
+  const logoSrc = (o, c) => c.logo === 'pref' ? ((S.settings.cab && S.settings.cab.head) || IMG_HEAD) : c.logo === 'emp' ? (o && o.logoEmp) : c.logo === 'prop' ? c.logoImg : null;
+  const imgCache = new Map();
+  const img = src => { if (!imgCache.has(src)) imgCache.set(src, carregarImg(src).catch(() => null)); return imgCache.get(src); };
+
+  window.__carimbo = async function (g, w, h, d) {
+    const o = O(), c = cfgC(o);
+    const partes = [];
+    if (c.data) partes.push(fHora(d.quando));
+    if (c.coord) partes.push(d.lat != null ? coordTxt(d.lat, d.lng, c.fmt) : 'sem coordenadas');
+    const lines = []; if (partes.length) lines.push(partes.join('   ·   ')); if (c.local && d.loc) lines.push(d.loc);
+    const fs = Math.max(13, Math.round(w / 48)), lh = Math.round(fs * 1.35);
+    const bh = lines.length ? lh * lines.length + Math.round(fs * 0.6) : 0;
+    if (bh) { g.fillStyle = 'rgba(0,0,0,0.55)'; g.fillRect(0, h - bh, w, bh); g.fillStyle = '#fff'; g.font = '600 ' + fs + 'px system-ui, Arial, sans-serif'; g.textBaseline = 'top';
+      lines.forEach((t, i) => { let s = t; while (g.measureText(s).width > w - fs && s.length > 4) s = s.slice(0, -2); g.fillText(s === t ? t : s + '…', Math.round(fs * 0.5), h - bh + Math.round(fs * 0.3) + i * lh); }); }
+    const src = logoSrc(o, c); if (!src) return;
+    const im = await img(src); if (!im || !im.naturalWidth) return;
+    let lw = w * Math.min(60, Math.max(8, +c.tam || 22)) / 100, lhh = lw * im.naturalHeight / im.naturalWidth;
+    if (lhh > h * 0.3) { lhh = h * 0.3; lw = lhh * im.naturalWidth / im.naturalHeight; }
+    const m = Math.round(w * 0.02), p = Math.round(Math.max(4, lw * 0.04));
+    const dir = c.pos[1] === 'd', baixo = c.pos[0] === 'i';
+    const x = dir ? w - m - lw - p : m + p, y = baixo ? h - bh - m - lhh - p : m + p;
+    g.fillStyle = 'rgba(255,255,255,0.85)';
+    const rx = x - p, ry = y - p, rw = lw + 2 * p, rh = lhh + 2 * p, r = p * 1.5;
+    g.beginPath(); g.moveTo(rx + r, ry); g.arcTo(rx + rw, ry, rx + rw, ry + rh, r); g.arcTo(rx + rw, ry + rh, rx, ry + rh, r); g.arcTo(rx, ry + rh, rx, ry, r); g.arcTo(rx, ry, rx + rw, ry, r); g.closePath(); g.fill();
+    g.drawImage(im, x, y, lw, lhh);
+  };
+
+  /* ---------- janela de configuração ---------- */
+  const podeMexer = () => can('config') || can('ocorr');
+  async function previa() {
+    const cv = $('#cb-prev'); if (!cv) return;
+    const W = 640, H = 420; cv.width = W; cv.height = H; const g = cv.getContext('2d');
+    const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, '#9bb7cf'); gr.addColorStop(.55, '#b9c4c8'); gr.addColorStop(.56, '#555'); gr.addColorStop(1, '#3a3a3a');
+    g.fillStyle = gr; g.fillRect(0, 0, W, H); g.fillStyle = '#222'; g.beginPath(); g.ellipse(320, 320, 90, 30, 0, 0, 7); g.fill();
+    await window.__carimbo(g, W, H, { quando: new Date().toISOString(), lat: -22.477532, lng: -41.910991, loc: 'Ocorrência nº 12 · Rua das Camélias — Praia Âncora' });
+  }
+  ACTS.sp38Abrir = function () {
+    const o = O(); if (!o) return; const c = cfgC(o), dis = podeMexer() ? '' : 'disabled';
+    const op = (v, t, cur) => `<option value="${v}" ${cur === v ? 'selected' : ''}>${t}</option>`;
+    M = { t: 'sp38' };
+    abrirModal(`<div class="mh"><h3>📷 Carimbo das fotos desta obra</h3><button class="x" data-act="mClose">×</button></div><div class="mb">
+      <p class="muted small">Vale para as fotos tiradas ou anexadas no programa e no app offline (também sem internet). Fotos já salvas não mudam.</p>
+      ${podeMexer() ? '' : '<div class="alert">Seu perfil só pode ver esta configuração.</div>'}
+      <div class="row gap" style="flex-wrap:wrap">
+        <label class="chk"><input type="checkbox" data-chg="sp38" data-k="coord" ${c.coord ? 'checked' : ''} ${dis}> Coordenadas</label>
+        <label>Formato<select data-chg="sp38" data-k="fmt" ${dis}>${op('dec', 'Decimal (-22,477532, -41,910991)', c.fmt)}${op('gms', "Graus (S 22° 28' 39&quot; W 41° 54' 39&quot;)", c.fmt)}</select></label>
+        <label class="chk"><input type="checkbox" data-chg="sp38" data-k="data" ${c.data ? 'checked' : ''} ${dis}> Data e hora</label>
+        <label class="chk"><input type="checkbox" data-chg="sp38" data-k="local" ${c.local ? 'checked' : ''} ${dis}> Nº e local da ocorrência</label></div>
+      <div class="row gap" style="flex-wrap:wrap;margin-top:8px">
+        <label>Logotipo<select data-chg="sp38" data-k="logo" ${dis}>${op('pref', 'Timbre da Secretaria (Obra & Config)', c.logo)}${op('emp', 'Logotipo da contratada' + (o.logoEmp ? '' : ' (não cadastrado)'), c.logo)}${op('prop', 'Outro logotipo (enviar imagem)', c.logo)}${op('nao', 'Sem logotipo', c.logo)}</select></label>
+        <label>Canto<select data-chg="sp38" data-k="pos" ${dis}>${op('sd', 'Superior direito', c.pos)}${op('se', 'Superior esquerdo', c.pos)}${op('id', 'Inferior direito', c.pos)}${op('ie', 'Inferior esquerdo', c.pos)}</select></label>
+        <label>Tamanho (% da largura)<input type="number" min="8" max="60" step="1" value="${c.tam}" data-chg="sp38" data-k="tam" ${dis} style="width:80px"></label>
+        ${c.logo === 'prop' ? `<button class="btn sm" data-act="sp38Logo" ${dis}>🖼 ${c.logoImg ? 'Trocar' : 'Enviar'} logotipo</button>` : ''}
+        ${c.logo === 'emp' && !o.logoEmp ? '<span class="small muted">Cadastre em Obra & Config › Logotipo da contratada.</span>' : ''}</div>
+      <p class="small muted" style="margin:10px 0 4px">Prévia:</p><canvas id="cb-prev" style="width:100%;max-width:640px;border-radius:8px;border:1px solid var(--line,#ddd)"></canvas>
+      <div class="row gap" style="margin-top:10px"><button class="btn pri" data-act="mClose">Pronto</button></div></div>`);
+    previa();
+  };
+  CHG.sp38 = function (el) {
+    if (!podeMexer()) return; const o = O(); const c = cfgC(o); const k = el.dataset.k;
+    c[k] = el.type === 'checkbox' ? el.checked : k === 'tam' ? Math.min(60, Math.max(8, +el.value || 22)) : el.value;
+    o.carimbo = c; saveObra(o);
+    if (k === 'logo') { ACTS.sp38Abrir(); if (c.logo === 'prop' && !c.logoImg) ACTS.sp38Logo(); } else previa();
+  };
+  ACTS.sp38Logo = function () {
+    const i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*';
+    i.onchange = async () => { const f = i.files[0]; if (!f) return; const u = URL.createObjectURL(f); try { const im = await carregarImg(u); const k = Math.min(1, 600 / Math.max(im.naturalWidth, im.naturalHeight));
+      const c = document.createElement('canvas'); c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      const o = O(); const cc = cfgC(o); cc.logoImg = c.toDataURL('image/png'); if (cc.logoImg.length > 400000) cc.logoImg = c.toDataURL('image/jpeg', 0.85); cc.logo = 'prop'; o.carimbo = cc; await saveObra(o); ACTS.sp38Abrir(); toast('Logotipo guardado na obra.') }
+      catch (e) { toast('Não foi possível ler a imagem.') } finally { URL.revokeObjectURL(u) } };
+    i.click();
+  };
+  /* botão na aba Obra & Config e junto das fotos do relato/atendimento */
+  const _cfg = tCfg;
+  tCfg = function (o) { return `<div class="card"><h3>📷 Carimbo das fotos</h3><p class="muted small">Coordenadas, data e hora, local e logotipo gravados nas fotos tiradas no programa e no app offline.</p><button class="btn" data-act="sp38Abrir">Configurar carimbo</button></div>` + _cfg.apply(this, arguments); };
+  const _fa = fotosArea;
+  fotosArea = function () { const r = _fa.apply(this, arguments); return S.obraId ? r + '<div style="margin-top:4px"><button type="button" class="btn mini" data-act="sp38Abrir" title="Coordenadas e logotipo gravados nas fotos">📷 Carimbo: coordenadas e logotipo</button></div>' : r; };
 })();
 </script>
 </body>
