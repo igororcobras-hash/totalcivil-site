@@ -2699,7 +2699,11 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
   async function ge04Busca(q, cache, rua){
     const k = q + '|' + (rua || '');
     if(cache[k] !== undefined) return cache[k];
-    cache[k] = await geoBusca(q, 5, rua ? (l => l.filter(x => ge04Confere(x, rua))) : null);
+    // GE-19: só serve RUA (ou endereço com número) com o nome certo e NO MUNICÍPIO do trabalho; senão passa para o próximo serviço
+    // (antes, uma loja “Recife” ou a “Rua Recife” de outra cidade encerrava a busca e a Esri, que acha a rua certa, nem era consultada)
+    const cid = ge04Norm(String(S.cfg.mun || '').split(/\s+-\s+|,/)[0]).trim();
+    const util = x => (x.class === 'highway' || (x.address && x.address.house_number)) && (!cid || ge04Norm(x.display_name).includes(cid));
+    cache[k] = await geoBusca(q, 5, rua ? (l => l.filter(x => ge04Confere(x, rua) && util(x))) : null);
     return cache[k];
   }
   // devolve {lat, lon, nota} ou null (nada que confira com a rua escrita)
