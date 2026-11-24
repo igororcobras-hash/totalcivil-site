@@ -916,12 +916,29 @@ $('bt-rem-sel').onclick = () => removerFotos(S.fotos.filter(f => f.sel).map(f =>
 
 /* ---------- OCR da tarja (Tesseract.js, carregado só quando usado) ---------- */
 let _ocr = null;
+/* GE-17: o leitor (Tesseract.js + núcleo + português) fica na pasta ocr/ do próprio site: carrega mais rápido, o navegador guarda para as
+   próximas vezes e não depende de servidor de terceiros. Se a cópia do site não carregar, volta a baixar da internet como antes. */
+function carregarScript(src){ return new Promise((ok, erro) => { const s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = () => { s.remove(); erro(new Error('script não carregou: ' + src)); }; document.head.appendChild(s); }); }
+let _localOk = true;   // GE-17: vira false se a cópia local falhar (não tenta de novo a cada foto)
+async function criarLeitor(){
+  const base = new URL('ocr/', location.href).href;
+  if(typeof Tesseract === 'undefined'){
+    let achou = false;
+    if(_localOk){ try{ await carregarScript(base + 'tesseract.min.js'); achou = true; }catch(e){ _localOk = false; console.warn('GE-17: leitor local indisponível, usando a internet.', e); } }
+    if(!achou){
+      try{ await carregarScript('https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js'); }
+      catch(e){ throw new Error('não foi possível carregar o leitor de texto (verifique a internet)'); }
+    }
+  }
+  if(_localOk){
+    try{ return await Tesseract.createWorker('por', 1, {workerPath: base + 'worker.min.js', corePath: base + 'core', langPath: base + 'lang', gzip: true}); }
+    catch(e){ _localOk = false; console.warn('GE-17: não consegui iniciar o leitor da cópia local, usando a internet.', e); }
+  }
+  return await Tesseract.createWorker('por');
+}
 async function motorOCR(){
   if(_ocr) return _ocr;
-  if(typeof Tesseract === 'undefined'){
-    await new Promise((ok, erro) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js'; s.onload = ok; s.onerror = () => erro(new Error('não foi possível carregar o leitor de texto (verifique a internet)')); document.head.appendChild(s); });
-  }
-  _ocr = await Tesseract.createWorker('por');
+  _ocr = await criarLeitor();
   return _ocr;
 }
 async function textoDaFoto(blob){
@@ -2257,7 +2274,9 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
   textoDaFoto = async function(blob){
     let txt = ''; const cands = [];
     const confirmada = () => { if(window.__ge03semParar) return false; return vencedora(votar(cands)); };
-    const pronto = () => confirmada() && lerEnderecoTarja(txt);
+    // GE-17: carimbo só com endereço (sem sinal de coordenada) e o mesmo endereço lido 2+ vezes: não precisa das 12 leituras
+    const soEndereco = () => { if(!window.ge16 || /\d{1,2}\s*[°º*]\s*\d{2}|\d{2}[.,]\d{4,}/.test(txt)) return false; const e = window.ge16.lerEndereco(txt); return !!e && e.votos >= 2; };
+    const pronto = () => (confirmada() && lerEnderecoTarja(txt)) || soEndereco();
     try{
       const w = await motorOCR();
       try{ await w.setParameters({tessedit_pageseg_mode: '6', preserve_interword_spaces: '1'}); }catch(e){}
@@ -3163,6 +3182,7 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
   function limpaBairro(fr){
     const w = String(fr).split(/\s+/).filter(Boolean);
     while(w.length && (w[0].replace(/[^A-Za-zÀ-ÿ]/g, '').length < 3 || !/^[A-Za-zÀ-ÿ]/.test(w[0]))) w.shift();   // restos do OCR no começo
+    { const k = w.findIndex(x => !CONECT.test(x) && /^[a-zà-ÿ]/.test(x)); if(k > 0) w.splice(k); }   // GE-17: “Extensão. cases” → “Extensão” (palavra minúscula solta é resto do OCR)
     const b = w.join(' ').replace(/[.:;,\s]+$/, '');
     if(b.length < 3 || b.length > 38 || NAO_BAIRRO.test(b) || /[^A-Za-zÀ-ÿ '.\-]/.test(b)) return '';
     if(w.some(x => x.length <= 2 && !CONECT.test(x))) return '';
@@ -3288,6 +3308,8 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
           if(Date.now() - t0 > 40000) break fim;
           await ler(cr, v);
           if(G3.vencedora(G3.votar(cands)) && window.ge16.lerEndereco(txt + '\n' + extra.join('\n'))) break fim;
+          { const todo = txt + '\n' + extra.join('\n'), e2 = window.ge16.lerEndereco(todo);   // GE-17: endereço lido 2+ vezes e nenhum sinal de coordenada na foto
+            if(e2 && e2.votos >= 2 && !RX_COORD.test(todo.replace(/\d{5}-?\d{3}/g, '').replace(/\d{1,2}:\d{2}(:\d{2})?/g, ''))) break fim; }
         }
         const e = window.ge16.lerEndereco(txt + '\n' + extra.join('\n'));
         const achouDica = RX_COORD.test(extra.join('\n'));
@@ -3349,6 +3371,65 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
     });
     if(n){ salvar(); renderFotos(); }
     return n;
+  };
+})();
+</script>
+<script>
+/* PATCH GE-17 (24/11/2026): leitura da tarja mais rápida. (1) o leitor (Tesseract.js) vem da pasta ocr/ do próprio site (ver motorOCR/criarLeitor);
+   (2) VÁRIOS leitores ao mesmo tempo: ao ler a tarja de 2+ fotos, as fotos são lidas em paralelo (até 4 leitores, conforme os núcleos do computador)
+   e o resultado fica guardado para o passo seguinte, que segue igual. Com 1 foto, ou computador de 1–2 núcleos, nada muda. */
+(function(){
+  const NMAX = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
+  window.__ge17 = {nmax: NMAX, forcar: null};
+  const pool = [], livres = [], fila = [];
+  const BASE = {tessedit_pageseg_mode: '6', preserve_interword_spaces: '1', tessedit_char_whitelist: ''};
+  const adquirir = () => new Promise(ok => { const w = livres.pop(); if(w) ok(w); else fila.push(ok); });
+  const liberar = w => { const n = fila.shift(); if(n) n(w); else livres.push(w); };
+  async function garantir(n){
+    const falta = n - pool.length; if(falta <= 0) return;
+    const novos = await Promise.all(Array.from({length: falta}, () => criarLeitor()));
+    novos.forEach(w => { pool.push(w); liberar(w); });
+  }
+  /* “leitor” entregue a cada leitura de foto: guarda os próprios parâmetros e usa um leitor livre do grupo só durante o recognize */
+  function Leitor(){ this.p = Object.assign({}, BASE); }
+  Leitor.prototype.setParameters = async function(o){ Object.assign(this.p, o || {}); };
+  Leitor.prototype.recognize = async function(img){
+    const w = await adquirir();
+    try{ await w.setParameters(this.p); return await w.recognize(img); }
+    finally{ liberar(w); }
+  };
+  motorOCR = async function(){
+    if(!pool.length){ if(_ocr){ pool.push(_ocr); liberar(_ocr); } else await garantir(1); }
+    return new Leitor();
+  };
+  const textoOriginal = textoDaFoto, PRONTO = new WeakMap();
+  textoDaFoto = async function(blob){
+    if(PRONTO.has(blob)){ const t = PRONTO.get(blob); PRONTO.delete(blob); return t; }
+    return textoOriginal(blob);
+  };
+  const ocrAnterior = ocrFotos;
+  ocrFotos = async function(lista, umaSo){
+    const blobs = (lista || []).map(f => BLOBS.get(f.id)).filter(Boolean);
+    const n = Math.min(window.__ge17.forcar || NMAX, blobs.length);
+    if(n >= 2){
+      try{
+        $('txt-acao').textContent = 'Preparando ' + n + ' leitores de texto para ler ' + blobs.length + ' fotos ao mesmo tempo… (na primeira vez baixa cerca de 10 MB)';
+        progresso('prog-acao', 0);
+        await garantir(n);
+        let feitas = 0; const t0 = Date.now(), restantes = blobs.slice();
+        const rodar = async () => {
+          while(restantes.length){
+            const b = restantes.shift();
+            try{ PRONTO.set(b, await textoOriginal(b)); }catch(e){ if(/leitor de texto/.test(e.message || '')) throw e; console.warn('GE-17 leitura em paralelo:', e); }
+            feitas++; progresso('prog-acao', feitas / blobs.length);
+            $('txt-acao').textContent = 'Lendo a tarja: ' + feitas + ' de ' + blobs.length + ' fotos (' + n + ' leitores ao mesmo tempo)…';
+          }
+        };
+        await Promise.all(Array.from({length: n}, rodar));
+        window.__ge17.ultimo = {fotos: blobs.length, leitores: n, seg: Math.round((Date.now() - t0) / 100) / 10};
+      }catch(e){ console.warn('GE-17: leitura em paralelo falhou; seguindo foto a foto.', e); }
+    }
+    return ocrAnterior.apply(this, arguments);
   };
 })();
 </script>
