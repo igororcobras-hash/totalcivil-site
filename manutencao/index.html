@@ -5660,5 +5660,208 @@ const _cm = calcMed;
   fotosArea = function () { const r = _fa.apply(this, arguments); return S.obraId ? r + '<div style="margin-top:4px"><button type="button" class="btn mini" data-act="sp38Abrir" title="Coordenadas e logotipo gravados nas fotos">📷 Carimbo: coordenadas e logotipo</button></div>' : r; };
 })();
 </script>
+<script>
+/* PATCH SP-39 (24/11/2026): “📷 Foto rápida” e “Minha localização · registro rápido” abriam a câmera do APARELHO (input capture): no celular com pouca
+   memória o Android fecha o navegador/app enquanto a câmera está aberta (“Devido à insuficiência de memória…”) e a foto se perde. Agora a foto é tirada
+   DENTRO do programa (getUserMedia, mesma câmera do botão “📷 Câmera” das janelas), funciona sem internet, a foto fica guardada no aparelho
+   (IndexedDB tc-rp) até ir para um relato, e depois da foto o programa pergunta a obra e abre o relato com a foto e o GPS para preencher tudo.
+   Se o aparelho ainda assim fechar a página, ao abrir de novo as fotos voltam e a pergunta da obra reaparece. */
+(function () {
+  /* ---------- fotos pendentes guardadas no aparelho ---------- */
+  let _db = null;
+  const db = () => _db || (_db = new Promise((res, rej) => { const r = indexedDB.open('tc-rp', 1); r.onupgradeneeded = () => r.result.createObjectStore('p'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
+  const pGet = () => db().then(d => new Promise(res => { const g = d.transaction('p').objectStore('p').get('pend'); g.onsuccess = () => res(g.result || null); g.onerror = () => res(null); })).catch(() => null);
+  const pPut = v => db().then(d => new Promise(res => { const t = d.transaction('p', 'readwrite'); t.objectStore('p').put(v, 'pend'); t.oncomplete = () => res(); t.onerror = () => res(); })).catch(() => { });
+  const pDel = () => db().then(d => new Promise(res => { const t = d.transaction('p', 'readwrite'); t.objectStore('p').delete('pend'); t.oncomplete = () => res(); t.onerror = () => res(); })).catch(() => { });
+  const temCam = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.isSecureContext);
+
+  const obrasPode = () => Object.values(S.obras).filter(o => o && (!S.trava || (S.acessos && S.acessos[o.id] && PERM[S.acessos[o.id].perfil].includes('ocorr'))) && (S.trava || PERM[S.perfil].includes('ocorr')))
+    .sort((a, b) => (a.criadaEm || '').localeCompare(b.criadaEm || ''));
+
+  /* ---------- câmera dentro do programa que só junta as fotos (sem precisar de janela aberta) ---------- */
+  function camColetar() {
+    return new Promise(resolve => {
+      if ($('#cam')) { resolve(null); return; }
+      const fotos = []; let st = null, face = 'environment', gps = null;
+      try { posicaoAtual().then(p => { gps = p; }).catch(() => { }); } catch (e) { }
+      const d = document.createElement('div'); d.id = 'cam';
+      d.innerHTML = '<div class="info" id="cam-info">📷 Foto rápida — aponte e toque em Tirar foto</div><video id="cam-v" autoplay playsinline muted></video><div class="cb"><button type="button" id="cam-troca" title="Trocar câmera">🔄</button><button type="button" class="shot" id="cam-foto">📸 Tirar foto</button><button type="button" id="cam-ok">✔ Concluir</button><button type="button" id="cam-sai">✕ Cancelar</button></div>';
+      document.body.appendChild(d);
+      const parar = () => { if (st) { st.getTracks().forEach(t => t.stop()); st = null; } };
+      const fim = (ok) => { parar(); d.remove(); resolve(ok && fotos.length ? { fotos, gps } : null); };
+      const ini = async () => {
+        parar();
+        try { st = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: face }, width: { ideal: 1920 }, height: { ideal: 1440 } }, audio: false }); $('#cam-v').srcObject = st; }
+        catch (e) { parar(); d.remove(); toast('Não consegui abrir a câmera dentro do programa (' + (e && e.name === 'NotAllowedError' ? 'permissão negada — libere a câmera para o site' : 'indisponível') + ').', 6000); resolve({ falhou: true }); }
+      };
+      $('#cam-troca').onclick = () => { face = face === 'environment' ? 'user' : 'environment'; ini(); };
+      $('#cam-ok').onclick = () => fim(true);
+      $('#cam-sai').onclick = () => fim(false);
+      $('#cam-foto').onclick = () => {
+        const v = $('#cam-v'); if (!v || !v.videoWidth) { toast('A câmera ainda está iniciando…'); return; }
+        const c = document.createElement('canvas'); c.width = v.videoWidth; c.height = v.videoHeight; c.getContext('2d').drawImage(v, 0, 0);
+        c.toBlob(async b => {
+          if (!b) return; const agora = Date.now();
+          fotos.push(new File([b], 'foto_' + agora + '.jpg', { type: 'image/jpeg', lastModified: agora }));
+          c.width = c.height = 0;
+          await pPut({ em: agora, gps, fotos: fotos.map(f => ({ blob: f, nome: f.name, t: f.lastModified })) });   /* guarda já: se a página fechar, volta */
+          const i = $('#cam-info'); if (i) i.textContent = '✔ ' + fotos.length + ' foto(s) guardada(s) no aparelho. Tire outra ou toque em Concluir.';
+        }, 'image/jpeg', .9);
+      };
+      ini();
+    });
+  }
+
+  /* ---------- pergunta a obra e abre o relato ---------- */
+  const RP = { files: null, gps: null };
+  function perguntarObra(files, gps, recuperado) {
+    RP.files = files; RP.gps = gps || null;
+    const l = obrasPode(); if (!l.length) { toast('Nenhuma obra liberada para registrar ocorrência. As fotos continuam guardadas no aparelho.', 6000); return; }
+    const atual = S.obraId && S.obras[S.obraId] ? S.obraId : null;
+    const ord = atual ? [S.obras[atual], ...l.filter(o => o.id !== atual)] : l;
+    M = { t: 'rpObra' };
+    abrirModal(`<div class="mh"><h3>📷 ${recuperado ? 'Fotos guardadas da Foto rápida' : 'Foto feita'}. Em qual obra é?</h3><button class="x" data-act="rpDepois">×</button></div><div class="mb">
+      <p class="muted small">${recuperado ? 'Estas fotos foram tiradas e ficaram guardadas neste aparelho (a página tinha fechado). ' : ''}${files.length} foto(s)${RP.gps ? ' com a sua localização' : ''}. Escolha a obra: o relato abre com a foto e você preenche todos os dados. ${navigator.onLine ? '' : '<b>Sem internet:</b> tudo fica salvo no aparelho e vai para a nuvem sozinho quando o sinal voltar.'}</p>
+      <div style="display:grid;gap:8px;margin:10px 0">${ord.map(o => `<button class="btn ${o.id === atual ? 'pri' : ''}" data-act="rpObra" data-id="${esc(o.id)}" style="text-align:left">${o.id === atual ? '✔ ' : ''}${esc(o.nome)}${o.contrato ? ' <span class="small">· ' + esc(o.contrato) + '</span>' : ''}${o.id === atual ? ' <span class="small">(obra aberta)</span>' : ''}</button>`).join('')}</div>
+      <div class="row gap"><button class="btn" data-act="rpDepois">Decidir depois (fica guardada)</button><button class="btn dan" data-act="rpCancela">Descartar as fotos</button></div></div>`);
+  }
+  ACTS.rpDepois = function () { RP.files = null; fecharModal(false); toast('As fotos continuam guardadas no aparelho. Toque em 📷 Foto rápida para usá-las.', 5000); };
+  ACTS.rpCancela = async function () { if (!confirm('Descartar as fotos da Foto rápida?')) return; RP.files = null; RP.gps = null; await pDel(); fecharModal(false); };
+  ACTS.rpObra = async function (d) {
+    const o = S.obras[d.id]; const f = RP.files, g = RP.gps; if (!o || !f) return;
+    fecharModal(false); S.obraId = o.id; S.tab = 'vistoria'; resetF(); try { semearOcMapa(o); } catch (e) { } render(); window.scrollTo(0, 0);
+    if (!can('ocorr')) { toast('Seu perfil nesta obra não registra ocorrências. As fotos continuam guardadas.', 6000); RP.files = null; return; }
+    ACTS.ocNew();
+    if (g && M && M.t === 'oc' && M.d.lat == null) setCoord(g.lat, g.lng, 'gps-aparelho', { fly: true });
+    await addFotos(f, true);
+    if (M && M.t === 'oc' && M.d.lat == null) { try { ACTS.usarGPS(); } catch (e) { } }
+    RP.files = null; RP.gps = null;
+    try { rascunhoSalva(); } catch (e) { }   /* as fotos já estão no relato (e no rascunho do aparelho) */
+    await pDel();
+    toast('Foto(s) no novo relato. Preencha os dados e salve' + (navigator.onLine ? '.' : ' — sem internet fica no aparelho e sobe sozinho depois.'), 6000);
+  };
+
+  /* ---------- botão 📷 Foto rápida: sempre câmera do programa, depois pergunta a obra ---------- */
+  ACTS.rpFoto = async function () {
+    const pend = await pGet();
+    if (pend && pend.fotos && pend.fotos.length) { perguntarObra(pend.fotos.map(x => new File([x.blob], x.nome, { type: 'image/jpeg', lastModified: x.t })), pend.gps, true); return; }
+    if (!obrasPode().length) { toast('Nenhuma obra liberada para registrar ocorrência.'); return; }
+    if (!temCam()) { toast('Este navegador não abre a câmera dentro do programa. Use “Minha localização · registro rápido” dentro da obra.', 6000); return; }
+    const r = await camColetar();
+    if (!r || r.falhou) return;
+    perguntarObra(r.fotos, r.gps, false);
+  };
+  /* “Minha localização · registro rápido”: câmera do programa em vez da câmera do aparelho */
+  ACTS.ocRapido = function () { ACTS.ocNew(); try { ACTS.usarGPS(); } catch (e) { } camAbrir(); };
+
+  /* ---------- ao abrir: fotos que ficaram guardadas (a página tinha fechado) ---------- */
+  let tent = 0;
+  const recupera = async () => {
+    if (++tent > 40) return;
+    const pronto = typeof S !== 'undefined' && S.settings && S.amb && !document.querySelector('.tc-veu') && $('#modal') && $('#modal').classList.contains('hidden') && !$('#cam');
+    if (!pronto) { setTimeout(recupera, 1500); return; }
+    const pend = await pGet(); if (!pend || !pend.fotos || !pend.fotos.length) return;
+    if (Date.now() - (pend.em || 0) > 7 * 864e5) return;
+    perguntarObra(pend.fotos.map(x => new File([x.blob], x.nome, { type: 'image/jpeg', lastModified: x.t })), pend.gps, true);
+  };
+  setTimeout(recupera, 2500);
+  window.__sp39 = { camColetar, pGet, pDel, perguntarObra };
+})();
+</script>
+<script>
+/* PATCH SP-40 (24/11/2026): local do relato conferido no mapa. (1) GPS que não responde → aviso em destaque “toque no mapa onde fica o local” e o mapa
+   rola para a vista; (2) GPS com precisão ruim (> 25 m) → aviso com a precisão e círculo no mapa; (3) marcador sempre arrastável e toque no mapa move;
+   (4) ao SALVAR, se o local foi corrigido, as fotos tiradas agora (coordenadas do GPS/ocorrência, não as do arquivo nem do carimbo) recebem as
+   coordenadas corrigidas e o carimbo da foto é refeito; foto que já tinha subido para a nuvem sobe de novo. Funciona sem internet. */
+(function () {
+  const ACC_RUIM = 25;
+  const dist = (a, b, c, d) => { const R = 6371000, r = Math.PI / 180, x = (d - b) * r * Math.cos((a + c) / 2 * r), y = (c - a) * r; return Math.sqrt(x * x + y * y) * R; };
+  /* guarda as medidas do carimbo de cada foto (para refazer só a faixa) */
+  const _cb = window.__carimbo;
+  if (_cb) window.__carimbo = async function (g, w, h, d) { await _cb.apply(this, arguments); const fs = Math.max(13, Math.round(w / 48)), lh = Math.round(fs * 1.35); const c = (typeof O === 'function' && O() && O().carimbo) || {}; const nl = ((c.data !== false || c.coord !== false) ? 1 : 0) + ((c.local !== false && d.loc) ? 1 : 0); window.__cbUlt = { bh: nl ? lh * nl + Math.round(fs * 0.6) : 0, quando: d.quando }; };
+  const _pf = processarFoto;
+  processarFoto = async function () { window.__cbUlt = null; const r = await _pf.apply(this, arguments); if (r && window.__cbUlt) { r.cbH = window.__cbUlt.bh; r.cbQ = window.__cbUlt.quando; } return r; };
+
+  /* ---------- aviso e círculo de precisão na janela do relato ---------- */
+  function aviso() {
+    if (!M || M.t !== 'oc' || !$('#pickMap')) return;
+    let a = $('#sp40'); if (!a) { a = document.createElement('div'); a.id = 'sp40'; a.style.cssText = 'margin:6px 0;padding:8px 10px;border-radius:8px;font-size:14px;line-height:1.35'; $('#pickMap').before(a); }
+    const d = M.d; let h, cor;
+    if (d.lat == null) { cor = '#fdecea;border:1px solid #e0a59e'; h = '⚠ <b>Sem localização.</b> ' + (d._gpsFalhou ? 'O GPS não respondeu. ' : '') + '<b>Toque no mapa onde fica o local</b> (dá para aproximar com dois dedos). Sem internet o fundo do mapa pode não aparecer: use as ocorrências (pontos cinza) como referência.'; }
+    else if (d.origem === 'gps-aparelho' && d._acc > ACC_RUIM) { cor = '#fff4e0;border:1px solid #f0c98a'; h = '📍 GPS com precisão de <b>± ' + Math.round(d._acc) + ' m</b>. Confira: se o ponto estiver errado, <b>arraste o marcador</b> ou toque no local certo no mapa.'; }
+    else if (d.origem === 'mapa') { cor = '#e8f5ec;border:1px solid #9fd0ad'; h = '✔ Local marcado/corrigido no mapa. As fotos tiradas agora recebem estas coordenadas ao salvar.'; }
+    else { cor = '#eef3fb;border:1px solid #b9cbe8'; h = '📍 Local ' + (d.origem === 'gps-aparelho' ? 'do GPS' + (d._acc ? ' (± ' + Math.round(d._acc) + ' m)' : '') : 'preenchido') + '. Se não estiver certo, arraste o marcador ou toque no local no mapa.'; }
+    a.style.background = cor.split(';')[0]; a.style.border = cor.split(';')[1].replace('border:', '');
+    a.innerHTML = h + ' <button type="button" class="btn mini" data-act="sp40Gps" style="margin-left:4px">🎯 Tentar o GPS de novo</button>';
+    const map = M.map;
+    if (map && typeof L !== 'undefined') {
+      if (M._circ) { map.removeLayer(M._circ); M._circ = null; }
+      if (d.lat != null && d.origem === 'gps-aparelho' && d._acc) M._circ = L.circle([d.lat, d.lng], { radius: d._acc, color: '#e07b00', weight: 1, fillOpacity: .08, interactive: false }).addTo(map);
+    }
+  }
+  const _sc = setCoord;
+  setCoord = function (lat, lng, origem, opt) { const r = _sc.apply(this, arguments); try { if (M && M.d) { if (origem === 'gps-aparelho' && opt && opt.acc != null) M.d._acc = opt.acc; if (origem !== 'gps-aparelho') M.d._acc = null; M.d._gpsFalhou = false; } aviso(); } catch (e) { } return r; };
+  ACTS.usarGPS = ACTS.sp40Gps = function () {
+    toast('Obtendo localização…');
+    posicaoAtual().then(p => { setCoord(p.lat, p.lng, 'gps-aparelho', { fly: true, acc: p.acc }); toast(p.acc > ACC_RUIM ? 'GPS com precisão de ± ' + Math.round(p.acc) + ' m: confira o ponto no mapa.' : 'Localização obtida (± ' + Math.round(p.acc) + ' m).', 5000); })
+      .catch(() => { if (M && M.d) { M.d._gpsFalhou = true; aviso(); const m = $('#pickMap'); if (m) m.scrollIntoView({ block: 'center', behavior: 'smooth' }); } toast('O GPS não respondeu. Toque no mapa onde fica o local.', 6000); });
+  };
+  /* pontos das ocorrências da obra no mapa do relato (referência, inclusive sem internet) */
+  const _ip = initPick;
+  initPick = function () {
+    const r = _ip.apply(this, arguments);
+    try {
+      if (M && M.map && typeof L !== 'undefined' && O()) {
+        O().ocorrencias.filter(x => x.lat != null && x.id !== M.d.id).slice(0, 1500).forEach(x => L.circleMarker([x.lat, x.lng], { radius: 4, color: '#6b7280', weight: 1, fillColor: '#9ca3af', fillOpacity: .8 }).bindTooltip('#' + x.num + ' ' + (x.rua || ''), { direction: 'top' }).addTo(M.map));
+      }
+      aviso();
+    } catch (e) { }
+    return r;
+  };
+
+  /* ---------- ao salvar: fotos tiradas agora ganham as coordenadas corrigidas e o carimbo refeito ---------- */
+  async function refazCarimbo(o, f, lat, lng, loc) {
+    const src = await getFoto(f.id); if (!src) return false;
+    const img = await carregarImg(src); const w = img.naturalWidth, h = img.naturalHeight;
+    const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+    if (f.cbH) { g.fillStyle = '#000'; g.fillRect(0, h - f.cbH, w, f.cbH); }
+    await window.__carimbo(g, w, h, { quando: f.cbQ || f.tiradaEm || new Date().toISOString(), lat, lng, loc });
+    const data = c.toDataURL('image/jpeg', FOTO_Q); c.width = c.height = 0;
+    await DB.put('fotos', f.id, { id: f.id, obraId: o.id, data }); fotoCache.set(f.id, data);
+    try { const k = 'fotosup:' + o.id, ja = (await DB.get('kv', k)) || []; if (ja.includes(f.id)) await DB.put('kv', k, ja.filter(x => x !== f.id)); } catch (e) { }
+    return true;
+  }
+  const _save = ACTS.ocSave;
+  ACTS.ocSave = async function () {
+    try {
+      if (M && M.t === 'oc' && M.d && M.d.lat != null && window.__carimbo) {
+        const o = O(), d = M.d, novas = new Set(M.novas || []);
+        const loc = (d.num ? 'Ocorrência nº ' + d.num + ' · ' : '') + [($('#oc-rua') || {}).value || d.rua, ($('#oc-bairro') || {}).value || d.bairro].filter(Boolean).join(' — ');
+        let n = 0;
+        for (const f of d.fotos || []) {
+          if (!(novas.has(f.id) || f.cbH != null)) continue;                 /* só fotos desta janela */
+          if (f.origem === 'exif' || f.origem === 'carimbo') continue;       /* local da própria foto: não mexe */
+          if (f.cbH == null) continue;                                       /* sem medidas do carimbo (foto antiga) */
+          if (f.lat != null && dist(f.lat, f.lng, d.lat, d.lng) < 3) continue;
+          if (await refazCarimbo(o, f, d.lat, d.lng, loc)) { f.lat = d.lat; f.lng = d.lng; f.origem = d.origem === 'mapa' ? 'mapa' : d.origem; n++; }
+        }
+        if (n) toast(n + ' foto(s) com as coordenadas corrigidas no carimbo.', 4000);
+      }
+    } catch (e) { console.warn('SP-40', e); }
+    return _save.apply(this, arguments);
+  };
+  /* Foto rápida: GPS com precisão e aviso quando falha */
+  const _rpo = ACTS.rpObra;
+  if (_rpo) ACTS.rpObra = async function (dd) {
+    const r = await _rpo.apply(this, arguments);
+    try { if (M && M.t === 'oc') { if (M.d.lat != null && M.d.origem === 'gps-aparelho' && M.d._acc == null && G.pos) M.d._acc = G.pos.acc; aviso(); } } catch (e) { }
+    return r;
+  };
+  if (!ORIGEM.mapa) ORIGEM.mapa = 'marcado no mapa';
+  /* “Salvar e registrar a próxima” espera o salvamento (agora pode refazer carimbos antes de salvar) */
+  ACTS.ocSaveNext = async function () { const o = O(), antes = o.ocorrencias.length; await ACTS.ocSave(); await new Promise(r => setTimeout(r, 300)); if (O().ocorrencias.length > antes) ACTS.ocRapido(); };
+  window.__sp40 = { aviso, refazCarimbo };
+})();
+</script>
 </body>
 </html>

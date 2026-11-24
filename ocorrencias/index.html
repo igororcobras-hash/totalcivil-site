@@ -69,6 +69,8 @@ small.m{color:#6b7280}
 
   /* ---------- abre o programa guardado ---------- */
   function abrir(prog, acesso){
+    /* sem ?instalar na barra: se o Android fechar a página (câmera, pouca memória), ela reabre pelo programa guardado, mesmo sem internet */
+    try{ if(location.search && /instalar/.test(location.search)) history.replaceState(null, '', '/ocorrencias/' + (window.__tcoffTeste ? '?teste=1' : '')); }catch(_){ }
     return TCOFF.texto(prog).then(function(html){
       html = TCOFF.preparar(html, acesso);
       document.open(); document.write(html); document.close();
@@ -134,7 +136,7 @@ small.m{color:#6b7280}
   /* ---------- início ---------- */
   Promise.all([TCOFF.get('programa'), TCOFF.get('acesso')]).then(function(v){
     var prog = v[0], ac = v[1];
-    if(Q.has('instalar') || !prog || !ac){ instalar(); return; }
+    if(!prog || !ac || (Q.has('instalar') && navigator.onLine)){ instalar(); return; }
     if(ac.revogado){ tela('<p class="msg">' + esc(ac.motivo || 'Seu acesso ao Serviços Públicos não está liberado.') + '</p><p>Quando o acesso for liberado, abra com internet.</p><div class="bts"><button class="pri" onclick="location.href=\'/ocorrencias/?instalar=1\'">Conferir de novo</button><a href="' + PRINCIPAL + '">Página principal</a></div>'); return; }
     if(!TCOFF.acessoValido(ac)){
       if(navigator.onLine){ instalar(); return; }
