@@ -3047,5 +3047,65 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
   };
 })();
 </script>
+<script>
+/* PATCH GE-15: botão "Exportar fotos selecionadas" — salva os arquivos ORIGINAIS das fotos marcadas numa pasta do computador
+   (ou num .zip, se o navegador não permitir escolher pasta). Serve para separar, por exemplo, as fotos "sem local". */
+(function(){
+  const bt = document.createElement('button');
+  bt.type = 'button'; bt.className = 'bt peq'; bt.id = 'bt-exp-sel'; bt.textContent = '⬇ Exportar fotos selecionadas';
+  const ref = $('bt-rem-sel'); ref.parentNode.insertBefore(bt, ref);
+  const msg = t => { $('txt-acao').textContent = t; };
+  const limpo = n => String(n || 'foto.jpg').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '_').trim() || 'foto.jpg';
+  function nomesUnicos(lista){
+    const usados = new Set(); const out = new Map();
+    lista.forEach(f => {
+      let n = limpo(f.nome); const i = n.lastIndexOf('.'); const base = i > 0 ? n.slice(0, i) : n, ext = i > 0 ? n.slice(i) : '';
+      let c = n, k = 2; while(usados.has(c.toLowerCase())){ c = base + '_' + (k++) + ext; }
+      usados.add(c.toLowerCase()); out.set(f.id, c);
+    });
+    return out;
+  }
+  bt.onclick = async () => {
+    const lista = S.fotos.filter(f => f.sel && BLOBS.get(f.id));
+    if(!S.fotos.some(f => f.sel)){ msg('Nenhuma foto selecionada. Use "Selecionar sem local" (ou marque as fotos) e clique de novo.'); return; }
+    if(!lista.length){ msg('Os arquivos das fotos selecionadas não estão mais no programa. Anexe-as de novo.'); return; }
+    const nomes = nomesUnicos(lista);
+    const semLocal = lista.every(f => !temLocal(f));
+    const pastaNome = (semLocal ? 'Fotos_sem_local_' : 'Fotos_selecionadas_') + new Date().toISOString().slice(0, 10);
+    /* 1) escolher a pasta (precisa ser logo no clique) */
+    if(window.showDirectoryPicker){
+      let raiz;
+      try{ raiz = await window.showDirectoryPicker({mode: 'readwrite'}); }
+      catch(e){ if(e && e.name === 'AbortError'){ msg('Exportação cancelada.'); return; } raiz = null; console.warn(e); }
+      if(raiz){
+        bt.disabled = true;
+        try{
+          const dir = await raiz.getDirectoryHandle(pastaNome, {create: true});
+          let n = 0;
+          for(const f of lista){
+            msg('Salvando foto ' + (++n) + ' de ' + lista.length + ': ' + nomes.get(f.id));
+            const h = await dir.getFileHandle(nomes.get(f.id), {create: true});
+            const w = await h.createWritable(); await w.write(BLOBS.get(f.id)); await w.close();
+          }
+          msg('Pronto: ' + lista.length + ' foto(s) originais salvas na pasta "' + pastaNome + '", dentro da pasta que você escolheu.');
+        }catch(e){ console.error(e); msg('Não consegui gravar na pasta (' + (e.message || e) + '). Tente outra pasta, ou use o navegador Chrome/Edge.'); }
+        finally{ bt.disabled = false; }
+        return;
+      }
+    }
+    /* 2) sem escolha de pasta no navegador: baixa um .zip com as fotos originais */
+    if(typeof JSZip === 'undefined'){ msg('O compactador não carregou (internet). Tente de novo em instantes.'); return; }
+    bt.disabled = true;
+    try{
+      msg('Compactando ' + lista.length + ' foto(s)…');
+      const z = new JSZip(); lista.forEach(f => z.file(nomes.get(f.id), BLOBS.get(f.id)));
+      const blob = await z.generateAsync({type: 'blob', compression: 'STORE'});
+      baixar(pastaNome + '.zip', blob);
+      msg('Pronto: ' + lista.length + ' foto(s) originais no arquivo "' + pastaNome + '.zip" (pasta Downloads). Descompacte para ter a pasta separada.');
+    }catch(e){ console.error(e); msg('Erro ao compactar: ' + (e.message || e)); }
+    finally{ bt.disabled = false; }
+  };
+})();
+</script>
 </body>
 </html>
