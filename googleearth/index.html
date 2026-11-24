@@ -2654,10 +2654,15 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
     });
   }
   // ordem: OpenStreetMap → (3 s) OpenStreetMap → Photon → Esri. Bloqueio OU nada encontrado passa para o próximo.
-  function geoBusca(q, limite){
+  /* GE-13: resultado só conta se for perto do trabalho (até 80 km) e, quando há filtro (`aceita`: nome da rua confere),
+     se passar no filtro; senão vai para o próximo serviço. Antes, uma “Rua Recife” de outra cidade no OpenStreetMap/Photon
+     parava a busca e a Esri (que acha a rua certa) nem era consultada. */
+  function geoBusca(q, limite, aceita){
     return naFila(async () => {
       const erros = []; let vazio = null;
-      const tenta = async (nome, fn) => { try{ const r = await fn(); if(r.length) return r; vazio = vazio || r; }catch(e){ erros.push(nome + ': ' + (e.message || e)); } return null; };
+      const ref = (typeof refLocal === 'function' ? refLocal() : null) || {lat: -22.527, lon: -41.945};
+      const perto = l => l.filter(x => x.lat != null && dist(ref.lat, ref.lon, +x.lat, +x.lon) < 80000);
+      const tenta = async (nome, fn) => { try{ let r = perto(await fn()); if(aceita) r = aceita(r); if(r.length) return r; vazio = vazio || r; }catch(e){ erros.push(nome + ': ' + (e.message || e)); } return null; };
       let r = await tenta('OpenStreetMap', () => nominatim(q, limite));
       if(!r && erros.length){ await espera(3000); erros.length = 0; r = await tenta('OpenStreetMap', () => nominatim(q, limite)); }
       if(!r) r = await tenta('Photon', () => photon(q, limite));
@@ -2668,10 +2673,11 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
     });
   }
   window.__geoBusca = geoBusca;
-  async function ge04Busca(q, cache){
-    if(cache[q] !== undefined) return cache[q];
-    cache[q] = await geoBusca(q, 5);
-    return cache[q];
+  async function ge04Busca(q, cache, rua){
+    const k = q + '|' + (rua || '');
+    if(cache[k] !== undefined) return cache[k];
+    cache[k] = await geoBusca(q, 5, rua ? (l => l.filter(x => ge04Confere(x, rua))) : null);
+    return cache[k];
   }
   // devolve {lat, lon, nota} ou null (nada que confira com a rua escrita)
   async function ge04Localizar(end, mun, cache){
@@ -2679,7 +2685,7 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
     if(esq){
       const linhas = [];
       for(const r of esq){
-        const vias = (await ge04Busca(r + ', ' + mun, cache)).filter(x => x.class === 'highway' && ge04Confere(x, r));
+        const vias = (await ge04Busca(r + ', ' + mun, cache, r)).filter(x => x.class === 'highway' && ge04Confere(x, r));
         linhas.push([].concat(...vias.map(v => { const g = v.geojson; return !g ? [] : g.type === 'LineString' ? [g.coordinates] : g.type === 'MultiLineString' ? g.coordinates : []; })));
       }
       let c = null;
@@ -2688,9 +2694,12 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
       end = esq[0];   // não achou o cruzamento: vale a primeira rua
     }
     const rua = ge04RuaLimpa(end);
-    const perguntas = [end + ', ' + mun]; if(rua) perguntas.push(rua + ', ' + mun);
+    // GE-13: com número (“Rua X, 120”) tenta o endereço completo primeiro; sem número, só a 1ª rua (sem “Paralela à …”)
+    const base = String(end).split(' - ')[0].replace(/\d{5}-?\d{3}/, '').replace(/[.,;:]?\s*(paralel[ao]|esquina|pr[óo]xim[oa]|perto|em frente|ao lado|defronte)\b.*$/i, '');
+    const temNum = /(?:,|\s)\s*\d{1,5}[A-Za-z]?\s*$/.test(base.trim());
+    const perguntas = rua ? (temNum ? [end + ', ' + mun, rua + ', ' + mun] : [rua + ', ' + mun]) : [end + ', ' + mun];
     for(const q of perguntas){
-      const bons = (await ge04Busca(q, cache)).filter(x => ge04Confere(x, rua) && x.lat);
+      const bons = (await ge04Busca(q, cache, rua)).filter(x => ge04Confere(x, rua) && x.lat);
       const casa = bons.find(x => x.address && x.address.house_number);
       if(casa) return {lat: +casa.lat, lon: +casa.lon, nota: null};
       const via = bons.find(x => x.class === 'highway');
@@ -2714,10 +2723,12 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
       const f = lista[i];
       $('txt-acao').textContent = 'Buscando endereço ' + (i + 1) + ' de ' + lista.length + ': ' + f.end;
       try{
-        let r = await ge04Localizar(f.end, mun, cache);
-        // GE-07: o nome do arquivo (escrito por uma pessoa) quando o endereço da tarja não foi achado
+        // GE-13: o nome do arquivo (escrito por uma pessoa; a 1ª rua é a principal, “Paralela à …” é só referência)
+        // vem ANTES do endereço lido pelo OCR, que costuma sair embaralhado
         const nm = ge07NomeArquivo(f.nome);
-        if(!r && nm && ge04Norm(nm) !== ge04Norm(f.end)){ r = await ge04Localizar(nm, mun, cache); if(r) r.nota = (r.nota ? r.nota + ' ' : '') + 'Local pelo nome do arquivo (“' + nm + '”).'; }
+        let r = null;
+        if(nm){ r = await ge04Localizar(nm, mun, cache); if(r){ r.nota = (r.nota ? r.nota + ' ' : '') + 'Local pelo nome do arquivo (“' + nm + '”).'; if(f.endOrig !== 'manual'){ f.end = nm; f.endOrig = 'nome'; } } }
+        if(!r && f.end && ge04Norm(nm) !== ge04Norm(f.end)) r = await ge04Localizar(f.end, mun, cache);
         if(r){ f.lat = r.lat; f.lon = r.lon; f.orig = 'endereco'; if(r.nota) f.conferencia = r.nota; ok++; }
       }catch(e){ $('txt-acao').textContent = 'Erro ao buscar endereço: ' + (e.message || e); break; }
       progresso('prog-acao', (i + 1) / lista.length); salvar(); renderFotos();
