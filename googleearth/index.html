@@ -1401,7 +1401,7 @@ async function montarKML(modo, aoAvancar){
       const ls = g.linhas.map(l => '<LineString><tessellate>1</tessellate><coordinates>' + coordsTxt(l) + '</coordinates></LineString>');
       geo = ls.length === 1 ? ls[0] : '<MultiGeometry>' + ls.join('') + '</MultiGeometry>';
     }else{ pts = g.anel; geo = '<Polygon><tessellate>1</tessellate><outerBoundaryIs><LinearRing><coordinates>' + coordsTxt(g.anel.concat([g.anel[0]])) + '</coordinates></LinearRing></outerBoundaryIs></Polygon>'; }
-    return {pasta: m.pasta || '', x: '<Placemark id="pm_' + m.id + '"><name>' + xml(m.nome) + '</name><description>' + cdata(descricao(m) + imgsDesc) + '</description>' + lookAt(pts) +
+    return {pasta: m.pasta || '', x: '<Placemark id="pm_' + m.id + '"><name>' + xml(m.nome) + '</name><description>' + cdata(descricao(m) + imgsDesc) + '</description>' +   /* GE-12: sem <LookAt>: a câmera salva levava de volta ao local antigo depois de mover o marcador no Google Earth */
       '<styleUrl>#' + estiloDe(m) + '</styleUrl>' + car + geo + '</Placemark>'};
   });
   const sty = [...estilos].map(([k, m]) => '<Style id="' + k + '"><IconStyle><scale>1.2</scale><Icon><href>https://earth.google.com/earth/document/icon?color=' + m.cor.replace('#', '').toLowerCase() + '&amp;id=' + iconeDe(m) + '&amp;scale=4</href></Icon><hotSpot x="64" y="128" xunits="pixels" yunits="insetPixels"/></IconStyle><LabelStyle><scale>0.9</scale></LabelStyle><LineStyle><color>' + abgr(m.cor) + '</color><width>' + m.esp + '</width></LineStyle><PolyStyle><color>' + abgr(m.cor, '59') + '</color></PolyStyle></Style>').join('');
