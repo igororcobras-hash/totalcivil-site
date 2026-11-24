@@ -2972,5 +2972,80 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
   document.addEventListener('keydown', e => { if(e.key === 'Enter' && prov && marcandoId && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '')){ e.preventDefault(); confirmar(); } });
 })();
 </script>
+<script>
+/* ============================================================
+   PATCH GE-14 (24/11/2026): dividir o KMZ em vários arquivos (até 50 fotos cada)
+   O Google Earth Web aceita no máximo 50 imagens de carrossel ÚNICAS por importação (100 ícones, 20 sobreposições).
+   Passou disso, as últimas fotos são recusadas: “o limite máximo de imagens externas foi atingido”.
+   Agora, com mais de 50 fotos, “Gerar KMZ” / “Só gerar KMZ” geram VÁRIOS arquivos (…_parte1de3.kmz, …), cada um com
+   até 50 fotos; uma marcação nunca é dividida entre arquivos. Com poucas fotos nada muda.
+   Não divide: fotos só na descrição, destino “projeto completo (mesclar)”.
+   ============================================================ */
+(function(){
+  const LIMITE = 50;
+  let parte = null, semCompletar = false; const baixados = [];
+
+  const itOrig = itensExportacao;
+  itensExportacao = function(){ const it = itOrig.apply(this, arguments); return parte ? it.filter(x => parte.ids.has(x.m.id)) : it; };
+  const nomeOrig = nomeArquivoSaida;
+  nomeArquivoSaida = function(){ const n = nomeOrig.apply(this, arguments); return parte ? n.replace(/\.([A-Za-z0-9]+)$/, '_' + parte.rot + '.$1') : n; };
+  const pickerOrig = escolherOndeSalvar;
+  escolherOndeSalvar = function(){ return parte ? Promise.resolve({h: null}) : pickerOrig.apply(this, arguments); };   // várias partes: sempre para Downloads
+  const completarOrig = completarLocais;
+  completarLocais = function(){ return (parte || semCompletar) ? Promise.resolve() : completarOrig.apply(this, arguments); };
+  const baixarOrig = baixar;
+  baixar = function(nome, blob){ baixados.push({nome, tam: blob.size}); return baixarOrig.apply(this, arguments); };
+
+  const unicas = itens => new Set([].concat(...itens.map(x => x.m.fotos || []))).size;
+  function dividir(){
+    const partes = []; let atual = {itens: [], ids: new Set()};
+    itensExportacao().filter(x => x.g).forEach(x => {
+      const fs = x.m.fotos || [], novos = fs.filter(id => !atual.ids.has(id)).length;
+      if(atual.itens.length && atual.ids.size + novos > LIMITE){ partes.push(atual); atual = {itens: [], ids: new Set()}; }
+      atual.itens.push(x); fs.forEach(id => atual.ids.add(id));
+    });
+    if(atual.itens.length) partes.push(atual);
+    return partes;
+  }
+
+  const gerarOrig = gerar;
+  gerar = async function(tipo, daAbaFotos, abrirLink){
+    parte = null; semCompletar = false;
+    const mescla = S.exp.destino === 'mesclar' && projKML;
+    const urlOn = S.exp.urlOn && (S.exp.url || '').trim();
+    if(mescla || (S.exp.fotosEm || 'carrossel') === 'descricao' || !(tipo === 'kmz' || urlOn)) return gerarOrig.apply(this, arguments);
+    if(daAbaFotos && !S.cfg.avulsas){ S.cfg.avulsas = true; salvar(); }
+    if(unicas(itensExportacao()) <= LIMITE) return gerarOrig.apply(this, arguments);   // caso comum: como antes
+
+    const msg = msgExp(); let partes;
+    BT_GERAR.forEach(id => $(id).disabled = true);
+    try{
+      if(S.fotos.some(f => !temLocal(f))){ msg.innerHTML = '<div class="msg info">Completando o local das fotos sem coordenada (tarja e endereço)…</div>'; await completarOrig(); }
+      partes = dividir();
+    }catch(e){ console.error(e); msg.innerHTML = '<div class="msg bad">Erro ao preparar os arquivos: ' + esc(e.message || e) + '</div>'; return; }
+    finally{ BT_GERAR.forEach(id => $(id).disabled = false); }
+    semCompletar = true;
+    if(partes.length <= 1){ try{ return await gerarOrig.apply(this, arguments); } finally{ semCompletar = false; } }
+
+    const total = partes.length, saidas = [];
+    try{
+      for(let i = 0; i < total; i++){
+        parte = {ids: new Set(partes[i].itens.map(x => x.m.id)), rot: 'parte' + (i + 1) + 'de' + total};
+        const antes = baixados.length;
+        msg.innerHTML = '<div class="msg info">Gerando o arquivo ' + (i + 1) + ' de ' + total + ' (' + partes[i].ids.size + ' fotos)…</div>';
+        await gerarOrig(tipo, daAbaFotos, i === 0 ? abrirLink : undefined);
+        if(baixados.length === antes) break;   // falhou: a mensagem de erro do arquivo já está na tela
+        saidas.push({nome: baixados[baixados.length - 1].nome, tam: baixados[baixados.length - 1].tam, marc: partes[i].itens.length, fotos: partes[i].ids.size});
+      }
+    }finally{ parte = null; semCompletar = false; }
+    if(saidas.length < total) return;
+    msg.innerHTML = '<div class="msg ok"><b>' + total + ' arquivos gerados</b>: o Google Earth Web aceita no máximo ' + LIMITE + ' fotos de carrossel por importação, então dividi as marcações (nenhuma foi cortada):' +
+      '<ol class="passos">' + saidas.map(s => '<li><b>' + esc(s.nome) + '</b>: ' + s.marc + ' marcação(ões), ' + s.fotos + ' foto(s) (' + kb(s.tam) + ')</li>').join('') + '</ol></div>' +
+      '<div class="msg info"><b>No Google Earth Web</b>, importe <b>um arquivo de cada vez</b> (<b>+ Novo › Importar arquivo KML</b>). Cada um entra como uma pasta com o mesmo nome: arraste as pastas para dentro de uma só. ' +
+      'Se o navegador perguntar sobre baixar vários arquivos, clique em <b>Permitir</b>.</div>' +
+      (partes.some(p => p.ids.size > LIMITE) ? '<div class="msg warn">Uma marcação tem mais de ' + LIMITE + ' fotos sozinha: o Google Earth vai recusar as que passarem do limite. Divida essa marcação.</div>' : '');
+  };
+})();
+</script>
 </body>
 </html>
