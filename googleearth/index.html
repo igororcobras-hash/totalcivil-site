@@ -1079,11 +1079,14 @@ function iniciarMapa(){
   const nomes = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {maxZoom: 21, maxNativeZoom: 18});
   const viasNomes = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}', {maxZoom: 21, maxNativeZoom: 18});   // GE-07: ruas com nome sobre o satélite
   const ruas = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 21, maxNativeZoom: 19, attribution: '© OpenStreetMap'});
-  const gSat = L.layerGroup([sat, viasNomes, nomes]).addTo(mapa);
+  // GE-09: a camada de ruas da Esri quase não tem nomes de rua no Brasil; rótulos do OpenStreetMap (CARTO) por cima
+  const rotulos = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}{r}.png', {subdomains: 'abcd', maxZoom: 21, maxNativeZoom: 20, attribution: '© OpenStreetMap © CARTO'});
+  const gSat = L.layerGroup([sat, viasNomes, rotulos]).addTo(mapa);
   L.control.layers({'Satélite com nomes de ruas': gSat, 'Satélite sem nomes': L.layerGroup([sat]), 'Ruas (mapa)': ruas}, null, {collapsed: true}).addTo(mapa);
   camMarc = L.layerGroup().addTo(mapa); camFotos = L.layerGroup().addTo(mapa);
   mapa.on('click', e => {
     if(!marcandoId) return;
+    if(window.__ge09Provisorio){ window.__ge09Provisorio(e.latlng.lat, e.latlng.lng); return; }   // GE-09: confirma antes de gravar
     const f = fotoPorId(marcandoId); if(f){ f.lat = e.latlng.lat; f.lon = e.latlng.lng; f.orig = 'manual'; salvar(); renderFotos(); }
     const prox = S.fotos.find(x => x.sel && !temLocal(x) && x.id !== marcandoId);
     if(prox) iniciarMarcar(prox.id); else cancelarMarcar();
@@ -2520,7 +2523,7 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
 
   // “Rua Recife. Paralela à av Brasília2” → “Rua Recife”; “Rua das Camélias, 120 - Praia Ancora” → “Rua das Camélias”
   function ge04RuaLimpa(end){
-    let t = String(end || '').split(' - ')[0].replace(/^\s*(final|fim|in[ií]cio|come[cç]o|meio)\s+d[aoe]s?\s+/i, '');
+    let t = String(end || '').split(' - ')[0].replace(/\s*[,-]?\s*\bbairro\b.*$/i, '').replace(/^\s*(final|fim|in[ií]cio|come[cç]o|meio)\s+d[aoe]s?\s+/i, '');
     t = t.replace(/[.,;:]?\s*(paralel[ao]|esquina|pr[óo]xim[oa]|perto|em frente|ao lado|defronte)\b.*$/i, '');
     t = t.replace(/[,\s]+\d{1,5}[A-Za-z]?\s*$/, '');
     return t.replace(/\s+/g, ' ').replace(/[.,;:\s]+$/, '').trim();
@@ -2611,14 +2614,47 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
   }
 
   // consulta o serviço de endereços (uma por segundo, como antes), com geometria da rua
+  /* GE-08: consultas de endereço em FILA (1 por vez, 1,2 s entre elas). O OpenStreetMap bloqueia quem consulta
+     rápido demais e a resposta de bloqueio vem sem permissão CORS: o navegador mostra só “Failed to fetch”.
+     Bloqueado → espera 3 s e tenta de novo; ainda bloqueado → Photon (outro serviço gratuito do OpenStreetMap,
+     sem a linha da rua: ponto aproximado). */
+  let fila = Promise.resolve(), ultima = 0;
+  function naFila(fn){ const p = fila.then(async () => { const w = 1200 - (Date.now() - ultima); if(w > 0) await espera(w); try{ return await fn(); } finally { ultima = Date.now(); } }); fila = p.catch(() => {}); return p; }
+  async function nominatim(q, limite){
+    const u = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=' + (limite || 5) + '&countrycodes=br&accept-language=pt-BR&addressdetails=1&polygon_geojson=1&q=' + encodeURIComponent(q);
+    const r = await fetch(u, {headers: {'Accept': 'application/json'}});
+    if(!r.ok) throw new Error('OpenStreetMap respondeu ' + r.status);
+    const j = await r.json(); return Array.isArray(j) ? j : [];
+  }
+  async function photon(q, limite){
+    const ref = (typeof refLocal === 'function' ? refLocal() : null) || {lat: -22.527, lon: -41.945};
+    const u = 'https://photon.komoot.io/api/?limit=' + (limite || 5) + '&lat=' + ref.lat + '&lon=' + ref.lon + '&q=' + encodeURIComponent(q);
+    const r = await fetch(u); if(!r.ok) throw new Error('Photon respondeu ' + r.status);
+    const j = await r.json();
+    return (j.features || []).filter(f => { const c = f.geometry && f.geometry.coordinates; return c && c[1] < 5.5 && c[1] > -34.5 && c[0] > -74.5 && c[0] < -32; }).map(f => {
+      const p = f.properties || {}, c = f.geometry.coordinates;
+      return {lat: String(c[1]), lon: String(c[0]), class: p.osm_key, type: p.osm_value, fonte: 'photon',
+        display_name: [p.name || p.street, p.housenumber, p.district || p.locality, p.city, p.state].filter(Boolean).join(', '),
+        address: {road: p.street || p.name, house_number: p.housenumber}};
+    });
+  }
+  function geoBusca(q, limite){
+    return naFila(async () => {
+      try{ return await nominatim(q, limite); }
+      catch(e1){
+        await espera(3000);
+        try{ return await nominatim(q, limite); }
+        catch(e2){
+          try{ return await photon(q, limite); }
+          catch(e3){ throw new Error('serviços de endereço fora do ar ou bloqueados por excesso de consultas; tente de novo em alguns minutos (' + (e2.message || e2) + ')'); }
+        }
+      }
+    });
+  }
+  window.__geoBusca = geoBusca;
   async function ge04Busca(q, cache){
     if(cache[q] !== undefined) return cache[q];
-    const u = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=br&accept-language=pt-BR&addressdetails=1&polygon_geojson=1&q=' + encodeURIComponent(q);
-    const r = await fetch(u, {headers: {'Accept': 'application/json'}});
-    if(!r.ok) throw new Error('serviço de endereços respondeu ' + r.status);
-    const j = await r.json();
-    cache[q] = Array.isArray(j) ? j : [];
-    await espera(1100);
+    cache[q] = await geoBusca(q, 5);
     return cache[q];
   }
   // devolve {lat, lon, nota} ou null (nada que confira com a rua escrita)
@@ -2788,10 +2824,10 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
     const inp = elB('input'); inp.hidden = false; inp.value = q; limpar();
     elB('ul').innerHTML = '<li>Pesquisando…</li>';
     const mun = S.cfg.mun || '';
-    const busca = async t => { const r = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=br&accept-language=pt-BR&polygon_geojson=1&q=' + encodeURIComponent(t), {headers: {'Accept': 'application/json'}}); if(!r.ok) throw new Error('serviço respondeu ' + r.status); return r.json(); };
+    const busca = t => window.__geoBusca(t.replace(/\s+bairro\s+/i, ', '), 6);   // GE-08: fila + Photon; “Rua X Bairro Y” → “Rua X, Y”
     try{
       achados = await busca(q + (mun ? ', ' + mun : ''));
-      if(!achados.length && mun){ await espera(1100); achados = await busca(q); }
+      if(!achados.length && mun) achados = await busca(q);
     }catch(e){ elB('ul').innerHTML = '<li>Pesquisa indisponível: ' + esc(e.message || e) + '</li>'; return; }
     if(!achados.length){ elB('ul').innerHTML = '<li>Nada encontrado para “' + esc(q) + '”.</li>'; return; }
     elB('ul').innerHTML = achados.map((a, i) => '<li data-i="' + i + '">' + esc(a.display_name.split(',').slice(0, 3).join(',')) + '</li>').join('');
@@ -2815,18 +2851,69 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
       let falta = tot / 2;
       for(let i = 0; i < seg.length; i++){ if(falta <= seg[i]){ const t = seg[i] ? falta / seg[i] : 0, A = linha[i], B = linha[i + 1]; p = {lat: A[1] + (B[1] - A[1]) * t, lon: A[0] + (B[0] - A[0]) * t}; break; } falta -= seg[i]; }
     }
-    f.lat = p.lat; f.lon = p.lon; f.orig = 'manual'; delete f.semGeo;
-    f.conferencia = 'Colocada no meio de “' + atual.display_name.split(',')[0] + '” pela pesquisa do mapa: arraste o marcador para o ponto exato.';
-    salvar(); renderFotos(); limpar();
-    const prox = S.fotos.find(x => x.sel && !temLocal(x) && x.id !== f.id);
-    if(prox) iniciarMarcar(prox.id); else cancelarMarcar();
-    desenharMapa(false); mapa.setView([p.lat, p.lon], 18);
-    aviso('Foto colocada no meio da rua. Arraste o marcador se precisar.', 4000);
+    window.__ge09Provisorio(p.lat, p.lon, 'Colocada no meio de “' + atual.display_name.split(',')[0] + '” pela pesquisa do mapa.');
+    mapa.setView([p.lat, p.lon], 18);
   }
   const iniOrig = iniciarMapa;
   iniciarMapa = function(){ iniOrig.apply(this, arguments); montarBusca(); };
   if(typeof mapa !== 'undefined' && mapa) montarBusca();
   window.__ge07busca = {pesquisar};
+})();
+</script>
+<script>
+/* ============================================================
+   PATCH GE-09 (24/11/2026): confirmar o local ao marcar no mapa
+   Clicar no mapa (ou “Pôr a foto no meio desta rua”) põe um marcador PROVISÓRIO (laranja, com a foto),
+   que pode ser arrastado ou trocado clicando em outro ponto. Só grava com “✔ Confirmar local”;
+   “Desfazer” tira o provisório. Depois de confirmar, vai para a próxima foto selecionada sem local.
+   ============================================================ */
+(function(){
+  let prov = null, nota = '';
+  const css = document.createElement('style');
+  css.textContent = '#bt-confirmar-marcar{background:#16a34a;color:#fff;border-color:#16a34a}#bt-confirmar-marcar[hidden],#bt-desfazer-marcar[hidden]{display:none}' +
+    '.ge09-prov{width:26px;height:26px;border-radius:50%;background:#FF6B1A;border:3px solid #fff;box-shadow:0 0 0 3px #FF6B1A,0 2px 8px rgba(0,0,0,.6)}';
+  document.head.appendChild(css);
+  function botoes(){
+    const cancelar = $('bt-cancelar-marcar'); if(!cancelar || $('bt-confirmar-marcar')) return;
+    const ok = document.createElement('button'); ok.type = 'button'; ok.className = 'bt peq'; ok.id = 'bt-confirmar-marcar'; ok.textContent = '✔ Confirmar local'; ok.hidden = true; ok.onclick = confirmar;
+    const des = document.createElement('button'); des.type = 'button'; des.className = 'bt peq'; des.id = 'bt-desfazer-marcar'; des.textContent = 'Desfazer'; des.hidden = true; des.onclick = () => { tirar(); estado(); };
+    cancelar.before(ok, des);
+  }
+  function tirar(){ if(prov && mapa){ mapa.removeLayer(prov); } prov = null; nota = ''; }
+  function estado(){
+    botoes();
+    const tem = !!prov; ['bt-confirmar-marcar', 'bt-desfazer-marcar'].forEach(id => { const b = $(id); if(b) b.hidden = !tem; });
+    const sm = document.querySelector('#faixa-marcar small');
+    if(sm && tem){ const p = prov.getLatLng(); sm.textContent = 'Ponto escolhido: ' + p.lat.toFixed(6) + ', ' + p.lng.toFixed(6) + '. Arraste o marcador laranja ou clique em outro ponto para ajustar; depois clique em “✔ Confirmar local”.'; }
+  }
+  window.__ge09Provisorio = function(lat, lon, txt){
+    if(!marcandoId || !mapa) return;
+    const f = fotoPorId(marcandoId);
+    nota = txt || '';
+    if(!prov){
+      prov = L.marker([lat, lon], {draggable: true, zIndexOffset: 1000, icon: L.divIcon({className: '', iconSize: [26, 26], iconAnchor: [13, 13], html: '<div class="ge09-prov"></div>'})}).addTo(mapa);
+      prov.on('dragend', estado);
+    }else prov.setLatLng([lat, lon]);
+    prov.bindTooltip((f && f.thumb ? '<img src="' + f.thumb + '" style="width:110px;display:block;border-radius:4px">' : '') + 'Local provisório', {direction: 'top', offset: [0, -14]});
+    estado();
+  };
+  function confirmar(){
+    const f = fotoPorId(marcandoId); if(!f || !prov) return;
+    const p = prov.getLatLng();
+    f.lat = p.lat; f.lon = p.lng; f.orig = 'manual'; delete f.semGeo;
+    if(nota) f.conferencia = nota + ' Confirmado no mapa.';
+    tirar(); salvar(); renderFotos();
+    const prox = S.fotos.find(x => x.sel && !temLocal(x) && x.id !== f.id);
+    if(prox) iniciarMarcar(prox.id); else cancelarMarcar();
+    desenharMapa(false);
+    aviso('Local da foto “' + f.nome + '” confirmado.', 3500);
+  }
+  const marcarOrig = iniciarMarcar;
+  iniciarMarcar = function(){ tirar(); const r = marcarOrig.apply(this, arguments); estado(); return r; };
+  const cancelarOrig = cancelarMarcar;
+  cancelarMarcar = function(){ tirar(); estado(); return cancelarOrig.apply(this, arguments); };
+  $('bt-cancelar-marcar').onclick = () => cancelarMarcar();
+  document.addEventListener('keydown', e => { if(e.key === 'Enter' && prov && marcandoId && !/INPUT|TEXTAREA|SELECT/.test((document.activeElement || {}).tagName || '')){ e.preventDefault(); confirmar(); } });
 })();
 </script>
 </body>
