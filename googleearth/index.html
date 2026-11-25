@@ -2251,7 +2251,7 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
         if(window.__ge03log) window.__ge03log.push('linha ' + t + '/' + pm + '/' + alvo + (so ? 'n' : '') + ': ' + tx.trim().replace(/\n/g, ' | '));
         const cf = r && r.data ? r.data.confidence : 0;
         candidatos(tx).slice(0, 1).forEach(x => { x.linha = true; x.conf = cf; out.push(x); });
-        if(window.__ge16Frouxa){ const c2 = window.__ge16Frouxa(tx); if(c2) out.push({lat: c2.lat, lon: c2.lon, lin: tx.trim().replace(/\n/g, ' '), linha: true, conf: cf * .6, frouxa: true}); }   // GE-16: leitura tolerante (símbolos perdidos)
+        if(window.__ge20Ativo && window.__ge16Frouxa && !candidatos(tx).length){ const c2 = window.__ge16Frouxa(tx); if(c2) out.push({lat: c2.lat, lon: c2.lon, lin: tx.trim().replace(/\n/g, ' '), linha: true, conf: cf * .6, frouxa: true}); }   // GE-20: só no resgate
         if(!window.__ge03semParar && vencedora(votar(fora.concat(out)))) break;
       }
     }finally{ try{ await w.setParameters({tessedit_pageseg_mode: '6', tessedit_char_whitelist: ''}); }catch(e){} }
@@ -2274,9 +2274,7 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
   textoDaFoto = async function(blob){
     let txt = ''; const cands = [];
     const confirmada = () => { if(window.__ge03semParar) return false; return vencedora(votar(cands)); };
-    // GE-17: carimbo só com endereço (sem sinal de coordenada) e o mesmo endereço lido 2+ vezes: não precisa das 12 leituras
-    const soEndereco = () => { if(!window.ge16 || /\d{1,2}\s*[°º*]\s*\d{2}|\d{2}[.,]\d{4,}/.test(txt)) return false; const e = window.ge16.lerEndereco(txt); return !!e && e.votos >= 2; };
-    const pronto = () => confirmada() && lerEnderecoTarja(txt);   // GE-18: sem a parada antecipada do GE-17
+    const pronto = () => confirmada() && lerEnderecoTarja(txt);
     try{
       const w = await motorOCR();
       try{ await w.setParameters({tessedit_pageseg_mode: '6', preserve_interword_spaces: '1'}); }catch(e){}
@@ -2293,14 +2291,14 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
         if(lc && !feitas.has(cr) && !confirmada()){ feitas.add(cr); (await lerLinha(w, bmp, rec, lc.bbox, cands)).forEach(x => cands.push(x)); }
       };
       try{
-        for(const v of VARIANTES){ for(const cr of CANTOS){ if(pronto() || Date.now() - t0 > 30000 * (window.__ge17 && window.__ge17.fator || 1)) break; await ler(cr, v); } if(pronto()) break; }
-        if(!cands.length && !lerEnderecoTarja(txt)) for(const v of VARIANTES.slice(0, 2)) for(const cr of FAIXAS){ if(pronto() || Date.now() - t0 > 40000 * (window.__ge17 && window.__ge17.fator || 1)) break; await ler(cr, v); }
+        for(const v of VARIANTES){ for(const cr of CANTOS){ if(pronto() || Date.now() - t0 > 30000) break; await ler(cr, v); } if(pronto()) break; }
+        if(!cands.length && !lerEnderecoTarja(txt)) for(const v of VARIANTES.slice(0, 2)) for(const cr of FAIXAS){ if(pronto() || Date.now() - t0 > 40000) break; await ler(cr, v); }
       }finally{ if(bmp.close) bmp.close(); }
     }catch(e){ if(/leitor de texto/.test(e.message || '')) throw e; console.warn('GE-03 tarja:', e); }
     if(!cands.length && !lerEnderecoTarja(txt)){ try{ txt += '\n' + await textoOrig(blob); candidatos(txt).forEach(x => cands.push(x)); }catch(e){ if(!txt.trim()) throw e; } }
     // decisão: 2 leituras iguais = confirmada; 1 leitura só sem endereço = usa e pede conferência;
     // leituras diferentes, ou 1 só com endereço legível = recusa a coordenada (vai pelo endereço)
-    const g = votar(cands), end = (window.__ge16EndAntigo || lerEnderecoTarja)(txt);   // GE-18
+    const g = votar(cands), end = lerEnderecoTarja(txt);
     let coord = null, info = {votos: g.length ? g[0].lista.length : 0, cands: cands.map(c => c.lin), confs: cands.map(c => Math.round(c.conf || 0)), coords: cands.map(c => c.lat.toFixed(5) + ',' + c.lon.toFixed(5)), unico: false, recusada: false};
     if(g.length && g[0].lista.length >= 2 && (g.length === 1 || g[0].pontos >= 1.5 * g[1].pontos)){
       const dig = c => (c.lin.match(/\d{2}[.,]\d{2,}/g) || []).length * 100 + (c.lin.match(/\d/g) || []).length;
@@ -2344,7 +2342,7 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
     return fora;
   }
   window.__ge03.regiao = regiao; window.__ge03.INFO = INFO; window.__ge03.binariza = binariza; window.__ge03.recorteBranco = recorteBranco; window.__ge03.linhaCoord = linhaCoord;
-  window.__ge03.lerLinha = lerLinha; window.__ge03.votar = votar; window.__ge03.vencedora = vencedora;   // GE-16: usados na leitura extra de recortes
+  window.__ge03.lerLinha = lerLinha; window.__ge03.votar = votar; window.__ge03.vencedora = vencedora;   // GE-20: usados só no resgate
 
   /* ---------- 3. o botão único ---------- */
   const PROP_END = ['local', 'titulo', 'assunto', 'comentario', 'descricao', 'palavras'];
@@ -2401,8 +2399,8 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
       const comEnd = semL().filter(f => (f.end && !jaTentou.has(f.id)) || (!f.end && nomeEnd(f)));
       if(comEnd.length){ await geocodificar(comEnd); const t = $('txt-acao').textContent; if(/^Erro ao buscar endereço/.test(t)) falha.end = t; }
       if(semL().some(f => f.end) && /^Erro ao buscar endereço/.test($('txt-acao').textContent)) falha.end = $('txt-acao').textContent;
-      // 3b. GE-16: foto sem endereço nem coordenada (só “Número do índice”) → local da foto vizinha pelo horário da tarja
-      if(window.__ge16Vizinhas) window.__ge16Vizinhas(semL());
+      // 3c. GE-20: RESGATE — só nas fotos que os passos acima deixaram sem local (não mexe em nenhuma foto já localizada)
+      if(window.__ge20Resgate){ try{ await window.__ge20Resgate(semL(), auto); }catch(e){ console.warn('GE-20 resgate:', e); } }
       // 4. coordenada → endereço
       const semEnd = tentar.filter(f => temLocal(f) && !f.end);
       if(semEnd.length) await enderecosPorCoord(semEnd, true);
@@ -2557,6 +2555,7 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
     return ge04Norm(rua).replace(/^\s*(rua|r|avenida|av|estrada|est|alameda|al|travessa|tv|rodovia|praca|pc|beco)\b\.?\s*/, '')
       .replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(t => t.length >= 4);
   }
+  window.__ge04 = {Confere: ge04Confere, Linha: ge04Linha, PontoNaRua: ge04PontoNaRua, Norm: ge04Norm};   // GE-20: usados só no resgate
   function ge04Confere(res, rua){
     const t = ge04Nucleo(rua); if(!t.length) return false;
     const d = ge04Norm(res && res.display_name);
@@ -2699,38 +2698,11 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
   async function ge04Busca(q, cache, rua){
     const k = q + '|' + (rua || '');
     if(cache[k] !== undefined) return cache[k];
-    // GE-19: só serve RUA (ou endereço com número) com o nome certo e NO MUNICÍPIO do trabalho; senão passa para o próximo serviço
-    // (antes, uma loja “Recife” ou a “Rua Recife” de outra cidade encerrava a busca e a Esri, que acha a rua certa, nem era consultada)
-    const cid = ge04Norm(String(S.cfg.mun || '').split(/\s+-\s+|,/)[0]).trim();
-    const util = x => (x.class === 'highway' || (x.address && x.address.house_number)) && (!cid || ge04Norm(x.display_name).includes(cid));
-    cache[k] = await geoBusca(q, 5, rua ? (l => l.filter(x => ge04Confere(x, rua) && util(x))) : null);
+    cache[k] = await geoBusca(q, 5, rua ? (l => l.filter(x => ge04Confere(x, rua))) : null);
     return cache[k];
   }
   // devolve {lat, lon, nota} ou null (nada que confira com a rua escrita)
-  /* GE-16: a rua escrita na tarja nem sempre é o nome do mapa: “Rua Tres Lot Serramar” (Lot = loteamento), “Rua Domingos F. Farias Mota” (inicial).
-     Se a busca normal não acha, tenta sem o loteamento, sem as iniciais e usando o bairro na pergunta. */
-  function ge16Variantes(end){
-    const partes = String(end).split(' - '), ruaNum = partes[0], resto = partes.slice(1).join(' - '), v = [];
-    const monta = r => r + (resto ? ' - ' + resto : '');
-    const semLot = ruaNum.replace(/\s+(lot\.?|loteamento|lotes?|cond\.?|condom[ií]nio|resid\.?|residencial)\s+[^,]*/i, '');
-    const semIni = ruaNum.replace(/\s+[A-ZÀ-Ý]\.(?=\s|,|$)/g, '');
-    if(semLot !== ruaNum) v.push(monta(semLot));
-    if(semIni !== ruaNum) v.push(monta(semIni));
-    return v;
-  }
   async function ge04Localizar(end, mun, cache){
-    let r = await ge04Localizar1(end, mun, cache); if(r) return r;
-    const bairro = (String(end).split(' - ')[1] || '').split(',')[0].trim();
-    const lista = ge16Variantes(end); if(!lista.length) return null;
-    for(const v of lista){
-      for(const m of (bairro ? [bairro + ', ' + mun, mun] : [mun])){
-        r = await ge04Localizar1(m === mun ? v : v.split(' - ')[0], m, cache);   // com o bairro na pergunta, ele sai do endereço (não repete)
-        if(r){ r.nota = ((r.nota ? r.nota + ' ' : '') + 'Nome da rua ajustado para “' + v.split(' - ')[0] + '” (confira no mapa).').trim(); return r; }
-      }
-    }
-    return null;
-  }
-  async function ge04Localizar1(end, mun, cache){
     const esq = ge07Esquina(end);
     if(esq){
       const linhas = [];
@@ -3158,9 +3130,8 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
 })();
 </script>
 <script>
-/* PATCH GE-16 (24/11/2026): fotos que o programa não localizava — tarjas do Timemark (texto no canto ESQUERDO), endereço em várias linhas,
-   número antes da rua, coordenada fora das faixas lidas, “Avenida Novo Rio das Ostras”, rua com “Lot”/inicial no nome, foto sem endereço (só “Número do índice”). */
-/* GE-16: leitura do endereço da tarja por votação entre as várias leituras do OCR (módulo de teste; vai igual para o index.html) */
+/* PATCH GE-20 (25/11/2026): o caminho antigo (GE-01..GE-13: propriedades, nome do arquivo, tarja) roda INTACTO; o que é novo só entra como RESGATE nas fotos que ele deixou sem local.
+   Assim nenhuma foto que o programa já localizava deixa de ser localizada. */
 (function(root){
   const TIPOS = 'Rua|R\\.|Avenida|Av\\.?|Alameda|Al\\.|Travessa|Tv\\.|Estrada|Estr\\.|Rodovia|Rod\\.|Pra[çc]a|Largo|Servid[aã]o|Beco|Via|Viela|Ladeira|Caminho';
   const SEM = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '');
@@ -3254,20 +3225,9 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
   root.ge16 = {lerEndereco, normaliza, dice, chave, dados: {dice}};
   })(typeof window !== 'undefined' ? window : globalThis);
 
-/* ---- GE-16, parte 2: ligação com o programa ---- */
+/* ---- GE-20: resgate das fotos que ficaram sem local ---- */
 (function(){
   const G3 = window.__ge03; if(!G3 || !window.ge16) return;
-  /* endereço: votação entre as leituras do OCR; o interpretador antigo só entra se o novo não achar nada e o resultado for plausível */
-  const lerEndAnterior = lerEnderecoTarja;
-  window.__ge16EndAntigo = lerEndAnterior;   // GE-18: critério antigo para decidir a coordenada
-  const plausivel = e => !!e && /^(rua|r\.|avenida|av|alameda|al|travessa|tv|estrada|estr|rodovia|rod|pra[çc]a|largo|servid|beco|via|viela|ladeira|caminho)\b/i.test(e.rua || '') &&
-    (e.rua.match(/[A-Za-zÀ-ÿ]{4,}/g) || []).length >= 1 && !/[^A-Za-zÀ-ÿ0-9 .,'\-]/.test(e.rua) && (e.rua.match(/[A-Za-zÀ-ÿ]/g) || []).length / e.rua.replace(/\s/g, '').length > .85;
-  lerEnderecoTarja = function(t){
-    const e = window.ge16.lerEndereco(t); if(e) return e;
-    const a = lerEndAnterior(t); return plausivel(a) ? a : null;
-  };
-  /* coordenada com símbolos perdidos pelo OCR (“22º3118,66'8 41º5637,06”, “2283718,66'S 41º5637062W”): usa a região do trabalho como âncora
-     (graus da latitude e da longitude das outras fotos / Rio das Ostras); só vale para sul/oeste e com 12+ dígitos na linha */
   window.__ge16Frouxa = function(txt){
     const ref = refLocal(), la = String(Math.floor(Math.abs(ref.lat))), lo0 = Math.floor(Math.abs(ref.lon));
     for(const lin of String(txt || '').split(/\n/)){
@@ -3281,83 +3241,133 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
     }
     return null;
   };
-  /* leitura extra de recortes quando a primeira leitura não achou coordenada nem um endereço firme */
-  const textoAnterior = textoDaFoto;
-  const TILES = [[.58, 1, 0, .92], [.10, .62, 0, .92], [0, .42, 0, 1], [.5, 1, 0, 1]];   // [y0, y1, x0, x1]: baixo-esq., meio-esq., topo, base
+
+  const TILES = [[.58, 1, 0, .92], [.10, .62, 0, .92], [0, .42, 0, 1], [.5, 1, 0, 1], [.55, 1, .25, 1]];   // baixo-esq., meio-esq., topo, base, baixo-dir.
   const VARS = [['lim', 245, 2], ['lim', 238, 3], ['cont', 200, 2]];
-  const RX_TIMEMARK = /t?imemar|memark|foto\s*100|verified/i, RX_COORD = /\d{1,2}\s*[°º*]\s*\d{2}|\d{2}[.,]\d{4,}/;
-  textoDaFoto = async function(blob){
-    let txt = await textoAnterior(blob);
-    const coord0 = lerCoordenadas(txt), end0 = window.ge16.lerEndereco(txt);
-    const dica = RX_TIMEMARK.test(txt) || RX_COORD.test(txt);
-    if(coord0 || (end0 && end0.votos >= 3 && !dica)) return txt;
+  const RX_COORD = /\d{1,2}\s*[°º*]\s*\d{2}|\d{2}[.,]\d{4,}/;
+  const P6 = {tessedit_pageseg_mode: '6', preserve_interword_spaces: '1', tessedit_char_whitelist: ''};
+  const mun = () => S.cfg.mun || '';
+  function centro(){   // mediana das fotos já localizadas (ou a região do trabalho)
+    const b = S.fotos.filter(f => temLocal(f));
+    if(b.length < 3) return refLocal();
+    const med = a => a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)];
+    return {lat: med(b.map(f => f.lat)), lon: med(b.map(f => f.lon))};
+  }
+  const perto = (c, km) => { const r = centro(); return dist(r.lat, r.lon, c.lat, c.lon) <= km * 1000; };
+  async function lerDeNovo(w, blob){
     const extra = [], cands = [], feitas = new Set(), t0 = Date.now();
-    let bmp = null;
+    const bmp = await abrirImagem(blob);
     try{
-      const w = await motorOCR();
-      try{ await w.setParameters({tessedit_pageseg_mode: '6', preserve_interword_spaces: '1', tessedit_char_whitelist: ''}); }catch(e){}
-      bmp = await abrirImagem(blob);
-      const ler = async (cr, v) => {
-        const rec = G3.recorteBranco(bmp, cr, v[1], v[2], v[0]);
-        if(rec.claro < .003 || rec.claro > .5) return;
-        const r = await w.recognize(rec.c), tx = (r && r.data ? r.data.text : '');
-        extra.push(tx);
-        const lc = G3.linhaCoord(r && r.data && r.data.lines);
-        G3.candidatos(tx).slice(0, 1).forEach(x => { x.conf = lc ? lc.confidence : (r.data.confidence || 0); cands.push(x); });
-        if(!G3.candidatos(tx).length){ const c2 = window.__ge16Frouxa(tx); if(c2) cands.push({lat: c2.lat, lon: c2.lon, lin: tx.trim().split(/\n/).find(l => (l.match(/\d/g) || []).length >= 12) || '', conf: (lc ? lc.confidence : 40) * .6, frouxa: true}); }
-        if(window.__ge16log) window.__ge16log.push('[' + v[0] + v[1] + ' ' + cr.join('/') + '] ' + tx.trim().replace(/\n/g, ' | ') + (lc ? '  => LINHA: ' + lc.text.trim() : ''));
-        if(lc && !feitas.has(cr.join()) && !G3.vencedora(G3.votar(cands))){ feitas.add(cr.join()); (await G3.lerLinha(w, bmp, rec, lc.bbox, cands)).forEach(x => cands.push(x)); }
-      };
       fim: for(const v of VARS){
         for(const cr of TILES){
-          if(Date.now() - t0 > 40000 * (window.__ge17 && window.__ge17.fator || 1)) break fim;
-          await ler(cr, v);
-          if(G3.vencedora(G3.votar(cands)) && window.ge16.lerEndereco(txt + '\n' + extra.join('\n'))) break fim;
-          { const todo = txt + '\n' + extra.join('\n'), e2 = window.ge16.lerEndereco(todo);   // GE-17: endereço lido 2+ vezes e nenhum sinal de coordenada na foto
-            if(e2 && e2.votos >= 2 && !RX_COORD.test(todo.replace(/\d{5}-?\d{3}/g, '').replace(/\d{1,2}:\d{2}(:\d{2})?/g, ''))) break fim; }
+          if(Date.now() - t0 > 45000) break fim;
+          const rec = G3.recorteBranco(bmp, cr, v[1], v[2], v[0]);
+          if(rec.claro < .003 || rec.claro > .5) continue;
+          await w.setParameters(P6);
+          const r = await w.recognize(rec.c), d = (r && r.data) || {}, tx = d.text || '';
+          extra.push(tx);
+          const lc = G3.linhaCoord(d.lines);
+          G3.candidatos(tx).slice(0, 1).forEach(x => { x.conf = lc ? lc.confidence : (d.confidence || 0); cands.push(x); });
+          if(!G3.candidatos(tx).length){ const c2 = window.__ge16Frouxa(tx); if(c2) cands.push({lat: c2.lat, lon: c2.lon, lin: (tx.split(/\n/).find(l => (l.match(/\d/g) || []).length >= 12) || '').trim(), conf: (lc ? lc.confidence : 40) * .6, frouxa: true}); }
+          if(lc && !feitas.has(cr.join()) && !G3.vencedora(G3.votar(cands))){
+            feitas.add(cr.join());
+            window.__ge20Ativo = true;
+            try{ (await G3.lerLinha(w, bmp, rec, lc.bbox, cands)).forEach(x => cands.push(x)); }finally{ window.__ge20Ativo = false; await w.setParameters(P6); }
+          }
+          const g = G3.votar(cands);
+          if(g.length && g[0].lista.length >= 2 && (g.length === 1 || g[0].pontos >= 2 * g[1].pontos)) break fim;   // coordenada confirmada
         }
-        const e = window.ge16.lerEndereco(txt + '\n' + extra.join('\n'));
-        const achouDica = RX_COORD.test(extra.join('\n'));
-        if(e && e.votos >= 3 && (!achouDica || G3.votar(cands).length)) break;   // endereço firme e sem coordenada escrita (ou já lida)
+        const todo = extra.join('\n'), e = window.ge16.lerEndereco(todo);
+        if(e && e.votos >= 3 && !RX_COORD.test(todo.replace(/\d{5}-?\d{3}/g, '').replace(/\d{1,2}:\d{2}(:\d{2})?/g, ''))) break;   // endereço firme e nenhum sinal de coordenada
       }
-    }catch(e){ console.warn('GE-16 leitura extra:', e); }
-    finally{ if(bmp && bmp.close) bmp.close(); }
-    if(!extra.length) return txt;
-    const novo = (txt + '\n' + extra.join('\n')).trim();
-    const g = G3.votar(cands), info = G3.INFO.get(blob), end = window.__ge16EndAntigo(novo);   // GE-18
-    let coord = null, unico = false, recusada = false;
-    if(g.length && g[0].lista.length >= 2 && (g.length === 1 || g[0].pontos >= 1.5 * g[1].pontos)) coord = {lat: g[0].lat, lon: g[0].lon};
-    else if(g.length === 1 && !end){ coord = {lat: g[0].lat, lon: g[0].lon}; unico = true; }
-    else if(g.length) recusada = true;
-    G3.COORD_TXT.set(novo, coord);
-    if(info) info.alt = g.length >= 2 ? g.slice(0, 3).map(x => ({lat: x.lat, lon: x.lon, n: x.lista.length})) : null;
-    if(info){ info.unico = unico; info.recusada = recusada; if(cands.length){ info.cands = cands.map(c => c.lin); info.coords = cands.map(c => c.lat.toFixed(5) + ',' + c.lon.toFixed(5)); } }
-    return novo;
-  };
-  /* leituras diferentes da coordenada (minuto 31 × 37): fica a que está perto da rua escrita na foto */
-  const ocrAnterior = ocrFotos;
-  ocrFotos = async function(lista, umaSo){
-    const r = await ocrAnterior.apply(this, arguments);
-    let mexeu = false;
-    for(const f of (lista || [])){
-      const info = G3.INFO.get(BLOBS.get(f.id)); if(!info || !info.alt || info.alt.length < 2 || !f.end) continue;
-      if(/^(manual|gps|prop)$/.test(f.orig || '')) continue;
-      try{
-        const rua = String(f.end).split(' - ')[0].replace(/,\s*\d+\s*$/, '');
-        const rs = await window.__geoBusca(rua + ', ' + (S.cfg.mun || ''), 3), p = (rs || []).find(x => x && x.lat);
-        if(!p) continue;
-        const alvo = {lat: +p.lat, lon: +p.lon};
-        if(f.orig === 'tarja' && temLocal(f) && dist(f.lat, f.lon, alvo.lat, alvo.lon) <= 3000) continue;   // a escolhida já bate com a rua
-        const ord = info.alt.slice().sort((a, b) => dist(a.lat, a.lon, alvo.lat, alvo.lon) - dist(b.lat, b.lon, alvo.lat, alvo.lon)), d = dist(ord[0].lat, ord[0].lon, alvo.lat, alvo.lon);
-        if(d > 3000) continue;
-        f.lat = ord[0].lat; f.lon = ord[0].lon; f.orig = 'tarja'; mexeu = true;
-        f.conferencia = 'A coordenada da tarja foi lida de formas diferentes (' + info.alt.map(a => a.lat.toFixed(5) + ', ' + a.lon.toFixed(5)).join(' | ') + '). Ficou a que está a ' + Math.round(d) + ' m da rua escrita na foto. Confira no mapa.';
-      }catch(e){ console.warn('GE-16 desempate:', e); }
+    }finally{ if(bmp && bmp.close) bmp.close(); }
+    return {texto: extra.join('\n'), grupos: G3.votar(cands)};
+  }
+  /* endereço → ponto: 1) como o programa já faz; 2) sem “Lot.”/inicial; 3) busca exigindo RUA no município (passa para a Esri se OSM/Photon devolverem outra coisa) */
+  function variantes(end){
+    const partes = String(end).split(' - '), ruaNum = partes[0], resto = partes.slice(1).join(' - '), v = [];
+    const monta = r => r + (resto ? ' - ' + resto : '');
+    const semLot = ruaNum.replace(/\s+(lot\.?|loteamento|lotes?|cond\.?|condom[ií]nio|resid\.?|residencial)\s+[^,]*/i, '');
+    const semIni = ruaNum.replace(/\s+[A-ZÀ-Ý]\.(?=\s|,|$)/g, '');
+    if(semLot !== ruaNum) v.push(monta(semLot));
+    if(semIni !== ruaNum) v.push(monta(semIni));
+    const semAc = ruaNum.normalize('NFD').replace(/[\u0300-\u036f]/g, '');   // OCR põe acento onde não tem (“Peixõto”)
+    if(semAc !== ruaNum) v.push(monta(semAc));
+    return v;
+  }
+  async function pelaRua(f, end, soEstrita){
+    const guarda = {end: f.end, endOrig: f.endOrig};
+    if(!soEstrita) for(const t of [end].concat(variantes(end))){
+      f.end = t; f.endOrig = guarda.endOrig === 'manual' ? 'manual' : (guarda.endOrig || 'tarja');
+      try{ await geocodificar([f]); }catch(e){ console.warn('GE-20 geocodificar:', e); }
+      if(temLocal(f)) return t === end ? '' : 'Nome da rua ajustado para “' + t.split(' - ')[0] + '”. ';
     }
-    if(mexeu){ salvar(); renderFotos(); }
-    return r;
+    // 3) busca estrita
+    const rua = String(end).split(' - ')[0].replace(/,\s*\d+.*$/, '').split(/\.\s+|\s+paralela\b|\s+esquina\b|\s+pr[oó]x/i)[0].trim();
+    const cid = window.__ge04.Norm(mun().split(/\s+-\s+|,/)[0]).trim();
+    const util = x => window.__ge04.Confere(x, rua) && (x.class === 'highway' || (x.address && x.address.house_number)) && (!cid || window.__ge04.Norm(x.display_name).includes(cid));
+    for(const t of [rua].concat(variantes(rua))){
+      try{
+        const rs = await window.__geoBusca(t + ', ' + mun(), 5, l => l.filter(util));
+        const x = (rs || []).find(util);
+        if(x){
+          const lin = window.__ge04.Linha(x), p = lin ? window.__ge04.PontoNaRua(lin, {lat: +x.lat, lon: +x.lon}) : null;
+          f.lat = p ? p.lat : +x.lat; f.lon = p ? p.lon : +x.lon; f.orig = 'endereco'; f.end = guarda.end || end; f.endOrig = guarda.endOrig;
+          return 'Rua “' + t + '” achada pelo ' + (x.fonte === 'esri' ? 'localizador da Esri' : x.fonte === 'photon' ? 'Photon' : 'OpenStreetMap') + ' (ponto aproximado na rua). ';
+        }
+      }catch(e){ console.warn('GE-20 busca estrita:', e); }
+    }
+    f.end = guarda.end; f.endOrig = guarda.endOrig;
+    return null;
+  }
+  window.__ge20Resgate = async function(lista, auto){
+    const fotos = (lista || []).filter(f => !temLocal(f) && !(auto && f.ge20));   // no botão sempre tenta; ao gerar o arquivo, só as que ainda não passaram
+    // pontos pelo endereço que caíram longe das outras fotos (ex.: “Rua Recife” de outra cidade): procura a rua NO MUNICÍPIO; se não achar, fica como estava
+    if(!auto){
+      const c0 = centro();
+      for(const f of S.fotos.filter(f => temLocal(f) && f.orig === 'endereco' && f.end && dist(c0.lat, c0.lon, f.lat, f.lon) > 12000)){
+        const ant = {lat: f.lat, lon: f.lon, orig: f.orig, conf: f.conferencia};
+        $('txt-acao').textContent = 'Conferindo foto localizada longe das outras: ' + f.nome;
+        delete f.lat; delete f.lon;
+        const ok = await pelaRua(f, f.end, true);
+        if(ok !== null && temLocal(f) && dist(c0.lat, c0.lon, f.lat, f.lon) < dist(c0.lat, c0.lon, ant.lat, ant.lon)){
+          f.conferencia = 'O endereço tinha caído a ' + Math.round(dist(c0.lat, c0.lon, ant.lat, ant.lon) / 1000) + ' km das outras fotos (rua de mesmo nome em outro lugar). ' + ok + 'Confira no mapa.';
+        }else{ f.lat = ant.lat; f.lon = ant.lon; f.orig = ant.orig; f.conferencia = ant.conf; }
+      }
+    }
+    if(!fotos.length){ salvar(); renderFotos(); return 0; }
+    const t0 = Date.now(); let n = 0, w = null;
+    try{ w = await motorOCR(); }catch(e){ console.warn('GE-20: sem leitor de texto', e); }
+    for(let i = 0; i < fotos.length; i++){
+      const f = fotos[i], blob = BLOBS.get(f.id); f.ge20 = true;
+      $('txt-acao').textContent = 'Resgate (2ª tentativa) das fotos sem local: ' + (i + 1) + ' de ' + fotos.length + ' — ' + f.nome;
+      progresso('prog-acao', i / fotos.length);
+      let lido = {texto: '', grupos: []};
+      if(w && blob){ try{ lido = await lerDeNovo(w, blob); }catch(e){ console.warn('GE-20 leitura:', f.nome, e); } }
+      // a) coordenada escrita na foto
+      const g = lido.grupos.filter(x => noBrasil(x.lat, x.lon) && perto(x, 15));
+      let c = null, nota = '';
+      if(g.length && g[0].lista.length >= 2 && (g.length === 1 || g[0].pontos >= 2 * g[1].pontos)){ c = g[0]; nota = 'Coordenada lida na tarja na 2ª tentativa (' + g[0].lista.length + ' leituras iguais). '; }
+      else if(g.length === 1){ c = g[0]; nota = 'Coordenada da tarja lida uma vez só na 2ª tentativa: confira no mapa. '; }
+      if(c){ f.lat = c.lat; f.lon = c.lon; f.orig = 'tarja'; f.conferencia = nota.trim(); n++; continue; }
+      // b) endereço: o lido agora (2ª leitura + a 1ª), o que já estava e o do nome do arquivo
+      const e = window.ge16.lerEndereco((f.tarja || '') + '\n' + lido.texto);
+      const nomeArq = window.__ge07NomeArquivo ? window.__ge07NomeArquivo(f.nome) : '';
+      const ends = [...new Set([e && e.texto, f.end, nomeArq].filter(Boolean))];
+      let ok = null;
+      for(const end of ends){ ok = await pelaRua(f, end); if(ok !== null) break; }
+      if(ok !== null && temLocal(f)){
+        // leituras diferentes da coordenada: fica a que está perto da rua achada
+        if(g.length >= 2){ const m = g.slice().sort((a, b) => dist(a.lat, a.lon, f.lat, f.lon) - dist(b.lat, b.lon, f.lat, f.lon))[0]; if(dist(m.lat, m.lon, f.lat, f.lon) <= 1500){ f.lat = m.lat; f.lon = m.lon; f.orig = 'tarja'; ok += 'Coordenada da tarja escolhida entre leituras diferentes pela rua escrita na foto. '; } }
+        f.conferencia = (ok + 'Local achado na 2ª tentativa: confira no mapa.').trim(); n++;
+      }else if(e && !f.end){ f.end = e.texto; f.endOrig = 'tarja'; }
+    }
+    // c) foto sem endereço nem coordenada: local da foto do mesmo horário
+    n += window.__ge16Vizinhas(fotos.filter(f => !temLocal(f))) || 0;
+    progresso('prog-acao', null); salvar(); renderFotos();
+    console.info('GE-20 resgate:', n, 'de', fotos.length, 'em', Math.round((Date.now() - t0) / 1000), 's');
+    return n;
   };
-  /* foto sem endereço nem coordenada (só “Número do índice”): usa o local da foto tirada no mesmo horário (até 3 min), se não houver dúvida */
   window.__ge16Vizinhas = function(lista){
     const hora = f => (f.data && (f.dataOrig === 'exif' || f.dataOrig === 'tarja')) ? Date.parse(f.data) : NaN;
     const com = S.fotos.filter(f => temLocal(f) && isFinite(hora(f)));
@@ -3376,66 +3386,6 @@ else document.addEventListener('tc-acesso-liberado', iniciar, {once: true});
     });
     if(n){ salvar(); renderFotos(); }
     return n;
-  };
-})();
-</script>
-<script>
-/* PATCH GE-17 (24/11/2026): leitura da tarja mais rápida. (1) o leitor (Tesseract.js) vem da pasta ocr/ do próprio site (ver motorOCR/criarLeitor);
-   (2) VÁRIOS leitores ao mesmo tempo: ao ler a tarja de 2+ fotos, as fotos são lidas em paralelo (até 4 leitores, conforme os núcleos do computador)
-   e o resultado fica guardado para o passo seguinte, que segue igual. Com 1 foto, ou computador de 1–2 núcleos, nada muda. */
-(function(){
-  const NMAX = Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 2) - 1));
-  window.__ge17 = {nmax: NMAX, forcar: null};
-  const pool = [], livres = [], fila = [];
-  const BASE = {tessedit_pageseg_mode: '6', preserve_interword_spaces: '1', tessedit_char_whitelist: ''};
-  const adquirir = () => new Promise(ok => { const w = livres.pop(); if(w) ok(w); else fila.push(ok); });
-  const liberar = w => { const n = fila.shift(); if(n) n(w); else livres.push(w); };
-  async function garantir(n){
-    const falta = n - pool.length; if(falta <= 0) return;
-    const novos = await Promise.all(Array.from({length: falta}, () => criarLeitor()));
-    novos.forEach(w => { pool.push(w); liberar(w); });
-  }
-  /* “leitor” entregue a cada leitura de foto: guarda os próprios parâmetros e usa um leitor livre do grupo só durante o recognize */
-  function Leitor(){ this.p = Object.assign({}, BASE); }
-  Leitor.prototype.setParameters = async function(o){ Object.assign(this.p, o || {}); };
-  Leitor.prototype.recognize = async function(img){
-    const w = await adquirir();
-    try{ await w.setParameters(this.p); return await w.recognize(img); }
-    finally{ liberar(w); }
-  };
-  motorOCR = async function(){
-    if(!pool.length){ if(_ocr){ pool.push(_ocr); liberar(_ocr); } else await garantir(1); }
-    return new Leitor();
-  };
-  const textoOriginal = textoDaFoto, PRONTO = new WeakMap();
-  textoDaFoto = async function(blob){
-    if(PRONTO.has(blob)){ const t = PRONTO.get(blob); PRONTO.delete(blob); return t; }
-    return textoOriginal(blob);
-  };
-  const ocrAnterior = ocrFotos;
-  ocrFotos = async function(lista, umaSo){
-    const blobs = (lista || []).map(f => BLOBS.get(f.id)).filter(Boolean);
-    const n = Math.min(window.__ge17.forcar || NMAX, blobs.length);
-    if(n >= 2){
-      try{
-        $('txt-acao').textContent = 'Preparando ' + n + ' leitores de texto para ler ' + blobs.length + ' fotos ao mesmo tempo… (na primeira vez baixa cerca de 10 MB)';
-        progresso('prog-acao', 0);
-        await garantir(n);
-        let feitas = 0; const t0 = Date.now(), restantes = blobs.slice();
-        const rodar = async () => {
-          while(restantes.length){
-            const b = restantes.shift();
-            try{ PRONTO.set(b, await textoOriginal(b)); }catch(e){ if(/leitor de texto/.test(e.message || '')) throw e; console.warn('GE-17 leitura em paralelo:', e); }
-            feitas++; progresso('prog-acao', feitas / blobs.length);
-            $('txt-acao').textContent = 'Lendo a tarja: ' + feitas + ' de ' + blobs.length + ' fotos (' + n + ' leitores ao mesmo tempo)…';
-          }
-        };
-        window.__ge17.fator = n;
-        try{ await Promise.all(Array.from({length: n}, rodar)); }finally{ window.__ge17.fator = 1; }
-        window.__ge17.ultimo = {fotos: blobs.length, leitores: n, seg: Math.round((Date.now() - t0) / 100) / 10};
-      }catch(e){ console.warn('GE-17: leitura em paralelo falhou; seguindo foto a foto.', e); }
-    }
-    return ocrAnterior.apply(this, arguments);
   };
 })();
 </script>
