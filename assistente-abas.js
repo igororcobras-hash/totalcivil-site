@@ -18,6 +18,9 @@
    Uso, no <head> do programa (depois do acesso-programa.js):
      <script src="/assistente-abas.js" data-tabs=".tab-btn" data-auxilio="proprio"></script>
    data-tabs = seletor CSS dos botões de aba, na ordem das abas.
+   data-sob-demanda="1" (Drenagem): a barra fica sempre oculta, sem botão flutuante;
+                        só aparece enquanto o guia do botão superior "📋 Auxílio
+                        Preenchimento" estiver aberto. O ✕ da barra ou do guia fecha os dois.
    ============================================================ */
 (function () {
   'use strict';
@@ -29,6 +32,7 @@
 
   var RECOLH = !!(me && me.dataset.recolhido);
   var aberto = !RECOLH, fab = null;
+  var SOB = !!(me && me.dataset.sobDemanda), trocando = false;
   var CORES = {fundo: '#ffffff', borda: '#2563eb', texto: '#1e293b', botao: '#2563eb'};
   var guia = {ativo: false, campos: [], i: 0};
   var barra = null, painel = null, ultimaChave = '';
@@ -76,6 +80,12 @@
     });
   }
 
+  function fecharProprio() {
+    if (!guiaProprioAberto()) return;
+    var p = botoesAuxilio().filter(function (b) { return /Parar Aux/.test(b.textContent); })[0];
+    if (p) p.click();
+  }
+
   /* ---------- barra ---------- */
   function css() {
     if (document.getElementById('tc-aa-css')) return;
@@ -106,6 +116,8 @@
       '@media(max-width:640px){#tc-aa{left:8px;right:8px;bottom:8px;max-width:none;justify-content:space-between}#tc-aa .mid small{max-width:110px}#tc-pg{right:8px;left:8px;width:auto;bottom:70px}}' +
       '#tc-fab{position:fixed;left:12px;bottom:12px;z-index:99985;width:44px;height:44px;border-radius:50%;border:2px solid #2563eb;background:#fff;color:#2563eb;font-size:20px;cursor:pointer;box-shadow:0 4px 14px rgba(37,99,235,.3);padding:0}' +
       '#tc-aa .x{padding:7px 8px}' +
+      'body.tc-sob [id^="guiaInstr"]{bottom:84px!important;max-height:calc(100vh - 100px);overflow:auto}' +
+      '@media(max-width:640px){body.tc-sob [id^="guiaInstr"]{left:8px!important;right:8px!important;width:auto!important;max-height:55vh}}' +
       '@media print{#tc-aa,#tc-pg,#tc-fab{display:none!important}}';
     document.head.appendChild(s);
   }
@@ -115,13 +127,14 @@
     barra = document.createElement('div'); barra.id = 'tc-aa';
     barra.innerHTML = '<button type="button" id="tc-ant">‹ Anterior</button>' +
       '<div class="mid"><button type="button" id="tc-aux">📋 Auxílio de preenchimento</button><small id="tc-pos"></small></div>' +
-      '<button type="button" class="pri" id="tc-prox">Próximo ›</button>' + (RECOLH ? '<button type="button" class="x" id="tc-rec" title="Esconder a barra">✕</button>' : '');
+      '<button type="button" class="pri" id="tc-prox">Próximo ›</button>' + (RECOLH || SOB ? '<button type="button" class="x" id="tc-rec" title="' + (SOB ? 'Fechar o auxílio' : 'Esconder a barra') + '">✕</button>' : '');
     document.body.appendChild(barra);
+    if (SOB) barra.querySelector('#tc-aux').textContent = '⏹ Parar auxílio';
     barra.querySelector('#tc-ant').onclick = function () { mover(-1); };
     barra.querySelector('#tc-prox').onclick = function () { mover(1); };
     barra.querySelector('#tc-aux').onclick = abrirAuxilio;
     var rc = barra.querySelector('#tc-rec');
-    if (rc) rc.onclick = function () { aberto = false; fecharGuia(); atualizar(); };
+    if (rc) rc.onclick = function () { if (SOB) fecharProprio(); else aberto = false; fecharGuia(); atualizar(); };
   }
   function montarFab() {
     if (fab) return;
@@ -137,12 +150,14 @@
     var n = l[i + d]; if (!n) return;
     var tinhaGuia = guia.ativo || guiaProprioAberto();
     fecharGuia();
+    if (SOB) { trocando = true; fecharProprio(); }
     n.click();
     try { n.scrollIntoView({inline: 'center', block: 'nearest'}); } catch (e) {}
     setTimeout(function () {
       window.scrollTo({top: 0, behavior: 'smooth'});
       atualizar();
       if (tinhaGuia) abrirAuxilio();
+      if (SOB) { trocando = false; atualizar(); }
     }, 350);
   }
 
@@ -150,6 +165,11 @@
     var l = abas();
     var modal = document.querySelector('#modal:not(.hidden),[role=dialog]:not([hidden]),.modal-overlay.open,.modal-overlay.show,.modal-overlay.active');
     if (l.length < 2 || (modal && visivel(modal))) { if (barra) barra.style.display = 'none'; if (fab) fab.style.display = 'none'; return; }
+    if (SOB) {
+      var usar = trocando || guiaProprioAberto();
+      document.body.classList.toggle('tc-sob', usar);
+      if (!usar) { if (barra) barra.style.display = 'none'; return; }
+    }
     if (RECOLH && !aberto) { if (barra) barra.style.display = 'none'; montarFab(); fab.style.display = ''; return; }
     if (fab) fab.style.display = 'none';
     montarBarra(); barra.style.display = '';
