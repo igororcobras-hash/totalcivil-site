@@ -37,9 +37,10 @@ function payload(tok) {
   try { const p = tok.split('.')[1].replace(/-/g, '+').replace(/_/g, '/'); return JSON.parse(decodeURIComponent(escape(atob(p + '==='.slice((p.length + 3) % 4))))); } catch (e) { return null; }
 }
 function sistema(ags) {
-  return REGRAS + '\n\n' + ags.map(a => String(AGENTES[a] || '')
-    .replace(/^---[\s\S]*?---\s*/, '').replace(/## Regras de trabalho[\s\S]*?(?=\n## |$)/, '')
-    .replace(/## Conversa com os outros especialistas[\s\S]*$/, '')).join('\n\n');
+  /* equipe toda: coordenação + contratos + biblioteca, o especialista do programa inteiro e os outros inteiros como apoio */
+  const ag = AGENTES.ag || {}, outros = Object.keys(ag).filter(a => !ags.includes(a));
+  return REGRAS + '\n\n' + (AGENTES.equipe || '') + '\n\n# ESPECIALISTA PRINCIPAL (programa aberto)\n' + ags.map(a => ag[a] || '').join('\n\n') +
+    '\n\n# APOIO — OUTROS ESPECIALISTAS DA EQUIPE\n' + outros.map(a => ag[a]).join('\n\n');
 }
 
 export default {
