@@ -32,6 +32,8 @@ const PARTE = 900 * 1024;               // limite do Firestore: 1 MiB por docume
 const FORA_DO_SITE = new Set(['.git', '.github', 'scripts', 'node_modules', 'firestore.rules', 'README.md', '_site']);
 
 const RAIZ = path.resolve(__dirname, '..', '..');
+/* texto dos especialistas para o assistente gratuito (sempre igual ao .claude/agents/) */
+try { require('../assistente/montar-especialistas.js')(); } catch (e) { console.log('assistente-especialistas.js:', e.message); }
 const saida = path.resolve(process.argv[2] || '_site');
 const enviar = process.argv.includes('--enviar');
 
