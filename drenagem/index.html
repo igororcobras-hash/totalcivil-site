@@ -438,6 +438,7 @@ body.cel table.t-cel td[data-l]::before{content:attr(data-l);font-size:.8rem;fon
 </style>
 <script src="/assistente-abas.js" data-tabs="#tabs-list .tab-btn" data-auxilio="proprio"></script>
 <script src="/estado-pagina.js"></script>
+<script src="/assistente.js" data-programa="drenagem" defer></script>
 </head>
 <body>
 <div id="toast"></div>
@@ -1412,7 +1413,7 @@ const HELP = {
   'proj.data': 'Data de emissão do memorial.',
   'proj.obs': 'Texto livre que entra no item "Objeto" do memorial: condições do local, interferências, premissas adotadas.',
   'crit.tr': 'Período de retorno é o intervalo médio, em anos, em que a chuva de projeto é igualada ou superada. Microdrenagem urbana: 2 a 10 anos (usual 10). Vias arteriais e áreas críticas: 10 a 25 anos.',
-  'crit.tcMin': 'Menor tempo de concentração aceito. Bacias urbanas muito pequenas dariam tc irreal (1–2 min) e chuvas exageradas; por isso adota-se um mínimo, usualmente 5 a 10 min.',
+  'crit.tcMin': 'Menor tempo de concentração aceito. Bacias urbanas muito pequenas dariam tc irreal (1–2 min) e chuvas exageradas; por isso adota-se um mínimo. O DNIT (IPR-724, p. 298) indica tc mínimo de 10 min e tempos de entrada de 7 a 15 min (Tabela 48); o padrão do programa é 5 min: ajuste conforme o órgão.',
   'crit.nTubo': 'Coeficiente de rugosidade de Manning do tubo. Quanto maior, mais atrito e menor a capacidade. Concreto: 0,013 a 0,015. PEAD/PVC: 0,010 a 0,012.',
   'crit.nSarj': 'Rugosidade de Manning da sarjeta e da faixa da pista por onde a água escoa. Concreto liso 0,013–0,016; asfalto 0,016–0,018; paralelepípedo 0,020–0,025.',
   'crit.gama': 'Peso específico da água, usado na tensão trativa τ = γ·R·S. Valor padrão 9.810 N/m³.',
@@ -1424,9 +1425,9 @@ const HELP = {
   'crit.ramalLmax': 'Comprimento máximo do ramal sem caixa intermediária. Usual até 15 m.',
   'crit.ramalImin': 'Declividade mínima do ramal. Usual 1 % para garantir autolimpeza.',
   'crit.dmin': 'Menor diâmetro admitido na rede tronco (galeria). Não é o diâmetro do projeto: cada trecho tem o seu na planilha da rede. Usual 400 mm (alguns municípios 500 ou 600 mm).',
-  'crit.yD': 'Relação máxima entre a altura da água e o diâmetro (y/D). Abaixo de 1 o tubo trabalha como canal livre, com folga para ar e detritos. DNIT recomenda 0,75 (alguns manuais 0,85).',
-  'crit.vmin': 'Velocidade mínima para evitar deposição de areia e lixo. Usual 0,60 m/s (alguns adotam 0,75 m/s).',
-  'crit.vmax': 'Velocidade máxima para evitar desgaste do tubo. Concreto: 5,0 m/s. Acima disso, use PV de queda ou degraus.',
+  'crit.yD': 'Relação máxima entre a altura da água e o diâmetro (y/D). Abaixo de 1 o tubo trabalha como canal livre, com folga para ar e detritos. Padrão do programa 0,75. O DNIT (IPR-724, p. 301) admite a altura d’água entre 20 % e 85 % do diâmetro.',
+  'crit.vmin': 'Velocidade mínima para evitar deposição de areia e lixo. Padrão do programa 0,60 m/s (alguns adotam 0,75 m/s). O DNIT (IPR-724, p. 301) indica 1,0 m/s para autolimpeza.',
+  'crit.vmax': 'Velocidade máxima para evitar desgaste do tubo. Padrão do programa 5,0 m/s. O DNIT (IPR-724, pp. 44 e 301) indica cerca de 4,5 m/s para tubo de concreto. Acima disso, use PV de queda ou degraus.',
   'crit.tauMin': 'Tensão trativa mínima (força do escoamento sobre o fundo) para autolimpeza. Usual 1,0 Pa.',
   'crit.imin': 'Declividade mínima aceita na rede e nas sarjetas. Usual 0,5 %; recomendável ≥ 1 % quando o terreno permite.',
   'crit.recob': 'Recobrimento mínimo de projeto (topo externo do tubo até a superfície), usado para lançar as cotas. Pode ser reduzido em terreno plano: abaixo do recobrimento sem proteção o programa indica tubo PA-2, laje de proteção ou envelopamento em concreto.',
@@ -1567,7 +1568,7 @@ const FB = {
   'bacias.A': (v, o) => !(v > 0) ? mk('err', 'Informe a área em hectares (ex.: 2.500 m² = 0,25 ha).') : v > 300 ? mk('err', 'Acima de ~3 km² o Método Racional não é recomendado; use hidrograma unitário.') : v > 2 ? mk('warn', 'Área grande para descarregar num único ponto de microdrenagem. Divida em sub-bacias por boca-de-lobo.') : mk('ok', '= ' + f2(v * 10000, 0) + ' m² · Q = ' + fL(R.bac[o.id] && R.bac[o.id].Q) + ' L/s'),
   'bacias.C': v => !(v > 0 && v <= 1) ? mk('err', 'C deve estar entre 0 e 1.', 0.7, 'Usar 0,70') : v >= 0.85 ? mk('info', 'Faixa de superfícies quase impermeáveis (telhados, asfalto, concreto).') : v >= 0.6 ? mk('info', 'Faixa de área urbana densa / residencial com lotes pequenos.') : v >= 0.35 ? mk('info', 'Faixa residencial com lotes grandes / misto.') : mk('info', 'Faixa de áreas verdes, praças, gramados.'),
   'bacias.dest': v => v ? null : mk('err', 'Escolha a BL ou o PV que recebe esta água; sem destino, a vazão não entra na rede.'),
-  'bacias.tc': v => !(v > 0) ? mk('warn', 'Sem tc: será adotado o mínimo de ' + P.crit.tcMin + ' min.') : v < P.crit.tcMin ? mk('info', 'Menor que o mínimo; será adotado ' + P.crit.tcMin + ' min.') : v > 30 ? mk('warn', 'tc alto para entrada de microdrenagem (usual 5 a 15 min). Confira.') : null,
+  'bacias.tc': v => !(v > 0) ? mk('warn', 'Sem tc: será adotado o mínimo de ' + P.crit.tcMin + ' min.') : v < P.crit.tcMin ? mk('info', 'Menor que o mínimo; será adotado ' + P.crit.tcMin + ' min.') : v > 30 ? mk('warn', 'tc alto para entrada de microdrenagem (usual 5 a 15 min; IPR-724 Tabela 48: 7 a 15 min). Confira.') : null,
   'bacias.kH': (v, o) => { const t = kirpich(num(o.kL), num(v)); return isNum(t) ? mk('info', 'tc Kirpich = ' + f2(t, 1) + ' min' + (t < P.crit.tcMin ? ' → adotado ' + P.crit.tcMin + ' min' : '') + '.') : mk('err', 'Informe L e H para calcular o tc.'); },
 
   'bls.dist': (v, o) => !isNum(num(v)) ? mk('err', 'Informe a posição.') : mk('info', 'Estaca ' + estLabel(num(v)) + (isNum(greideCota(o.rua, num(v))) ? ' · greide ' + f2(greideCota(o.rua, num(v)), 3) + ' m' : '')),
@@ -10005,7 +10006,7 @@ function T3compCard() {
    PATCH DR-10 (05/11/2026) — Visualização 3D: alerta de enchimento do tubo
    Tubo de drenagem não trabalha cheio: precisa de folga acima da lâmina
    para ventilação (ar) e passagem de detritos. Quando a lâmina passa do
-   limite do projeto (y/D máximo da aba de critérios, crit.yD; DNIT 0,75)
+   limite do projeto (y/D máximo da aba de critérios, crit.yD; padrão 0,75)
    ou o tubo entra em carga, o 3D mostra:
    - faixa vermelha piscando em volta do tubo/galeria, com etiqueta;
    - quadro de alerta dentro do desenho, com os trechos e ramais;
@@ -11225,7 +11226,7 @@ gerTela = function () {
    Conduto livre precisa de colchão de ar sobre a lâmina: com a água rápida
    o escoamento arrasta ar (emulsão), a lâmina "incha" e o tubo pode
    afogar e entrar em carga aos golpes. y/D máximo de cada trecho = o MENOR:
-     - y/D máximo dos critérios (DNIT 0,75);
+     - y/D máximo dos critérios (padrão 0,75; IPR-724 admite até 0,85);
      - V > Vc = 6·√(g·Rh) (NBR 9649) → 0,50 (crit.yDvent);
      - Froude 0,86–1,13 (superfície ondulada) → 0,70 (crit.yDfr);
      - colchão de ar ≥ crit.folgaAr (0,10 m) entre a lâmina e o topo.
@@ -11238,7 +11239,7 @@ migrate = function () { const p = _mig15.apply(this, arguments); try { if (p && 
 const _defCrit15 = defaultCrit;
 defaultCrit = function () { return Object.assign(_defCrit15.apply(this, arguments), {ventVc: 1, yDvent: 0.50, yDfr: 0.70, folgaAr: 0.10}); };
 Object.assign(CRITR, {yDvent: [0.40, 0.60], yDfr: [0.60, 0.75], folgaAr: [0.05, 0.20]});
-HELP['crit.ventVc'] = 'Ventilação do conduto (colchão de ar sobre a lâmina). Ligada, o y/D máximo de cada trecho é o MENOR entre: o y/D máximo (DNIT 0,75); 0,50 se a velocidade passar da crítica Vc = 6·√(g·Rh) (NBR 9649: a água arrasta ar e a lâmina incha); 0,70 com Froude entre 0,86 e 1,13 (superfície ondulada); e o que deixa o colchão de ar mínimo em metros. Vale para o dimensionamento, o Redimensionar do 3D, o gerador e a verificação.';
+HELP['crit.ventVc'] = 'Ventilação do conduto (colchão de ar sobre a lâmina). Ligada, o y/D máximo de cada trecho é o MENOR entre: o y/D máximo (padrão 0,75; IPR-724 admite até 0,85); 0,50 se a velocidade passar da crítica Vc = 6·√(g·Rh) (NBR 9649: a água arrasta ar e a lâmina incha); 0,70 com Froude entre 0,86 e 1,13 (superfície ondulada); e o que deixa o colchão de ar mínimo em metros. Vale para o dimensionamento, o Redimensionar do 3D, o gerador e a verificação.';
 HELP['crit.yDvent'] = 'y/D máximo quando a velocidade passa da crítica Vc = 6·√(g·Rh). NBR 9649: 0,50 (metade da seção para o ar).';
 HELP['crit.yDfr'] = 'y/D máximo com o regime perto do crítico (Froude entre 0,86 e 1,13): a superfície fica ondulada e as ondas batem no topo do tubo, tirando o ar. Folga maior que a normal; usual 0,70.';
 HELP['crit.folgaAr'] = 'Colchão de ar mínimo entre a lâmina e o topo do tubo ou da galeria, em metros (boa prática: 0,10 m). Pesa nos tubos pequenos (ramais) e garante a passagem de ar e de detritos flutuantes.';
