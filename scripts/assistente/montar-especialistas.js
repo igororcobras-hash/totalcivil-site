@@ -34,8 +34,10 @@ function pacote() {
   const dir = path.join(RAIZ, '.claude', 'agents'), E = { equipe: equipe(), ag: {}, ap: {} };
   for (const f of fs.readdirSync(dir).sort()) if (f.endsWith('.md')) {
     const k = f.replace(/\.md$/, ''), t = fs.readFileSync(path.join(dir, f), 'utf8');
-    E.ag[k] = '## ' + k + ' — ' + descricao(t) + '\n' + junta(t, TIRA_AG);
-    E.ap[k] = '## ' + k + ' — ' + descricao(t) + '\n' + junta(t, TIRA_AP);
+    /* treino extra: soluções reais de redimensionamento (engenharia/solucoes/<agente>.md), se houver */
+    const sol = semFront(ler('engenharia/solucoes/' + k + '.md')).trim();
+    E.ag[k] = '## ' + k + ' — ' + descricao(t) + '\n' + junta(t, TIRA_AG) + (sol ? '\n\n' + sol : '');
+    E.ap[k] = '## ' + k + ' — ' + descricao(t) + '\n' + junta(t, TIRA_AP) + (sol ? '\n\n' + sol : '');
   }
   return E;
 }
