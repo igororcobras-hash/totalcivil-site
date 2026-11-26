@@ -423,7 +423,7 @@ footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wr
       <div class="opcoes" id="cad-programas"></div>
       <div class="duas" id="cad-pagto">
         <div class="campo"><label for="cd-indic">Código de indicação (opcional)</label><input id="cd-indic" maxlength="12" autocapitalize="characters" placeholder="Ex.: TC4F8K2A"></div>
-        <div class="campo"><span class="rot">Forma de pagamento</span>
+        <div class="campo" id="cad-forma"><span class="rot">Forma de pagamento</span>
           <div class="opcoes" style="margin:4px 0 0">
             <label class="opcao"><input type="radio" name="cd-pag" value="pix" checked><span class="nm">Pix</span></label>
             <label class="opcao"><input type="radio" name="cd-pag" value="transferencia"><span class="nm">Transferência (Itaú)</span></label>
@@ -567,6 +567,7 @@ const PROF_PROMO = new Set(Object.keys(PROF_NOME));
 const PROMO_MESES = 2;                                        /* PROMO-02: 2 meses grátis (antes 1 ano) */
 const PROMO_FIM = new Date('2027-03-01T00:00:00-03:00');      /* PROMO-02: vale para cadastros até 28/02/2027 */
 const promoAtiva = () => Date.now() < PROMO_FIM.getTime();
+const gratisPromo = () => !eu && !modoTeste && promoAtiva();   /* PROMO-02: cadastro novo sem cobrança */
 function promoValidade(){ const v = new Date(); v.setMonth(v.getMonth() + PROMO_MESES); return v; }
 /* Combos de cobrança: quem tem os dois programas do par paga só por um (o outro sai grátis).
    Cada programa continua com o código, a página e os dados 100% separados — isto só mexe no PREÇO. */
@@ -788,16 +789,17 @@ function abrirCadastro(teste){
   const logado = !!eu;
   $('cad-dados').hidden = logado;
   $('cad-ja').hidden = logado;
-  $('cad-pagto').hidden = modoTeste; $('cad-plano').hidden = modoTeste; $('cad-resumo').hidden = modoTeste;
-  $('t-cad').textContent = modoTeste ? 'Solicitar acesso teste' : logado ? 'Contratar ou alterar pacote' : 'Criar conta e contratar';
-  $('t-cad').nextElementSibling.textContent = modoTeste ? 'Escolha os programas que quer testar. O administrador libera o teste e define até quando.' : 'Escolha os programas do seu pacote. Os 2 primeiros meses são grátis.';
-  $('cd-bt').textContent = modoTeste ? (logado ? 'Solicitar teste' : 'Criar conta e solicitar teste') : logado ? 'Enviar pedido' : 'Criar conta e enviar pedido';
+  const gratis = gratisPromo();   /* PROMO-02: até 28/02/2027 o cadastro novo não mostra preço nem cobrança */
+  $('cad-pagto').hidden = modoTeste; $('cad-plano').hidden = modoTeste || gratis; $('cad-resumo').hidden = modoTeste; $('cad-forma').hidden = gratis;
+  $('t-cad').textContent = modoTeste ? 'Solicitar acesso teste' : gratis ? 'Criar conta grátis' : logado ? 'Contratar ou alterar pacote' : 'Criar conta e contratar';
+  $('t-cad').nextElementSibling.textContent = modoTeste ? 'Escolha os programas que quer testar. O administrador libera o teste e define até quando.' : gratis ? 'Promoção para novos cadastros até 28/02/2027: 2 meses grátis, sem nenhuma cobrança.' : 'Escolha os programas do seu pacote. Os 2 primeiros meses são grátis.';
+  $('cd-bt').textContent = modoTeste ? (logado ? 'Solicitar teste' : 'Criar conta e solicitar teste') : gratis ? 'Criar conta grátis' : logado ? 'Enviar pedido' : 'Criar conta e enviar pedido';
   if(logado && eu.indicadoPor) $('cd-indic').value = eu.indicadoPor;
   const pl = document.querySelector('input[name="cd-plano"][value="' + ((eu && eu.plano) || 'mensal') + '"]'); if(pl) pl.checked = true;
   $('cad-programas').innerHTML = PROGRAMAS.filter(p => !modoTeste || p.disp).map(p => {
     const lib = p.disp && liberado(eu, p);
     return '<label class="opcao"><input type="checkbox" value="' + p.key + '"' + (sel.has(p.key) || lib ? ' checked' : '') + (lib ? ' disabled' : '') + '>' +
-      '<span class="nm">' + esc(p.nome) + '</span><span class="vl">' + (lib ? 'já liberado' : p.disp ? brl(PRECO) + '/mês' : 'em breve') + '</span></label>';
+      '<span class="nm">' + esc(p.nome) + '</span><span class="vl">' + (lib ? 'já liberado' : p.disp ? (gratis ? 'grátis' : brl(PRECO) + '/mês') : 'em breve') + '</span></label>';
   }).join('');
   msg('cd-msg', '');
   resumoCadastro();
@@ -808,6 +810,18 @@ function marcadosCadastro(){ return [...$('cad-programas').querySelectorAll('inp
 const planoCadastro = () => (document.querySelector('input[name="cd-plano"]:checked') || {}).value || 'mensal';
 function resumoCadastro(){
   const ks = marcadosCadastro();
+  if(gratisPromo()){   /* PROMO-02: nenhum valor na tela durante a promoção */
+    const v0 = valores(ks);
+    $('cad-programas').querySelectorAll('label.opcao').forEach(lb => {
+      const cb = lb.querySelector('input'); const p = porKey(cb.value);
+      if(p && p.disp && !cb.disabled) lb.querySelector('.vl').textContent = 'grátis';
+    });
+    $('cad-resumo').innerHTML =
+      '<div class="lin"><span>Programas marcados</span><span>' + v0.disp + (v0.breve ? ' + ' + v0.breve + ' em breve' : '') + '</span></div>' +
+      '<div class="lin"><span>Acesso</span><span>2 meses grátis</span></div>' +
+      '<div class="lin tot"><span>Cobrança</span><span>nenhuma</span></div>';
+    return;
+  }
   const kset = new Set(ks);
   const v = valores(ks), pl = planoCadastro();
   /* combo "compra 1, ganha o outro": mostra o 2º programa do par como grátis na própria lista */
@@ -836,11 +850,12 @@ $('form-cadastro').addEventListener('submit', async ev => {
   let ks = marcadosCadastro().filter(k => !(eu && liberado(eu, porKey(k))));
   const profSel = !eu ? $('cd-prof').value : '';
   const promo = !eu && promoAtiva() && PROF_PROMO.has(profSel);
+  const gratis = gratisPromo();   /* PROMO-02: cadastro novo até 28/02/2027 nunca gera cobrança */
   let promoOk = false;
   if(promo) ks = PROGRAMAS.filter(p => p.disp).map(p => p.key);
   const pag = (document.querySelector('input[name="cd-pag"]:checked') || {}).value || 'pix';
   const plano = planoCadastro();
-  const tipoPedido = modoTeste ? 'teste' : 'compra';
+  const tipoPedido = (modoTeste || gratisPromo()) ? 'teste' : 'compra';
   const indic = String($('cd-indic').value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
   if(!ks.length && !promo && (eu || profSel)){ msg('cd-msg', 'Marque ao menos um programa.', 'erro'); return; }
   const {a, d, auth, fs} = fb;
@@ -930,7 +945,7 @@ $('form-cadastro').addEventListener('submit', async ev => {
     sel.clear(); salvarSel(); renderProgramas(); atualizarBarra();
     if(promoOk){ mostrarPromoOk(); return; }
     if(promo){ ks = PROGRAMAS.filter(p => p.disp).map(p => p.key); }
-    mostrarPedido({nome, email, zap, ks: (modoTeste || promo) ? ks : todosPedidos(ks), pag, plano, indic, teste: modoTeste || promo});
+    mostrarPedido({nome, email, zap, ks: (modoTeste || promo || gratis) ? ks : todosPedidos(ks), pag, plano, indic, teste: modoTeste || promo || gratis});
   }catch(e){
     criando = false;
     msg('cd-msg', e && e.mensagem ? e.mensagem : traduzir(e, 'Não foi possível enviar o pedido'), 'erro');
