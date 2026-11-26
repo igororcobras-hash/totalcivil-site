@@ -370,10 +370,10 @@ footer .wrap{display:flex; justify-content:space-between; gap:12px; flex-wrap:wr
   <div class="promo-topo">
     <span class="promo-selo">Promoção para novos cadastros</span>
     <h3 id="t-promo">Teste todos os programas</h3>
-    <div class="promo-ano">1<small>ano de acesso liberado</small></div>
+    <div class="promo-ano">2<small>meses grátis</small></div>
   </div>
   <div class="promo-corpo">
-    <p>Para você testar e conhecer.</p>
+    <p>Para você testar e conhecer. Cadastre-se até 28 de fevereiro de 2027.</p>
     <div class="promo-bt">
       <button class="bt pri" type="button" id="promo-criar">Criar minha conta</button>
       <button class="bt" type="button" data-fechar>Agora não</button>
@@ -556,7 +556,7 @@ const PROGRAMAS = [
    ico:'<circle cx="23" cy="23" r="17"/><path d="M6 23h34M23 6c-6 6-6 28 0 34M23 6c6 6 6 28 0 34"/>'}
 ];
 const porKey = k => PROGRAMAS.find(p => p.key === k);
-/* PROMO-01 (14/11/2026): 1 ano de acesso para novas contas de profissões da engenharia / construção civil.
+/* PROMO-01 (14/11/2026) / PROMO-02 (26/11/2026): 2 meses grátis (antes 1 ano) para novas contas de profissões da engenharia / construção civil.
    A lista de chaves precisa ser igual à de cadastroPromo() em firestore.rules. */
 const PROF_NOME = {'eng-civil':'Engenheiro(a) civil','eng-outra':'Engenheiro(a) de outra modalidade','arquiteto':'Arquiteto(a) e urbanista',
   'tec-edificacoes':'Técnico(a) em edificações / construção civil','tec-estradas':'Técnico(a) em estradas, saneamento ou agrimensura',
@@ -564,7 +564,10 @@ const PROF_NOME = {'eng-civil':'Engenheiro(a) civil','eng-outra':'Engenheiro(a) 
   'servidor-obras':'Servidor(a) público(a) de obras e infraestrutura','setor-construcao':'Empresário(a) ou profissional do setor da construção',
   'estudante':'Estudante de engenharia, arquitetura ou construção civil'};
 const PROF_PROMO = new Set(Object.keys(PROF_NOME));
-const PROMO_DIAS = 365;
+const PROMO_MESES = 2;                                        /* PROMO-02: 2 meses grátis (antes 1 ano) */
+const PROMO_FIM = new Date('2027-03-01T00:00:00-03:00');      /* PROMO-02: vale para cadastros até 28/02/2027 */
+const promoAtiva = () => Date.now() < PROMO_FIM.getTime();
+function promoValidade(){ const v = new Date(); v.setMonth(v.getMonth() + PROMO_MESES); return v; }
 /* Combos de cobrança: quem tem os dois programas do par paga só por um (o outro sai grátis).
    Cada programa continua com o código, a página e os dados 100% separados — isto só mexe no PREÇO. */
 const COMBOS_GRATIS = [['drenagem', 'drenagem2']];
@@ -765,6 +768,7 @@ let promoVisto = false;
 function promoMostrar(){
   if(promoVisto) return; promoVisto = true;
   try{
+    if(!promoAtiva()) return;                       // PROMO-02: promoção encerrada depois de 28/02/2027
     if(eu) return;                                   // quem já tem conta não precisa da promoção de cadastro
     const q = new URLSearchParams(location.search);
     if(q.get('entrar') || q.get('voltar')) return;
@@ -831,7 +835,7 @@ $('form-cadastro').addEventListener('submit', async ev => {
   if(!fb){ msg('cd-msg', 'Conectando ao servidor… tente de novo em instantes.', 'erro'); return; }
   let ks = marcadosCadastro().filter(k => !(eu && liberado(eu, porKey(k))));
   const profSel = !eu ? $('cd-prof').value : '';
-  const promo = !eu && PROF_PROMO.has(profSel);
+  const promo = !eu && promoAtiva() && PROF_PROMO.has(profSel);
   let promoOk = false;
   if(promo) ks = PROGRAMAS.filter(p => p.disp).map(p => p.key);
   const pag = (document.querySelector('input[name="cd-pag"]:checked') || {}).value || 'pix';
@@ -877,8 +881,8 @@ $('form-cadastro').addEventListener('submit', async ev => {
       if(ks.includes('esgoto')){ perfil.esgotoSolicitado = true; perfil.esgotoAtivo = false; }   /* só quem pede o Esgoto (regras do Firestore com esgoto*) */
       if(indic && indic !== codigoDe(uid)) perfil.indicadoPor = indic;
       if(promo){
-        /* promoção: todos os programas disponíveis por 1 ano; se as regras do servidor ainda não aceitarem, grava o cadastro normal */
-        const perfilP = Object.assign({}, perfil, {ativo: true, validade: new Date(Date.now() + PROMO_DIAS * 86400000), promo1ano: true, profissao: profSel, gratisUsado: true, tipoPedido: 'promo', programasPedidos: PROGRAMAS.filter(p => p.disp).map(p => p.key)});
+        /* promoção: todos os programas disponíveis por 2 meses (PROMO-02); se as regras do servidor ainda não aceitarem, grava o cadastro normal */
+        const perfilP = Object.assign({}, perfil, {ativo: true, validade: promoValidade(), promo1ano: true, profissao: profSel, gratisUsado: true, tipoPedido: 'promo', programasPedidos: PROGRAMAS.filter(p => p.disp).map(p => p.key)});
         PROGRAMAS.forEach(p => { if(p.disp){ perfilP[p.campo] = true; if(p.solic && p.campo !== 'ativo' && p.solic in perfil) perfilP[p.solic] = true; } });
         try{ await gravar('set', fs.doc(d, 'usuarios', uid), perfilP); promoOk = true; }
         catch(e){ console.warn('Promoção não gravada; cadastro normal.', e); await gravar('set', fs.doc(d, 'usuarios', uid), perfil); }
@@ -1238,7 +1242,7 @@ async function renderUsuarios(){
     const nInd = indicacoes[codigoDe(u.uid)] || 0;
     const bonusPend = Math.max(0, nInd - (u.indicacoesUsadas || 0));
     const pedidoInfo = e === 'adm' ? '' :
-      (u.promo1ano ? '<div><span class="tag pediu">Promoção 1 ano</span></div>' : '') +
+      (u.promo1ano ? '<div><span class="tag pediu">Promoção de cadastro</span></div>' : '') +
       (u.tipoPedido === 'teste' ? '<div><span class="tag pediu">Pediu acesso teste</span></div>' : '') +
       '<div class="mini">Plano ' + nomePlano(plano).toLowerCase() + ': <b>' + brl(valorPlano(nCob, plano)) + sufixoPlano(plano) + '</b></div>' +
       (bonusPend ? '<div class="mini"><span class="tag pediu">' + bonusPend + ' indicação(ões) a creditar: +' + bonusPend * DIAS_INDICACAO[plano] + ' dias</span></div>' : '') +
