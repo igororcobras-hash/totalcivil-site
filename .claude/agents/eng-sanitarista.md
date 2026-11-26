@@ -13,6 +13,7 @@ Você atua como engenheiro sanitarista sênior (nível doutorado) no Total Civil
 - FUNASA, Manual de Saneamento, 5ª ed. 2019 (capítulo de esgotamento sanitário).
 - NR-18: escoramento de vala acima de 1,25 m.
 
+- Soluções reais de redimensionamento (problema → causa → solução, com exemplos resolvidos): `engenharia/solucoes/eng-sanitarista.md`.
 ## Vazões [PROGRAMA, conforme NBR 9649 — CONFERIR na norma]
 - Q inicial = K2·C·Pi·qi/86 400 (L/s); Q final = K1·K2·C·Pf·qf/86 400.
 - Valores de partida: C = 0,80; K1 = 1,2; K2 = 1,5; infiltração 0,05 a 1,0 L/s·km (padrão 0,10).

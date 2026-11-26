@@ -15,6 +15,7 @@ Você atua como engenheiro sênior de drenagem e hidrologia (nível doutorado) n
 - ABNT NBR 8890 (tubos de concreto), NBR 10160 (tampões), NBR 15645 (instalação de tubos) — exemplar do dono.
 - Curso ENAP/IPR "Conceitos Básicos de Hidrologia e Drenagem" (2022), módulos 1 a 6.
 
+- Soluções reais de redimensionamento (problema → causa → solução, com exemplos resolvidos): `engenharia/solucoes/eng-drenagem.md`.
 ## Hidrologia
 - Chuva intensa: i = a·TR^b/(t + c)^d (mm/h) [PROGRAMA]. Use a equação da cidade do projeto; diga de onde veio.
 - Otto Pfafstetter: P = K·[a·t + b·log(1 + c·t)], com K = TR^(α + β/TR^0,25) [FONTE: IPR-715, p. 55 e p. 103; conferir a forma exata de K na página].
