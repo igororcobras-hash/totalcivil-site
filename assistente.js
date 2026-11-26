@@ -4,9 +4,9 @@
 (function () {
   'use strict';
   var me = document.currentScript, PROG = me && me.dataset.programa;
-  var URL_F = 'https://southamerica-east1-calculadora-dnit.cloudfunctions.net/assistente';
+  var URL_F = window.TC_ASSIST_URL || '';
   var SDK = 'https://www.gstatic.com/firebasejs/12.19.0/';
-  if (!PROG) return;
+  if (!PROG || !URL_F) return;
   var hist = [], ocupado = false, pan, lista, txt;
 
   function contexto() {
@@ -57,7 +57,7 @@
     var bt = document.createElement('button'); bt.id = 'tca-bt'; bt.type = 'button'; bt.textContent = '💬 Pergunte ao engenheiro';
     pan = document.createElement('div'); pan.id = 'tca';
     pan.innerHTML = '<header><b>Assistente de engenharia</b><button type="button" aria-label="Fechar">✕</button></header><div class="tca-l"></div>' +
-      '<small>Apoio técnico com IA. Confira os resultados: a decisão e a ART são do engenheiro responsável.</small>' +
+      '<small>Apoio técnico com IA (Gemini, Google). Não envie dados pessoais. Confira os resultados: a decisão e a ART são do engenheiro responsável.</small>' +
       '<form><textarea placeholder="Ex.: por que este trecho deu Ø 600?"></textarea><button>Enviar</button></form>';
     document.body.appendChild(bt); document.body.appendChild(pan);
     lista = pan.querySelector('.tca-l'); txt = pan.querySelector('textarea');
