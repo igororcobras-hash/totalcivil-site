@@ -6472,5 +6472,228 @@ if(ab&&!document.getElementById('pv-b-comp')){ const b=document.createElement('b
   document.addEventListener('DOMContentLoaded',()=>{ try{ mfAtualizarResumo(); }catch(e){} });
 })();
 </script>
+<script>
+/* =====================================================================
+   PATCH PAV-AUTOSAVE (27/11/2026) — salvamento automático na nuvem (a cada 5 min,
+   ao sair/ocultar a página e ao sair da conta), rascunho no aparelho para o que
+   não chegou à nuvem, e botão "Salvar como…" (nuvem, arquivo e WhatsApp).
+   O navegador não garante envio ao FECHAR a página: por isso há o aviso de saída
+   e o rascunho local, recuperado na próxima abertura.
+   ===================================================================== */
+(function(){
+  if(window.__pavAuto) return; window.__pavAuto=true;
+  const INTERVALO=5*60*1000;
+  let base=null;          // retrato do projeto como está salvo (ou recém-aberto)
+  let cargas=0;           // muda a cada projeto aberto/importado
+  let ocupado=null;       // gravação automática em andamento
+  let ultima=Date.now(), tBase=0;
+  const N=()=>window.Nuvem;
+  const usuario=()=>{const u=N()&&N().usuario; return u&&u.liberado?u:null;};
+  const z=n=>String(n).padStart(2,'0');
+  const hora=d=>z(d.getHours())+':'+z(d.getMinutes());
+  function retrato(d){
+    try{ d=JSON.parse(JSON.stringify(d||dadosDoProjeto()));
+      delete d.arquivo; if(d.topo){ delete d.topo.ruaAtiva; if(d.topo.ruas) delete d.topo.rows; }
+      return JSON.stringify(d); }catch(e){ return null; }
+  }
+  function marcarBase(){ base=retrato(); }
+  function agendarBase(){ base=null; clearTimeout(tBase); tBase=setTimeout(()=>{ if(!_sujo) marcarBase(); },1500); }
+  function pendente(){ if(_sujo) return true; if(base===null) return false; const r=retrato(); return r!==null&&r!==base; }
+
+  /* ---------- aviso na barra ---------- */
+  function status(txt,alerta){
+    let e=document.getElementById('pv-auto-status');
+    if(!e){ const ref=document.getElementById('pv-b-salvarcomo'); if(!ref) return;
+      e=document.createElement('span'); e.id='pv-auto-status'; e.setAttribute('role','status');
+      e.style.cssText='font-size:11.5px;color:var(--fg3);align-self:center'; ref.after(e); }
+    e.textContent=txt; e.style.color=alerta?'#c2410c':'var(--fg3)';
+    e.title='Salvamento automático na nuvem: a cada 5 minutos, ao sair da página e ao sair da conta.';
+  }
+
+  /* ---------- rascunho no aparelho ---------- */
+  const chave=()=>{const u=usuario(); return u?'pavRascunho_'+u.uid:null;};
+  let temOferta=false;    // há rascunho antigo aguardando resposta: não sobrescrever
+  function gravarRascunho(){
+    const k=chave(); if(!k||temOferta||!pendente()) return;
+    try{ localStorage.setItem(k,JSON.stringify({dados:dadosDoProjeto(),id:_projetoNuvemId,dono:_projetoNuvemDono,nome:_projetoNuvemNome,quando:Date.now()})); }catch(e){}
+  }
+  function apagarRascunho(){ const k=chave(); if(k&&!temOferta) try{ localStorage.removeItem(k); }catch(e){} }
+
+  /* ---------- gravação automática ---------- */
+  function salvarAuto(){
+    if(ocupado) return ocupado;
+    const u=usuario(); if(!u||!pendente()) return Promise.resolve(false);
+    gravarRascunho();
+    if(navigator.onLine===false){ status('⚠ Sem internet: guardado só neste aparelho',true); return Promise.resolve(false); }
+    const d=dadosDoProjeto(), enviado=retrato(d), carga=cargas, idAntes=_projetoNuvemId;
+    const meu=projetoNuvemEhMeu(), id=idParaSalvar(false), agora=new Date();
+    const nome=id ? (_projetoNuvemNome||nomeDoProjeto(d,'Projeto sem nome'))
+      : (!meu ? 'Cópia de '+(_projetoNuvemNome||nomeDoProjeto(d,'Projeto sem nome'))
+              : nomeDoProjeto(d,'Projeto sem nome '+z(agora.getDate())+'/'+z(agora.getMonth()+1)+' '+hora(agora)));
+    ultima=Date.now(); status('☁ Salvando…');
+    const lento=setTimeout(()=>status('⚠ A nuvem não respondeu: há cópia neste aparelho',true),30000);
+    ocupado=N().salvarProjeto(nome,d,id).then(novoId=>{
+      if(cargas===carga&&_projetoNuvemId===idAntes){
+        _projetoNuvemId=novoId; if(!id){ _projetoNuvemDono=u.uid; _projetoNuvemNome=nome; }
+        base=enviado;
+        if(retrato()===enviado){ _sujo=false; apagarRascunho(); }
+      }
+      status('☁ Salvo na nuvem às '+hora(new Date())); return true;
+    }).catch(e=>{ status('⚠ Não salvou na nuvem: '+(e&&e.message||e),true); return false; })
+      .finally(()=>{ clearTimeout(lento); ocupado=null; });
+    return ocupado;
+  }
+  window.pavSalvarAuto=salvarAuto;
+
+  /* ---------- gatilhos ---------- */
+  setInterval(()=>{
+    if(!usuario()) return;
+    gravarRascunho();
+    const m=document.getElementById('modal');
+    if(Date.now()-ultima>=INTERVALO && (!m||m.hidden)){ ultima=Date.now(); salvarAuto(); }
+  },10000);
+  document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='hidden') salvarAuto(); });
+  window.addEventListener('pagehide',()=>{ gravarRascunho(); salvarAuto(); });
+  window.addEventListener('beforeunload',ev=>{
+    if(!usuario()||!pendente()) return;
+    gravarRascunho(); salvarAuto();
+    ev.preventDefault(); ev.returnValue='';
+  });
+  window.addEventListener('online',()=>salvarAuto());
+
+  /* projeto aberto/importado: novo retrato de partida */
+  const aplicar=window.aplicarProjeto;
+  window.aplicarProjeto=function(){ cargas++; const r=aplicar.apply(this,arguments); agendarBase(); return r; };
+  /* salvamentos manuais também atualizam o retrato */
+  function embrulharNuvem(){
+    const n=N(); if(!n||!n._fb||!n.salvarProjeto||n.salvarProjeto.__auto||!n.listarCompartilhados) return false;
+    const orig=n.salvarProjeto;
+    const f=async function(nome,dados,id){
+      const enviado=retrato(dados), carga=cargas;
+      const r=await orig.apply(this,arguments);
+      if(carga===cargas){ base=enviado; if(retrato()===enviado) apagarRascunho(); }
+      status('☁ Salvo na nuvem às '+hora(new Date())); ultima=Date.now(); return r;
+    };
+    f.__auto=true; n.salvarProjeto=f; return true;
+  }
+
+  /* sair da conta: grava antes */
+  window.confirmarSairDaConta=function(){
+    abrirModal('Sair da conta','O que não estiver salvo será gravado na nuvem antes de sair.');
+    corpoModal('<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">'+
+    '<button type="button" class="tb-btn" id="btn-cancelar-saida" onclick="fecharModal()">Cancelar</button>'+
+    '<button type="button" class="tb-btn tb-btn-save" onclick="sairDaConta()">Salvar e sair</button></div>');
+    const c=document.getElementById('btn-cancelar-saida'); if(c) c.focus();
+  };
+  const sair=window.sairDaConta;
+  window.sairDaConta=async function(forcar){
+    if(forcar!==true&&usuario()&&(pendente()||ocupado)){
+      corpoModal('<p style="font-size:13px;color:var(--fg2);margin-top:10px">Salvando na nuvem…</p>');
+      const limite=new Promise(r=>setTimeout(()=>r(false),20000));
+      await Promise.race([(async()=>{ if(ocupado) await ocupado; if(pendente()) await salvarAuto(); })(),limite]);
+      if(pendente()){
+        gravarRascunho();
+        abrirModal('Não foi possível salvar na nuvem','Uma cópia ficou neste aparelho e será oferecida na próxima entrada.');
+        corpoModal('<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;"><button type="button" class="tb-btn" onclick="fecharModal()">Continuar no programa</button>'+
+          '<button type="button" class="tb-btn tb-btn-save" onclick="sairDaConta(true)">Sair assim mesmo</button></div>');
+        return;
+      }
+    }
+    base=null; _sujo=false;
+    return sair.apply(this,[]);
+  };
+
+  /* ---------- recuperar rascunho ---------- */
+  function oferecerRascunho(){
+    const k=chave(); if(!k) return;
+    let r=null; try{ r=JSON.parse(localStorage.getItem(k)||'null'); }catch(e){}
+    if(!r||!r.dados) return;
+    temOferta=true;
+    const d=new Date(r.quando);
+    const cx=document.createElement('div'); cx.id='pv-rascunho';
+    cx.style.cssText='position:fixed;left:12px;right:12px;bottom:12px;max-width:560px;margin:auto;z-index:100000;background:#fff7ed;color:#7c2d12;border:2px solid #ea580c;border-radius:10px;padding:12px;font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.35)';
+    cx.innerHTML='<b>Há alterações que podem não ter chegado à nuvem</b><br>'+escapar(r.nome||nomeDoProjeto(r.dados,'Projeto sem nome'))+' — '+z(d.getDate())+'/'+z(d.getMonth()+1)+' às '+hora(d)+
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button type="button" class="tb-btn tb-btn-save" data-a="rec">Recuperar</button><button type="button" class="tb-btn" data-a="del">Descartar</button></div>';
+    cx.addEventListener('click',ev=>{
+      const a=ev.target.getAttribute&&ev.target.getAttribute('data-a'); if(!a) return;
+      if(a==='del'&&!confirm('Apagar essa cópia guardada no aparelho?')) return;
+      if(a==='rec'&&pendente()&&!confirm('O que está na tela agora e não foi salvo será substituído. Continuar?')) return;
+      cx.remove(); temOferta=false;
+      if(a==='del'){ apagarRascunho(); return; }
+      window.aplicarProjeto(r.dados);
+      _projetoNuvemId=r.id||null; _projetoNuvemDono=r.dono||null; _projetoNuvemNome=r.nome||''; _sujo=true;
+      const sp=document.getElementById('splash'); if(sp&&!sp.hidden&&typeof initApp==='function') initApp(window.matchMedia('(max-width:800px)').matches?'android':'desktop');
+      salvarAuto();
+    });
+    document.body.appendChild(cx);
+  }
+
+  /* ---------- Salvar como… e WhatsApp ---------- */
+  const FORMATOS={
+    json:{rot:'Projeto completo (.json)',fn:()=>window.exportarJsonCompleto()},
+    pdf:{rot:'Memória em PDF',fn:()=>window.exportarMemoriaPDF()},
+    docx:{rot:'Memória em Word',fn:()=>window.exportarMemoriaWord()},
+    xlsx:{rot:'Memória em Excel',fn:()=>window.exportarMemoriaExcel()}
+  };
+  const bt=(txt,fn,destaque)=>'<button type="button" class="tb-btn'+(destaque?' tb-btn-save':'')+'" onclick="'+fn+'">'+txt+'</button>';
+  const linha=h=>'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">'+h+'</div>';
+  const titulo=t=>'<h3 style="font-size:13px;margin:16px 0 0">'+t+'</h3>';
+  window.pvSalvarComo=function(){
+    abrirModal('Salvar como','Escolha onde salvar ou como enviar o projeto aberto.');
+    const nome=_projetoNuvemNome||nomeDoProjeto(dadosDoProjeto(),'Projeto sem nome');
+    let h='';
+    if(usuario()) h+=titulo('☁ Na nuvem, com outro nome')+'<div class="field" style="margin-top:6px"><label>Nome do projeto</label><input type="text" id="nv_nome" maxlength="120" value="'+escapar(nome)+'"></div>'+
+      linha(bt('Salvar como novo na nuvem','confirmarSalvarNuvem(true)',true));
+    h+=titulo('💾 Arquivo neste aparelho')+linha(Object.keys(FORMATOS).map(k=>bt(FORMATOS[k].rot,"pvArquivo('"+k+"')")).join(''));
+    h+=titulo('🟢 Enviar pelo WhatsApp')+linha(Object.keys(FORMATOS).map(k=>bt(FORMATOS[k].rot,"pvWhats('"+k+"')")).join(''));
+    corpoModal(h);
+  };
+  window.pvArquivo=async function(k){ fecharModal(); try{ await FORMATOS[k].fn(); }catch(e){ avisarErro('Não consegui gerar o arquivo: '+(e&&e.message||e)); } };
+  /* gera o arquivo sem baixar, para entregar ao WhatsApp */
+  async function gerar(k){
+    const orig=window.triggerDownload; let arq=null;
+    window.triggerDownload=async function(blob,nome){ arq={blob,nome}; };
+    try{ await FORMATOS[k].fn(); }finally{ window.triggerDownload=orig; }
+    return arq;
+  }
+  let pronto=null;
+  window.pvWhats=async function(k){
+    abrirModal('Enviar pelo WhatsApp','Gerando o arquivo…');
+    let a=null; try{ a=await gerar(k); }catch(e){ console.warn(e); }
+    if(!a){ corpoModal('<p class="val-bar warn" style="margin-top:10px">Não consegui gerar o arquivo. Confira os dados e a internet e tente de novo.</p>'); return; }
+    pronto=a;
+    let podeAnexar=false;
+    try{ pronto.file=new File([a.blob],a.nome,{type:a.blob.type}); podeAnexar=!!(navigator.canShare&&navigator.canShare({files:[pronto.file]})); }catch(e){}
+    abrirModal('Enviar pelo WhatsApp','Arquivo pronto: '+a.nome);
+    corpoModal((podeAnexar?titulo('Com o arquivo já anexado')+linha(bt('📤 Compartilhar e escolher o WhatsApp','pvCompartilhar()',true)):'')+
+      titulo('Pelo WhatsApp Web')+'<p style="font-size:12.5px;color:var(--fg2);margin-top:6px">O WhatsApp Web não deixa o programa anexar o arquivo sozinho. O botão abaixo baixa o arquivo e abre o WhatsApp Web: escolha a conversa, toque no <b>clipe 📎 › Documento</b> e selecione <b>'+escapar(a.nome)+'</b> na pasta Downloads.</p>'+
+      linha(bt('Baixar e abrir o WhatsApp Web','pvWhatsWeb()',!podeAnexar)));
+  };
+  window.pvCompartilhar=async function(){
+    try{ await navigator.share({files:[pronto.file],title:pronto.nome}); fecharModal(); }
+    catch(e){ if(!e||e.name!=='AbortError') avisarErro('Este aparelho não compartilhou o arquivo. Use "Baixar e abrir o WhatsApp Web".'); }
+  };
+  window.pvWhatsWeb=function(){
+    const nome=_projetoNuvemNome||nomeDoProjeto(dadosDoProjeto(),'Projeto sem nome');
+    window.open('https://web.whatsapp.com/send?text='+encodeURIComponent('Pavimento Flexível — '+nome+'\nArquivo: '+pronto.nome),'_blank','noopener');
+    window.triggerDownload(pronto.blob,pronto.nome);
+  };
+
+  function botao(){
+    if(document.getElementById('pv-b-salvarcomo')) return;
+    const ref=document.querySelector('button[onclick="salvarProjeto()"]'); if(!ref) return;
+    const b=document.createElement('button'); b.type='button'; b.id='pv-b-salvarcomo'; b.className='tb-btn tb-btn-save';
+    b.textContent='Salvar como…'; b.title='Salvar na nuvem com outro nome, em arquivo, ou enviar pelo WhatsApp'; b.onclick=window.pvSalvarComo; ref.after(b);
+  }
+  botao();
+  let entrou=false;
+  const t=setInterval(()=>{
+    botao(); embrulharNuvem();
+    if(!entrou&&usuario()&&window.__calcIniciada&&N().salvarProjeto.__auto){
+      entrou=true; clearInterval(t); if(!_sujo) marcarBase(); status('☁ Salvamento automático ligado'); oferecerRascunho();
+    }
+  },500);
+})();
+</script>
 </body>
 </html>
