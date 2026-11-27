@@ -277,6 +277,13 @@
       }
     } catch (e) { ST.aviso.push('Bancos SINAPI e SCO-Rio indisponíveis (' + e.message + '). Confira a internet.'); }
     BK.emop = await lerEmopLocal();
+    /* sem EMOP importada: administrador usa os poucos códigos que o programa embutiu (TCORC.emopAdm) */
+    if (!BK.emop && EMOP_ADMX.n && window.TC_USUARIO && window.TC_USUARIO.admin) {
+      var mp = {}; Object.keys(EMOP_ADMX.t).forEach(function(b){ var v = EMOP_ADMX.t[b];
+        mp[b + '-' + v[2]] = {CODIGO: b + '-' + v[2], DESCR1: v[1], UNID: v[0], CUSTO: v[3]};
+        if (v[4]) mp[b + '-' + v[4]] = {CODIGO: b + '-' + v[4], DESCR1: v[1], UNID: v[0], CUSTO: v[5]}; });
+      BK.emop = {map: mp, meta: {origem: 'embutida (administrador) ' + EMOP_ADMX.ref}, n: Object.keys(mp).length};
+    }
     ST.refs.emop = BK.emop ? (BK.emop.meta.importadoEm ? 'importada em ' + String(BK.emop.meta.importadoEm).slice(0, 10) : 'importada no Orçamento') : '';
   }
 
@@ -303,6 +310,10 @@
     '08.015.0068': ['T', 'REVESTIMENTO DE CONCRETO BETUMINOSO USINADO A QUENTE,IMPORTADO DE USINA,EXECUTADO EM UMA CAMADA', '0'],
     '08.037.0070': ['T', 'REVESTIMENTO DE CONCRETO BETUMINOSO USINADO A QUENTE,CONSIDERANDO SOMENTE O ESPALHAMENTO COM VIBROACABADORA', '0']
   };
+  /* códigos EMOP que um programa registra (descrição e, para administrador, preço embutido): TCORC.emopAdm({ref, t:{cod:[un, descr, sufO, precoO, sufD, precoD]}}) */
+  var EMOP_ADMX = {ref: '', t: {}, n: 0};
+  function emopAdm(o){ if (!o || !o.t) return; Object.keys(o.t).forEach(function(b){ var v = o.t[b]; EMOP_ADMX.t[b] = v; if (!EMOP_TAB[b]) EMOP_TAB[b] = [v[0], v[1], v[2]]; });
+    EMOP_ADMX.ref = o.ref || EMOP_ADMX.ref; EMOP_ADMX.n = Object.keys(EMOP_ADMX.t).length; }
   var sufEmop = function(s, regime){ return regime === 'D' ? (s === '1' ? 'B' : 'A') : s; };
   function idxSco(B){ if (B.idx) return B.idx; B.idx = {}; Object.keys(B.map).forEach(function(k){ B.idx[k.replace(/\s*\([^)]*\)\s*$/, '')] = k; }); return B.idx; }
   function resolve1(bank, s, regime){
@@ -787,5 +798,5 @@
   };
 
   function registrar(def){ PROGS[def.prog] = def; }
-  window.TCORC = {util: U, registrar: registrar, abrir: abrir, resumo: resumo, cfg: cfg, bancos: BANCOS, versao: 1};
+  window.TCORC = {util: U, registrar: registrar, emopAdm: emopAdm, abrir: abrir, resumo: resumo, cfg: cfg, bancos: BANCOS, versao: 1};
 })();

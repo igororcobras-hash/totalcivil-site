@@ -1971,7 +1971,8 @@ setEstaca('helice');
 (function(){
   if (!window.TCORC) return;
   var U = TCORC.util, ACO = 7850;
-  var G = ['SERVIÇOS PRELIMINARES', 'ESCAVAÇÃO, LASTRO E REATERRO', 'SAPATAS ISOLADAS', 'SAPATA CORRIDA', 'RADIER', 'ESTACAS E BLOCOS DE COROAMENTO'];
+  var G = ['SERVIÇOS PRELIMINARES', 'ESCAVAÇÃO, LASTRO E REATERRO', 'SAPATAS ISOLADAS', 'SAPATA CORRIDA', 'RADIER', 'ESTACAS E BLOCOS DE COROAMENTO',
+    'ESTRUTURA — PILARES', 'ESTRUTURA — VIGAS', 'LAJES', 'ALVENARIA', 'COBERTURA', 'REVESTIMENTO E PINTURA'];   /* etapas: fundação (2–5), estrutura (6–7), lajes (8), alvenaria (9) — CON-3D */
   var nf = function(v, d){ return (isFinite(v) ? v : 0).toLocaleString('pt-BR', {minimumFractionDigits: d, maximumFractionDigits: d}); };
   var SOL = [
     {k: 'eco', nome: 'Solução 1 — Econômica', curto: 'Econômica', desc: 'Fôrmas de madeira serrada (2 utilizações), concreto bombeado, lastro de concreto magro e armadura em CA-50. Menor custo de execução.', form: 'tabua', imper: false},
@@ -1984,6 +1985,16 @@ setEstaca('helice');
     bloco: {tabua: ['SC-96531'], comp2: ['SC-96537'], comp4: ['SC-96540']}
   };
   var NOMEF = {tabua: 'madeira serrada (2 utilizações)', comp2: 'chapa compensada resinada (2 utilizações)', comp4: 'chapa compensada resinada (4 utilizações)'};
+  /* EMOP (27/11/2026): só códigos conferidos no catálogo EMOP 09/2026 (bloco EMOP_ADM da Drenagem).
+     Fôrma 11.004.0022 (madeira de 3ª, paramentos planos, sem escoramento), aço CA-50 8 a 12,5 mm 11.009.0072,
+     concreto bombeado fck 15 (11.025.0002) e fck 25 (11.025.0009). fck acima de 25 MPa: sem código conferido → usa outro banco. */
+  var EM = {forma: '11.004.0022', aco: '11.009.0072', c15: '11.025.0002', c25: '11.025.0009'};
+  var emC = function(fck){ return fck <= 25 ? EM.c25 : undefined; };
+  if (TCORC.emopAdm) TCORC.emopAdm({ref: '09/2026', t: {
+    '11.004.0022': ['M2', 'FORMAS DE MADEIRA DE 3ª PARA MOLDAGEM DE PECAS DE CONCRETO ARMADO COM PARAMENTOS PLANOS,EM LAJES,VIGAS,PAREDES,ETC,SERVINDO A MADEIRA 1,4 VEZES,INCLUSIVE DESMOLDAGEM,EXCLUSIVE ESCORAMENTO', '1', 104.31, 'B', 100.25],
+    '11.009.0072': ['KG', 'BARRA DE ACO CA-50,COM SALIENCIA OU MOSSA,DIAMETRO DE 8 A 12,5MM,DESTINADA A ARMADURA DE CONCRETO ARMADO,COMPREENDENDO 10% DE PERDAS DE PONTAS E ARAME 18.FORNECIMENTO,CORTE,DOBRAGEM,MONTAGEM E COLOCACAO DO ACO NAS FORMAS', '1', 12.74, 'B', 12.35],
+    '11.025.0002': ['M3', 'CONCRETO BOMBEADO,FCK=15MPA,COMPREENDENDO O FORNECIMENTO DE CONCRETO IMPORTADO DE USINA,COLOCACAO NAS FORMAS,ESPALHAMENTO,ADENSAMENTO MECANICO E ACABAMENTO', '0', 712.31, 'A', 706.0],
+    '11.025.0009': ['M3', 'CONCRETO BOMBEADO,FCK=25MPA,COMPREENDENDO O FORNECIMENTO DE CONCRETO IMPORTADO DE USINA,COLOCACAO NAS FORMAS,ESPALHAMENTO,ADENSAMENTO MECANICO E ACABAMENTO', '0', 743.81, 'A', 737.5]}});
   var PRM = {sap: 'inc_sap', cor: 'inc_cor', rad: 'inc_rad', est: 'inc_est'};
   /* por diâmetro (cm) mais próximo: [diâmetro, SINAPI, SCO] */
   var EST = {
@@ -2008,10 +2019,10 @@ setEstaca('helice');
     });
     var reat = Math.max(0, escav - vol - lastro * 0.05);
     L.push({g: G[1], nome: 'Escavação mecanizada para sapatas (inclui escavação para colocação de fôrmas)', un: 'm³', q: escav, cod: {sinapi: 'SC-96521', sco: 'SCO-MT 10.10.0050'}, memo: n + ' sapata(s): (B + 0,40) × (L + 0,40) × profundidade ' + nf(P.D, 2) + ' m'});
-    L.push({g: G[1], nome: 'Lastro de concreto magro sob as sapatas, 5 cm', un: 'm²', q: lastro, cod: {sinapi: 'SC-96619'}, memo: 'Σ (B + 0,20) × (L + 0,20)'});
-    L.push({g: g, nome: 'Fôrma para sapata em ' + NOMEF[sol.form], un: 'm²', q: forma, cod: {sinapi: FORMA.sapata[sol.form][0], sco: false}, memo: 'Σ faces laterais: rodapé 2 × (B + L) × h0 + faces inclinadas do tronco de pirâmide. No SCO a fôrma já está na composição do concreto armado'});
-    L.push({g: g, nome: 'Armação de sapatas isoladas, aço CA-50 (bitola de referência 10 mm)', un: 'kg', q: kg, cod: {sinapi: 'SC-104919', sco: false}, memo: 'Asx e Asy calculadas × comprimento das barras × 7.850 kg/m³. No SCO o aço já está na composição do concreto armado'});
-    L.push({g: g, nome: 'Concretagem de sapatas, fck 30 MPa, com bomba' + sco, un: 'm³', q: vol, cod: {sinapi: 'SC-96558', sco: p.fck <= 20 ? 'SCO-ET 05.60.0150' : 'SCO-ET 05.60.0200'}, memo: 'Volume calculado (rodapé + tronco de pirâmide): ' + nf(vol, 3) + ' m³; fck do projeto ' + nf(p.fck, 0) + ' MPa'});
+    L.push({g: G[1], nome: 'Lastro de concreto magro sob as sapatas, 5 cm', un: 'm²', q: lastro, qb: {emop: lastro * 0.05}, cod: {sinapi: 'SC-96619', emop: EM.c15}, memo: 'Σ (B + 0,20) × (L + 0,20). Na EMOP o concreto é por m³: área × 0,05 m'});
+    L.push({g: g, nome: 'Fôrma para sapata em ' + NOMEF[sol.form], un: 'm²', q: forma, cod: {sinapi: FORMA.sapata[sol.form][0], sco: false, emop: EM.forma}, memo: 'Σ faces laterais: rodapé 2 × (B + L) × h0 + faces inclinadas do tronco de pirâmide. No SCO a fôrma já está na composição do concreto armado'});
+    L.push({g: g, nome: 'Armação de sapatas isoladas, aço CA-50 (bitola de referência 10 mm)', un: 'kg', q: kg, cod: {sinapi: 'SC-104919', sco: false, emop: EM.aco}, memo: 'Asx e Asy calculadas × comprimento das barras × 7.850 kg/m³. No SCO o aço já está na composição do concreto armado'});
+    L.push({g: g, nome: 'Concretagem de sapatas, fck 30 MPa, com bomba' + sco, un: 'm³', q: vol, cod: {sinapi: 'SC-96558', sco: p.fck <= 20 ? 'SCO-ET 05.60.0150' : 'SCO-ET 05.60.0200', emop: emC(p.fck)}, memo: 'Volume calculado (rodapé + tronco de pirâmide): ' + nf(vol, 3) + ' m³; fck do projeto ' + nf(p.fck, 0) + ' MPa'});
     if (sol.imper) L.push({g: g, nome: 'Impermeabilização das faces enterradas com emulsão asfáltica, 2 demãos', un: 'm²', q: lat, cod: {sinapi: 'SC-98557'}, memo: 'Área de topo e faces laterais das sapatas'});
     L.push({g: G[1], nome: 'Reaterro manual compactado das sapatas', un: 'm³', q: reat, cod: {sinapi: 'SC-93382', sco: 'SCO-MT 15.10.0075'}, memo: 'Escavação − sapatas − lastro (o volume do pilar não é descontado)'});
     return L;
@@ -2025,10 +2036,10 @@ setEstaca('helice');
     var g = G[3], reat = Math.max(0, esc - vol - lastro * 0.05);
     return [
       {g: G[1], nome: 'Escavação mecanizada para sapata corrida (inclui escavação para colocação de fôrmas)', un: 'm³', q: esc, cod: {sinapi: 'SC-96525', sco: 'SCO-MT 10.10.0050'}, memo: '(B + 0,40) × profundidade ' + nf(V('D'), 2) + ' m × ' + nf(Lc, 2) + ' m'},
-      {g: G[1], nome: 'Lastro de concreto magro sob a sapata corrida, 5 cm', un: 'm²', q: lastro, cod: {sinapi: 'SC-96619'}, memo: '(B + 0,20) × ' + nf(Lc, 2) + ' m'},
-      {g: g, nome: 'Fôrma para sapata corrida em ' + NOMEF[sol.form], un: 'm²', q: forma, cod: {sinapi: FORMA.corrida[sol.form][0], sco: false}, memo: '2 faces × h × comprimento. No SCO a fôrma já está na composição do concreto armado'},
-      {g: g, nome: 'Armação de sapata corrida, aço CA-50 (bitola de referência 10 mm)', un: 'kg', q: kg, cod: {sinapi: 'SC-104919', sco: false}, memo: 'As transversal ' + nf(As, 2) + ' cm²/m × B × comprimento × 7.850 kg/m³, mais 20 % de armadura de distribuição. No SCO o aço já está na composição'},
-      {g: g, nome: 'Concretagem de sapata corrida, fck 30 MPa, com bomba' + sco, un: 'm³', q: vol, cod: {sinapi: 'SC-104924', sco: p.fck <= 20 ? 'SCO-ET 05.60.0150' : 'SCO-ET 05.60.0200'}, memo: nf(B, 2) + ' × ' + nf(h, 2) + ' × ' + nf(Lc, 2) + ' m; fck do projeto ' + nf(p.fck, 0) + ' MPa'}
+      {g: G[1], nome: 'Lastro de concreto magro sob a sapata corrida, 5 cm', un: 'm²', q: lastro, qb: {emop: lastro * 0.05}, cod: {sinapi: 'SC-96619', emop: EM.c15}, memo: '(B + 0,20) × ' + nf(Lc, 2) + ' m'},
+      {g: g, nome: 'Fôrma para sapata corrida em ' + NOMEF[sol.form], un: 'm²', q: forma, cod: {sinapi: FORMA.corrida[sol.form][0], sco: false, emop: EM.forma}, memo: '2 faces × h × comprimento. No SCO a fôrma já está na composição do concreto armado'},
+      {g: g, nome: 'Armação de sapata corrida, aço CA-50 (bitola de referência 10 mm)', un: 'kg', q: kg, cod: {sinapi: 'SC-104919', sco: false, emop: EM.aco}, memo: 'As transversal ' + nf(As, 2) + ' cm²/m × B × comprimento × 7.850 kg/m³, mais 20 % de armadura de distribuição. No SCO o aço já está na composição'},
+      {g: g, nome: 'Concretagem de sapata corrida, fck 30 MPa, com bomba' + sco, un: 'm³', q: vol, cod: {sinapi: 'SC-104924', sco: p.fck <= 20 ? 'SCO-ET 05.60.0150' : 'SCO-ET 05.60.0200', emop: emC(p.fck)}, memo: nf(B, 2) + ' × ' + nf(h, 2) + ' × ' + nf(Lc, 2) + ' m; fck do projeto ' + nf(p.fck, 0) + ' MPa'}
     ].concat(sol.imper ? [{g: g, nome: 'Impermeabilização das faces enterradas com emulsão asfáltica, 2 demãos', un: 'm²', q: B * Lc + 2 * h * Lc, cod: {sinapi: 'SC-98557'}, memo: 'Topo e faces laterais'}] : [],
       [{g: G[1], nome: 'Reaterro manual compactado da sapata corrida', un: 'm³', q: reat, cod: {sinapi: 'SC-93382', sco: 'SCO-MT 15.10.0075'}, memo: 'Escavação − sapata − lastro'}]);
   }
@@ -2043,10 +2054,10 @@ setEstaca('helice');
     return [
       {g: g, nome: 'Compactação mecânica do solo para execução do radier', un: 'm²', q: A, cod: {sinapi: 'SC-97083', sco: false}, memo: 'Área do radier: ' + nf(A, 2) + ' m²'},
       {g: g, nome: 'Camada separadora em lona plástica', un: 'm²', q: A, cod: {sinapi: 'SC-97087', sco: false}, memo: 'Área do radier'},
-      {g: g, nome: 'Lastro de concreto magro sob o radier, 5 cm', un: 'm²', q: A, cod: {sinapi: 'SC-95241'}, memo: 'Área do radier'},
-      {g: g, nome: 'Fôrma lateral do radier, ' + (sol.form === 'tabua' ? 'madeira serrada' : 'compensado resinado') + ' (4 utilizações)', un: 'm²', q: per * h, cod: {sinapi: sol.form === 'tabua' ? 'SC-97086' : 'SC-107283', sco: false}, memo: 'Perímetro estimado como de um quadrado de mesma área (' + nf(per, 2) + ' m) × h. No SCO a fôrma já está na composição do concreto armado'},
-      {g: g, nome: 'Armação do radier, aço CA-50 (bitola de referência 10 mm), duas direções', un: 'kg', q: kg, cod: {sinapi: 'SC-104919', sco: false}, memo: 'As ' + nf(Asa, 2) + ' cm²/m em cada direção × 2 × área × 7.850 kg/m³. No SCO o aço já está na composição'},
-      {g: g, nome: 'Concretagem do radier, fck ' + (p.fck <= 25 ? '25' : '30') + ' MPa' + sco, un: 'm³', q: vol, cod: {sinapi: p.fck <= 25 ? 'SC-107276' : 'SC-97096', sco: p.fck <= 20 ? 'SCO-ET 05.60.0150' : 'SCO-ET 05.60.0200'}, memo: nf(A, 2) + ' m² × ' + nf(h, 2) + ' m; fck do projeto ' + nf(p.fck, 0) + ' MPa'}
+      {g: g, nome: 'Lastro de concreto magro sob o radier, 5 cm', un: 'm²', q: A, qb: {emop: A * 0.05}, cod: {sinapi: 'SC-95241', emop: EM.c15}, memo: 'Área do radier'},
+      {g: g, nome: 'Fôrma lateral do radier, ' + (sol.form === 'tabua' ? 'madeira serrada' : 'compensado resinado') + ' (4 utilizações)', un: 'm²', q: per * h, cod: {sinapi: sol.form === 'tabua' ? 'SC-97086' : 'SC-107283', sco: false, emop: EM.forma}, memo: 'Perímetro estimado como de um quadrado de mesma área (' + nf(per, 2) + ' m) × h. No SCO a fôrma já está na composição do concreto armado'},
+      {g: g, nome: 'Armação do radier, aço CA-50 (bitola de referência 10 mm), duas direções', un: 'kg', q: kg, cod: {sinapi: 'SC-104919', sco: false, emop: EM.aco}, memo: 'As ' + nf(Asa, 2) + ' cm²/m em cada direção × 2 × área × 7.850 kg/m³. No SCO o aço já está na composição'},
+      {g: g, nome: 'Concretagem do radier, fck ' + (p.fck <= 25 ? '25' : '30') + ' MPa' + sco, un: 'm³', q: vol, cod: {sinapi: p.fck <= 25 ? 'SC-107276' : 'SC-97096', sco: p.fck <= 20 ? 'SCO-ET 05.60.0150' : 'SCO-ET 05.60.0200', emop: emC(p.fck)}, memo: nf(A, 2) + ' m² × ' + nf(h, 2) + ' m; fck do projeto ' + nf(p.fck, 0) + ' MPa'}
     ];
   }
   /* ---- estacas e bloco de coroamento (um bloco; multiplicado pelo número de blocos iguais) ---- */
@@ -2066,12 +2077,185 @@ setEstaca('helice');
       {g: g, nome: 'Mobilização e desmobilização de equipamento de estacas', un: 'vb', q: 1, cod: {}, memo: 'Informe o preço no Orçamento'},
       {g: g, nome: 'Arrasamento de estaca de concreto', un: 'un', q: n * nb, cod: {sinapi: D <= 0.4 ? 'SC-95601' : D <= 0.6 ? 'SC-95602' : D <= 0.8 ? 'SC-95603' : 'SC-95604', sco: D <= 0.3 ? 'SCO-FD 05.40.0050' : D <= 0.5 ? 'SCO-FD 05.40.0100' : 'SCO-FD 05.40.0150'}, memo: n * nb + ' estaca(s)'},
       {g: G[1], nome: 'Escavação mecanizada para blocos de coroamento (inclui escavação para fôrmas)', un: 'm³', q: eb * nb, cod: {sinapi: 'SC-96521', sco: 'SCO-MT 10.10.0050'}, memo: nb + ' bloco(s) de ' + nf(C, 2) + ' × ' + nf(W, 2) + ' × ' + nf(hb, 2) + ' m (dimensões estimadas pelo espaçamento)'},
-      {g: G[1], nome: 'Lastro de concreto magro sob os blocos, 5 cm', un: 'm²', q: lb * nb, cod: {sinapi: 'SC-96619'}, memo: nb + ' bloco(s)'},
-      {g: g, nome: 'Fôrma para bloco de coroamento em ' + NOMEF[sol.form], un: 'm²', q: fb * nb, cod: {sinapi: FORMA.bloco[sol.form][0], sco: false}, memo: '2 × (C + L) × h por bloco. No SCO a fôrma já está na composição do concreto armado'},
-      {g: g, nome: 'Armação de bloco de coroamento, aço CA-50 (bitola de referência 10 mm)', un: 'kg', q: kg * nb, cod: {sinapi: 'SC-96546', sco: false}, memo: 'As do tirante ' + nf(As, 2) + ' cm² (bielas-tirantes) nas duas direções × 7.850 kg/m³ por bloco, mais a armadura mínima/de pele não incluída. No SCO o aço já está na composição'},
-      {g: g, nome: 'Concretagem de bloco de coroamento, fck 30 MPa, com bomba' + sco, un: 'm³', q: vb * nb, cod: {sinapi: 'SC-96557', sco: p.fck <= 20 ? 'SCO-ET 05.60.0150' : 'SCO-ET 05.60.0200'}, memo: nf(C, 2) + ' × ' + nf(W, 2) + ' × ' + nf(hb, 2) + ' m por bloco; altura recomendada do programa'}
+      {g: G[1], nome: 'Lastro de concreto magro sob os blocos, 5 cm', un: 'm²', q: lb * nb, qb: {emop: lb * nb * 0.05}, cod: {sinapi: 'SC-96619', emop: EM.c15}, memo: nb + ' bloco(s)'},
+      {g: g, nome: 'Fôrma para bloco de coroamento em ' + NOMEF[sol.form], un: 'm²', q: fb * nb, cod: {sinapi: FORMA.bloco[sol.form][0], sco: false, emop: EM.forma}, memo: '2 × (C + L) × h por bloco. No SCO a fôrma já está na composição do concreto armado'},
+      {g: g, nome: 'Armação de bloco de coroamento, aço CA-50 (bitola de referência 10 mm)', un: 'kg', q: kg * nb, cod: {sinapi: 'SC-96546', sco: false, emop: EM.aco}, memo: 'As do tirante ' + nf(As, 2) + ' cm² (bielas-tirantes) nas duas direções × 7.850 kg/m³ por bloco, mais a armadura mínima/de pele não incluída. No SCO o aço já está na composição'},
+      {g: g, nome: 'Concretagem de bloco de coroamento, fck 30 MPa, com bomba' + sco, un: 'm³', q: vb * nb, cod: {sinapi: 'SC-96557', sco: p.fck <= 20 ? 'SCO-ET 05.60.0150' : 'SCO-ET 05.60.0200', emop: emC(p.fck)}, memo: nf(C, 2) + ' × ' + nf(W, 2) + ' × ' + nf(hb, 2) + ' m por bloco; altura recomendada do programa'}
     ];
     if (sol.imper) L.push({g: g, nome: 'Impermeabilização das faces enterradas dos blocos com emulsão asfáltica, 2 demãos', un: 'm²', q: (C * W + 2 * (C + W) * hb) * nb, cod: {sinapi: 'SC-98557'}, memo: 'Topo e faces laterais'});
+    return L;
+  }
+
+  /* ---- CON-3D (26/11/2026): estrutura, lajes e alvenaria por nível ----
+     Quantidades do mesmo modelo do 3D (pilares por nível, vigas entre pilares alinhados, laje no contorno,
+     paredes e janelas da planta importada). Vigas e lajes não são dimensionadas pelo programa: a armadura
+     usa taxa (kg de aço por m³) informada na janela, e a altura da viga sai do vão (vão/10). */
+  var FPIL = {tabua: 'SC-92411', comp2: 'SC-92415', comp4: 'SC-92419'}, FVIG = {tabua: 'SC-92447', comp2: 'SC-92451', comp4: 'SC-92455'}, FLAJ = {tabua: 'SC-92484', comp2: 'SC-92510', comp4: 'SC-92514'};
+  var LAJES = {
+    auto: 'Conforme o tipo de estrutura escolhido',
+    macica: 'Laje maciça moldada no local',
+    trel_cer: 'Laje pré-moldada treliçada com lajota cerâmica',
+    trel_eps: 'Laje pré-moldada treliçada com EPS (isopor)',
+    nerv: 'Laje nervurada com cubetas plásticas (60 × 60 cm)',
+    nao: 'Sem laje (cobertura em telhado)'};
+  var ALV = {
+    auto: ['Conforme o tipo de estrutura escolhido'],
+    c9: ['Vedação em bloco cerâmico 9 × 19 × 39 cm', 'SC-103322', undefined, 0.09],
+    c14: ['Vedação em bloco cerâmico 14 × 19 × 39 cm', 'SC-103324', undefined, 0.14],
+    c19: ['Vedação em bloco cerâmico 19 × 19 × 39 cm', 'SC-103326', undefined, 0.19],
+    ce14: ['Alvenaria estrutural de bloco cerâmico 14 × 19 × 39 cm, fbk 6 MPa', 'SC-89282', 'SCO-AL 05.23.0100', 0.14],
+    bc14: ['Alvenaria estrutural de bloco de concreto 14 × 19 × 39 cm, fbk 4,5 MPa', 'SC-89453', undefined, 0.14],
+    nao: ['Sem alvenaria no orçamento']};
+  function lajeTipo(P, te){ var t = P.tipo_laje || 'auto'; if (t !== 'auto') return t; return te === 'pre' ? 'nao' : te === 'alv' ? 'trel_eps' : 'macica'; }
+  function alvTipo(P, te){ var t = P.tipo_alv || 'auto'; if (t !== 'auto') return t; return te === 'alv' ? 'ce14' : 'c14'; }
+  function estrutura(sol, p, P){
+    var M3 = window.TC_CON3D && window.TC_CON3D.modelo ? window.TC_CON3D.modelo() : null;
+    if (!M3) return [];
+    var L = [], te = M3.tipo, conc = p.fck <= 20 ? 'SCO-ET 05.60.0150' : 'SCO-ET 05.60.0200', niv = M3.pav + ' nível(is)';
+    var tp = Math.max(0, +P.taxa_pil || 120), tv = Math.max(0, +P.taxa_vig || 100), tl = Math.max(0, +P.taxa_laj || 80);
+    var lt = lajeTipo(P, te), at = alvTipo(P, te), preM = lt === 'trel_cer' || lt === 'trel_eps';
+    /* pilares (do topo da fundação até a cobertura) */
+    if (P.inc_estr !== 'N' && M3.pilares.length) {
+      var vp = 0, fp = 0, n0 = {};
+      M3.pilares.forEach(function(c){ var h = c.z1 - c.z0; if (h <= 0) return; vp += c.bp * c.hp * h; fp += 2 * (c.bp + c.hp) * h; n0[c.s.id] = 1; });
+      var np = Object.keys(n0).length, g = G[6];
+      L.push({g: g, nome: 'Fôrma de pilares retangulares em ' + NOMEF[sol.form], un: 'm²', q: fp, cod: {sinapi: FPIL[sol.form], sco: false, emop: EM.forma}, memo: np + ' pilares × ' + niv + ': Σ 2 × (bp + hp) × altura (do topo da fundação à cobertura). No SCO a fôrma já está no concreto armado'});
+      L.push({g: g, nome: 'Armação de pilares, aço CA-50 10 mm (taxa ' + nf(tp, 0) + ' kg/m³)', un: 'kg', q: vp * tp, cod: {sinapi: 'SC-92762', sco: false, emop: EM.aco}, memo: 'Volume dos pilares ' + nf(vp, 3) + ' m³ × ' + nf(tp, 0) + ' kg/m³ (taxa estimada: os pilares não são dimensionados pelo programa)'});
+      L.push({g: g, nome: 'Concretagem de pilares, fck 25 MPa, com bomba' + sco, un: 'm³', q: vp, cod: {sinapi: 'SC-103672', sco: conc, emop: EM.c25}, memo: 'Σ bp × hp × altura de cada trecho de pilar; fck do projeto ' + nf(p.fck, 0) + ' MPa'});
+    }
+    /* vigas (cintas da alvenaria estrutural entram na alvenaria) */
+    var vigas = M3.vigas.filter(function(v){ return v.nome !== 'Cinta'; }), cintas = M3.vigas.filter(function(v){ return v.nome === 'Cinta'; });
+    if (P.inc_estr !== 'N' && vigas.length) {
+      var vv = 0, fv = 0, lv = 0, g2 = G[7];
+      vigas.forEach(function(v){ var l = Math.max(0, Math.hypot(v.x2 - v.x1, v.y2 - v.y1) - 0.25); lv += l; vv += v.b * v.h * l; fv += (2 * v.h + v.b) * l; });
+      L.push({g: g2, nome: 'Fôrma de vigas em ' + (sol.form === 'tabua' ? 'madeira serrada' : 'chapa compensada resinada') + ', escoramento incluído', un: 'm²', q: fv, cod: {sinapi: FVIG[sol.form], sco: false, emop: EM.forma}, memo: vigas.length + ' vigas, ' + nf(lv, 2) + ' m (vão livre ≈ entre eixos − 0,25 m) × (2 × h + b); seção 18 × vão/10 cm'});
+      L.push({g: g2, nome: 'Armação de vigas, aço CA-50 10 mm (taxa ' + nf(tv, 0) + ' kg/m³)', un: 'kg', q: vv * tv, cod: {sinapi: 'SC-92762', sco: false, emop: EM.aco}, memo: 'Volume das vigas ' + nf(vv, 3) + ' m³ × ' + nf(tv, 0) + ' kg/m³ (taxa estimada)'});
+      L.push({g: g2, nome: 'Concretagem de vigas, fck 25 MPa, com bomba' + sco, un: 'm³', q: vv, cod: {sinapi: preM ? 'SC-103674' : 'SC-103675', sco: conc, emop: EM.c25}, memo: 'Σ b × h × vão livre'});
+    }
+    /* lajes */
+    if (lt !== 'nao') {
+      var A = 0, vaoMax = 0, g3 = G[8];
+      M3.lajes.forEach(function(l){ A += (l.x2 - l.x1) * (l.y2 - l.y1); });
+      if (!A) { var e = M3.ext; A = (e[2] - e[0]) * (e[3] - e[1]) * M3.pav; }
+      M3.vigas.forEach(function(v){ vaoMax = Math.max(vaoMax, Math.hypot(v.x2 - v.x1, v.y2 - v.y1)); });
+      if (!vaoMax) vaoMax = 4;
+      var mA = nf(A, 2) + ' m² (contorno da edificação × ' + niv + ')';
+      if (lt === 'macica') {
+        var h = Math.max(0.08, +P.laje_h || (M3.E.laje || 0.12));
+        L.push({g: g3, nome: 'Fôrma de laje maciça em ' + NOMEF[sol.form] + ', escoramento incluído', un: 'm²', q: A, cod: {sinapi: FLAJ[sol.form], sco: false, emop: EM.forma}, memo: mA});
+        L.push({g: g3, nome: 'Armação de laje maciça, aço CA-50 8 mm (taxa ' + nf(tl, 0) + ' kg/m³)', un: 'kg', q: A * h * tl, cod: {sinapi: 'SC-92770', sco: false, emop: EM.aco}, memo: nf(A, 2) + ' m² × h ' + nf(h, 2) + ' m × ' + nf(tl, 0) + ' kg/m³ (taxa estimada)'});
+        L.push({g: g3, nome: 'Concretagem de laje maciça, fck 25 MPa, com bomba' + sco, un: 'm³', q: A * h, cod: {sinapi: 'SC-103675', sco: conc, emop: EM.c25}, memo: nf(A, 2) + ' m² × h ' + nf(h, 2) + ' m'});
+      } else if (preM) {
+        var LT = vaoMax <= 3.5 ? 12 : vaoMax <= 4.5 ? 16 : vaoMax <= 5.5 ? 20 : 25, k = {12: 0, 16: 1, 20: 2, 25: 3}[LT];
+        var cs = lt === 'trel_cer' ? ['SC-101947', 'SC-101948', 'SC-101949', 'SC-101950'] : ['SC-101951', 'SC-101952', 'SC-101953', 'SC-101954'];
+        var so = vaoMax <= 5 ? 'SCO-ET 55.05.0150' : vaoMax <= 6.9 ? 'SCO-ET 55.05.0159' : 'SCO-ET 55.05.0171';
+        L.push({g: g3, nome: LAJES[lt] + ', altura total ' + LT + ' cm (enchimento + capa), completa', un: 'm²', q: A, cod: {sinapi: cs[k], sco: so}, memo: mA + '. Altura pelo maior vão entre pilares (' + nf(vaoMax, 2) + ' m): até 3,5 m → 12 cm, 4,5 m → 16, 5,5 m → 20, acima → 25 cm (conferir com o fabricante). A composição já traz vigotas, enchimento, capa de concreto, armadura de distribuição e escoras' + (lt === 'trel_eps' ? '. No SCO a laje é com tijolo cerâmico (não há EPS)' : '')});
+      } else if (lt === 'nerv') {
+        var he = 0.095;
+        L.push({g: g3, nome: 'Fôrma de laje nervurada com cubetas plásticas e assoalho (10 utilizações)', un: 'm²', q: A, cod: {sinapi: 'SC-92494', sco: false}, memo: mA});
+        L.push({g: g3, nome: 'Armação de laje nervurada, aço CA-50 8 mm (taxa ' + nf(tl, 0) + ' kg/m³)', un: 'kg', q: A * he * tl, cod: {sinapi: 'SC-92770', sco: false, emop: EM.aco}, memo: 'Volume equivalente ' + nf(he, 3) + ' m³/m² (cubeta 60 × 60 × 16 cm + capa de 5 cm) × ' + nf(tl, 0) + ' kg/m³'});
+        L.push({g: g3, nome: 'Concretagem de laje nervurada, fck 25 MPa, com bomba' + sco, un: 'm³', q: A * he, cod: {sinapi: 'SC-103675', sco: conc, emop: EM.c25}, memo: nf(A, 2) + ' m² × ' + nf(he, 3) + ' m³/m² (conferir o consumo da cubeta escolhida)'});
+      }
+    }
+    /* alvenaria */
+    if (at !== 'nao') {
+      var a = ALV[at], g4 = G[9], esp = a[3], area = 0, vaos = 0, nj = 0, enc = 0, est2 = at === 'ce14' || at === 'bc14', fonte;
+      if (M3.paredes.length) {
+        M3.paredes.forEach(function(w){ var l = Math.hypot(w.x2 - w.x1, w.y2 - w.y1); area += l * (w.z1 - w.z0); enc += l; });
+        M3.janelas.forEach(function(w){ var l = Math.hypot(w.x2 - w.x1, w.y2 - w.y1), h = w.z1 - w.z0; area += l * h; vaos += l * Math.min(2.1, h * 0.78) - l * Math.min(1.0, h * 0.38); nj += 1; area -= l * (Math.min(2.1, h * 0.78) - Math.min(1.0, h * 0.38)); });
+        fonte = M3.paredes.length / M3.pav + (M3.semPlanta ? ' paredes desenhadas nas linhas entre pilares (sem planta importada: importe a planta para ter as paredes reais)' : ' paredes da planta importada') + ' por nível';
+      } else {
+        var e2 = M3.ext, per = 2 * ((e2[2] - e2[0]) + (e2[3] - e2[1]));
+        M3.bases.slice(0, M3.pav).forEach(function(b, i){ var h = M3.bases[i + 1] - b - (M3.E.laje || 0); area += per * h; enc += per; });
+        area *= 0.85; fonte = 'sem planta importada: só o perímetro externo, descontando 15 % de vãos (importe a planta para ter as paredes internas)';
+      }
+      L.push({g: g4, nome: a[0], un: 'm²', q: area, cod: {sinapi: a[1], sco: a[2]}, memo: nf(area, 2) + ' m² — ' + fonte + '; altura = pé-direito − laje' + (vaos ? '; vãos de janelas descontados (' + nf(vaos, 2) + ' m²)' : '')});
+      if (!est2) L.push({g: g4, nome: 'Fixação (encunhamento) da alvenaria com argamassa', un: 'm', q: enc, cod: {sinapi: 'SC-93200'}, memo: 'Comprimento das paredes sob vigas e lajes'});
+      if (nj) { var lj = 0; M3.janelas.forEach(function(w){ lj += Math.hypot(w.x2 - w.x1, w.y2 - w.y1) + 0.6; });
+        L.push({g: g4, nome: 'Verga moldada no local em concreto, espessura 15 cm', un: 'm', q: lj, cod: {sinapi: 'SC-105023'}, memo: nj + ' janela(s): largura do vão + 0,30 m de cada lado'});
+        L.push({g: g4, nome: 'Contraverga moldada no local em concreto, espessura 15 cm', un: 'm', q: lj, cod: {sinapi: 'SC-105029'}, memo: 'Mesmo comprimento das vergas'}); }
+      if (cintas.length) { var lc = 0; cintas.forEach(function(v){ lc += Math.hypot(v.x2 - v.x1, v.y2 - v.y1); });
+        L.push({g: g4, nome: 'Cinta de amarração com blocos canaleta, espessura 15 cm', un: 'm', q: lc, cod: {sinapi: 'SC-105033', sco: 'SCO-AL 05.23.0300'}, memo: 'Topo das paredes em cada nível'}); }
+    }
+    /* ---- cobertura (tipo e águas escolhidos no ⚙ Ajustes do 3D ou aqui) ---- */
+    var tc = P.tipo_cob && P.tipo_cob !== 'auto' ? P.tipo_cob : M3.cob, gC = G[10];
+    var tl = M3.telhado, e3 = M3.ext, Aproj = (e3[2] - e3[0]) * (e3[3] - e3[1]);
+    if (tc && tc !== 'laje' && tc !== 'nao') {
+      var ii = {ceramica: 0.30, colonial: 0.25, fibro: 0.15, metal: 0.10, termo: 0.10}[tc] || 0.30, ag = +(P.aguas_cob || (tl ? tl.aguas : 2)) === 4 ? 4 : 2;
+      var bx = (e3[2] - e3[0]) + 1, by = (e3[3] - e3[1]) + 1, W = Math.min(bx, by), Lg = Math.max(bx, by), kk = Math.sqrt(1 + ii * ii), fh = W / 2 * ii;
+      var Ar = bx * by * kk, cum = ag === 4 ? Math.max(0, Lg - W) : Lg, esp = ag === 4 ? 4 * Math.sqrt(2 * (W / 2) * (W / 2) + fh * fh) : 0;
+      var mA = 'Projeção ' + nf(bx, 2) + ' × ' + nf(by, 2) + ' m (edificação + beiral de 0,50 m) × ' + nf(kk, 3) + ' (inclinação ' + nf(ii * 100, 0) + ' %, ' + ag + ' águas)';
+      var cer = tc === 'ceramica' || tc === 'colonial', mais = ag === 4;
+      L = L.concat(madeiramento(P, tc, ag, Ar, W, Lg, mA, gC));
+      var TEL = {ceramica: ['Telhamento com telha cerâmica de encaixe (portuguesa)', mais ? 'SC-94198' : 'SC-94195', 'SCO-CI 05.30.0056'],
+        colonial: ['Telhamento com telha cerâmica capa e canal (colonial)', mais ? 'SC-94204' : 'SC-94201', 'SCO-CI 05.30.0050'],
+        fibro: ['Telhamento com telha ondulada de fibrocimento 6 mm', 'SC-94207', 'SCO-CI 05.45.0100'],
+        metal: ['Telhamento com telha de aço/alumínio 0,5 mm', 'SC-94213', 'SCO-CI 05.35.0203'],
+        termo: ['Telhamento com telha metálica termoacústica 30 mm', 'SC-94216', false]}[tc];
+      L.push({g: gC, nome: TEL[0], un: 'm²', q: Ar, cod: {sinapi: TEL[1], sco: TEL[2]}, memo: mA});
+      var cumC = cer ? (mais ? 'SC-94219' : 'SC-94221') : tc === 'fibro' ? 'SC-94223' : 'SC-100326';
+      L.push({g: gC, nome: cer ? (mais ? 'Cumeeira e espigão emboçados (telha cerâmica)' : 'Cumeeira emboçada (telha cerâmica)') : 'Cumeeira para ' + (tc === 'fibro' ? 'telha de fibrocimento' : 'telha metálica'), un: 'm', q: cum + (cer && mais ? esp : 0), cod: {sinapi: cumC, sco: cer ? 'SCO-CI 05.30.0300' : false}, memo: 'Cumeeira ' + nf(cum, 2) + ' m' + (esp ? ' + espigões ' + nf(esp, 2) + ' m' : '')});
+      if (!cer && esp) L.push({g: gC, nome: 'Espigão para telha ' + (tc === 'fibro' ? 'de fibrocimento' : 'metálica'), un: 'm', q: esp, cod: {sinapi: cumC, sco: false}, memo: '4 espigões de ' + nf(esp / 4, 2) + ' m (usa a composição da cumeeira)'});
+      if (ag === 2 && M3.paredes.length) { var oit = 2 * (Math.min(e3[2] - e3[0], e3[3] - e3[1]) / 2) * (Math.min(e3[2] - e3[0], e3[3] - e3[1]) / 2 * ii);
+        var a0 = ALV[alvTipo(P, M3.tipo)]; if (a0 && a0[1]) L.push({g: gC, nome: 'Oitões em alvenaria (empenas do telhado de 2 águas): ' + a0[0].toLowerCase(), un: 'm²', q: oit, cod: {sinapi: a0[1], sco: a0[2]}, memo: '2 triângulos: base ' + nf(Math.min(e3[2] - e3[0], e3[3] - e3[1]), 2) + ' m × altura ' + nf(Math.min(e3[2] - e3[0], e3[3] - e3[1]) / 2 * ii, 2) + ' m ÷ 2'}); }
+    } else if (tc === 'laje' && M3.lajes.length) {
+      L.push({g: gC, nome: 'Impermeabilização da laje de cobertura com manta asfáltica 4 mm', un: 'm²', q: Aproj * 1.10, cod: {sinapi: 'SC-98546', sco: false}, memo: 'Área da laje ' + nf(Aproj, 2) + ' m² + 10 % de rodapé/subida nas platibandas'});
+    }
+    /* ---- revestimento (chapisco + emboço/massa única) e pintura ---- */
+    var rv = P.revest || 'tudo';
+    if (rv !== 'nao' && (M3.paredes.length || at !== 'nao')) {
+      var gR = G[11], Ab = 0, Aj = 0, per = 2 * ((e3[2] - e3[0]) + (e3[3] - e3[1])), Hl = 0;
+      M3.paredes.forEach(function(w){ Ab += Math.hypot(w.x2 - w.x1, w.y2 - w.y1) * (w.z1 - w.z0); });
+      M3.janelas.forEach(function(w){ var l = Math.hypot(w.x2 - w.x1, w.y2 - w.y1), h = w.z1 - w.z0; Aj += l * (Math.min(2.1, h * 0.78) - Math.min(1.0, h * 0.38)); });
+      M3.bases.slice(0, M3.pav).forEach(function(b, i){ Hl += M3.bases[i + 1] - b; });
+      var Aext = Math.max(0, per * Hl - Aj), Atot = M3.paredes.length ? 2 * Ab : 2 * per * Hl * 0.85, Aint = Math.max(0, Atot - Aext);
+      if (rv === 'int') Aext = 0;
+      var Ateto = (lt !== 'nao' && M3.lajes.length) ? M3.lajes.reduce(function(s, l){ return s + (l.x2 - l.x1) * (l.y2 - l.y1); }, 0) : 0;
+      var mI = 'Paredes: 2 faces de ' + nf(Ab, 2) + ' m² menos a fachada', mE = 'Perímetro externo ' + nf(per, 2) + ' m × altura ' + nf(Hl, 2) + ' m − vãos ' + nf(Aj, 2) + ' m²';
+      L.push({g: gR, nome: 'Chapisco em paredes internas, traço 1:3', un: 'm²', q: Aint, cod: {sinapi: 'SC-87879', sco: 'SCO-RV 10.05.0059'}, memo: mI});
+      L.push({g: gR, nome: 'Massa única (emboço) em paredes internas, traço 1:2:8, e = 17,5 mm', un: 'm²', q: Aint, cod: {sinapi: 'SC-87529', sco: 'SCO-RV 10.05.0159'}, memo: mI});
+      if (Aext) { L.push({g: gR, nome: 'Chapisco em fachada, traço 1:3', un: 'm²', q: Aext, cod: {sinapi: 'SC-87894', sco: 'SCO-RV 10.05.0059'}, memo: mE});
+        L.push({g: gR, nome: 'Emboço / massa única em fachada com vãos, traço 1:2:8, e = 25 mm', un: 'm²', q: Aext, cod: {sinapi: 'SC-87775', sco: 'SCO-RV 10.05.0250'}, memo: mE}); }
+      if (Ateto) { L.push({g: gR, nome: 'Chapisco no teto (laje), com rolo', un: 'm²', q: Ateto, cod: {sinapi: 'SC-87882', sco: 'SCO-RV 10.05.0059'}, memo: 'Área das lajes ' + nf(Ateto, 2) + ' m²'});
+        L.push({g: gR, nome: 'Massa única no teto, traço 1:2:8, e = 10 mm', un: 'm²', q: Ateto, cod: {sinapi: 'SC-90408', sco: 'SCO-RV 10.05.0159'}, memo: 'Área das lajes'}); }
+      var pt = P.pintura || 'standard', cor = M3.cor ? ' — cor da fachada ' + String(M3.cor).toUpperCase() + ' (escolhida no 3D)' : '';
+      var PIN = {premium: ['premium', 'SC-88489', 'SC-88488'], standard: ['standard', 'SC-104642', 'SC-104640'], economica: ['econômica', 'SC-104641', 'SC-104639']}[pt === 'textura' ? 'standard' : pt] || ['standard', 'SC-104642', 'SC-104640'];
+      if (pt !== 'nao') {
+        L.push({g: gR, nome: 'Fundo selador acrílico em paredes, uma demão', un: 'm²', q: Aint + Aext, cod: {sinapi: 'SC-88485', sco: false}, memo: 'Paredes internas + fachada'});
+        L.push({g: gR, nome: 'Pintura látex acrílica ' + PIN[0] + ' em paredes internas, duas demãos', un: 'm²', q: Aint, cod: {sinapi: PIN[1], sco: 'SCO-PT 05.15.0100'}, memo: mI});
+        if (Aext) L.push({g: gR, nome: (pt === 'textura' ? 'Textura acrílica na fachada, uma demão' : 'Pintura látex acrílica ' + PIN[0] + ' na fachada, duas demãos') + cor, un: 'm²', q: Aext, cod: {sinapi: pt === 'textura' ? 'SC-95305' : PIN[1], sco: 'SCO-PT 05.15.0153'}, memo: mE});
+        if (Ateto) { L.push({g: gR, nome: 'Fundo selador acrílico no teto, uma demão', un: 'm²', q: Ateto, cod: {sinapi: 'SC-88484', sco: false}, memo: 'Área das lajes'});
+          L.push({g: gR, nome: 'Pintura látex acrílica ' + PIN[0] + ' no teto, duas demãos', un: 'm²', q: Ateto, cod: {sinapi: PIN[2], sco: 'SCO-PT 05.15.0100'}, memo: 'Área das lajes'}); }
+      }
+    }
+    return L;
+  }
+
+  /* ---- madeiramento do telhado (27/11/2026): trama de madeira ou de aço, tesouras pelo vão e peças do SCO ----
+     Trama SINAPI: ripas + caibros + terças (cerâmica) ou só terças (telha ondulada/metálica), por m² de telhado.
+     Tesouras quando o vão passa de 5 m (ou se o usuário pedir): a cada 3,0 m; nas pontas do telhado de 2 águas
+     os oitões em alvenaria apoiam as terças. SCO não tem trama completa: terças (peça 7 × 20 cm) e caibros (5 × 7,5 cm) por metro. */
+  var TES = {madeira: {cer: [3, 92545], ond: [3, 92555], meiaCer: 100357, meiaOnd: 100367, passo: 1},
+             aco: {cer: [3, 92582], ond: [3, 92602], passo: 2}};
+  function madeiramento(P, tc, ag, Ar, W, Lg, mA, gC){
+    var L = [], cer = tc === 'ceramica' || tc === 'colonial', mais = ag === 4, mat = P.estr_cob === 'aco' ? 'aco' : 'madeira';
+    var vao = Math.max(0, W - 1), comp = Math.max(0, Lg - 1), tes = P.tesoura === 'S' ? true : P.tesoura === 'N' ? false : vao > 5;
+    var nomeT = mat === 'aco' ? 'aço' : 'madeira', cod;
+    if (mat === 'aco') cod = tc === 'colonial' ? (mais ? 'SC-92577' : 'SC-92574') : cer ? (mais ? 'SC-92571' : 'SC-92568') : 'SC-92580';
+    else cod = cer ? (mais ? 'SC-92540' : 'SC-92539') : 'SC-92543';
+    L.push({g: gC, nome: 'Madeiramento: trama de ' + nomeT + ' do telhado (' + (cer ? 'ripas, caibros e terças' : 'terças') + '), ' + ag + ' águas', un: 'm²', q: Ar, cod: {sinapi: cod, sco: false},
+      memo: mA + (cer ? '' : (mais ? '. Para mais de 2 águas o SINAPI só tem a trama de terças até 2 águas: conferir' : '')) + (mat === 'aco' ? '. Trama de aço sem pintura (incluir pintura anticorrosiva à parte)' : '') + '. No SCO a trama vai em peças (terças e caibros), abaixo'});
+    /* SCO: peças por metro (os itens só entram no banco SCO) */
+    var sT = cer ? 1.5 : 1.69, mT = Ar / sT, mC = Ar / 0.5;
+    L.push({g: gC, nome: 'Madeiramento (SCO): terças em peça de madeira serrada 7 × 20 cm', un: 'm', q: mT, cod: {sinapi: false, emop: false, sco: 'SCO-CI 05.05.0200'}, memo: 'Área do telhado ' + nf(Ar, 2) + ' m² ÷ ' + nf(sT, 2) + ' m entre terças' + (cer ? '' : ' (vão da telha ondulada)')});
+    if (cer) L.push({g: gC, nome: 'Madeiramento (SCO): caibros em madeira serrada 5 × 7,5 cm', un: 'm', q: mC, cod: {sinapi: false, emop: false, sco: 'SCO-CI 05.15.0100'}, memo: 'Área do telhado ÷ 0,50 m entre caibros. O SCO não tem item de ripas: conferir na composição da telha ou incluir à parte'});
+    if (tes && vao > 0) {
+      var vt = Math.min(12, Math.max(3, Math.ceil(vao))), n = Math.max(1, Math.ceil(comp / 3) - 1), T = TES[mat], k = cer ? T.cer : T.ond;
+      var cT = 'SC-' + (k[1] + (vt - k[0]) * T.passo), ext = vao > 12 ? ' ATENÇÃO: vão de ' + nf(vao, 2) + ' m passa de 12 m (maior tesoura do SINAPI): precisa de projeto da estrutura do telhado.' : '';
+      L.push({g: gC, nome: 'Madeiramento: tesoura inteira em ' + (mat === 'aco' ? 'aço' : 'madeira não aparelhada') + ', vão de ' + vt + ' m, para telha ' + (cer ? 'cerâmica' : 'ondulada/metálica'), un: 'un', q: n, cod: {sinapi: cT}, memo: 'Vão ' + nf(vao, 2) + ' m (menor lado da edificação) → tesoura de ' + vt + ' m; comprimento ' + nf(comp, 2) + ' m a cada 3,0 m = ' + n + ' tesoura(s)' + (ag === 2 ? ' (nas pontas os oitões apoiam as terças)' : '') + (P.tesoura === 'S' ? '' : '. Entrou porque o vão passa de 5 m (escolha “Não” na janela se houver paredes internas apoiando as terças)') + ext + (mat === 'aco' ? '. Sem pintura' : '')});
+      if (mais && mat === 'madeira') L.push({g: gC, nome: 'Madeiramento: meia tesoura de madeira não aparelhada, vão de ' + vt + ' m (espigões)', un: 'un', q: 4, cod: {sinapi: 'SC-' + ((cer ? T.meiaCer : T.meiaOnd) + (vt - 3))}, memo: 'Telhado de 4 águas: uma meia tesoura em cada espigão'});
+      if (mais && mat === 'aco') L.push({g: gC, nome: 'Madeiramento: tesoura em aço para as águas das pontas (equivalente a 2 inteiras), vão de ' + vt + ' m', un: 'un', q: 2, cod: {sinapi: cT}, memo: 'Telhado de 4 águas: 4 meias tesouras ≈ 2 inteiras (o SINAPI não tem meia tesoura de aço por unidade)'});
+    }
     return L;
   }
   var sco = '';
@@ -2079,29 +2263,44 @@ setEstaca('helice');
     var P = ctx.params, p = getP(), L = [];
     sco = bank === 'sco' ? ' (composição de concreto armado completo: concreto, fôrma e aço)' : '';
     var sel = [P.inc_sap === 'S', P.inc_cor === 'S', P.inc_rad === 'S', P.inc_est === 'S'];
-    if (!sel.some(Boolean)) return {erro: 'Nenhuma fundação marcada. Abra a janela “3 soluções com orçamento” e marque Sim nas que entram no orçamento.'};
+    var maisEtapas = P.inc_estr !== 'N' || (P.tipo_laje && P.tipo_laje !== 'nao') || (P.tipo_alv && P.tipo_alv !== 'nao');
+    if (!sel.some(Boolean) && !maisEtapas) return {erro: 'Nenhuma etapa marcada. Abra a janela “3 soluções com orçamento” e marque Sim nas que entram no orçamento.'};
     if (sel[0] && !valido()) return {erro: 'Cadastre os pilares e calcule as sapatas para ter o orçamento.'};
     L = L.concat(U.preliminares(G[0], P.placa, 0));
     if (sel[0]) L = L.concat(sapatas(sol, p, {D: V('D') || 1.5}));
     if (sel[1]) L = L.concat(corrida(sol, p));
     if (sel[2]) L = L.concat(radier(sol, p));
     if (sel[3]) L = L.concat(estacas(sol, p, P));
+    try { L = L.concat(estrutura(sol, p, P)); } catch (e) { console.error('orçamento da estrutura:', e); }
     return L;
   }
   var SN = [['S', 'Sim'], ['N', 'Não']];
-  TCORC.registrar({prog: 'concreto', nome: 'Fundações em Concreto Armado', solucoes: SOL, grupos: G, itens: itens,
+  TCORC.registrar({prog: 'concreto', nome: 'Fundações, estrutura, lajes e alvenaria em Concreto Armado', solucoes: SOL, grupos: G, itens: itens,
     params: [
       {k: 'inc_sap', label: 'Incluir sapatas isoladas', val: 'S', tipo: 'sel', opts: SN},
       {k: 'inc_cor', label: 'Incluir sapata corrida', val: 'N', tipo: 'sel', opts: SN},
       {k: 'inc_rad', label: 'Incluir radier', val: 'N', tipo: 'sel', opts: SN},
       {k: 'inc_est', label: 'Incluir estacas e blocos', val: 'N', tipo: 'sel', opts: SN},
       {k: 'nblocos', label: 'Nº de blocos de estacas iguais ao calculado', val: 1, step: '1'},
+      {k: 'inc_estr', label: 'Etapa estrutura: incluir pilares e vigas', val: 'S', tipo: 'sel', opts: SN},
+      {k: 'tipo_laje', label: 'Etapa lajes: tipo de laje', val: 'auto', tipo: 'sel', opts: Object.keys(LAJES).map(function(k){ return [k, LAJES[k]]; })},
+      {k: 'laje_h', label: 'Espessura da laje maciça (m) — 0 = do tipo de estrutura', val: 0, step: '0.01'},
+      {k: 'tipo_alv', label: 'Etapa alvenaria: tipo de alvenaria', val: 'auto', tipo: 'sel', opts: Object.keys(ALV).map(function(k){ return [k, ALV[k][0]]; })},
+      {k: 'tipo_cob', label: 'Etapa cobertura: tipo (padrão = o escolhido no 3D)', val: 'auto', tipo: 'sel', opts: [['auto', 'Conforme o 3D'], ['ceramica', 'Telha cerâmica portuguesa'], ['colonial', 'Telha cerâmica colonial'], ['fibro', 'Telha de fibrocimento'], ['metal', 'Telha metálica'], ['termo', 'Telha termoacústica'], ['laje', 'Laje impermeabilizada'], ['nao', 'Sem cobertura no orçamento']]},
+      {k: 'aguas_cob', label: 'Telhado: número de águas (0 = o do 3D)', val: 0, step: '2'},
+      {k: 'estr_cob', label: 'Madeiramento: estrutura do telhado', val: 'madeira', tipo: 'sel', opts: [['madeira', 'Madeira (trama de ripas, caibros e terças)'], ['aco', 'Aço (trama metálica, sem pintura)']]},
+      {k: 'tesoura', label: 'Madeiramento: tesouras', val: 'auto', tipo: 'sel', opts: [['auto', 'Automático (vão acima de 5 m)'], ['S', 'Sim'], ['N', 'Não (terças apoiadas nas paredes)']]},
+      {k: 'revest', label: 'Etapa revestimento: chapisco e emboço', val: 'tudo', tipo: 'sel', opts: [['tudo', 'Paredes internas, fachada e teto'], ['int', 'Só internas e teto (tijolo aparente fora)'], ['nao', 'Sem revestimento']]},
+      {k: 'pintura', label: 'Pintura', val: 'standard', tipo: 'sel', opts: [['standard', 'Látex acrílica standard'], ['premium', 'Látex acrílica premium'], ['economica', 'Látex acrílica econômica'], ['textura', 'Acrílica dentro + textura na fachada'], ['nao', 'Sem pintura']]},
+      {k: 'taxa_pil', label: 'Taxa de aço dos pilares (kg/m³)', val: 120, step: '5'},
+      {k: 'taxa_vig', label: 'Taxa de aço das vigas (kg/m³)', val: 100, step: '5'},
+      {k: 'taxa_laj', label: 'Taxa de aço das lajes moldadas no local (kg/m³)', val: 80, step: '5'},
       {k: 'placa', label: 'Placa de obra (m²)', val: 6, step: '0.5'}
     ],
     projeto: function(){ return {nome: S('endereco') || 'Fundações em concreto armado', municipio: ''}; },
-    intro: 'As três soluções usam as mesmas dimensões calculadas (volumes, armadura, fôrmas, escavação e lastro); mudam as fôrmas e a proteção das faces enterradas.',
+    intro: 'Orçamento por etapas: fundação, estrutura (pilares e vigas), lajes (escolha o tipo), alvenaria (escolha o bloco), cobertura (tipo de telha e águas) e revestimento e pintura (chapisco, emboço e tinta; cor da casa vem do 3D). As três soluções usam as mesmas quantidades; mudam as fôrmas e a proteção das faces enterradas. Níveis, pé-direito, tipo de estrutura e paredes vêm da aba Cargas e Pilares e do 3D (planta importada).',
     avisos: function(){ var a = [], p = getP(); if (p.fck > 30) a.push('O fck do projeto (' + nf(p.fck, 0) + ' MPa) é maior que o das composições (30 MPa): o preço do concreto pode estar abaixo do real.'); return a; },
-    rodape: 'Quantidades: volumes e armaduras calculados no programa; escavação com folga de 20 cm por lado; bloco de coroamento com dimensões estimadas pelo espaçamento das estacas; bitola de referência de 10 mm nas composições de armação. No SCO o concreto armado já traz fôrma e aço (12 m² e 90 kg por m³), por isso os itens de fôrma e armação ficam só no SINAPI. Não inclui sondagem, rebaixamento de lençol, esgotamento, escoramento, controle tecnológico e mobilização.'});
+    rodape: 'Quantidades: volumes e armaduras calculados no programa; escavação com folga de 20 cm por lado; bloco de coroamento com dimensões estimadas pelo espaçamento das estacas; bitola de referência de 10 mm nas composições de armação. No SCO o concreto armado já traz fôrma e aço (12 m² e 90 kg por m³), por isso os itens de fôrma e armação ficam só no SINAPI. Não inclui sondagem, rebaixamento de lençol, esgotamento, escoramento, controle tecnológico e mobilização. Estrutura, lajes e alvenaria: quantidades do modelo do 3D por nível; vigas com seção estimada (18 cm × vão/10) e aço por taxa (kg/m³), porque o programa não dimensiona pilares, vigas e lajes; laje pré-moldada com altura pelo maior vão (conferir com o fabricante). EMOP: fôrma (11.004.0022, sem escoramento), aço CA-50 (11.009.0072) e concreto bombeado fck 15/25 (11.025.0002/0009) conferidos no catálogo EMOP 09/2026; o preço vem da EMOP importada no Orçamento (administrador: preço embutido 09/2026). Os demais itens (lajes pré-moldadas, alvenaria, cobertura, madeiramento, revestimento, pintura) e o concreto acima de 25 MPa usam o equivalente de outro banco (aparece a etiqueta na planilha) até os códigos EMOP serem conferidos com o DIPR. Cobertura pelo tipo e número de águas do 3D (inclinação usual: cerâmica 30 %, colonial 25 %, fibrocimento 15 %, metálica 10 %; beiral 0,50 m; sem calhas e rufos). Madeiramento: trama SINAPI por m² (madeira ou aço), tesouras a cada 3 m quando o vão passa de 5 m; no SCO terças 7 × 20 cm e caibros 5 × 7,5 cm por metro (sem ripas). Revestimento: áreas das paredes do modelo (2 faces menos a fachada; fachada = perímetro × altura − vãos de janelas). Não inclui esquadrias, pisos, louças e instalações.'});
   /* cada fundação entra no orçamento quando o usuário abre a aba dela */
   function marcar(k){
     try { var sv = JSON.parse(localStorage.getItem('tcorc_p_concreto') || '{}'); if (sv[k] == null) { sv[k] = 'S'; localStorage.setItem('tcorc_p_concreto', JSON.stringify(sv)); } } catch (e) {}
@@ -2497,13 +2696,13 @@ setEstaca('helice');
     regGuia({
       id: 'vis3d', nomeAba: 'Visualização 3D',
       passos: [
-        { sel: '#vb-topo',
-          titulo: '1 / 2 — Vistas disponíveis',
-          dica: 'Use os botões de vista para conferir o projeto: Topo (planta) mostra distribuição em planta das sapatas e pilares; Frente e Lateral mostram cotas verticais; Isométrica permite verificar possíveis sobreposições em 3D. As cores indicam o estado de cada sapata: verde = OK, azul = subutilizada, laranja = próxima ao limite, vermelho = subdimensionada.',
+        { sel: '#c3-imp',
+          titulo: '1 / 2 — Planta, vistas e ajustes',
+          dica: 'Importe a planta baixa (DWG, DXF ou imagem) para o 3D ganhar paredes, janelas e o piso. Na barra do desenho: vistas (Perspectiva, Topo, Frente, Lateral), modos prontos (Obra pronta, Fundações, Estrutura, Armaduras), Mover pilar, + Pilar, Medir e Andar. Em ⚙ Ajustes: tipo de estrutura e de fundação, transparência de cada nível e de cada componente, qualidade e sol. Ligue “Colorir pela situação do cálculo”: verde = OK, azul = subutilizada, laranja = perto do limite, vermelho = subdimensionada.',
           norma: '' },
-        { sel: '#canvas3d',
+        { sel: '#c3',
           titulo: '2 / 2 — Interpretação do modelo 3D',
-          dica: 'No modo Isométrica, arraste para girar e use o scroll para zoom. Verifique: sapatas estão dentro do perímetro da construção? Há sobreposição entre sapatas? As dimensões Z (altura) estão proporcionais? Se alguma sapata ficar vermelha, volte à aba Sapatas e aumente as dimensões ou reduza a carga.',
+          dica: 'Botão esquerdo gira, meio ou direito move, a roda aproxima no ponto do cursor, duplo clique enquadra. Toque numa sapata ou pilar para ver e editar B, L, h e posição. Verifique: sapatas estão dentro do perímetro da construção? Há sobreposição entre sapatas? As dimensões Z (altura) estão proporcionais? Se alguma sapata ficar vermelha, volte à aba Sapatas e aumente as dimensões ou reduza a carga.',
           norma: '' }
       ]
     }),
@@ -2549,6 +2748,977 @@ setEstaca('helice');
   }, 800);
 
 })();
+</script>
+<script>
+/* =====================================================================
+   PATCH CON-3D (26/11/2026) — 3D realista e interativo, importação de
+   planta baixa (DWG, DXF ou imagem) e exportação DWG/DXF.
+   Só desenho e entrada de dados: nenhuma fórmula de cálculo muda.
+   ===================================================================== */
+(function(){
+'use strict';
+var THREE_URL='https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js';
+var ORBIT_URL='https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
+var $=function(id){return document.getElementById(id);};
+var esc=function(t){return String(t==null?'':t).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});};
+var n2=function(v){return (+v||0).toFixed(2).replace('.',',');};
+function ls(k,v){try{if(v===undefined)return JSON.parse(localStorage.getItem(k));localStorage.setItem(k,JSON.stringify(v));return true;}catch(e){return v===undefined?null:false;}}
+var carregando={};
+function script(u){if(carregando[u])return carregando[u];return carregando[u]=new Promise(function(ok,err){var s=document.createElement('script');s.src=u;s.onload=ok;s.onerror=function(){delete carregando[u];s.remove();err(new Error('não carregou '+u));};document.head.appendChild(s);});}
+function baixar(nome,blob){var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nome;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(a.href);},60000);}
+
+/* ───────── planta importada (vai com o projeto) ───────── */
+var PL=ls('tc_conc_planta')||null;
+function guardarPlanta(){ if(!PL){try{localStorage.removeItem('tc_conc_planta');}catch(e){} return;}
+  if(!ls('tc_conc_planta',PL)) aviso('A planta é grande demais para ficar guardada no navegador. Use "Salvar" para gravá-la no arquivo do projeto.','err'); }
+
+/* ───────── preferências do 3D ───────── */
+var COMP=[['terreno','Terreno',0.22],['fund','Fundações',1],['arm','Armaduras',1],['pilar','Pilares',1],['parede','Paredes',1],['janela','Janelas',1],['laje','Lajes',0.35],['cob','Cobertura',1],['piso','Piso / planta',1],['na','Lençol freático',0.35],['rot','Rótulos',1]];
+var PADRAO={on:{terreno:1,fund:1,arm:0,pilar:1,parede:1,janela:1,laje:0,cob:1,piso:1,na:0,rot:1},op:{},fund:'sap',pav:1,pe:2.8,tipoPar:'bloco',cob:'auto',aguas:2,cor:'#efe3c8',sit:0,qual:'alta',sol:'manha',painel:1};
+var CFG=Object.assign({},PADRAO,ls('tc_conc_3d')||{});
+CFG.on=Object.assign({},PADRAO.on,CFG.on);CFG.op=Object.assign({},CFG.op);
+COMP.forEach(function(c){if(CFG.op[c[0]]==null)CFG.op[c[0]]=c[2];});
+if(!(ls('tc_conc_3d'))&&Math.min(screen.width,screen.height)<700){CFG.qual='media';CFG.painel=0;}
+function guardarCfg(){ls('tc_conc_3d',CFG);}
+
+/* ════════════ TEXTURAS (geradas no programa, com relevo) ════════════ */
+var TX={};
+function rnd(seed){var s=seed>>>0||1;return function(){s=(s*16807)%2147483647;return s/2147483647;};}
+function cv(N){var c=document.createElement('canvas');c.width=c.height=N;return c;}
+/* ruído suave repetível */
+function ruido(g,N,R,cel,alfa,claro,escuro){var n=Math.ceil(N/cel),v=[];for(var i=0;i<n*n;i++)v.push(R());
+  var p=cv(n),q=p.getContext('2d'),im=q.createImageData(n,n);for(var k=0;k<n*n;k++){var c=v[k]>0.5?claro:escuro;im.data[k*4]=c;im.data[k*4+1]=c;im.data[k*4+2]=c;im.data[k*4+3]=Math.abs(v[k]-0.5)*2*alfa*255;}q.putImageData(im,0,0);
+  g.imageSmoothingEnabled=true;for(var a=-1;a<=1;a++)for(var b=-1;b<=1;b++)g.drawImage(p,a*N,b*N,N,N);}
+function pintar(nome,g,h,N){var R=rnd(nome.length*977+13),i,x,y,r;
+  var base=function(c,hc){g.fillStyle=c;g.fillRect(0,0,N,N);h.fillStyle=hc||'#808080';h.fillRect(0,0,N,N);};
+  var graos=function(qt,cores,min,max,alt){for(i=0;i<qt;i++){x=R()*N;y=R()*N;r=(min+R()*(max-min))*N/512;g.fillStyle=cores[(R()*cores.length)|0];g.beginPath();g.arc(x,y,r,0,7);g.fill();if(alt){h.fillStyle=alt[(R()*alt.length)|0];h.beginPath();h.arc(x,y,r,0,7);h.fill();}}};
+  if(nome==='concreto'){base('#b4b2ac');ruido(g,N,R,N/6,0.22,235,90);ruido(g,N,R,N/40,0.16,225,100);graos(2600,['#9b9992','#c6c4bd','#8e8c86'],0.4,1.6,['#6c6c6c','#929292']);graos(90,['#6f6d68'],1,3.2,['#3a3a3a']);
+    g.fillStyle='rgba(70,68,64,.35)';g.fillRect(0,0,N,N/220);h.fillStyle='#555';h.fillRect(0,0,N,N/160);}
+  else if(nome==='bloco'){base('#b9b2a6','#505050');var nx=3,ny=6,bw=N/nx,bh=N/ny,j=N*0.014;
+    for(y=0;y<ny;y++)for(x=-1;x<=nx;x++){var ox=x*bw+(y%2?bw/2:0),cor=['#b4573a','#a94f34','#bd6040','#9f482f','#b95b36'][(R()*5)|0];
+      g.fillStyle=cor;g.fillRect(ox+j/2,y*bh+j/2,bw-j,bh-j);h.fillStyle='#b4b4b4';h.fillRect(ox+j/2,y*bh+j/2,bw-j,bh-j);
+      for(i=1;i<4;i++){g.fillStyle='rgba(60,20,10,.18)';g.fillRect(ox+j,y*bh+i*bh/4,bw-2*j,N/400);h.fillStyle='#8a8a8a';h.fillRect(ox+j,y*bh+i*bh/4,bw-2*j,N/300);}}
+    ruido(g,N,R,N/24,0.16,240,50);graos(1400,['rgba(60,25,12,.35)','rgba(230,200,180,.25)'],0.5,1.4);}
+  else if(nome==='telha'||nome==='colonial'){base(nome==='telha'?'#b5532f':'#a9573a','#606060');var cols=nome==='telha'?5:6,rows=nome==='telha'?6:5,cw=N/cols,rh=N/rows;
+    for(y=0;y<rows;y++)for(x=0;x<cols;x++){var t0=(R()*30)|0,gr=g.createLinearGradient(x*cw,0,(x+1)*cw,0);
+      gr.addColorStop(0,'rgb('+(120+t0)+','+(48+t0/3)+','+(28)+')');gr.addColorStop(0.5,'rgb('+(196+t0)+','+(98+t0/2)+','+(60+t0/3)+')');gr.addColorStop(1,'rgb('+(110+t0)+','+(44+t0/3)+','+(26)+')');
+      g.fillStyle=gr;g.fillRect(x*cw,y*rh,cw,rh-N/90);var hg=h.createLinearGradient(x*cw,0,(x+1)*cw,0);hg.addColorStop(0,'#404040');hg.addColorStop(0.5,'#d8d8d8');hg.addColorStop(1,'#404040');h.fillStyle=hg;h.fillRect(x*cw,y*rh,cw,rh-N/90);
+      g.fillStyle='rgba(40,15,5,.55)';g.fillRect(x*cw,(y+1)*rh-N/90,cw,N/90);}
+    ruido(g,N,R,N/12,0.14,220,60);graos(1500,['rgba(70,30,15,.35)','rgba(230,190,150,.2)','rgba(60,70,40,.18)'],0.5,1.8);}
+  else if(nome==='fibro'||nome==='metal'||nome==='termo'){var me=nome!=='fibro';base(me?'#c9ced3':'#a9aaa4','#808080');var nOnd=me?5:8,ow=N/nOnd;
+    for(x=0;x<nOnd;x++){var gr2=g.createLinearGradient(x*ow,0,(x+1)*ow,0),cA=me?['#e6e9ec','#9aa2aa','#d4d8dc']:['#bdbeb8','#8a8b85','#b1b2ac'];
+      if(me){gr2.addColorStop(0,cA[1]);gr2.addColorStop(0.12,cA[0]);gr2.addColorStop(0.42,cA[0]);gr2.addColorStop(0.55,cA[1]);gr2.addColorStop(1,cA[2]);}else{gr2.addColorStop(0,cA[1]);gr2.addColorStop(0.5,cA[0]);gr2.addColorStop(1,cA[1]);}
+      g.fillStyle=gr2;g.fillRect(x*ow,0,ow,N);var hg2=h.createLinearGradient(x*ow,0,(x+1)*ow,0);hg2.addColorStop(0,'#202020');hg2.addColorStop(me?0.25:0.5,'#e0e0e0');hg2.addColorStop(me?0.5:1,me?'#e0e0e0':'#202020');if(me)hg2.addColorStop(1,'#202020');h.fillStyle=hg2;h.fillRect(x*ow,0,ow,N);}
+    ruido(g,N,R,N/10,me?0.05:0.14,me?250:210,me?200:120);if(!me)graos(1800,['rgba(70,70,60,.25)','rgba(230,230,220,.2)'],0.4,1.4);}
+  else if(nome==='reboco'){base('#f3f0e9');ruido(g,N,R,N/5,0.10,255,150);ruido(g,N,R,N/90,0.10,250,150);graos(3200,['rgba(255,255,255,.35)','rgba(150,140,120,.25)'],0.4,1.3,['#767676','#8a8a8a']);}
+  else if(nome==='piso'){base('#cfc6b6','#606060');var q=N/4,m=N*0.006;for(y=0;y<4;y++)for(x=0;x<4;x++){var t=205+((R()*18)|0);g.fillStyle='rgb('+t+','+(t-8)+','+(t-22)+')';g.fillRect(x*q+m,y*q+m,q-2*m,q-2*m);h.fillStyle='#a0a0a0';h.fillRect(x*q+m,y*q+m,q-2*m,q-2*m);}ruido(g,N,R,N/16,0.12,255,120);}
+  else if(nome==='grama'){base('#55772f');ruido(g,N,R,N/7,0.30,150,25);for(i=0;i<9000;i++){x=R()*N;y=R()*N;var a=R()*6.28,L=(3+R()*8)*N/512;g.strokeStyle=['#6f9a3a','#44631f','#83a94b','#5c7f2c','#9a9a55'][(R()*5)|0];g.lineWidth=N/512*1.2;g.beginPath();g.moveTo(x,y);g.lineTo(x+Math.cos(a)*L,y+Math.sin(a)*L);g.stroke();h.strokeStyle=R()>0.5?'#b0b0b0':'#505050';h.lineWidth=N/512*1.4;h.beginPath();h.moveTo(x,y);h.lineTo(x+Math.cos(a)*L,y+Math.sin(a)*L);h.stroke();}}
+  else if(nome==='solo'){base('#8c5f3c');ruido(g,N,R,N/5,0.34,200,40);ruido(g,N,R,N/30,0.25,210,40);graos(2200,['#6e4a2e','#a9784e','#5b3c25','#b9915f'],0.6,3,['#555','#aaa','#999']);graos(60,['#8d867a','#a39b8c'],3,9,['#d0d0d0']);}
+  else if(nome==='aco'){base('#6f3f2a');ruido(g,N,R,N/20,0.25,200,40);for(i=0;i<16;i++){g.fillStyle='rgba(30,15,8,.35)';g.fillRect(0,i*N/16,N,N/60);h.fillStyle='#d0d0d0';h.fillRect(0,i*N/16,N,N/40);}}
+  else {base('#999999');}
+}
+function normalDe(hc,forca){var N=hc.width,d=hc.getContext('2d').getImageData(0,0,N,N).data,o=cv(N),g=o.getContext('2d'),im=g.createImageData(N,N);
+  var H=function(x,y){return d[(((y+N)%N)*N+((x+N)%N))*4]/255;};
+  for(var y=0;y<N;y++)for(var x=0;x<N;x++){var dx=(H(x-1,y)-H(x+1,y))*forca,dy=(H(x,y+1)-H(x,y-1))*forca,l=Math.sqrt(dx*dx+dy*dy+1),k=(y*N+x)*4;
+    im.data[k]=(dx/l*0.5+0.5)*255;im.data[k+1]=(dy/l*0.5+0.5)*255;im.data[k+2]=(1/l*0.5+0.5)*255;im.data[k+3]=255;}
+  g.putImageData(im,0,0);return o;}
+/* metros cobertos por uma repetição */
+var ESCALA={telha:1.6,colonial:1.4,fibro:1.1,metal:1.0,termo:1.0,concreto:1.6,bloco:1.2,reboco:2,piso:2.4,grama:3,solo:2.5,aco:0.2};
+function textura(nome){var N=QUAL[CFG.qual].tex,k=nome+N;if(TX[k])return TX[k];var T=window.THREE,c=cv(N),hc=cv(N);pintar(nome,c.getContext('2d'),hc.getContext('2d'),N);
+  var f=function(img,srgb){var t=new T.CanvasTexture(img);t.wrapS=t.wrapT=T.RepeatWrapping;if(srgb)t.encoding=T.sRGBEncoding;t.anisotropy=S3&&S3.ren?S3.ren.capabilities.getMaxAnisotropy():4;return t;};
+  var forca={concreto:1.6,bloco:3.4,reboco:1.2,piso:2.2,grama:2.4,solo:3,aco:3}[nome]||1;
+  return TX[k]={map:f(c,true),nor:CFG.qual==='baixa'?null:f(normalDe(hc,forca),false)};}
+
+var QUAL={baixa:{px:1,sombra:0,tex:256},media:{px:1.25,sombra:1024,tex:512},alta:{px:1.75,sombra:2048,tex:512},ultra:{px:2,sombra:4096,tex:1024}};
+var SOL={manha:{el:32,az:115,cor:0xffe7c4,i:1.05},meio:{el:70,az:160,cor:0xffffff,i:1.15},tarde:{el:38,az:245,cor:0xffe0b0,i:1.05},fim:{el:12,az:265,cor:0xffb070,i:0.95}};
+/* ════════════ NÍVEIS (pavimentos) ════════════
+   Duas coisas SEPARADAS:
+   - NIV (vai com o projeto): nome, pé-direito e PESO de cada nível (g e q em kN/m²).
+     Com "calcular pelos níveis" ligado, Gk e Qk de cada pilar = soma dos níveis × área de influência
+     + peso próprio do pilar. Isso entra no cálculo das fundações.
+   - CFG.nv (só desenho): mostrar/ocultar e transparência de cada nível no 3D. Não muda conta nenhuma. */
+var NIV_PADRAO={auto:0,bal:0.30,lista:[{nome:'Térreo',pe:2.8,g:6.0,q:1.5},{nome:'1º pavimento (laje de cobertura)',pe:2.8,g:4.0,q:1.0}]};
+var NIV=ls('tc_conc_niveis')||JSON.parse(JSON.stringify(NIV_PADRAO));
+if(!NIV.lista||!NIV.lista.length)NIV.lista=JSON.parse(JSON.stringify(NIV_PADRAO.lista));
+if(!Array.isArray(CFG.nv))CFG.nv=[];
+function guardarNiv(){ls('tc_conc_niveis',NIV);}
+function nivVis(i){var v=CFG.nv[i]||(CFG.nv[i]={vis:1,op:1});return v;}
+/* cota da base de cada nível (o térreo começa na cota 0) */
+function nivBases(){var z=0;return NIV.lista.map(function(n){var b=z;z+=Math.max(2,Math.min(8,+n.pe||2.8));return b;}).concat([z]);}
+/* área de influência de cada pilar: região mais próxima dele (Voronoi) dentro do contorno da edificação */
+function recorte(pol,a,b,c){var out=[];for(var i=0;i<pol.length;i++){var P=pol[i],Q=pol[(i+1)%pol.length],fp=a*P[0]+b*P[1]-c,fq=a*Q[0]+b*Q[1]-c;
+  if(fp<=0)out.push(P);if((fp<0&&fq>0)||(fp>0&&fq<0)){var t=fp/(fp-fq);out.push([P[0]+t*(Q[0]-P[0]),P[1]+t*(Q[1]-P[1])]);}}return out;}
+function areaPol(p){var s=0;for(var i=0;i<p.length;i++){var j=(i+1)%p.length;s+=p[i][0]*p[j][1]-p[j][0]*p[i][1];}return Math.abs(s)/2;}
+function contorno(){var a=[1e9,1e9,-1e9,-1e9],p=function(x,y){a[0]=Math.min(a[0],x);a[1]=Math.min(a[1],y);a[2]=Math.max(a[2],x);a[3]=Math.max(a[3],y);};
+  if(PL&&PL.paredes&&PL.paredes.length)PL.paredes.forEach(function(w){var t=(w[4]||0.15)/2;p(w[0]-t,w[1]-t);p(w[2]+t,w[3]+t);p(w[0]+t,w[1]+t);p(w[2]-t,w[3]-t);});
+  else{var b=Math.max(0,+NIV.bal||0);_pilares.forEach(function(q){p(q.x-(q.bp||0.2)/2-b,q.y-(q.hp||0.3)/2-b);p(q.x+(q.bp||0.2)/2+b,q.y+(q.hp||0.3)/2+b);});}
+  return a[0]>a[2]?null:a;}
+function areasInfluencia(){var c=contorno(),A={};if(!c)return A;
+  _pilares.forEach(function(p){var pol=[[c[0],c[1]],[c[2],c[1]],[c[2],c[3]],[c[0],c[3]]];
+    _pilares.forEach(function(q){if(q===p||!pol.length)return;var dx=q.x-p.x,dy=q.y-p.y;if(Math.abs(dx)+Math.abs(dy)<1e-6)return;
+      pol=recorte(pol,dx,dy,(dx*(p.x+q.x)+dy*(p.y+q.y))/2);});
+    A[p.id]={A:pol.length>2?areaPol(pol):0,pol:pol};});return A;}
+/* cargas de cada pilar pelos níveis */
+function cargasNiveis(){var A=areasInfluencia(),r={},sg=0,sq=0;NIV.lista.forEach(function(n){sg+=+n.g||0;sq+=+n.q||0;});var H=nivBases().pop();
+  _pilares.forEach(function(p){var a=(A[p.id]||{}).A||0,pp=25*(p.bp||0.2)*(p.hp||0.3)*H;r[p.id]={A:a,gk:a*sg+pp,qk:a*sq,pp:pp};});return r;}
+function aplicarCargas(){if(!NIV.auto)return;var C=cargasNiveis();
+  _pilares.forEach(function(p){var c=C[p.id];if(!c||p.cargaMan)return;p.gk=Math.round(c.gk*10)/10;p.qk=Math.round(c.qk*10)/10;});}
+/* cartão na aba Cargas e Pilares */
+function nivCard(){var aba=$('tab-pilares');if(!aba)return;var e=$('niv-card');
+  if(!e){e=document.createElement('div');e.className='sec';e.id='niv-card';aba.insertBefore(e,aba.firstChild);
+    e.addEventListener('change',nivMuda);e.addEventListener('click',nivClique);}
+  var C=cargasNiveis(),H=nivBases().pop(),sg=0,sq=0,man=_pilares.filter(function(p){return p.cargaMan;}).length;
+  NIV.lista.forEach(function(n){sg+=+n.g||0;sq+=+n.q||0;});
+  var inp=function(i,c,v,st,w){return '<input type="number" data-n="'+i+'" data-c="'+c+'" value="'+v+'" step="'+st+'" style="width:'+(w||62)+'px;padding:2px 4px;border:1px solid var(--inp-border);background:var(--inp);color:var(--fg);border-radius:3px;font-size:11px">';};
+  var h='<div class="sec-title">C0) Níveis (pavimentos) e peso de cada nível</div>'+
+    '<p style="font-size:11px;color:var(--fg3);margin-bottom:8px">Cada nível tem o seu pé-direito e o peso da laje do teto dele (o último é a cobertura): <b>g</b> = permanente (peso próprio da laje + revestimento + paredes + vigas) e <b>q</b> = variável (uso), em kN/m². Valores iniciais são usuais para residência (NBR 6120:2019: q 1,5 kN/m² em residências, 1,0 kN/m² em cobertura com acesso só para manutenção) — confira para a sua obra. A transparência de cada nível fica no painel do 3D e não muda o cálculo.</p>'+
+    '<div class="tbl-wrap"><table><thead><tr><th>Nível</th><th>Pé-direito (m)</th><th>g permanente (kN/m²)</th><th>q variável (kN/m²)</th><th>Cota da base (m)</th><th></th></tr></thead><tbody>';
+  var B=nivBases();NIV.lista.forEach(function(n,i){h+='<tr><td><input data-n="'+i+'" data-c="nome" value="'+esc(n.nome)+'" style="width:130px;padding:2px 4px;border:1px solid var(--inp-border);background:var(--inp);color:var(--fg);border-radius:3px;font-size:11px"></td><td>'+inp(i,'pe',n.pe,0.05)+'</td><td>'+inp(i,'g',n.g,0.1)+'</td><td>'+inp(i,'q',n.q,0.1)+'</td><td class="td-out">'+n2(B[i])+'</td><td>'+(NIV.lista.length>1?'<button class="btn-rem" data-a="rem" data-n="'+i+'">✕</button>':'')+'</td></tr>';});
+  h+='<tr><td><b>Total</b></td><td class="td-out">'+n2(H)+'</td><td class="td-out">'+n2(sg)+'</td><td class="td-out">'+n2(sq)+'</td><td></td><td></td></tr></tbody></table></div>'+
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:8px 0"><button class="btn-add" data-a="add">+ Nível</button>'+
+    '<label style="font-size:12px;font-weight:600;display:flex;gap:6px;align-items:center"><input type="checkbox" data-c="auto"'+(NIV.auto?' checked':'')+'> Calcular Gk e Qk dos pilares pelos níveis (área de influência)</label>'+
+    '<label style="font-size:11px">Balanço da laje além dos pilares externos (m) '+inp(-1,'bal',NIV.bal,0.05,56)+'</label></div>';
+  if(NIV.auto){h+='<div class="tbl-wrap"><table><thead><tr><th>Pilar</th><th>Área de influência (m²)</th><th>Peso próprio do pilar (kN)</th><th>Gk pelos níveis (kN)</th><th>Qk pelos níveis (kN)</th><th>Na tabela abaixo</th></tr></thead><tbody>';
+    _pilares.forEach(function(p){var c=C[p.id]||{};h+='<tr><td><b>'+esc(p.id)+'</b></td><td class="td-out">'+n2(c.A)+'</td><td class="td-out">'+n2(c.pp)+'</td><td class="td-out">'+n2(c.gk)+'</td><td class="td-out">'+n2(c.qk)+'</td><td>'+(p.cargaMan?'digitada à mão <button class="tb-btn" data-a="volta1" data-id="'+esc(p.id)+'">↺ usar a dos níveis</button>':'pelos níveis')+'</td></tr>';});
+    h+='</tbody></table></div>'+(man?'<button class="tb-btn" data-a="volta" style="margin-top:6px">↺ Todos os pilares pela carga dos níveis</button>':'')+
+      '<p style="font-size:11px;color:var(--fg3);margin-top:6px">Área de influência = parte da laje mais perto de cada pilar, dentro do contorno da edificação ('+(PL&&PL.paredes&&PL.paredes.length?'paredes da planta importada':'pilares externos + balanço')+'). Gk e Qk digitados na tabela abaixo ficam valendo para aquele pilar. Depois de mudar o peso, use ⚡ Otimizar B×L×h para redimensionar as sapatas.</p>';}
+  e.innerHTML=h;}
+function nivMuda(ev){var el=ev.target,c=el.dataset.c;if(!c)return;var i=+el.dataset.n;
+  if(c==='auto'){NIV.auto=el.checked?1:0;if(NIV.auto&&!confirm('Os valores de Gk e Qk de todos os pilares serão trocados pelos calculados pelos níveis. Continuar?')){NIV.auto=0;el.checked=false;return;}
+    if(NIV.auto)_pilares.forEach(function(p){delete p.cargaMan;});}
+  else if(c==='bal'){var v=parseFloat(el.value);if(isNaN(v)||v<0)return;NIV.bal=v;}
+  else if(c==='nome')NIV.lista[i].nome=el.value.trim()||('Nível '+(i+1));
+  else{var x=parseFloat(el.value);if(isNaN(x)||x<0)return;if(c==='pe')x=Math.max(2,Math.min(8,x));NIV.lista[i][c]=x;}
+  guardarNiv();calc();}
+function nivClique(ev){var a=ev.target.closest('[data-a]');if(!a)return;var k=a.dataset.a;
+  if(k==='add'){var u=NIV.lista[NIV.lista.length-1];NIV.lista.splice(NIV.lista.length-1,0,{nome:(NIV.lista.length)+'º pavimento',pe:u.pe,g:6.0,q:1.5});}
+  else if(k==='rem'){var i=+a.dataset.n;if(!confirm('Excluir o nível "'+NIV.lista[i].nome+'"?'))return;NIV.lista.splice(i,1);CFG.nv.splice(i,1);guardarCfg();}
+  else if(k==='volta')_pilares.forEach(function(p){delete p.cargaMan;});
+  else if(k==='volta1')_pilares.forEach(function(p){if(p.id===a.dataset.id)delete p.cargaMan;});
+  else return;guardarNiv();calc();}
+/* ════════════ MODELO (a mesma geometria serve para o 3D e para o DWG) ════════════ */
+var ESTR={
+  conv:{nome:'Concreto armado convencional (pilares, vigas e lajes)',viga:1,pilar:1,laje:0.12,par:'bloco',fund:'sap',paredes:1},
+  lisa:{nome:'Laje lisa (pilares e lajes, sem vigas)',viga:0,pilar:1,laje:0.20,par:'reboco',fund:'sap',paredes:1},
+  alv:{nome:'Alvenaria estrutural (paredes portantes)',viga:0,pilar:0,laje:0.12,par:'bloco',fund:'cor',paredes:1,cinta:1},
+  pre:{nome:'Pré-moldado / galpão (pilares, vigas e cobertura)',viga:1,pilar:1,laje:0,par:'concreto',fund:'sap',paredes:1,telhado:1}};
+var FUND={sap:'Sapatas isoladas',cor:'Sapata corrida',rad:'Radier',est:'Blocos sobre estacas'};
+if(!ESTR[CFG.estr])CFG.estr='conv';
+/* coberturas: inclinação usual (fabricantes / NBR 15575-5): cerâmica ~30 %, colonial ~25 %, fibrocimento ~15 %, aço ~10 % */
+var COB={auto:{nome:'Conforme o tipo de estrutura'},laje:{nome:'Laje impermeabilizada (sem telhado)'},
+  ceramica:{nome:'Telha cerâmica (portuguesa / francesa)',i:0.30,tex:'telha'},colonial:{nome:'Telha cerâmica colonial (capa e canal)',i:0.25,tex:'colonial'},
+  fibro:{nome:'Telha de fibrocimento ondulada',i:0.15,tex:'fibro'},metal:{nome:'Telha metálica trapezoidal',i:0.10,tex:'metal'},termo:{nome:'Telha metálica termoacústica (sanduíche)',i:0.10,tex:'termo'}};
+function tipoCob(){var c=CFG.cob||'auto',te=tipoEstr();if(!COB[c]||c==='auto')c=te==='pre'?'metal':'ceramica';if(c==='laje'&&!ESTR[te].laje)c='metal';return c;}
+function tipoEstr(){return (PL&&PL.estr&&ESTR[PL.estr])?PL.estr:CFG.estr;}
+function V_(id,d){var e=$(id),v=e?parseFloat(e.value):NaN;return isNaN(v)?d:v;}
+function extensao(){var a=[1e9,1e9,-1e9,-1e9],p=function(x,y){a[0]=Math.min(a[0],x);a[1]=Math.min(a[1],y);a[2]=Math.max(a[2],x);a[3]=Math.max(a[3],y);};
+  _sapatas.forEach(function(s){p(s.x-s.B/2,s.y-s.L/2);p(s.x+s.B/2,s.y+s.L/2);});
+  if(PL){(PL.paredes||[]).concat(PL.janelas||[]).forEach(function(w){p(w[0],w[1]);p(w[2],w[3]);});(PL.fundo||[]).forEach(function(l){l.forEach(function(q){p(q[0],q[1]);});});
+    if(PL.img){p(PL.img.x,PL.img.y);p(PL.img.x+PL.img.w*PL.img.esc,PL.img.y+PL.img.h*PL.img.esc);}}
+  if(a[0]>a[2])a=[0,0,10,6];return a;}
+/* vigas entre pilares alinhados (vizinhos na mesma linha) */
+function vigasAuto(){var out=[],feito={};
+  _sapatas.forEach(function(a,i){[[1,0],[0,1]].forEach(function(d){var melhor=null,md=12;
+    _sapatas.forEach(function(b,j){if(i===j)return;var dx=b.x-a.x,dy=b.y-a.y,av=dx*d[0]+dy*d[1],lt=Math.abs(dx*d[1]-dy*d[0]);if(av>0.4&&lt<=0.35&&av<md){md=av;melhor=b;}});
+    if(melhor){var k=a.id+'|'+melhor.id;if(!feito[k]){feito[k]=1;out.push({a:a,b:melhor});}}});});return out;}
+/* barras ilustrativas da sapata: φ10, quantidade pela área de aço calculada e espaçamento máximo 20 cm */
+function barras(As,largura){var n=Math.max(Math.ceil(As/0.785),Math.ceil(Math.max(0.1,largura-0.1)/0.20)+1);return Math.min(n,40);}
+/* posições das estacas no bloco, para n estacas com espaçamento e */
+function estacasPos(n,e){var r=[],i,a;if(n<=1)return[[0,0]];if(n===2)return[[-e/2,0],[e/2,0]];
+  if(n===3){var R=e/Math.sqrt(3);for(i=0;i<3;i++){a=Math.PI/2+i*2*Math.PI/3;r.push([R*Math.cos(a),R*Math.sin(a)]);}return r;}
+  if(n===4)return[[-e/2,-e/2],[e/2,-e/2],[e/2,e/2],[-e/2,e/2]];
+  if(n===5){var q=e*0.75;return[[-q,-q],[q,-q],[q,q],[-q,q],[0,0]];}
+  var m=n===7?6:n;for(i=0;i<m;i++){a=i*2*Math.PI/m;r.push([e*Math.cos(a),e*Math.sin(a)]);}if(n===7)r.push([0,0]);return r;}
+function modelo(){
+  var p=getP(),te=tipoEstr(),E=ESTR[te],ext=extensao(),D=Math.max(0.5,p.D||1.5),BS=nivBases(),pav=NIV.lista.length,pe=BS[1]-BS[0];
+  var M={tipo:te,E:E,fund:CFG.fund,D:D,NA:p.NA,pav:pav,pe:pe,bases:BS,ext:ext,sapatas:[],pilares:[],vigas:[],paredes:[],janelas:[],lajes:[],corridas:[],radier:null,blocos:[],H:BS[pav]};
+  var paredes=PL&&PL.paredes&&PL.paredes.length?PL.paredes:[];M.semPlanta=!paredes.length;
+  /* alvenaria estrutural sem planta importada: paredes de 14 cm nas linhas entre pilares (só para visualizar) */
+  if(!paredes.length&&te==='alv')paredes=vigasAuto().map(function(v){return[v.a.x,v.a.y,v.b.x,v.b.y,0.14];});
+  if(M.fund==='sap')_sapatas.forEach(function(s){M.sapatas.push({s:s,x:s.x,y:s.y,B:s.B,L:s.L,h:s.h,h0:s.h0,bp:s.bp,hp:s.hp,z:-D});});
+  if(M.fund==='cor'){var cB=Math.max(0.3,V_('cor_B',0.9)),ch=Math.max(0.15,V_('cor_h',0.4)),bw=Math.max(0.1,V_('cor_bw',0.2)),cL=V_('cor_L',10);
+    var linhas=paredes.length?paredes.map(function(w){return[w[0],w[1],w[2],w[3]];}):[[ext[0],(ext[1]+ext[3])/2,ext[0]+cL,(ext[1]+ext[3])/2]];
+    linhas.forEach(function(w){M.corridas.push({x1:w[0],y1:w[1],x2:w[2],y2:w[3],B:cB,h:ch,bw:bw,z:-D,ilustra:!paredes.length});});}
+  if(M.fund==='rad'){var rh=Math.max(0.15,V_('rad_h',0.45)),A=V_('rad_A',0),w=ext[2]-ext[0]+0.6,h=ext[3]-ext[1]+0.6;
+    if(!PL&&A>0){var k=Math.sqrt(A/(w*h));if(k>1){w*=k;h*=k;}}
+    M.radier={x:(ext[0]+ext[2])/2,y:(ext[1]+ext[3])/2,w:w,d:h,h:rh,z:-rh};}
+  if(M.fund==='est'){var De=Math.max(0.15,V_('est_D',0.4)),Le=Math.max(1,V_('est_L',12)),n=parseInt($('est_n')&&$('est_n').value)||3,esp=Math.max(2,V_('est_esp',2.5))*De,hb=(_est&&_est.hb)||Math.max(0.3,esp/2);
+    _sapatas.forEach(function(s){var pos=estacasPos(n,esp),mx=0,my=0;pos.forEach(function(q){mx=Math.max(mx,Math.abs(q[0]));my=Math.max(my,Math.abs(q[1]));});
+      M.blocos.push({s:s,x:s.x,y:s.y,w:Math.max(s.bp+0.2,2*mx+De+0.3),d:Math.max(s.hp+0.2,2*my+De+0.3),h:hb,z:-D,pos:pos,D:De,L:Le});});}
+  /* pilares: do topo da fundação até a cobertura */
+  if(E.pilar)_sapatas.forEach(function(s){var z0=M.fund==='rad'?0:M.fund==='est'?-D+((_est&&_est.hb)||0.5):M.fund==='cor'?-D+V_('cor_h',0.4):-D+s.h;
+    if(z0<-0.01)M.pilares.push({s:s,x:s.x,y:s.y,bp:s.bp,hp:s.hp,z0:z0,z1:0,niv:-1,arr:1});
+    for(var k=0;k<pav;k++)M.pilares.push({s:s,x:s.x,y:s.y,bp:s.bp,hp:s.hp,z0:Math.max(z0,BS[k]),z1:BS[k+1],niv:k,topo:k===pav-1});});
+  for(var k=0;k<pav;k++){var base=BS[k],topo=BS[k+1];pe=topo-base;
+    if(E.viga)vigasAuto().forEach(function(v){var vao=Math.hypot(v.b.x-v.a.x,v.b.y-v.a.y),hv=Math.max(0.3,Math.min(0.8,Math.round(vao/10*20)/20));M.vigas.push({x1:v.a.x,y1:v.a.y,x2:v.b.x,y2:v.b.y,b:0.18,h:hv,z:topo-hv,pav:k,niv:k,nome:'V '+v.a.id+'–'+v.b.id});});
+    if(E.cinta)paredes.forEach(function(w){M.vigas.push({x1:w[0],y1:w[1],x2:w[2],y2:w[3],b:w[4],h:0.2,z:topo-0.2,pav:k,niv:k,nome:'Cinta'});});
+    paredes.forEach(function(w){var hh=pe-(E.cinta?0.2:0)-(E.laje?E.laje:0);M.paredes.push({x1:w[0],y1:w[1],x2:w[2],y2:w[3],t:w[4],z0:base,z1:base+hh,pav:k,niv:k});});
+    ((PL&&PL.janelas)||[]).forEach(function(w){M.janelas.push({x1:w[0],y1:w[1],x2:w[2],y2:w[3],t:w[4],z0:base,z1:base+pe-(E.laje||0),pav:k,niv:k});});
+    if(E.laje)M.lajes.push({z:topo-E.laje,h:E.laje,x1:ext[0],y1:ext[1],x2:ext[2],y2:ext[3],pav:k,niv:k});}
+  M.cob=tipoCob();M.cor=CFG.cor||'#efe3c8';M.par=CFG.tipoPar||E.par;
+  if(M.cob!=='laje'){var bei=0.5,C0=COB[M.cob],tx1=ext[0]-bei,ty1=ext[1]-bei,tx2=ext[2]+bei,ty2=ext[3]+bei,Wt=Math.min(tx2-tx1,ty2-ty1),Lt=Math.max(tx2-tx1,ty2-ty1),ag=+CFG.aguas===4?4:2,f=Wt/2*C0.i,k=Math.sqrt(1+C0.i*C0.i);
+    M.telhado={niv:pav-1,z:M.H,x1:tx1,y1:ty1,x2:tx2,y2:ty2,f:f,i:C0.i,tipo:M.cob,aguas:ag,beiral:bei,
+      area:(tx2-tx1)*(ty2-ty1)*k,cumeeira:ag===4?Math.max(0,Lt-Wt):Lt,espigao:ag===4?4*Math.sqrt(2*(Wt/2)*(Wt/2)+f*f):0,
+      oitao:ag===2?2*(ext[2]-ext[0]>=ext[3]-ext[1]?ext[3]-ext[1]:ext[2]-ext[0])/2*(Math.min(ext[2]-ext[0],ext[3]-ext[1])/2*C0.i):0,beiralLin:2*((tx2-tx1)+(ty2-ty1))};}
+  return M;}
+
+/* ════════════ CENA 3D ════════════ */
+var NIVT=-1;
+var S3={ren:null,sel:null,modo:'girar',vista:'persp',pronto:false};
+function mat(nome,op){var t=textura(nome);op=op||{};var o={map:t.map,roughness:nome==='aco'?0.55:nome==='piso'?0.45:0.92,metalness:nome==='aco'?0.5:0};if(t.nor){o.normalMap=t.nor;o.normalScale=new THREE.Vector2(0.9,0.9);}
+  Object.assign(o,op);return new THREE.MeshStandardMaterial(o);}
+/* coordenadas de textura em metros, conforme a face (a textura não estica) */
+function uvMundo(geo,esc){var g=geo.index?geo.toNonIndexed():geo;g.computeVertexNormals();var p=g.attributes.position,n=g.attributes.normal,uv=new Float32Array(p.count*2);
+  for(var i=0;i<p.count;i++){var ax=Math.abs(n.getX(i)),ay=Math.abs(n.getY(i)),az=Math.abs(n.getZ(i)),u,v;
+    if(ay>=ax&&ay>=az){u=p.getX(i);v=p.getZ(i);}else if(ax>=az){u=p.getZ(i);v=p.getY(i);}else{u=p.getX(i);v=p.getY(i);}uv[i*2]=u/esc;uv[i*2+1]=v/esc;}
+  g.setAttribute('uv',new THREE.BufferAttribute(uv,2));return g;}
+/* planta (x, y, cota z) → desenho: Y para cima */
+function P3(x,y,z){return new THREE.Vector3(x-S3.cx,z,-(y-S3.cy));}
+function caixa(g,matn,m,x,y,z0,w,d,h,ang,info){if(w<=0||d<=0||h<=0)return null;
+  var geo=new THREE.BoxGeometry(w,h,d);if(ang)geo.rotateY(ang);var c=P3(x,y,z0+h/2);geo.translate(c.x,c.y,c.z);
+  var o=new THREE.Mesh(uvMundo(geo,ESCALA[matn]||1),m);o.castShadow=o.receiveShadow=true;if(info)o.userData=info;if(o.userData.niv==null)o.userData.niv=NIVT;g.add(o);return o;}
+function barraSeg(g,m,w,t,z0,h,ext,info,matn){var dx=w.x2-w.x1,dy=w.y2-w.y1,l=Math.hypot(dx,dy);if(l<0.02)return null;
+  return caixa(g,matn,m,(w.x1+w.x2)/2,(w.y1+w.y2)/2,z0,l+(ext||0),t,h,Math.atan2(dy,dx),info);}
+/* sapata: rodapé + tronco de pirâmide até o pilar (a mesma forma usada no volume) */
+function troncoGeo(a){var B=a.B/2,L=a.L/2,b=Math.min(B,a.bp/2+0.025),l=Math.min(L,a.hp/2+0.025),h0=a.h0,h=a.h,v=[],
+  q=function(A,Bq,C,D){v.push.apply(v,[].concat(A,Bq,C,A,C,D));},
+  anel=function(w,d,y){return[[-w,y,d],[w,y,d],[w,y,-d],[-w,y,-d]];},r0=anel(B,L,0),r1=anel(B,L,h0),r2=anel(b,l,h);
+  for(var i=0;i<4;i++){var j=(i+1)%4;q(r0[i],r0[j],r1[j],r1[i]);if(h>h0+1e-4)q(r1[i],r1[j],r2[j],r2[i]);}
+  q(r0[3],r0[2],r0[1],r0[0]);var tp=h>h0+1e-4?r2:r1;q(tp[0],tp[1],tp[2],tp[3]);
+  var g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(v,3));return g;}
+function cil(g,m,a,b,r,seg){var dir=new THREE.Vector3().subVectors(b,a),len=dir.length();if(len<1e-4)return null;var o=new THREE.Mesh(new THREE.CylinderGeometry(r,r,len,seg||10),m);
+  o.position.copy(a).addScaledVector(dir,0.5);o.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),dir.normalize());o.castShadow=true;o.userData.niv=NIVT;g.add(o);return o;}
+function rotulo(txt,cor){var c=document.createElement('canvas'),g=c.getContext('2d'),f='bold 40px system-ui,sans-serif';g.font=f;var w=Math.ceil(g.measureText(txt).width)+28;c.width=w;c.height=58;g=c.getContext('2d');g.font=f;
+  g.fillStyle='rgba(255,255,255,.92)';g.strokeStyle=cor||'#1e3a5f';g.lineWidth=4;g.beginPath();g.moveTo(10,2);g.arcTo(w-2,2,w-2,56,10);g.arcTo(w-2,56,2,56,10);g.arcTo(2,56,2,2,10);g.arcTo(2,2,w-2,2,10);g.closePath();g.fill();g.stroke();
+  g.fillStyle='#10243d';g.textBaseline='middle';g.textAlign='center';g.fillText(txt,w/2,31);
+  var t=new THREE.CanvasTexture(c);t.minFilter=THREE.LinearFilter;var s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,depthTest:false,sizeAttenuation:false}));s.scale.set(0.030*w/58,0.030,1);s.renderOrder=10;return s;}
+var STCOR={ok:0x7bd88f,info:0x7fb0ff,warn:0xffb35c,danger:0xff6b6b};
+function limpar(g){g.traverse(function(o){if(o.geometry)o.geometry.dispose();if(o.material&&o.userData.descartar!==0){var ms=[].concat(o.material);ms.forEach(function(m){if(m.map&&o.isSprite)m.map.dispose();m.dispose();});}});while(g.children.length)g.remove(g.children[0]);}
+function montar(){
+  var T=window.THREE;if(!T||!S3.ren)return;var M=S3.M=modelo(),ext=M.ext;
+  S3.cx=(ext[0]+ext[2])/2;S3.cy=(ext[1]+ext[3])/2;
+  if(S3.raiz){limpar(S3.raiz);S3.cena.remove(S3.raiz);}
+  var R=S3.raiz=new T.Group();S3.cena.add(R);var G=S3.G={};COMP.forEach(function(c){G[c[0]]=new T.Group();R.add(G[c[0]]);});
+  S3.alvos=[];var alvo=function(o){if(o)S3.alvos.push(o);return o;};
+  var mCon=function(extra){return mat('concreto',extra);},mAco=mat('aco');
+  var corSt=function(s){return CFG.sit?{color:new T.Color(STCOR[s.stCl]||0xffffff)}:{};};
+  /* fundações */
+  M.sapatas.forEach(function(a){var inf={tipo:'sapata',id:a.s.id,comp:'fund'},geo=troncoGeo(a),c=P3(a.x,a.y,a.z);geo.translate(c.x,c.y,c.z);
+    var o=new T.Mesh(uvMundo(geo,ESCALA.concreto),mCon(Object.assign({side:T.DoubleSide},corSt(a.s))));o.castShadow=o.receiveShadow=true;o.userData=inf;G.fund.add(o);alvo(o);
+    caixa(G.fund,'concreto',mat('concreto',{color:0x8f8a80}),a.x,a.y,a.z-0.05,a.B+0.1,a.L+0.1,0.05,0,{tipo:'lastro',comp:'fund'});
+    var cob=0.045,za=a.z+cob+0.006,i,n=barras(a.s.AsXa,a.L);
+    for(i=0;i<n;i++){var yy=a.y-a.L/2+cob+i*(a.L-2*cob)/Math.max(1,n-1);cil(G.arm,mAco,P3(a.x-a.B/2+cob,yy,za),P3(a.x+a.B/2-cob,yy,za),0.006,8);
+      cil(G.arm,mAco,P3(a.x-a.B/2+cob,yy,za),P3(a.x-a.B/2+cob,yy,za+a.h0*0.7),0.006,6);cil(G.arm,mAco,P3(a.x+a.B/2-cob,yy,za),P3(a.x+a.B/2-cob,yy,za+a.h0*0.7),0.006,6);}
+    n=barras(a.s.AsYa,a.B);for(i=0;i<n;i++){var xx=a.x-a.B/2+cob+i*(a.B-2*cob)/Math.max(1,n-1);cil(G.arm,mAco,P3(xx,a.y-a.L/2+cob,za+0.012),P3(xx,a.y+a.L/2-cob,za+0.012),0.006,8);}
+    var lb=rotulo(a.s.id+'  '+n2(a.B)+'×'+n2(a.L)+'×'+n2(a.h),CFG.sit?'#b91c1c':'#1e3a5f');lb.position.copy(P3(a.x,a.y-a.L/2,a.z+a.h+0.15));G.rot.add(lb);});
+  M.corridas.forEach(function(w){var inf={tipo:'corrida',comp:'fund',B:w.B,h:w.h,ilustra:w.ilustra};
+    alvo(barraSeg(G.fund,mCon(),w,w.B,w.z,w.h,w.B*0.5,inf,'concreto'));
+    var topo=w.z+w.h;if(topo<0)alvo(barraSeg(G.fund,mat('bloco'),w,w.bw,topo,-topo,0,inf,'bloco'));
+    var dx=w.x2-w.x1,dy=w.y2-w.y1,l=Math.hypot(dx,dy)||1,ux=dx/l,uy=dy/l;
+    [-0.35,0,0.35].forEach(function(k){var o=k*w.B;cil(G.arm,mAco,P3(w.x1-uy*o,w.y1+ux*o,w.z+0.06),P3(w.x2-uy*o,w.y2+ux*o,w.z+0.06),0.005,6);});
+    for(var s=0.1;s<l;s+=0.2)cil(G.arm,mAco,P3(w.x1+ux*s-uy*(w.B/2-0.05),w.y1+uy*s+ux*(w.B/2-0.05),w.z+0.05),P3(w.x1+ux*s+uy*(w.B/2-0.05),w.y1+uy*s-ux*(w.B/2-0.05),w.z+0.05),0.005,5);});
+  if(M.radier){var r=M.radier;alvo(caixa(G.fund,'concreto',mCon(),r.x,r.y,r.z,r.w,r.d,r.h,0,{tipo:'radier',comp:'fund',w:r.w,d:r.d,h:r.h}));
+    [r.z+0.06,r.z+r.h-0.06].forEach(function(z){for(var x=r.x-r.w/2+0.08;x<r.x+r.w/2;x+=Math.max(0.25,r.w/80))cil(G.arm,mAco,P3(x,r.y-r.d/2+0.05,z),P3(x,r.y+r.d/2-0.05,z),0.005,5);
+      for(var y=r.y-r.d/2+0.08;y<r.y+r.d/2;y+=Math.max(0.25,r.d/80))cil(G.arm,mAco,P3(r.x-r.w/2+0.05,y,z+0.012),P3(r.x+r.w/2-0.05,y,z+0.012),0.005,5);});}
+  M.blocos.forEach(function(b){var inf={tipo:'bloco',id:b.s.id,comp:'fund',b:b};alvo(caixa(G.fund,'concreto',mCon(corSt(b.s)),b.x,b.y,b.z,b.w,b.d,b.h,0,inf));
+    b.pos.forEach(function(q){var o=cil(G.fund,mat('concreto',{color:0xcfc8b8}),P3(b.x+q[0],b.y+q[1],b.z-b.L),P3(b.x+q[0],b.y+q[1],b.z+0.05),b.D/2,20);if(o){o.userData=inf;alvo(o);}
+      for(var i=0;i<6;i++){var an=i*Math.PI/3,rx=Math.cos(an)*b.D*0.32,ry=Math.sin(an)*b.D*0.32;cil(G.arm,mAco,P3(b.x+q[0]+rx,b.y+q[1]+ry,b.z-Math.min(b.L,4)),P3(b.x+q[0]+rx,b.y+q[1]+ry,b.z+b.h*0.6),0.006,5);}});
+    var lb=rotulo('Bloco '+b.s.id+' · '+b.pos.length+' est. Ø'+Math.round(b.D*100));lb.position.copy(P3(b.x,b.y-b.d/2,b.z+b.h+0.15));G.rot.add(lb);});
+  /* pilares e armadura ilustrativa */
+  M.pilares.forEach(function(c){NIVT=c.niv;alvo(caixa(G.pilar,'concreto',mCon(corSt(c.s)),c.x,c.y,c.z0,c.bp,c.hp,c.z1-c.z0,0,{tipo:'pilar',id:c.s.id,comp:'pilar',niv:c.niv}));
+    var bx=c.bp/2-0.035,by=c.hp/2-0.035,z0=(M.fund==='sap'&&(c.arr||(c.niv===0&&c.z0>=0)))?c.z0-c.s.h+0.08:c.z0;
+    [[-1,-1],[1,-1],[1,1],[-1,1]].forEach(function(q){cil(G.arm,mAco,P3(c.x+q[0]*bx,c.y+q[1]*by,z0),P3(c.x+q[0]*bx,c.y+q[1]*by,c.z1),0.007,8);});
+    for(var z=c.z0+0.1;z<c.z1;z+=0.2){var k=[[-bx,-by],[bx,-by],[bx,by],[-bx,by]];for(var i=0;i<4;i++)cil(G.arm,mAco,P3(c.x+k[i][0],c.y+k[i][1],z),P3(c.x+k[(i+1)%4][0],c.y+k[(i+1)%4][1],z),0.0035,4);}
+    if(c.topo){var lb=rotulo(c.s.id);lb.position.copy(P3(c.x,c.y,c.z1+0.3));lb.userData.niv=c.niv;G.rot.add(lb);}});NIVT=-1;
+  M.vigas.forEach(function(v){NIVT=v.niv;alvo(barraSeg(G.pilar,mCon(),v,v.b,v.z,v.h,0,{tipo:'viga',comp:'pilar',v:v},'concreto'));
+    var dx=v.x2-v.x1,dy=v.y2-v.y1,l=Math.hypot(dx,dy)||1,o=v.b/2-0.035,ox=-dy/l*o,oy=dx/l*o;
+    [1,-1].forEach(function(s){[v.z+0.04,v.z+v.h-0.04].forEach(function(z){cil(G.arm,mAco,P3(v.x1+ox*s,v.y1+oy*s,z),P3(v.x2+ox*s,v.y2+oy*s,z),0.005,5);});});});
+  var mPar=CFG.tipoPar||M.E.par,matPar=mat(mPar,mPar==='reboco'&&CFG.cor?{color:new T.Color(CFG.cor)}:{});
+  M.paredes.forEach(function(w){NIVT=w.niv;alvo(barraSeg(G.parede,matPar,w,w.t,w.z0,w.z1-w.z0,0,{tipo:'parede',comp:'parede',w:w},mPar));});
+  var vidro=new T.MeshStandardMaterial({color:0x9cc4de,roughness:0.06,metalness:0.7,transparent:true,opacity:0.55}),alum=new T.MeshStandardMaterial({color:0xd8dde2,roughness:0.35,metalness:0.8});
+  M.janelas.forEach(function(w){NIVT=w.niv;var h=w.z1-w.z0,pt=Math.min(1.0,h*0.38),vg=Math.min(2.1,h*0.78);
+    barraSeg(G.parede,matPar,w,w.t,w.z0,pt,0,null,mPar);barraSeg(G.parede,matPar,w,w.t,w.z0+vg,h-vg,0,null,mPar);
+    barraSeg(G.janela,vidro,w,0.02,w.z0+pt,vg-pt,-0.06,null,'x');[pt,vg-0.04,(pt+vg)/2].forEach(function(z){barraSeg(G.janela,alum,w,0.07,w.z0+z,0.04,0,null,'x');});
+    var dx=w.x2-w.x1,dy=w.y2-w.y1,n=Math.max(1,Math.round(Math.hypot(dx,dy)/0.8));for(var i=0;i<=n;i++)caixa(G.janela,'x',alum,w.x1+dx*i/n,w.y1+dy*i/n,w.z0+pt,0.045,0.07,vg-pt,Math.atan2(dy,dx));});
+  M.lajes.forEach(function(l){NIVT=l.niv;alvo(caixa(G.laje,'concreto',mCon(),(l.x1+l.x2)/2,(l.y1+l.y2)/2,l.z,l.x2-l.x1+0.2,l.y2-l.y1+0.2,l.h,0,{tipo:'laje',comp:'laje',l:l}));});
+  if(M.telhado){NIVT=M.telhado.niv;var t=M.telhado,aoX=(t.x2-t.x1)>=(t.y2-t.y1),C0=COB[t.tipo],esc=ESCALA[C0.tex]||1.4,k=Math.sqrt(1+t.i*t.i);
+    var mt=mat(C0.tex,{side:T.DoubleSide,roughness:t.tipo==='metal'||t.tipo==='termo'?0.38:0.8,metalness:t.tipo==='metal'||t.tipo==='termo'?0.6:0});
+    /* pontos em planta: eixo longo = u (0..Lu), curto = v (0..Lv); cumeeira em v = Lv/2 */
+    var Lu=aoX?t.x2-t.x1:t.y2-t.y1,Lv=aoX?t.y2-t.y1:t.x2-t.x1,hip=t.aguas===4?Math.min(Lv/2,Lu/2):0;
+    var pl=function(u,v){return aoX?[t.x1+u,t.y1+v]:[t.x1+v,t.y1+u];};
+    var pos=[],uvs=[],face=function(P,ea,eb){/* P: [[u,v,z]...] polígono convexo; ea-eb: beiral (em u,v) */
+      var A=pl(ea[0],ea[1]),B=pl(eb[0],eb[1]),ex=B[0]-A[0],ey=B[1]-A[1],el=Math.hypot(ex,ey)||1;ex/=el;ey/=el;var nx=-ey,ny=ex,Q=P.map(function(p){return pl(p[0],p[1]).concat([p[2]]);});
+      var c=[(Q[0][0]+Q[1][0]+Q[2][0])/3,(Q[0][1]+Q[1][1]+Q[2][1])/3];if((c[0]-A[0])*nx+(c[1]-A[1])*ny<0){nx=-nx;ny=-ny;}
+      for(var a=1;a<Q.length-1;a++)[Q[0],Q[a],Q[a+1]].forEach(function(q){var p3=P3(q[0],q[1],t.z+q[2]);pos.push(p3.x,p3.y,p3.z);uvs.push(((q[0]-A[0])*ex+(q[1]-A[1])*ey)/esc,((q[0]-A[0])*nx+(q[1]-A[1])*ny)*k/esc);});};
+    var f=t.f;
+    face([[0,0,0],[Lu,0,0],[Lu-hip,Lv/2,f],[hip,Lv/2,f]],[0,0],[Lu,0]);face([[Lu,Lv,0],[0,Lv,0],[hip,Lv/2,f],[Lu-hip,Lv/2,f]],[Lu,Lv],[0,Lv]);
+    if(t.aguas===4){face([[0,Lv,0],[0,0,0],[hip,Lv/2,f]],[0,Lv],[0,0]);face([[Lu,0,0],[Lu,Lv,0],[Lu-hip,Lv/2,f]],[Lu,0],[Lu,Lv]);}
+    var gt=new T.BufferGeometry();gt.setAttribute('position',new T.Float32BufferAttribute(pos,3));gt.setAttribute('uv',new T.Float32BufferAttribute(uvs,2));gt.computeVertexNormals();
+    var ot=new T.Mesh(gt,mt);ot.castShadow=ot.receiveShadow=true;ot.userData={tipo:'telhado',comp:'cob',niv:t.niv,t:t};G.cob.add(ot);alvo(ot);
+    /* cumeeira, espigões, testeira (madeira) e oitões em alvenaria nas pontas do telhado de 2 águas */
+    var mCum=mat(C0.tex==='telha'||C0.tex==='colonial'?'colonial':C0.tex,{color:0xdddddd}),mTes=new T.MeshStandardMaterial({color:0x6b4a2f,roughness:0.8});
+    var cum=function(a,b,r){var p=pl(a[0],a[1]),q=pl(b[0],b[1]);cil(G.cob,mCum,P3(p[0],p[1],t.z+a[2]+0.02),P3(q[0],q[1],t.z+b[2]+0.02),r||0.09,10);};
+    if(Lu-2*hip>0.05)cum([hip,Lv/2,f],[Lu-hip,Lv/2,f]);
+    if(t.aguas===4)[[0,0],[Lu,0],[0,Lv],[Lu,Lv]].forEach(function(c){cum([c[0],c[1],0],[c[0]?Lu-hip:hip,Lv/2,f],0.07);});
+    [[[0,0],[Lu,0]],[[0,Lv],[Lu,Lv]]].concat(t.aguas===4?[[[0,0],[0,Lv]],[[Lu,0],[Lu,Lv]]]:[]).forEach(function(e){var p=pl(e[0][0],e[0][1]),q=pl(e[1][0],e[1][1]),o=P3(p[0],p[1],t.z-0.1),d=P3(q[0],q[1],t.z-0.1);
+      var bx=new T.Mesh(new T.BoxGeometry(o.distanceTo(d),0.18,0.03),mTes);bx.position.copy(o).lerp(d,0.5);bx.rotation.y=-Math.atan2(d.z-o.z,d.x-o.x);bx.castShadow=true;G.cob.add(bx);});
+    if(t.aguas===2&&M.paredes.length){var be=t.beiral,mo=mat(CFG.tipoPar||M.E.par,Object.assign({side:T.DoubleSide},(CFG.tipoPar||M.E.par)==='reboco'&&CFG.cor?{color:new T.Color(CFG.cor)}:{})),ov=[],ouv=[];
+      [be,Lu-be].forEach(function(u){var a=pl(u,be),b=pl(u,Lv-be),m=pl(u,Lv/2),hm=(Lv/2-be)*t.i;[[a,0],[b,0],[m,hm]].forEach(function(q){var p3=P3(q[0][0],q[0][1],t.z+q[1]-0.02);ov.push(p3.x,p3.y,p3.z);ouv.push((aoX?q[0][1]:q[0][0])/2,(t.z+q[1])/2);});});
+      var go=new T.BufferGeometry();go.setAttribute('position',new T.Float32BufferAttribute(ov,3));go.setAttribute('uv',new T.Float32BufferAttribute(ouv,2));go.computeVertexNormals();var oo=new T.Mesh(go,mo);oo.castShadow=true;oo.userData={tipo:'parede',comp:'parede',niv:t.niv};G.parede.add(oo);}}
+  NIVT=-1;
+  /* piso: contrapiso, imagem da planta e as linhas do desenho importado */
+  var pw=ext[2]-ext[0],pd=ext[3]-ext[1];
+  if(PL&&PL.paredes&&PL.paredes.length&&M.fund!=='rad')alvo(caixa(G.piso,'piso',mat('piso'),S3.cx,S3.cy,-0.06,pw+0.15,pd+0.15,0.06,0,{tipo:'piso',comp:'piso'}));
+  if(PL&&PL.img&&PL.img.src){var im=PL.img,tx=new T.TextureLoader().load(im.src,function(){S3.sujo=1;});tx.encoding=T.sRGBEncoding;
+    var pl=new T.Mesh(new T.PlaneGeometry(im.w*im.esc,im.h*im.esc),new T.MeshBasicMaterial({map:tx,transparent:true,opacity:0.92,side:T.DoubleSide}));pl.rotation.x=-Math.PI/2;pl.position.copy(P3(im.x+im.w*im.esc/2,im.y+im.h*im.esc/2,0.012));G.piso.add(pl);}
+  if(PL&&PL.fundo&&PL.fundo.length){var lv=[];PL.fundo.forEach(function(l){for(var i=0;i<l.length-1;i++){var a=P3(l[i][0],l[i][1],0.016),b=P3(l[i+1][0],l[i+1][1],0.016);lv.push(a.x,a.y,a.z,b.x,b.y,b.z);}});
+    var lg=new T.BufferGeometry();lg.setAttribute('position',new T.Float32BufferAttribute(lv,3));G.piso.add(new T.LineSegments(lg,new T.LineBasicMaterial({color:0x2b3a4a})));}
+  /* terreno: grama em cima, corte de solo em volta, lençol freático */
+  var mg=Math.max(3,Math.min(8,Math.max(pw,pd)*0.25)),X0=ext[0]-mg,X1=ext[2]+mg,Y0=ext[1]-mg,Y1=ext[3]+mg,prof=M.D+0.6;
+  var furo=new T.Shape(),anel=function(sh,a,b,c,d){sh.moveTo(a,b);sh.lineTo(c,b);sh.lineTo(c,d);sh.lineTo(a,d);sh.lineTo(a,b);};
+  anel(furo,X0-S3.cx,Y0-S3.cy,X1-S3.cx,Y1-S3.cy);
+  if(PL&&((PL.paredes||[]).length||PL.img)){var hb=new T.Path();anel(hb,ext[0]-S3.cx-0.1,ext[1]-S3.cy-0.1,ext[2]-S3.cx+0.1,ext[3]-S3.cy+0.1);furo.holes.push(hb);}
+  var gg=new T.ShapeGeometry(furo);gg.rotateX(-Math.PI/2);gg.translate(0,-0.065,0);var chao=new T.Mesh(uvMundo(gg,ESCALA.grama),mat('grama',{side:T.DoubleSide}));chao.receiveShadow=true;chao.userData={tipo:'terreno',comp:'terreno'};G.terreno.add(chao);
+  var ms=mat('solo',{side:T.DoubleSide});
+  caixa(G.terreno,'solo',ms,S3.cx,Y1,-prof,X1-X0,0.04,prof-0.07);caixa(G.terreno,'solo',ms,X0,S3.cy,-prof,0.04,Y1-Y0,prof-0.07);
+  caixa(G.terreno,'solo',ms,S3.cx,S3.cy,-prof-0.06,X1-X0,Y1-Y0,0.05);
+  var hz=new T.Mesh(uvMundo(new T.CircleGeometry(Math.max(pw,pd)*6+60,64).rotateX(-Math.PI/2),ESCALA.grama*3),mat('grama',{color:0xb9c9a8}));hz.position.y=-prof-0.12;hz.receiveShadow=true;G.terreno.add(hz);
+  if(M.NA>0){var agua=new T.Mesh(new T.PlaneGeometry(X1-X0,Y1-Y0).rotateX(-Math.PI/2),new T.MeshStandardMaterial({color:0x2f7fd0,roughness:0.1,metalness:0.4,transparent:true,side:T.DoubleSide,depthWrite:false}));
+    agua.position.copy(P3(S3.cx,S3.cy,-M.NA));G.na.add(agua);var ln=rotulo('N.A. −'+n2(M.NA)+' m','#1d4ed8');ln.position.copy(P3(X1,Y0,-M.NA));G.na.add(ln);}
+  S3.bb=[new T.Vector3(ext[0]-S3.cx-0.5,-M.D-(M.fund==='est'?M.blocos.length?M.blocos[0].L:0:0),-(ext[3]-S3.cy)-0.5),new T.Vector3(ext[2]-S3.cx+0.5,M.H+(M.telhado?M.telhado.f:0.3),-(ext[1]-S3.cy)+0.5)];
+  var cache=new Map();R.traverse(function(o){if(!o.material||o.isSprite||o.userData.niv==null||o.userData.niv<0)return;var m=o.material,k=m.uuid+'|'+o.userData.niv,c=cache.get(k);
+    if(!c){var dono=m.userData.dono;if(dono==null||dono===o.userData.niv){m.userData.dono=o.userData.niv;c=m;}else c=m.clone();cache.set(k,c);}o.material=c;});
+  Object.keys(G).forEach(function(k){G[k].traverse(function(o){if(o.material)[].concat(o.material).forEach(function(m){if(m.userData.op0==null){m.userData.op0=m.opacity;m.userData.tr0=m.transparent;m.userData.dw0=m.depthWrite;}});});});
+  aplicar();luzSombra();if(S3.sel)destacar(S3.sel);resumo();S3.sujo=1;}
+function aplicar(){var G=S3.G;if(!G)return;COMP.forEach(function(c){var k=c[0],g=G[k],op0=CFG.op[k],on=!!CFG.on[k];g.visible=on;
+    g.traverse(function(o){if(o===g)return;var nv=o.userData.niv,L=(nv!=null&&nv>=0)?nivVis(nv):null,op=op0*(L?L.op:1);if(L&&o.parent===g)o.visible=!!L.vis;
+      if(!o.material)return;if(o.isSprite){o.material.opacity=op;return;}[].concat(o.material).forEach(function(m){var a=(m.userData.op0==null?1:m.userData.op0)*op;m.opacity=a;var tr=a<0.995||!!m.userData.tr0;if(m.transparent!==tr){m.transparent=tr;m.needsUpdate=true;}m.depthWrite=tr?false:m.userData.dw0!==false;});o.castShadow=o.isMesh&&op>0.6&&k!=='terreno';});});
+  S3.sujo=1;}
+function resumo(){var e=$('c3-res');if(!e)return;var M=S3.M;
+  e.textContent=(M.fund==='sap'?M.sapatas.length+' sapatas':M.fund==='cor'?'Sapata corrida'+(M.corridas[0]&&M.corridas[0].ilustra?' (trecho ilustrativo)':''):M.fund==='rad'?'Radier '+n2(M.radier.w)+' × '+n2(M.radier.d)+' m':M.blocos.length+' blocos sobre estacas')+
+    ' · '+(M.E.pilar?_sapatas.length+' pilares':'sem pilares (paredes portantes)')+' · '+M.pav+' níveis (H '+n2(M.H)+' m)'+(M.paredes.length?' · '+Math.round(M.paredes.length/M.pav)+' paredes por nível':'')+((PL&&PL.nome)?' · planta: '+PL.nome:'');}
+/* ════════════ CÉU, LUZ, CÂMERA ════════════ */
+function ceu(){var T=window.THREE,s=SOL[CFG.sol]||SOL.manha,c=cv(512),g=c.getContext('2d'),gr=g.createLinearGradient(0,0,0,512),fim=CFG.sol==='fim';
+  gr.addColorStop(0,fim?'#33477a':'#3f7fd0');gr.addColorStop(0.38,fim?'#a87b9a':'#8fbdf0');gr.addColorStop(0.5,fim?'#ffc08a':'#e3eef8');gr.addColorStop(0.53,'#9aa68c');gr.addColorStop(1,'#5f6650');g.fillStyle=gr;g.fillRect(0,0,512,512);
+  var R=rnd(7);for(var i=0;i<260;i++){var x=R()*512,y=60+R()*170,r=8+R()*26,rg=g.createRadialGradient(x,y,0,x,y,r);rg.addColorStop(0,'rgba(255,255,255,'+(0.05+R()*0.1)+')');rg.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=rg;g.fillRect(x-r,y-r*0.6,2*r,1.2*r);}
+  var t=new T.CanvasTexture(c);t.mapping=T.EquirectangularReflectionMapping;t.encoding=T.sRGBEncoding;
+  if(S3.ceuTx)S3.ceuTx.dispose();S3.ceuTx=t;S3.cena.background=t;
+  var pm=new T.PMREMGenerator(S3.ren);if(S3.env)S3.env.dispose();S3.env=pm.fromEquirectangular(t);pm.dispose();S3.cena.environment=CFG.qual==='baixa'?null:S3.env.texture;
+  S3.sol.color.setHex(s.cor).convertSRGBToLinear();S3.sol.intensity=s.i*1.7;S3.hemi.intensity=CFG.qual==='baixa'?0.9:0.35;}
+function luzSombra(){var s=SOL[CFG.sol]||SOL.manha,q=QUAL[CFG.qual],el=s.el*Math.PI/180,az=s.az*Math.PI/180,bb=S3.bb;if(!bb)return;
+  var c=bb[0].clone().add(bb[1]).multiplyScalar(0.5),r=Math.max(8,bb[1].distanceTo(bb[0])*0.75),L=S3.sol;
+  L.position.set(c.x+Math.sin(az)*Math.cos(el)*r*3,c.y+Math.sin(el)*r*3,c.z+Math.cos(az)*Math.cos(el)*r*3);L.target.position.copy(c);L.target.updateMatrixWorld();
+  L.castShadow=q.sombra>0;S3.ren.shadowMap.enabled=q.sombra>0;S3.ren.shadowMap.needsUpdate=true;
+  if(q.sombra){if(L.shadow.mapSize.x!==q.sombra){L.shadow.mapSize.set(q.sombra,q.sombra);if(L.shadow.map){L.shadow.map.dispose();L.shadow.map=null;}}
+    var k=L.shadow.camera;k.left=k.bottom=-r;k.right=k.top=r;k.near=1;k.far=r*7;k.updateProjectionMatrix();L.shadow.bias=-0.0004;L.shadow.normalBias=0.03;}}
+function caixaVisivel(){var T=window.THREE,b=new T.Box3(),t=new T.Box3();
+  ['fund','pilar','parede','laje','cob','janela','piso'].forEach(function(k){if(CFG.on[k]&&S3.G[k].children.length){t.setFromObject(S3.G[k]);if(!t.isEmpty())b.union(t);}});
+  if(b.isEmpty())b.set(S3.bb[0],S3.bb[1]);return b;}
+/* enquadra: afasta a câmera na direção escolhida até os 8 cantos caberem (como na Drenagem) */
+function enquadrar(dir){if(!S3.cam)return;var T=window.THREE,bx=caixaVisivel(),c=bx.getCenter(new T.Vector3()),cam=S3.cam;
+  var u=(dir||new T.Vector3().subVectors(cam.position,S3.ctl.target)).clone().normalize();if(!isFinite(u.x)||u.lengthSq()<1e-6)u.set(0.6,0.55,0.7).normalize();
+  var cant=[];for(var i=0;i<8;i++)cant.push(new T.Vector3(i&1?bx.max.x:bx.min.x,i&2?bx.max.y:bx.min.y,i&4?bx.max.z:bx.min.z));
+  var cabe=function(d){cam.position.copy(c).addScaledVector(u,d);cam.lookAt(c);cam.updateMatrixWorld();cam.updateProjectionMatrix();return cant.every(function(p){var q=p.clone().project(cam);return q.z<1&&Math.abs(q.x)<=0.92&&Math.abs(q.y)<=0.86;});};
+  var lo=0.5,hi=Math.max(20,bx.getSize(new T.Vector3()).length()*3);while(!cabe(hi)&&hi<5000)hi*=2;for(i=0;i<36;i++){var m=(lo+hi)/2;if(cabe(m))hi=m;else lo=m;}
+  cam.position.copy(c).addScaledVector(u,hi);S3.ctl.target.copy(c);S3.ctl.update();S3.sujo=1;}
+function vista(v){if(!S3.cam)return;if(S3.modo==='andar')modo('girar');var T=window.THREE;S3.vista=v;
+  var d={topo:[0,1,0.001],frente:[0,0.001,1],lateral:[1,0.001,0],iso:[0.7,0.62,0.7],persp:[0.45,0.42,0.8],baixo:[0.5,-0.35,0.75]}[v]||[0.6,0.55,0.7];
+  S3.cam.fov=(v==='topo'||v==='frente'||v==='lateral')?18:42;S3.cam.updateProjectionMatrix();enquadrar(new T.Vector3(d[0],d[1],d[2]));
+  document.querySelectorAll('#c3 [data-v]').forEach(function(b){b.classList.toggle('on',b.dataset.v===v);});}
+var PRESET={obra:{on:{terreno:1,fund:1,arm:0,pilar:1,parede:1,janela:1,laje:1,cob:1,piso:1,na:0,rot:0},op:{terreno:1,laje:1}},
+  fund:{on:{terreno:1,fund:1,arm:0,pilar:1,parede:0,janela:0,laje:0,cob:0,piso:0,na:1,rot:1},op:{terreno:0.18,fund:1,pilar:1}},
+  estr:{on:{terreno:1,fund:1,arm:0,pilar:1,parede:0,janela:0,laje:1,cob:1,piso:0,na:0,rot:1},op:{terreno:0.18,laje:0.35,cob:0.35,pilar:1,fund:1}},
+  arm:{on:{terreno:0,fund:1,arm:1,pilar:1,parede:0,janela:0,laje:0,cob:0,piso:0,na:0,rot:0},op:{fund:0.18,pilar:0.18}},
+  interno:{on:{terreno:1,fund:0,arm:0,pilar:1,parede:1,janela:1,laje:0,cob:0,piso:1,na:0,rot:0},op:{terreno:1}}};
+function preset(k){var p=PRESET[k];COMP.forEach(function(c){CFG.on[c[0]]=p.on[c[0]];CFG.op[c[0]]=p.op[c[0]]!=null?p.op[c[0]]:(c[0]==='na'?0.35:1);});guardarCfg();aplicar();painel();enquadrar();}
+
+/* ════════════ INTERAÇÃO ════════════ */
+function destacar(inf){S3.sel=inf;if(S3.marca){S3.cena.remove(S3.marca);S3.marca=null;}
+  if(inf){var T=window.THREE,alvo=S3.alvos.filter(function(o){return o.userData.tipo===inf.tipo&&(inf.id?o.userData.id===inf.id:o===inf.obj);});
+    if(alvo.length){var b=new T.Box3();alvo.forEach(function(o){b.expandByObject(o);});b.expandByScalar(0.03);S3.marca=new T.Box3Helper(b,0xffd400);S3.marca.material.depthTest=false;S3.cena.add(S3.marca);}else if(!inf.id)S3.sel=null;}
+  info();S3.sujo=1;}
+function info(){var e=$('c3-info');if(!e)return;var s=S3.sel;if(!s){e.hidden=true;e.innerHTML='';return;}e.hidden=false;
+  var h='<button class="c3-x" data-a="fecha">✕</button>',lin=function(a,b){return '<div class="c3-l"><span>'+a+'</span><b>'+b+'</b></div>';},
+    sa=s.id?_sapatas.filter(function(x){return x.id===s.id;})[0]:null,i=sa?_pilares.findIndex(function(q){return q.id===s.id;}):-1,
+    inp=function(c,rot,v,st){return '<label>'+rot+'<input type="number" step="'+st+'" data-c="'+c+'" value="'+(+v).toFixed(2)+'"></label>';};
+  var nomes={sapata:'Sapata',pilar:'Pilar',bloco:'Bloco sobre estacas',viga:'Viga (ilustrativa)',parede:'Parede',laje:'Laje (ilustrativa)',corrida:'Sapata corrida',radier:'Radier',piso:'Piso',telhado:'Cobertura',lastro:'Lastro'};
+  h+='<h4>'+(nomes[s.tipo]||s.tipo)+(s.id?' '+esc(s.id):'')+'</h4>';
+  if(sa&&i>=0){var p=_pilares[i];
+    h+=lin('Situação',esc(sa.st))+lin('Nk / Fd',n2(sa.Nk)+' / '+n2(sa.Fd)+' kN')+lin('σ máx. no solo',n2(sa.sigma_max)+' kPa');
+    if(s.tipo==='sapata')h+=lin('As X / Y',n2(sa.AsXa)+' / '+n2(sa.AsYa)+' cm²')+lin('Volume',n2(sa.vol)+' m³')+lin('Punção',sa.puncOk?'atende':'NÃO ATENDE')+'<div class="c3-g">'+inp('B','B (m)',p.B,0.05)+inp('L','L (m)',p.L,0.05)+inp('h','h (m)',p.h,0.05)+'</div>';
+    if(s.tipo==='bloco'&&s.b)h+=lin('Bloco',n2(s.b.w)+' × '+n2(s.b.d)+' × '+n2(s.b.h)+' m')+lin('Estacas',s.b.pos.length+' de Ø'+Math.round(s.b.D*100)+' cm, L '+n2(s.b.L)+' m');
+    h+='<div class="c3-g">'+inp('bp','Pilar bp (m)',p.bp,0.05)+inp('hp','Pilar hp (m)',p.hp,0.05)+inp('x','X (m)',p.x,0.1)+inp('y','Y (m)',p.y,0.1)+'</div>'+
+      '<div class="c3-bts"><button data-a="dim">⚡ Dimensionar esta</button><button data-a="ver">📋 Abrir no cálculo</button><button data-a="del">🗑 Excluir pilar</button></div>';}
+  else if(s.v)h+=lin('Ligação',esc(s.v.nome))+lin('Seção',Math.round(s.v.b*100)+' × '+Math.round(s.v.h*100)+' cm')+lin('Vão',n2(Math.hypot(s.v.x2-s.v.x1,s.v.y2-s.v.y1))+' m')+'<p>Viga desenhada só para visualizar; o programa não dimensiona vigas.</p>';
+  else if(s.w&&s.tipo==='parede')h+=lin('Comprimento',n2(Math.hypot(s.w.x2-s.w.x1,s.w.y2-s.w.y1))+' m')+lin('Espessura',Math.round(s.w.t*100)+' cm')+lin('Altura',n2(s.w.z1-s.w.z0)+' m')+'<div class="c3-bts"><button data-a="delpar">🗑 Excluir parede</button></div>';
+  else if(s.l)h+=lin('Espessura',Math.round(s.l.h*100)+' cm')+lin('Pavimento',s.l.pav+1);
+  else if(s.tipo==='radier')h+=lin('Dimensões',n2(s.w)+' × '+n2(s.d)+' m')+lin('Espessura h',n2(s.h)+' m');
+  else if(s.tipo==='corrida')h+=lin('Largura B',n2(s.B)+' m')+lin('Altura h',n2(s.h)+' m')+(s.ilustra?'<p>Sem planta importada: trecho desenhado com o comprimento da aba Sapata Corrida.</p>':'');
+  e.innerHTML=h;}
+function atualizarCalc(){calc();montar();}
+function eventoInfo(ev){var a=ev.target.closest('[data-a]');if(!a)return;var s=S3.sel,i=s&&s.id?_pilares.findIndex(function(q){return q.id===s.id;}):-1;
+  if(a.dataset.a==='fecha')destacar(null);
+  else if(a.dataset.a==='dim'&&i>=0){dimensionarPilar(_pilares[i],getP());atualizarCalc();aviso('B×L×h de '+s.id+' dimensionados.');}
+  else if(a.dataset.a==='ver'&&i>=0){var id=s.id;sairCheia();aba('sapatas');_sapSel=null;setTimeout(function(){selecionarSapata(id);},150);}
+  else if(a.dataset.a==='del'&&i>=0){if(confirm('Excluir o pilar '+s.id+'?')){remPilar(i);destacar(null);montar();}}
+  else if(a.dataset.a==='delpar'&&s.w){var w=s.w;var k=(PL.paredes||[]).findIndex(function(q){return q[0]===w.x1&&q[1]===w.y1&&q[2]===w.x2&&q[3]===w.y2;});if(k>=0){PL.paredes.splice(k,1);guardarPlanta();destacar(null);montar();}}}
+function mudaInfo(ev){var el=ev.target;if(!el.dataset.c||!S3.sel)return;var i=_pilares.findIndex(function(q){return q.id===S3.sel.id;});if(i<0)return;setPil(i,el.dataset.c,el);montar();}
+function raio(ev){var T=window.THREE,r=S3.canvas.getBoundingClientRect(),rc=S3.rc||(S3.rc=new T.Raycaster());rc.setFromCamera(new T.Vector2((ev.clientX-r.left)/r.width*2-1,-(ev.clientY-r.top)/r.height*2+1),S3.cam);return rc;}
+function acerto(ev){var l=raio(ev).intersectObjects(S3.alvos.filter(function(o){var k=o.userData.comp;return CFG.on[k]&&CFG.op[k]>0.08;}),false);
+  if(!l.length)return null;var h=l[0];for(var i=0;i<l.length;i++){var m=l[i].object.material;if(m.opacity>0.5){h=l[i];break;}}return h;}
+function noPlano(ev,z){var T=window.THREE,p=new T.Vector3(),ok=raio(ev).ray.intersectPlane(new T.Plane(new T.Vector3(0,1,0),-z),p);return ok?[p.x+S3.cx,-p.z+S3.cy]:null;}
+function modo(m){if(S3.modo==='andar'&&m!=='andar'){S3.ctl.enabled=true;S3.cam.fov=42;S3.cam.updateProjectionMatrix();setTimeout(function(){enquadrar(new THREE.Vector3(0.5,0.45,0.75));},0);}
+  S3.modo=m;S3.med=null;limparMedida();document.querySelectorAll('#c3 [data-m]').forEach(function(b){b.classList.toggle('on',b.dataset.m===m);});
+  var txt={girar:'',mover:'✥ Arraste um pilar (ou a sapata dele) para outro lugar. Encaixa de 5 em 5 cm.',novo:'＋ Toque no chão para criar um pilar.',medir:'📏 Toque em dois pontos para medir.',andar:'🚶 W A S D ou setas andam · arraste para olhar · Esc sai.'}[m]||'';
+  var a=$('c3-dica');a.textContent=txt;a.hidden=!txt;S3.canvas.style.cursor=m==='mover'?'move':m==='girar'?'grab':'crosshair';
+  if(m==='andar'){var e=S3.M.ext;S3.ctl.enabled=false;S3.cam.fov=65;S3.cam.updateProjectionMatrix();S3.andar={x:0,z:-(e[1]-S3.cy)+4,yaw:0,pit:-0.05,tec:{}};destacar(null);andarPos();}
+  S3.sujo=1;}
+function andarPos(){var a=S3.andar,c=S3.cam;c.position.set(a.x,1.65,a.z);c.lookAt(a.x-Math.sin(a.yaw)*Math.cos(a.pit),1.65+Math.sin(a.pit),a.z-Math.cos(a.yaw)*Math.cos(a.pit));S3.sujo=1;}
+function andarTick(dt){var a=S3.andar,t=a.tec,f=(t.w||t.arrowup?1:0)-(t.s||t.arrowdown?1:0),l=(t.d?1:0)-(t.a?1:0),g=(t.arrowleft?1:0)-(t.arrowright?1:0),v=(t.shift?5:1.8)*dt;
+  if(!f&&!l&&!g)return;a.yaw+=g*1.6*dt;a.x+=(-Math.sin(a.yaw)*f+Math.cos(a.yaw)*l)*v;a.z+=(-Math.cos(a.yaw)*f-Math.sin(a.yaw)*l)*v;andarPos();}
+function limparMedida(){if(S3.gMed){limpar(S3.gMed);S3.cena.remove(S3.gMed);S3.gMed=null;}}
+function medirPonto(p){var T=window.THREE;if(!S3.med||S3.med.length>1){limparMedida();S3.med=[];S3.gMed=new T.Group();S3.cena.add(S3.gMed);}S3.med.push(p);
+  var m=new T.Mesh(new T.SphereGeometry(0.07,12,8),new T.MeshBasicMaterial({color:0xffd400,depthTest:false}));m.position.copy(p);m.renderOrder=9;S3.gMed.add(m);
+  if(S3.med.length===2){var a=S3.med[0],b=S3.med[1],g=new T.BufferGeometry().setFromPoints([a,b]),ln=new T.Line(g,new T.LineBasicMaterial({color:0xffd400,depthTest:false}));ln.renderOrder=9;S3.gMed.add(ln);
+    var d=a.distanceTo(b),h=Math.hypot(b.x-a.x,b.z-a.z),r=rotulo(n2(d)+' m','#a16207');r.position.copy(a).lerp(b,0.5);S3.gMed.add(r);
+    $('c3-dica').textContent='📏 Distância '+n2(d)+' m · horizontal '+n2(h)+' m · desnível '+n2(Math.abs(b.y-a.y))+' m. Toque para medir de novo.';}
+  S3.sujo=1;}
+function eventos(){var cvs=S3.canvas,ini=null,arr=null;
+  cvs.addEventListener('pointerdown',function(ev){ini={x:ev.clientX,y:ev.clientY,b:ev.button};
+    if(S3.modo==='andar'){S3.olha={x:ev.clientX,y:ev.clientY};try{cvs.setPointerCapture(ev.pointerId);}catch(e){}return;}
+    if(S3.modo==='mover'&&ev.button===0){var h=acerto(ev),id=h&&h.object.userData.id;if(id){var i=_pilares.findIndex(function(q){return q.id===id;});if(i>=0){var p=noPlano(ev,h.point.y);if(!p)return;arr={i:i,z:h.point.y,dx:_pilares[i].x-p[0],dy:_pilares[i].y-p[1]};S3.ctl.enabled=false;try{cvs.setPointerCapture(ev.pointerId);}catch(e){}}}}},true);
+  cvs.addEventListener('pointermove',function(ev){
+    if(S3.modo==='andar'&&S3.olha){var a=S3.andar;a.yaw+=(ev.clientX-S3.olha.x)*0.005;a.pit=Math.max(-1.2,Math.min(1.2,a.pit+(ev.clientY-S3.olha.y)*0.004));S3.olha={x:ev.clientX,y:ev.clientY};andarPos();return;}
+    if(arr){var p=noPlano(ev,arr.z);if(!p)return;var q=_pilares[arr.i],nx=Math.round((p[0]+arr.dx)*20)/20,ny=Math.round((p[1]+arr.dy)*20)/20;if(nx!==q.x||ny!==q.y){q.x=nx;q.y=ny;calc();
+        var cx=S3.cx,cy=S3.cy;montar();S3.cam.position.x+=cx-S3.cx;S3.ctl.target.x+=cx-S3.cx;S3.cam.position.z-=cy-S3.cy;S3.ctl.target.z-=cy-S3.cy;
+        $('c3-dica').textContent='✥ '+q.id+': X '+n2(nx)+' m · Y '+n2(ny)+' m';}}});
+  var solta=function(ev){S3.olha=null;if(arr){arr=null;S3.ctl.enabled=true;return;}
+    if(!ini||ini.b!==0||Math.hypot(ev.clientX-ini.x,ev.clientY-ini.y)>6||S3.modo==='andar'){ini=null;return;}ini=null;
+    if(S3.modo==='medir'){var h=acerto(ev),p=h?h.point.clone():null;if(!p){var q=noPlano(ev,0);if(q)p=P3(q[0],q[1],0);}if(p)medirPonto(p);return;}
+    if(S3.modo==='novo'){var c=noPlano(ev,0);if(c){var id='P'+(_nextId++),pil={id:id,gk:300,qk:80,mkx:10,mky:10,bp:0.20,hp:0.30,x:Math.round(c[0]*20)/20,y:Math.round(c[1]*20)/20,B:1.5,L:1.5,h:0.6};_pilares.push(pil);dimensionarPilar(pil,getP());atualizarCalc();destacar({tipo:S3.M.fund==='sap'?'sapata':'pilar',id:id});aviso(id+' criado com carga padrão (Gk 300 / Qk 80 kN). Ajuste a carga na aba Cargas e Pilares.');modo('girar');}return;}
+    var h2=acerto(ev);if(h2){var u=h2.object.userData;destacar(Object.assign({obj:h2.object},u));}else destacar(null);};
+  cvs.addEventListener('pointerup',solta);cvs.addEventListener('pointercancel',function(){arr=null;ini=null;S3.olha=null;S3.ctl.enabled=S3.modo!=='andar';});
+  /* roda aproxima no ponto sob o cursor, como no AutoCAD */
+  cvs.addEventListener('wheel',function(ev){ev.preventDefault();ev.stopImmediatePropagation();if(S3.modo==='andar'){var a=S3.andar,s=ev.deltaY<0?0.5:-0.5;a.x-=Math.sin(a.yaw)*s;a.z-=Math.cos(a.yaw)*s;andarPos();return;}
+    var T=window.THREE,rc=raio(ev),h=acerto(ev),alvo=h?h.point:null;if(!alvo){alvo=new T.Vector3();var n=new T.Vector3().subVectors(S3.cam.position,S3.ctl.target).normalize();if(!rc.ray.intersectPlane(new T.Plane().setFromNormalAndCoplanarPoint(n,S3.ctl.target),alvo))alvo.copy(S3.ctl.target);}
+    var k=ev.deltaY<0?0.85:1/0.85,d=S3.cam.position.distanceTo(S3.ctl.target);if((d*k<0.4&&k<1)||(d*k>1500&&k>1))return;
+    S3.cam.position.sub(alvo).multiplyScalar(k).add(alvo);S3.ctl.target.sub(alvo).multiplyScalar(k).add(alvo);S3.ctl.update();S3.sujo=1;},{capture:true,passive:false});
+  var ultimo=0;cvs.addEventListener('mousedown',function(ev){if(ev.button!==1)return;ev.preventDefault();var t=Date.now();if(t-ultimo<400)enquadrar();ultimo=t;});
+  cvs.addEventListener('dblclick',function(ev){var h=acerto(ev);if(h&&S3.modo==='girar'){var d=new THREE.Vector3().subVectors(h.point,S3.ctl.target);S3.cam.position.add(d);S3.ctl.target.add(d);S3.ctl.update();S3.sujo=1;}else enquadrar();});
+  cvs.addEventListener('contextmenu',function(e){e.preventDefault();});
+  var tecla=function(ev,v){if(!visivel())return;if(ev.key==='Escape'&&v){if(S3.modo!=='girar')modo('girar');else if(S3.sel)destacar(null);else sairCheia();return;}
+    if(S3.modo==='andar'&&!/INPUT|SELECT|TEXTAREA/.test(ev.target.tagName)){S3.andar.tec[ev.key.toLowerCase()]=v;if(/^arrow/i.test(ev.key))ev.preventDefault();}};
+  document.addEventListener('keydown',function(e){tecla(e,true);});document.addEventListener('keyup',function(e){tecla(e,false);});}
+function visivel(){var t=$('tab-vis3d');return !!(t&&t.classList.contains('active'));}
+function sairCheia(){var e=$('c3');if(e&&e.classList.contains('cheia')){e.classList.remove('cheia');medida();}if(document.fullscreenElement)document.exitFullscreen();}
+
+/* ════════════ INTERFACE ════════════ */
+var CSS='#c3{position:relative;height:min(78vh,760px);min-height:420px;border:1px solid var(--border);border-radius:8px;overflow:hidden;background:#cfe0ee;user-select:none}'+
+'#c3.cheia{position:fixed;inset:0;height:100dvh;z-index:9000;border-radius:0;border:0}#c3 canvas{display:block;width:100%;height:100%;touch-action:none}'+
+'.c3-bar{position:absolute;left:8px;right:8px;top:8px;display:flex;gap:4px;flex-wrap:wrap;pointer-events:none}.c3-bar>*{pointer-events:auto}'+
+'.c3-bar button,.c3-pn button,.c3-info button,.c3-bar select{font:600 12px Inter,system-ui,sans-serif;padding:6px 9px;border-radius:6px;border:1px solid rgba(20,40,70,.25);background:rgba(255,255,255,.93);color:#13263d;cursor:pointer}'+
+'.c3-bar button.on,.c3-pn button.on{background:#1d4ed8;color:#fff;border-color:#1d4ed8}.c3-sep{width:6px}'+
+'.c3-pn,.c3-info{position:absolute;background:rgba(255,255,255,.95);color:#13263d;border:1px solid rgba(20,40,70,.2);border-radius:8px;padding:10px;font-size:12px;box-shadow:0 8px 24px rgba(0,0,0,.18);overflow:auto}'+
+'.c3-pn{right:8px;top:88px;bottom:34px;width:238px}.c3-info{left:8px;bottom:34px;width:270px;max-height:70%}'+
+'.c3-pn h4,.c3-info h4{margin:0 0 6px;font-size:12.5px}.c3-pn select,.c3-pn input[type=number],.c3-info input{width:100%;padding:4px;border:1px solid #b9c4d2;border-radius:5px;font:inherit;background:#fff;color:#13263d}'+
+'.c3-pn label.f{display:block;margin-bottom:6px;font-weight:600}.c3-cp{display:grid;grid-template-columns:1fr 78px;gap:4px;align-items:center;margin:2px 0}.c3-cp input[type=range]{width:100%}'+
+'.c3-g{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin:6px 0}.c3-info label{font-size:11px;font-weight:600}.c3-l{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dotted #c8d2de;padding:2px 0}.c3-l b{text-align:right}'+
+'.c3-bts{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}.c3-x{float:right;padding:2px 7px!important}'+
+'.c3-dica{position:absolute;left:50%;transform:translateX(-50%);bottom:34px;background:#fde68a;color:#3b2f04;padding:6px 12px;border-radius:20px;font-size:12px;font-weight:600;max-width:90%;text-align:center;pointer-events:none}'+
+'.c3-res{position:absolute;left:8px;right:8px;bottom:6px;font-size:11px;color:#fff;text-shadow:0 1px 3px #000;pointer-events:none}.c3-and{position:absolute;right:12px;bottom:60px;display:grid;grid-template-columns:repeat(3,48px);gap:4px}.c3-and button{height:44px;font-size:18px;border-radius:8px;border:0;background:rgba(255,255,255,.9);color:#13263d;touch-action:none}'+
+'#c3 [hidden]{display:none!important}@media(max-width:700px){#c3{height:80vh}.c3-bar{flex-wrap:nowrap;overflow-x:auto;pointer-events:auto}.c3-bar>*{flex:0 0 auto}.c3-pn{top:52px;width:210px}.c3-info{width:230px;max-height:55%}}';
+function criarTela(){if($('c3'))return true;var aba3=$('tab-vis3d');if(!aba3)return false;
+  var st=document.createElement('style');st.textContent=CSS;document.head.appendChild(st);
+  var sec=aba3.querySelector('.sec'),antigo=document.createElement('div');antigo.id='c3-antigo';antigo.hidden=true;
+  while(sec.children.length>1)antigo.appendChild(sec.children[1]);
+  sec.querySelector('.sec-title').textContent='H) Visualização 3D — estrutura, fundações e planta';
+  var topo=document.createElement('div');topo.style.cssText='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px';
+  topo.innerHTML='<button class="btn-calc" id="c3-imp">📥 Importar planta baixa (DWG, DXF ou imagem)</button><button class="tb-btn" id="c3-dwg">⬇ Exportar DWG</button><button class="tb-btn" id="c3-dxf">⬇ Exportar DXF</button><button class="tb-btn" id="c3-ant">Desenho simples (antigo)</button>';
+  var box=document.createElement('div');box.id='c3';
+  var b=function(a,v,t,tit){return '<button data-'+a+'="'+v+'" title="'+(tit||t)+'">'+t+'</button>';};
+  box.innerHTML='<canvas id="c3-cv"></canvas><div class="c3-bar">'+b('v','persp','◢ Perspectiva')+b('v','iso','Isométrica')+b('v','topo','Topo (planta)')+b('v','frente','Frente')+b('v','lateral','Lateral')+b('a','fit','⛶ Enquadrar','Enquadrar (duplo clique do botão do meio)')+'<span class="c3-sep"></span>'+
+    b('p','obra','🏠 Obra pronta')+b('p','fund','⛏ Fundações')+b('p','estr','🏗 Estrutura')+b('p','arm','🔩 Armaduras')+b('p','interno','🛋 Planta aberta')+'<span class="c3-sep"></span>'+
+    b('m','girar','🖱 Selecionar')+b('m','mover','✥ Mover pilar')+b('m','novo','＋ Pilar')+b('m','medir','📏 Medir')+b('m','andar','🚶 Andar')+'<span class="c3-sep"></span>'+b('a','png','🖼 PNG')+b('a','cheia','⤢ Tela cheia')+b('a','painel','⚙ Ajustes')+'</div>'+
+    '<div class="c3-pn" id="c3-pn"></div><div class="c3-info" id="c3-info" hidden></div><div class="c3-dica" id="c3-dica" hidden></div><div class="c3-res" id="c3-res"></div><div class="c3-and" id="c3-and" hidden><span></span><button data-k="w">▲</button><span></span><button data-k="arrowleft">↶</button><button data-k="s">▼</button><button data-k="arrowright">↷</button></div>';
+  sec.appendChild(topo);sec.appendChild(box);sec.appendChild(antigo);
+  $('c3-imp').onclick=function(){abrirImportar();};$('c3-dwg').onclick=function(){exportar('dwg');};$('c3-dxf').onclick=function(){exportar('dxf');};
+  $('c3-ant').onclick=function(){var s=antigo.hidden;antigo.hidden=!s;box.hidden=s;this.textContent=s?'Voltar ao 3D realista':'Desenho simples (antigo)';if(s)antigoDesenhar();else desenhar();};
+  box.querySelector('.c3-bar').addEventListener('click',function(ev){var t=ev.target.closest('button');if(!t||!S3.pronto)return;var d=t.dataset;
+    if(d.v)vista(d.v);else if(d.p)preset(d.p);else if(d.m){modo(d.m);$('c3-and').hidden=!(d.m==='andar'&&('ontouchstart' in window));}
+    else if(d.a==='fit')enquadrar();else if(d.a==='png')png();
+    else if(d.a==='cheia'){var c=box.classList.toggle('cheia');if(!c&&document.fullscreenElement)document.exitFullscreen();medida();setTimeout(enquadrar,60);}
+    else if(d.a==='painel'){CFG.painel=CFG.painel?0:1;guardarCfg();painel();}});
+  $('c3-info').addEventListener('click',eventoInfo);$('c3-info').addEventListener('change',mudaInfo);
+  $('c3-pn').addEventListener('input',mudaPainel);$('c3-pn').addEventListener('change',mudaPainel);$('c3-pn').addEventListener('click',function(ev){var cb=ev.target.closest('[data-cor]');if(cb){CFG.cor=cb.dataset.cor;if(!CFG.tipoPar||CFG.tipoPar==='bloco')CFG.tipoPar='reboco';guardarCfg();montar();painel();return;}var a=ev.target.closest('[data-a]');if(!a)return;
+    if(a.dataset.a==='xpn'){CFG.painel=0;guardarCfg();painel();}else if(a.dataset.a==='nvsol'||a.dataset.a==='nvso'){NIV.lista.forEach(function(n,i){var L=nivVis(i);L.vis=1;L.op=(a.dataset.a==='nvso'&&i<NIV.lista.length-1)?0.12:1;});guardarCfg();aplicar();painel();}else if(a.dataset.a==='limpa'&&confirm('Remover a planta importada? Os pilares e cargas continuam.')){PL=null;guardarPlanta();painel();montar();enquadrar();}});
+  $('c3-and').addEventListener('pointerdown',function(ev){var k=ev.target.dataset.k;if(k&&S3.andar)S3.andar.tec[k]=true;});
+  ['pointerup','pointercancel','pointerleave'].forEach(function(n){$('c3-and').addEventListener(n,function(){if(S3.andar)S3.andar.tec={};},true);});
+  return true;}
+function painel(){var e=$('c3-pn');if(!e)return;e.hidden=!CFG.painel;var te=tipoEstr();
+  var op=function(o,v){return Object.keys(o).map(function(k){return '<option value="'+k+'"'+(k===v?' selected':'')+'>'+(o[k].nome||o[k])+'</option>';}).join('');};
+  var sel=function(n,rot,o,v){return '<label class="f">'+rot+'<select data-s="'+n+'">'+op(o,v)+'</select></label>';};
+  e.innerHTML='<button class="c3-x" data-a="xpn">✕</button><h4>⚙ Ajustes do 3D</h4>'+sel('estr','Tipo de estrutura',ESTR,te)+sel('fund','Tipo de fundação',FUND,CFG.fund)+
+    '<h4>Níveis — mostrar · transparência</h4>'+NIV.lista.map(function(n,i){var v=nivVis(i);return '<div class="c3-cp"><label><input type="checkbox" data-nv="'+i+'"'+(v.vis?' checked':'')+'> '+esc(n.nome)+'</label><input type="range" min="0.05" max="1" step="0.05" data-nvop="'+i+'" value="'+v.op+'"></div>';}).join('')+
+    '<div class="c3-bts" style="margin:2px 0 8px"><button data-a="nvsol">Todos sólidos</button><button data-a="nvso">Só o último</button></div><p style="font-size:10.5px;color:#55687f;margin:0 0 8px">Só desenho. Peso e pé-direito de cada nível: aba Cargas e Pilares.</p>'+
+    sel('cob','Cobertura',COB,CFG.cob||'auto')+sel('aguas','Telhado',{2:'2 águas',4:'4 águas'},String(CFG.aguas||2))+
+    sel('tipoPar','Acabamento das paredes',{'':'Do tipo de estrutura',bloco:'Tijolo aparente',reboco:'Emboço pintado (cor abaixo)',concreto:'Concreto'},CFG.tipoPar||'')+
+    '<label class="f">Cor da casa (pintura)<div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap"><input type="color" data-s="cor" value="'+(CFG.cor||'#efe3c8')+'" style="width:42px;height:26px;padding:0;border:1px solid #b9c4d2;border-radius:4px">'+
+    ['#efe3c8','#ffffff','#f2d29b','#cfe0d2','#c9d9ea','#e8b9a0','#d9d9d9','#b9c48f'].map(function(c){return '<button data-cor="'+c+'" title="'+c+'" style="width:20px;height:20px;padding:0;border-radius:4px;border:1px solid #8896a8;background:'+c+'"></button>';}).join('')+'</div></label>'+
+    sel('qual','Qualidade',{baixa:'Baixa (aparelho fraco)',media:'Média',alta:'Alta',ultra:'Ultra'},CFG.qual)+sel('sol','Sol',{manha:'Manhã',meio:'Meio-dia',tarde:'Tarde',fim:'Fim de tarde'},CFG.sol)+
+    '<label style="display:flex;gap:6px;margin:4px 0 8px"><input type="checkbox" data-s="sit"'+(CFG.sit?' checked':'')+'> Colorir pela situação do cálculo</label><h4>Mostrar · transparência</h4>'+
+    COMP.map(function(c){return '<div class="c3-cp"><label><input type="checkbox" data-on="'+c[0]+'"'+(CFG.on[c[0]]?' checked':'')+'> '+c[1]+'</label><input type="range" min="0.05" max="1" step="0.05" data-op="'+c[0]+'" value="'+CFG.op[c[0]]+'"></div>';}).join('')+
+    (PL?'<div class="c3-bts"><button data-a="limpa">🗑 Remover a planta importada</button></div>':'')+
+    '<p style="font-size:10.5px;color:#55687f;margin:8px 0 0">Esquerdo gira · meio/direito move · roda aproxima no cursor. Vigas, lajes, cobertura, paredes e armaduras são ilustrativas: o cálculo continua sendo o das abas de fundação.</p>';}
+function mudaPainel(ev){var el=ev.target,d=el.dataset;
+  if(d.nv!=null){nivVis(+d.nv).vis=el.checked?1:0;aplicar();}else if(d.nvop!=null){var L=nivVis(+d.nvop);L.op=+el.value;L.vis=1;var cb=el.parentNode.querySelector('input[type=checkbox]');if(cb)cb.checked=true;aplicar();}
+  else if(d.on){CFG.on[d.on]=el.checked?1:0;aplicar();}else if(d.op){CFG.op[d.op]=+el.value;CFG.on[d.op]=1;var c=el.parentNode.querySelector('input[type=checkbox]');if(c)c.checked=true;aplicar();}
+  else if(d.s&&ev.type==='change'){var k=d.s,v=el.type==='checkbox'?(el.checked?1:0):el.value;
+    if(k==='estr'){CFG.estr=v;if(PL){PL.estr=v;guardarPlanta();}CFG.fund=ESTR[v].fund;CFG.tipoPar='';aviso('Estrutura: '+ESTR[v].nome+'. Fundação sugerida: '+FUND[CFG.fund]+' (pode trocar).');}
+    else CFG[k]=v;
+    if(k==='aguas')CFG.aguas=+v;if(k==='cor'&&(!CFG.tipoPar||CFG.tipoPar==='bloco'))CFG.tipoPar='reboco';
+    if(k==='qual'){medida();ceu();}if(k==='sol'){ceu();luzSombra();}
+    destacar(null);guardarCfg();montar();painel();if(k==='estr'||k==='fund'||k==='cob'||k==='aguas')enquadrar();return;}
+  else return;guardarCfg();}
+function medida(){var box=$('c3');if(!S3.ren||!box)return;var w=box.clientWidth,h=box.clientHeight;if(!w||!h)return;S3.ren.setPixelRatio(Math.min(window.devicePixelRatio||1,QUAL[CFG.qual].px));S3.ren.setSize(w,h,false);S3.cam.aspect=w/h;S3.cam.updateProjectionMatrix();S3.sujo=1;}
+function png(){S3.ren.render(S3.cena,S3.cam);S3.canvas.toBlob(function(b){baixar('concreto_3d.png',b);},'image/png');}
+function iniciar3D(){var T=window.THREE,cvs=$('c3-cv');S3.canvas=cvs;
+  var ren=S3.ren=new T.WebGLRenderer({canvas:cvs,antialias:true,preserveDrawingBuffer:true});ren.outputEncoding=T.sRGBEncoding;ren.toneMapping=T.ACESFilmicToneMapping;ren.toneMappingExposure=0.95;ren.shadowMap.type=T.PCFSoftShadowMap;
+  S3.cena=new T.Scene();var cam=S3.cam=new T.PerspectiveCamera(42,1,0.05,4000);cam.position.set(15,12,18);
+  var ctl=S3.ctl=new T.OrbitControls(cam,cvs);ctl.enableDamping=true;ctl.dampingFactor=0.14;ctl.mouseButtons={LEFT:T.MOUSE.ROTATE,MIDDLE:T.MOUSE.PAN,RIGHT:T.MOUSE.PAN};ctl.enableZoom=true;ctl.screenSpacePanning=true;
+  if('ontouchstart' in window){ctl.rotateSpeed=0.55;ctl.panSpeed=0.7;ctl.zoomSpeed=0.7;}
+  ctl.addEventListener('change',function(){S3.sujo=1;});
+  S3.hemi=new T.HemisphereLight(0xdcecff,0x6b5a45,0.35);S3.cena.add(S3.hemi);S3.sol=new T.DirectionalLight(0xffffff,1.6);S3.cena.add(S3.sol);S3.cena.add(S3.sol.target);
+  new ResizeObserver(function(){medida();}).observe($('c3'));eventos();medida();ceu();S3.pronto=true;montar();vista('persp');painel();
+  var t0=performance.now(),n=0;(function loop(t){requestAnimationFrame(loop);var dt=Math.min(0.1,(t-t0)/1000)||0;t0=t;if(!visivel()||$('c3').hidden)return;
+    if(S3.modo==='andar')andarTick(dt);else S3.ctl.update();if(S3.sujo||++n>30){S3.sujo=0;n=0;S3.ren.render(S3.cena,S3.cam);}})(t0);}
+var antigoDesenhar=window.desenhar3D;
+function desenhar(){if(!criarTela())return;if($('c3').hidden){antigoDesenhar();return;}
+  if(!visivel())return;
+  if(S3.pronto){medida();montar();return;}
+  if(S3.carregando)return;S3.carregando=true;$('c3-res').textContent='Carregando o 3D…';
+  (window.THREE?Promise.resolve():script(THREE_URL)).then(function(){return window.THREE.OrbitControls?null:script(ORBIT_URL);}).then(function(){S3.carregando=false;iniciar3D();})
+  .catch(function(e){console.error(e);S3.carregando=false;$('c3').hidden=true;$('c3-antigo').hidden=false;antigoDesenhar();aviso('Não foi possível abrir o 3D realista (verifique a internet). Mostrando o desenho simples.','err');});}
+window.desenhar3D=desenhar;
+/* ════════════ IMPORTAR PLANTA BAIXA (DWG, DXF ou imagem) ════════════
+   DWG: biblioteca do site (/tc-dwg.min.js, acad-ts MIT, AutoCAD 2000 a 2018+), lida em segundo plano (Worker) como no
+   📥 Importar DWG do Pavimento Flexível; se o navegador não deixar, lê na tela principal.
+   Regra do dono: referências externas (xref) são sempre ignoradas. Blocos (INSERT) são abertos, com escala e rotação. */
+var DWG_URL='/tc-dwg.min.js';
+/* função "pura" (sem variáveis de fora): roda no Worker e na tela principal */
+function EXTRAIR_DWG(doc){
+  var out={ents:[],un:null,xref:0,camadas:{},blocos:0,versao:null};
+  try{out.versao=String(doc.header&&doc.header.version);var u=doc.header&&doc.header.insUnits;out.un=typeof u==='number'?u:(u&&u.value!=null?+u.value:(u!=null?+u:null));}catch(e){}
+  var nomeL=function(e){return (e.layer&&e.layer.name)||'0';};
+  var xref=function(e,l){try{if(String(l).indexOf('|')>=0)return true;if(e.objectName==='INSERT'&&e.block){var f=e.block.flags|0;if((f&(4|8|16))||e.block.xRefPath)return true;}}catch(_){}return false;};
+  var lista=function(c){if(!c)return[];if(Array.isArray(c))return c;try{return Array.from(c);}catch(_){return[];}};
+  var limpa=function(s){return String(s==null?'':s).replace(/\\[A-Za-z][^;\\{}]*;/g,'').replace(/\\P/g,' ').replace(/[{}]/g,'').trim();};
+  var push=function(o){out.ents.push(o);out.camadas[o.l]=(out.camadas[o.l]||0)+1;};
+  var andar=function(ents,T,camPai,nivel){
+    lista(ents).forEach(function(e){var t=e.objectName,l=nomeL(e);if(l==='0'&&camPai)l=camPai;
+      if(xref(e,l)){out.xref++;return;}
+      var P=function(p){return T(p.x,p.y);};
+      try{
+        if(t==='LINE')push({t:'L',l:l,p:[P(e.startPoint),P(e.endPoint)],c:false});
+        else if(t==='LWPOLYLINE'||t==='POLYLINE'||t==='POLYLINE_2D'||t==='POLYLINE_3D'){var V=lista(e.vertices).map(function(q){var a=q.location||q;return T(a.x,a.y);}).filter(function(q){return isFinite(q[0])&&isFinite(q[1]);});
+          var fe=!!(e.isClosed||(e.flags&1));if(V.length>=2)push({t:'L',l:l,p:V,c:fe});}
+        else if(t==='CIRCLE'){var c=P(e.center),r2=T(e.center.x+e.radius,e.center.y);push({t:'C',l:l,x:c[0],y:c[1],r:Math.hypot(r2[0]-c[0],r2[1]-c[1])});}
+        else if(t==='ARC'){var a0=e.startAngle,a1=e.endAngle;if(Math.abs(a0)>7||Math.abs(a1)>7){a0*=Math.PI/180;a1*=Math.PI/180;}if(a1<a0)a1+=2*Math.PI;var n=Math.max(4,Math.ceil((a1-a0)/0.2)),pts=[];
+          for(var i=0;i<=n;i++){var a=a0+(a1-a0)*i/n;pts.push(T(e.center.x+e.radius*Math.cos(a),e.center.y+e.radius*Math.sin(a)));}push({t:'L',l:l,p:pts,c:false,arco:1});}
+        else if(t==='TEXT'||t==='MTEXT'){var s=limpa(e.value);if(s){var q=P(e.insertPoint);push({t:'T',l:l,x:q[0],y:q[1],s:s});}}
+        else if(t==='INSERT'&&e.block&&nivel<6){out.blocos++;var ip=e.insertPoint,sx=e.xScale||1,sy=e.yScale||1,ro=e.rotation||0,co=Math.cos(ro),si=Math.sin(ro),bp=e.block.basePoint||{x:0,y:0},bx=bp.x||0,by=bp.y||0;
+          var T2=function(x,y){var u=(x-bx)*sx,v=(y-by)*sy;return T(ip.x+u*co-v*si,ip.y+u*si+v*co);};
+          andar(e.block.entities,T2,l,nivel+1);}
+      }catch(err){}});};
+  andar(doc.entities,function(x,y){return[x,y];},null,0);
+  return out;}
+var WSRC_CON='var EX='+EXTRAIR_DWG.toString()+';self.onmessage=function(ev){var m=ev.data;try{if(m.cmd==="ini"){importScripts(m.u+"'+DWG_URL+'");self.postMessage({ok:1});}'+
+  'else{var R=self.TCDWG.DwgReader,doc=R.readFromStream?R.readFromStream(m.buf):new R(m.buf).read();self.postMessage({ok:1,res:EX(doc)});}}catch(e){self.postMessage({erro:String(e&&e.message||e)});}};';
+function lerDWG(buf){return new Promise(function(ok,err){var w=null,fim=function(){try{w&&w.terminate();}catch(e){}};
+  var principal=function(){script(DWG_URL).then(function(){setTimeout(function(){try{var R=window.TCDWG.DwgReader,doc=R.readFromStream?R.readFromStream(buf):new R(buf).read();ok(EXTRAIR_DWG(doc));}catch(e){err(e);}},40);}).catch(err);};
+  try{w=new Worker(URL.createObjectURL(new Blob([WSRC_CON],{type:'text/javascript'})));var et=0,cp=buf.slice(0);
+    var to=setTimeout(function(){fim();principal();},25000);
+    w.onmessage=function(ev){var r=ev.data;if(r.erro){clearTimeout(to);fim();if(et===0)principal();else err(new Error(r.erro));return;}
+      if(et===0){et=1;w.postMessage({cmd:'ler',buf:cp},[cp]);clearTimeout(to);to=setTimeout(function(){fim();err(new Error('o arquivo demorou demais para ler'));},180000);}else{clearTimeout(to);fim();ok(r.res);}};
+    w.onerror=function(){clearTimeout(to);fim();if(et===0)principal();else err(new Error('erro na leitura em segundo plano'));};
+    w.postMessage({cmd:'ini',u:location.origin});}catch(e){principal();}});}
+/* DXF em texto (ASCII). DXF binário: pedir para salvar como DXF ASCII ou mandar o DWG. */
+function lerDXF(txt){var L=txt.split(/\r?\n/),n=L.length,i=0,par=function(){if(i+1>=n)return null;var c=parseInt(L[i],10),v=L[i+1];i+=2;return [c,v==null?'':v.trim()];};
+  var out={ents:[],un:null,xref:0,camadas:{},blocos:0,versao:'DXF'},BL={},cur=null,sec='',cam=function(o){out.camadas[o.l]=(out.camadas[o.l]||0)+1;};
+  var lidos=[],e=null,p,blocoAtual=null,emBloco=false;
+  var fecha=function(){if(!e)return;if(emBloco&&blocoAtual)blocoAtual.ents.push(e);else if(sec==='ENTITIES')lidos.push(e);e=null;};
+  while((p=par())){var c=p[0],v=p[1];
+    if(c===0){fecha();
+      if(v==='SECTION'){var q=par();sec=q?q[1]:'';continue;}if(v==='ENDSEC'){sec='';continue;}
+      if(sec==='BLOCKS'&&v==='BLOCK'){blocoAtual={nome:'',x:0,y:0,flags:0,ents:[]};emBloco=true;e={tipo:'__BLOCK',g:{}};continue;}
+      if(sec==='BLOCKS'&&v==='ENDBLK'){if(blocoAtual)BL[blocoAtual.nome]=blocoAtual;blocoAtual=null;emBloco=false;continue;}
+      if(sec==='ENTITIES'||emBloco)e={tipo:v,g:{},vx:[],l:'0'};continue;}
+    if(!e)continue;
+    if(e.tipo==='__BLOCK'){if(c===2)blocoAtual.nome=v;else if(c===10)blocoAtual.x=+v;else if(c===20)blocoAtual.y=+v;else if(c===70)blocoAtual.flags=+v;else if(c===1&&v)blocoAtual.xref=1;continue;}
+    if(c===8)e.l=v;
+    if(e.tipo==='LWPOLYLINE'&&c===10){e.vx.push([+v,null,0]);continue;}if(e.tipo==='LWPOLYLINE'&&c===42){if(e.vx.length)e.vx[e.vx.length-1][2]=+v;continue;}if(e.tipo==='LWPOLYLINE'&&c===20){if(e.vx.length)e.vx[e.vx.length-1][1]=+v;continue;}
+    if(e.g[c]==null)e.g[c]=v;}
+  fecha();
+  /* VERTEX ficam como entidades soltas: junta na POLYLINE anterior */
+  var junta=function(arr){var r=[],pl=null;arr.forEach(function(o){if(o.tipo==='POLYLINE'){pl=o;o.vx=[];r.push(o);}else if(o.tipo==='VERTEX'){if(pl)pl.vx.push([+o.g[10],+o.g[20],+o.g[42]||0]);}else if(o.tipo==='SEQEND'){pl=null;}else r.push(o);});return r;};
+  Object.keys(BL).forEach(function(k){BL[k].ents=junta(BL[k].ents);});
+  var limpa=function(s){return String(s||'').replace(/\\[A-Za-z][^;\\{}]*;/g,'').replace(/\\P/g,' ').replace(/[{}]/g,'').trim();};
+  /* arco de polilinha (bulge = tangente de 1/4 do ângulo) */
+  var bulge=function(V,fe){var r=[];for(var i=0;i<V.length;i++){var a=V[i];r.push([a[0],a[1]]);var b=V[(i+1)%V.length];if(!a[2]||(i===V.length-1&&!fe))continue;
+      var th=4*Math.atan(a[2]),dx=b[0]-a[0],dy=b[1]-a[1],c=Math.hypot(dx,dy);if(c<1e-9)continue;var R=c/(2*Math.sin(th/2)),hh=R*Math.cos(th/2),mx=(a[0]+b[0])/2,my=(a[1]+b[1])/2,cx=mx-dy/c*hh,cy=my+dx/c*hh,a0=Math.atan2(a[1]-cy,a[0]-cx),n=Math.max(2,Math.ceil(Math.abs(th)/0.2));
+      for(var k=1;k<n;k++){var an=a0+th*k/n;r.push([cx+Math.abs(R)*Math.cos(an)*(R<0?1:1),cy+Math.abs(R)*Math.sin(an)]);}}return r;};
+  var andar=function(arr,T0,camPai,nivel){arr.forEach(function(o){var T=T0;if(o.g&&String(o.g[67]).trim()==='1')return;var l=o.l||'0';if(+o.g[230]<0)T=function(x,y){return T0(-x,y);};if(l==='0'&&camPai)l=camPai;if(l.indexOf('|')>=0){out.xref++;return;}var g=o.g,f=function(k){return +g[k]||0;},q;
+    if(o.tipo==='LINE')q={t:'L',l:l,p:[T(f(10),f(20)),T(f(11),f(21))],c:false};
+    else if(o.tipo==='LWPOLYLINE'||o.tipo==='POLYLINE'){var fe=!!(f(70)&1),V0=o.vx.filter(function(a){return isFinite(a[0])&&isFinite(a[1]);}),tb=V0.some(function(a){return a[2];}),V=(tb?bulge(V0,fe):V0).map(function(a){return T(a[0],a[1]);});if(V.length>=2)q={t:'L',l:l,p:V,c:fe,arco:tb&&V0.length<=3?1:undefined};}
+    else if(o.tipo==='CIRCLE'){var c0=T(f(10),f(20)),c1=T(f(10)+f(40),f(20));q={t:'C',l:l,x:c0[0],y:c0[1],r:Math.hypot(c1[0]-c0[0],c1[1]-c0[1])};}
+    else if(o.tipo==='ARC'){var a0=f(50)*Math.PI/180,a1=f(51)*Math.PI/180;if(a1<a0)a1+=2*Math.PI;var nn=Math.max(4,Math.ceil((a1-a0)/0.2)),pts=[];for(var j=0;j<=nn;j++){var a=a0+(a1-a0)*j/nn;pts.push(T(f(10)+f(40)*Math.cos(a),f(20)+f(40)*Math.sin(a)));}q={t:'L',l:l,p:pts,c:false,arco:1};}
+    else if(o.tipo==='TEXT'||o.tipo==='MTEXT'){var s=limpa(g[1]);if(s){var tq=T(f(10),f(20));q={t:'T',l:l,x:tq[0],y:tq[1],s:s};}}
+    else if(o.tipo==='INSERT'&&nivel<6){var B=BL[g[2]];if(!B)return;if(B.xref||(B.flags&(4|8|16))){out.xref++;return;}out.blocos++;
+      var sx=g[41]!=null?+g[41]:1,sy=g[42]!=null?+g[42]:1,ro=f(50)*Math.PI/180,co=Math.cos(ro),si=Math.sin(ro),ix=f(10),iy=f(20);
+      andar(B.ents,function(x,y){var u=(x-B.x)*sx,w=(y-B.y)*sy;return T(ix+u*co-w*si,iy+u*si+w*co);},l,nivel+1);return;}
+    if(q){out.ents.push(q);cam(q);}});};
+  andar(junta(lidos),function(x,y){return[x,y];},null,0);
+  var m=/\$INSUNITS\s*\r?\n\s*70\s*\r?\n\s*(\d+)/.exec(txt);if(m)out.un=+m[1];
+  return out;}
+/* ───── unidades: INSUNITS (4 mm, 5 cm, 6 m) se o tamanho fizer sentido; senão a que deixa a obra com ~5 a 300 m ───── */
+var UNID={m:1,cm:0.01,mm:0.001,pol:0.0254};
+function tamanho(ents){var xs=[],ys=[];ents.forEach(function(o){if(o.t==='L')o.p.forEach(function(q){xs.push(q[0]);ys.push(q[1]);});else{xs.push(o.x);ys.push(o.y);}});
+  if(!xs.length)return null;xs.sort(function(a,b){return a-b;});ys.sort(function(a,b){return a-b;});var pc=function(a,f){return a[Math.min(a.length-1,Math.max(0,Math.round(f*(a.length-1))))];};
+  return {x0:pc(xs,0.02),x1:pc(xs,0.98),y0:pc(ys,0.02),y1:pc(ys,0.98),X0:xs[0],X1:xs[xs.length-1],Y0:ys[0],Y1:ys[ys.length-1]};}
+function unidadeSugerida(D){var b=tamanho(D.ents);if(!b)return 'm';var w=Math.max(b.x1-b.x0,b.y1-b.y0)||1,ins={4:'mm',5:'cm',6:'m',1:'pol'}[D.un];
+  if(ins&&w*UNID[ins]>=3&&w*UNID[ins]<=400)return ins;var best='m',bd=1e9;Object.keys(UNID).forEach(function(k){if(k==='pol')return;var t=w*UNID[k],d=Math.abs(Math.log(t/20));if(d<bd){bd=d;best=k;}});return best;}
+/* ───── função de cada camada (sugerida pelo nome) ───── */
+var PAPEIS=[['ign','Ignorar'],['fundo','Fundo (só desenho)'],['parede','Paredes'],['pilar','Pilares'],['janela','Janelas / portas']];
+function papelSugerido(nome,D){var s=nome.toUpperCase();
+  if(/COTA|DIM|TEXT|HACH|HATCH|MOB|LOUC|LEGEND|CARIMBO|SELO|VIEWPORT|DEFPOINT|NORTE|EIXO|GRID|QUADRO|CORTE|3D|TITUL|FOLHA/.test(s))return 'ign';
+  if(/PILAR|PIL\b|^P-|COLUN|COLUMN|S-COL/.test(s))return 'pilar';
+  if(/JANEL|ESQUAD|PORTA|WIN|DOOR|VAO/.test(s))return 'janela';
+  if(/PARED|ALVEN|WALL|A-WALL|MURO/.test(s))return 'parede';
+  return 'fundo';}
+/* ───── reconhecimento: pilares, paredes, janelas ───── */
+function bboxPts(p){var b=[1e18,1e18,-1e18,-1e18];p.forEach(function(q){b[0]=Math.min(b[0],q[0]);b[1]=Math.min(b[1],q[1]);b[2]=Math.max(b[2],q[0]);b[3]=Math.max(b[3],q[1]);});return b;}
+function segs(ents){var r=[];ents.forEach(function(o){if(o.t!=='L'||o.arco)return;for(var i=0;i<o.p.length-1;i++)r.push([o.p[i][0],o.p[i][1],o.p[i+1][0],o.p[i+1][1]]);if(o.c&&o.p.length>2)r.push([o.p[o.p.length-1][0],o.p[o.p.length-1][1],o.p[0][0],o.p[0][1]]);});
+  return r.filter(function(s){return Math.hypot(s[2]-s[0],s[3]-s[1])>0.02;});}
+function detectar(D,cfg){var k=UNID[cfg.un]||1,ar=cfg.area,R={pilares:[],paredes:[],janelas:[],fundo:[],avisos:[]};
+  var dentro=function(x,y){return !ar||(x>=ar[0]&&x<=ar[2]&&y>=ar[1]&&y<=ar[3]);};
+  var por={pilar:[],parede:[],janela:[],fundo:[]},txt=[];
+  D.ents.forEach(function(o){var pa=cfg.papel[o.l]||'ign';
+    var q=o.t==='L'?{t:'L',l:o.l,c:o.c,arco:o.arco,p:o.p.map(function(v){return[v[0]*k,v[1]*k];})}:o.t==='C'?{t:'C',l:o.l,x:o.x*k,y:o.y*k,r:o.r*k}:{t:'T',l:o.l,x:o.x*k,y:o.y*k,s:o.s};
+    var cx=q.t==='L'?q.p[0][0]:q.x,cy=q.t==='L'?q.p[0][1]:q.y;if(q.t==='L'){var bb=bboxPts(q.p);cx=(bb[0]+bb[2])/2;cy=(bb[1]+bb[3])/2;}
+    if(!dentro(cx,cy))return;if(q.t==='T'){txt.push(q);return;}if(pa!=='ign'&&por[pa])por[pa].push(q);});
+  /* pilares: contornos fechados pequenos, círculos e laços de linhas soltas */
+  var cand=[];por.pilar.forEach(function(o){
+    if(o.t==='C'){if(o.r>=0.06&&o.r<=0.8)cand.push({x:o.x,y:o.y,bp:2*o.r,hp:2*o.r});return;}
+    var p=o.p,fech=o.c||(p.length>3&&Math.hypot(p[0][0]-p[p.length-1][0],p[0][1]-p[p.length-1][1])<0.01);
+    if(fech&&p.length>=3&&p.length<=14){var b=bboxPts(p),w=b[2]-b[0],h=b[3]-b[1];if(Math.min(w,h)>=0.09&&Math.max(w,h)<=2.0)cand.push({x:(b[0]+b[2])/2,y:(b[1]+b[3])/2,bp:w,hp:h});}});
+  var soltas=segs(por.pilar.filter(function(o){return o.t==='L'&&!(o.c);}));
+  if(soltas.length&&soltas.length<20000){var chave=function(x,y){return Math.round(x/0.005)+','+Math.round(y/0.005);},pai={},ach=function(a){while(pai[a]!==a){pai[a]=pai[pai[a]];a=pai[a];}return a;},
+      un=function(a,b){a=ach(a);b=ach(b);if(a!==b)pai[a]=b;};
+    soltas.forEach(function(s){var a=chave(s[0],s[1]),b=chave(s[2],s[3]);if(pai[a]==null)pai[a]=a;if(pai[b]==null)pai[b]=b;un(a,b);});
+    var grupos={};soltas.forEach(function(s){var r=ach(chave(s[0],s[1]));(grupos[r]=grupos[r]||[]).push(s);});
+    Object.keys(grupos).forEach(function(r){var g=grupos[r];if(g.length<3||g.length>14)return;var b=bboxPts([].concat.apply([],g.map(function(s){return[[s[0],s[1]],[s[2],s[3]]];}))),w=b[2]-b[0],h=b[3]-b[1];
+      if(Math.min(w,h)>=0.09&&Math.max(w,h)<=2.0)cand.push({x:(b[0]+b[2])/2,y:(b[1]+b[3])/2,bp:w,hp:h});});}
+  cand.forEach(function(c){if(R.pilares.some(function(q){return Math.hypot(q.x-c.x,q.y-c.y)<0.15;}))return;R.pilares.push(c);});
+  /* nomes P1, P2… do texto mais perto (até 1,2 m) */
+  var usados={};R.pilares.forEach(function(p){var m=null,md=1.2;txt.forEach(function(t){if(!/^P\s*\d+[A-Z]?$/i.test(t.s))return;var d=Math.hypot(t.x-p.x,t.y-p.y);if(d<md&&!usados[t.s]){md=d;m=t;}});if(m){p.nome=m.s.replace(/\s+/g,'').toUpperCase();usados[m.s]=1;}});
+  /* paredes: pares de linhas paralelas (espessura 7 a 40 cm) viram eixo + espessura */
+  var S=segs(por.parede),tot=0,par=0,usou=new Uint8Array(S.length);S.forEach(function(s){tot+=Math.hypot(s[2]-s[0],s[3]-s[1]);});
+  if(S.length>6000){R.avisos.push('Muitas linhas de parede ('+S.length+'): para não travar, cada linha vira uma parede de 15 cm. Selecione só a área da planta para melhor resultado.');}
+  else for(var i=0;i<S.length;i++){if(usou[i])continue;var a=S[i],ax=a[2]-a[0],ay=a[3]-a[1],la=Math.hypot(ax,ay),ux=ax/la,uy=ay/la,best=-1,bd=1;
+    for(var j=0;j<S.length;j++){if(j===i||usou[j])continue;var b=S[j],bx=b[2]-b[0],by=b[3]-b[1],lb=Math.hypot(bx,by);if(Math.abs(ux*by-uy*bx)/lb>0.035)continue;
+      var d=Math.abs((b[0]-a[0])*uy-(b[1]-a[1])*ux);if(d<0.07||d>0.40)continue;
+      var t1=(b[0]-a[0])*ux+(b[1]-a[1])*uy,t2=(b[2]-a[0])*ux+(b[3]-a[1])*uy,lo=Math.max(0,Math.min(t1,t2)),hi=Math.min(la,Math.max(t1,t2));if(hi-lo<0.2)continue;
+      if(d<bd){bd=d;best=j;}}
+    if(best<0)continue;var b2=S[best],t1b=(b2[0]-a[0])*ux+(b2[1]-a[1])*uy,t2b=(b2[2]-a[0])*ux+(b2[3]-a[1])*uy,lo2=Math.max(0,Math.min(t1b,t2b)),hi2=Math.min(la,Math.max(t1b,t2b)),
+      sg=((b2[0]-a[0])*uy-(b2[1]-a[1])*ux)>0?1:-1,nx=uy*sg,ny=-ux*sg;   /* normal apontando para a outra linha */
+    var mx=nx*bd/2,my=ny*bd/2;R.paredes.push([a[0]+ux*lo2+mx,a[1]+uy*lo2+my,a[0]+ux*hi2+mx,a[1]+uy*hi2+my,Math.round(bd*100)/100]);usou[i]=usou[best]=1;par+=hi2-lo2;}
+  if(S.length&&(S.length>6000||par<0.2*tot/2)){R.paredes=S.map(function(s){return[s[0],s[1],s[2],s[3],0.15];});if(S.length<=6000)R.avisos.push('As paredes estão desenhadas com uma linha só: cada linha virou uma parede de 15 cm.');}
+  /* emendas nos cantos: estende cada ponta até meia espessura para fechar o encontro */
+  R.paredes.forEach(function(w){var dx=w[2]-w[0],dy=w[3]-w[1],l=Math.hypot(dx,dy)||1,e=w[4]/2;
+    [[0,-1],[2,1]].forEach(function(pt){var x=w[pt[0]],y=w[pt[0]+1],perto=R.paredes.some(function(o){if(o===w)return false;var ox=o[2]-o[0],oy=o[3]-o[1],ol=Math.hypot(ox,oy)||1,t=Math.max(0,Math.min(1,((x-o[0])*ox+(y-o[1])*oy)/(ol*ol)));return Math.hypot(o[0]+ox*t-x,o[1]+oy*t-y)<o[4]/2+e+0.02&&Math.abs((dx*ox+dy*oy)/(l*ol))<0.5;});
+      if(perto){w[pt[0]]+=pt[1]*dx/l*e;w[pt[0]+1]+=pt[1]*dy/l*e;}});});
+  R.paredes=R.paredes.filter(function(w){return Math.hypot(w[2]-w[0],w[3]-w[1])>0.1;});
+  /* janelas e portas: grupos de linhas próximas, maior lado de 0,5 a 4 m */
+  var J=segs(por.janela);if(J.length&&J.length<8000){var gr=[];J.forEach(function(s){var b=[Math.min(s[0],s[2]),Math.min(s[1],s[3]),Math.max(s[0],s[2]),Math.max(s[1],s[3])],g=null;
+      gr.forEach(function(q){if(!g&&b[0]<=q[2]+0.3&&b[2]>=q[0]-0.3&&b[1]<=q[3]+0.3&&b[3]>=q[1]-0.3)g=q;});if(g){g[0]=Math.min(g[0],b[0]);g[1]=Math.min(g[1],b[1]);g[2]=Math.max(g[2],b[2]);g[3]=Math.max(g[3],b[3]);}else gr.push(b);});
+    gr.forEach(function(b){var w=b[2]-b[0],h=b[3]-b[1],L=Math.max(w,h),t=Math.max(0.1,Math.min(0.3,Math.min(w,h)));if(L<0.5||L>4)return;var cx=(b[0]+b[2])/2,cy=(b[1]+b[3])/2;
+      R.janelas.push(w>=h?[b[0],cy,b[2],cy,t]:[cx,b[1],cx,b[3],t]);});}
+  /* parede contínua desenhada por trás da janela: corta a parede no vão (senão a alvenaria conta duas vezes) */
+  R.janelas.forEach(function(j){var jx=j[2]-j[0],jy=j[3]-j[1],jl=Math.hypot(jx,jy)||1,ux=jx/jl,uy=jy/jl,novas=[];
+    R.paredes.forEach(function(w){var dx=w[2]-w[0],dy=w[3]-w[1],l=Math.hypot(dx,dy)||1,vx=dx/l,vy=dy/l;
+      var par=Math.abs(vx*uy-vy*ux)<0.05,dist=Math.abs((j[0]-w[0])*vy-(j[1]-w[1])*vx)+Math.abs(((j[0]+j[2])/2-w[0])*vy-((j[1]+j[3])/2-w[1])*vx);
+      if(!par||dist/2>w[4]/2+0.08){novas.push(w);return;}
+      var t1=(j[0]-w[0])*vx+(j[1]-w[1])*vy,t2=(j[2]-w[0])*vx+(j[3]-w[1])*vy,a=Math.max(0,Math.min(t1,t2)),b=Math.min(l,Math.max(t1,t2));
+      if(b-a<0.2){novas.push(w);return;}
+      if(a>0.05)novas.push([w[0],w[1],w[0]+vx*a,w[1]+vy*a,w[4]]);if(l-b>0.05)novas.push([w[0]+vx*b,w[1]+vy*b,w[2],w[3],w[4]]);j[4]=w[4];});
+    R.paredes=novas;});
+  /* fundo: linhas para desenhar no piso (limite para não pesar o projeto) */
+  var nf=0;por.fundo.concat(cfg.fundoTudo?por.parede.concat(por.janela):[]).forEach(function(o){if(nf>25000)return;if(o.t==='L'){R.fundo.push(o.p.map(function(v){return[+v[0].toFixed(3),+v[1].toFixed(3)];}).concat(o.c?[[+o.p[0][0].toFixed(3),+o.p[0][1].toFixed(3)]]:[]));nf+=o.p.length;}
+    else if(o.t==='C'){var cc=[];for(var a2=0;a2<=16;a2++)cc.push([+(o.x+o.r*Math.cos(a2*Math.PI/8)).toFixed(3),+(o.y+o.r*Math.sin(a2*Math.PI/8)).toFixed(3)]);R.fundo.push(cc);nf+=17;}});
+  if(nf>25000)R.avisos.push('Fundo muito grande: foram guardadas as primeiras linhas. Selecione só a área da planta.');
+  /* pilares sugeridos nos encontros de paredes (opcional) */
+  if(cfg.sugerir&&!R.pilares.length&&R.paredes.length){var pts=[];R.paredes.forEach(function(w){pts.push([w[0],w[1]],[w[2],w[3]]);});
+    pts.forEach(function(p){var n=pts.filter(function(q){return Math.hypot(q[0]-p[0],q[1]-p[1])<0.35;}).length;if(n>=2&&!R.pilares.some(function(q){return Math.hypot(q.x-p[0],q.y-p[1])<2;}))R.pilares.push({x:p[0],y:p[1],bp:0.15,hp:0.30,sug:1});});
+    if(R.pilares.length)R.avisos.push(R.pilares.length+' pilar(es) SUGERIDO(S) nos encontros de paredes (a cada 2 m no mínimo). Confira: a posição real é do projeto estrutural.');}
+  return R;}
+/* ───── janela de importação ───── */
+var IMP=null;
+function abrirImportar(){if($('c3imp'))$('c3imp').remove();
+  IMP={D:null,papel:{},un:'m',area:null,res:null,vista:null,modo:'ver',img:null,manual:{pilares:[],paredes:[]},cal:[]};
+  var ov=document.createElement('div');ov.id='c3imp';
+  ov.style.cssText='position:fixed;inset:0;z-index:99990;background:rgba(10,18,30,.6);display:flex;align-items:center;justify-content:center;padding:8px;font:13px system-ui,sans-serif';
+  var te=tipoEstr(),opE=Object.keys(ESTR).map(function(k){return '<option value="'+k+'"'+(k===te?' selected':'')+'>'+ESTR[k].nome+'</option>';}).join('');
+  ov.innerHTML='<div style="background:#fff;color:#13263d;border-radius:12px;width:min(1180px,100%);height:calc(100vh - 16px);display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.45)">'+
+   '<div style="padding:10px 16px;border-bottom:1px solid #d6dbe2;display:flex;gap:10px;align-items:center"><b style="flex:1;font-size:15px">📥 Importar planta baixa — DWG, DXF ou imagem</b><button id="ci-x" style="border:0;background:none;font-size:20px;cursor:pointer">✕</button></div>'+
+   '<div style="flex:1;min-height:0;display:flex;gap:0;flex-wrap:wrap">'+
+    '<div style="flex:1 1 520px;min-width:280px;min-height:300px;position:relative;background:#0f1a26"><canvas id="ci-cv" style="width:100%;height:100%;display:block;touch-action:none"></canvas>'+
+     '<div id="ci-bar" style="position:absolute;left:8px;top:8px;display:flex;gap:4px;flex-wrap:wrap"></div><div id="ci-dica" style="position:absolute;left:8px;right:8px;bottom:8px;color:#fff;font-size:12px;text-shadow:0 1px 2px #000"></div></div>'+
+    '<div style="flex:0 1 380px;min-width:280px;overflow:auto;padding:12px 14px;border-left:1px solid #d6dbe2" id="ci-lado">'+
+     '<label style="display:block;font-weight:700;margin-bottom:4px">1. Arquivo</label><input type="file" id="ci-arq" accept=".dwg,.dxf,.png,.jpg,.jpeg,.webp,image/*"><div id="ci-info" style="font-size:12px;color:#55687f;margin:6px 0 10px">DWG (AutoCAD 2000 em diante), DXF em texto, ou foto/imagem da planta (você marca a escala e desenha paredes e pilares).</div>'+
+     '<div id="ci-cad"></div>'+
+     '<label style="display:block;font-weight:700;margin:10px 0 4px">Tipo de estrutura</label><select id="ci-estr" style="width:100%;padding:5px">'+opE+'</select>'+
+     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:8px 0"><label>Pavimentos<input id="ci-pav" type="number" min="1" max="20" value="'+NIV.lista.length+'" style="width:100%;padding:4px"></label><label>Pé-direito (m)<input id="ci-pe" type="number" min="2" max="8" step="0.05" value="'+(NIV.lista[0].pe||2.8)+'" style="width:100%;padding:4px"></label></div>'+
+     '<label style="display:flex;gap:6px;margin:4px 0"><input type="checkbox" id="ci-auto" checked> Calcular as cargas dos pilares pelos níveis (área de influência)</label>'+
+     '<div id="ci-res" style="margin-top:10px;font-size:12px"></div></div></div>'+
+   '<div style="padding:10px 16px;border-top:1px solid #d6dbe2;display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap"><button id="ci-can" class="tb-btn">Cancelar</button><button id="ci-ok" class="btn-calc" disabled>✔ Aplicar no programa</button></div></div>';
+  document.body.appendChild(ov);
+  $('ci-x').onclick=$('ci-can').onclick=function(){ov.remove();IMP=null;};
+  $('ci-arq').onchange=function(){var f=this.files[0];if(f)carregarArquivo(f);};
+  $('ci-ok').onclick=aplicarImport;
+  impEventos();impDesenhar();}
+function impMsg(h,cor){var e=$('ci-info');if(e){e.innerHTML=h;e.style.color=cor||'#55687f';}}
+function carregarArquivo(f){var nome=f.name,ext=(nome.split('.').pop()||'').toLowerCase();IMP.nome=nome;IMP.D=null;IMP.img=null;IMP.area=null;IMP.manual={pilares:[],paredes:[]};IMP.cal=[];$('ci-cad').innerHTML='';
+  if(/^(png|jpe?g|webp|gif|bmp)$/.test(ext)||(ext!=='dxf'&&ext!=='dwg'&&/^image\/(png|jpe?g|webp|gif|bmp)/.test(f.type)))return carregarImagem(f);
+  var t0=Date.now(),relogio=setInterval(function(){impMsg('Lendo '+esc(nome)+'… <b>'+Math.round((Date.now()-t0)/1000)+' s</b> (a tela não trava; desenhos grandes levam até 1 minuto)');},500);
+  var fim=function(D){clearInterval(relogio);if(!D.ents.length){impMsg('Não encontrei linhas no desenho. Se o arquivo usa só referências externas (xref), elas são ignoradas: abra a planta original.','#b91c1c');return;}
+    IMP.D=D;IMP.un=unidadeSugerida(D);var cams=Object.keys(D.camadas).sort();cams.forEach(function(c){IMP.papel[c]=papelSugerido(c,D);});
+    impMsg('✔ '+esc(nome)+': '+D.ents.length.toLocaleString('pt-BR')+' elementos em '+cams.length+' camadas'+(D.blocos?' · '+D.blocos+' blocos abertos':'')+(D.xref?' · '+D.xref+' de referências externas (xref) IGNORADOS':'')+' · lido em '+((Date.now()-t0)/1000).toFixed(1)+' s','#166534');
+    impCamadas();impDetectar();impEnquadrar();};
+  var r=new FileReader();
+  if(ext==='dxf'){r.onload=function(){var buf=new Uint8Array(r.result),cab=new TextDecoder('latin1').decode(buf.slice(0,22));
+      if(/AutoCAD Binary DXF/.test(cab)){clearInterval(relogio);impMsg('Este DXF é binário. No AutoCAD, salve como DXF (ASCII) ou envie o DWG.','#b91c1c');return;}
+      var txt;try{txt=new TextDecoder('utf-8',{fatal:true}).decode(buf);}catch(e){txt=new TextDecoder('windows-1252').decode(buf);}
+      setTimeout(function(){try{fim(lerDXF(txt));}catch(e){clearInterval(relogio);impMsg('Erro ao ler o DXF: '+esc(e.message),'#b91c1c');}},30);};r.readAsArrayBuffer(f);}
+  else if(ext==='dwg'){r.onload=function(){var buf=r.result,v=new TextDecoder('latin1').decode(new Uint8Array(buf.slice(0,6)));
+      if(!/^AC10(1[5-9]|2\d|3\d)/.test(v)){clearInterval(relogio);impMsg('Versão do DWG: '+esc(v)+'. O programa lê DWG do AutoCAD 2000 (AC1015) em diante. No AutoCAD use "Salvar como" em versão 2000 ou mais nova, ou exporte DXF.','#b91c1c');return;}
+      lerDWG(buf).then(fim).catch(function(e){clearInterval(relogio);console.error(e);impMsg('Não consegui ler este DWG ('+esc(e.message||e)+'). Tente salvar como DWG 2013/2018 ou DXF no AutoCAD e importe de novo.','#b91c1c');});};r.readAsArrayBuffer(f);}
+  else{clearInterval(relogio);impMsg('Formato não reconhecido: use DWG, DXF ou imagem.','#b91c1c');}}
+function impCamadas(){var D=IMP.D,cams=Object.keys(D.camadas).sort(function(a,b){return D.camadas[b]-D.camadas[a];});
+  var op=function(c){return PAPEIS.map(function(p){return '<option value="'+p[0]+'"'+(IMP.papel[c]===p[0]?' selected':'')+'>'+p[1]+'</option>';}).join('');};
+  $('ci-cad').innerHTML='<label style="display:block;font-weight:700;margin-bottom:4px">2. Unidade do desenho</label><select id="ci-un" style="width:100%;padding:5px">'+[['m','metro'],['cm','centímetro'],['mm','milímetro'],['pol','polegada']].map(function(u){return '<option value="'+u[0]+'"'+(IMP.un===u[0]?' selected':'')+'>'+u[1]+'</option>';}).join('')+'</select><div id="ci-tam" style="font-size:12px;color:#55687f;margin:4px 0 8px"></div>'+
+    '<label style="display:block;font-weight:700;margin-bottom:4px">3. O que é cada camada</label><input id="ci-filtro" placeholder="filtrar camadas…" style="width:100%;padding:4px;margin-bottom:4px"><div style="max-height:260px;overflow:auto;border:1px solid #d6dbe2;border-radius:6px"><table style="width:100%;font-size:12px;border-collapse:collapse" id="ci-tab">'+
+    cams.map(function(c){return '<tr data-c="'+esc(c)+'"><td style="padding:3px 6px;word-break:break-all">'+esc(c)+' <small style="color:#8a99ab">('+D.camadas[c]+')</small></td><td style="padding:2px"><select data-cam="'+esc(c)+'" style="font-size:11.5px;padding:2px">'+op(c)+'</select></td></tr>';}).join('')+'</table></div>'+
+    '<label style="display:flex;gap:6px;margin:6px 0"><input type="checkbox" id="ci-sug"> Sem camada de pilares: sugerir pilares nos encontros das paredes</label>'+
+    '<div style="font-size:11.5px;color:#55687f">4. Use “▭ Selecionar área” no desenho quando o arquivo tiver mais de uma planta (corte, fachada, situação). Pilares em vermelho e paredes em azul mostram o que foi reconhecido.</div>';
+  $('ci-un').onchange=function(){IMP.un=this.value;IMP.area=null;impDetectar();impEnquadrar();};
+  $('ci-sug').onchange=impDetectar;
+  $('ci-filtro').oninput=function(){var f=this.value.toUpperCase();document.querySelectorAll('#ci-tab tr').forEach(function(tr){tr.hidden=f&&tr.dataset.c.toUpperCase().indexOf(f)<0;});};
+  $('ci-tab').onchange=function(ev){var s=ev.target;if(s.dataset.cam!=null){IMP.papel[s.dataset.cam]=s.value;impDetectar();}};}
+function impDetectar(){if(!IMP.D){impResumo();return;}var k=UNID[IMP.un],b=tamanho(IMP.D.ents);
+  if(b&&$('ci-tam'))$('ci-tam').textContent='Tamanho do desenho: '+n2((b.x1-b.x0)*k)+' × '+n2((b.y1-b.y0)*k)+' m'+((b.x1-b.x0)*k>400?' — grande demais para uma planta: confira a unidade ou selecione a área':'');
+  IMP.res=detectar(IMP.D,{un:IMP.un,papel:IMP.papel,area:IMP.area,sugerir:$('ci-sug')&&$('ci-sug').checked});impResumo();impDesenhar();}
+function impResumo(){var e=$('ci-res'),ok=$('ci-ok');if(!e)return;var R=IMP.res;
+  if(IMP.img){var pl=IMP.manual;e.innerHTML='<b>Imagem:</b> '+(IMP.img.esc?'escala '+n2(1/IMP.img.esc)+' px/m':'<span style="color:#b45309">marque a escala (📏)</span>')+' · '+pl.paredes.length+' parede(s) · '+pl.pilares.length+' pilar(es)';ok.disabled=!IMP.img.esc;return;}
+  if(!R){e.innerHTML='';ok.disabled=true;return;}
+  e.innerHTML='<b>Reconhecido:</b> '+R.pilares.length+' pilar(es) · '+R.paredes.length+' parede(s) · '+R.janelas.length+' janela(s)/porta(s) · '+R.fundo.length+' linha(s) de fundo'+
+    (R.avisos.length?'<div style="margin-top:6px;color:#92400e">⚠ '+R.avisos.map(esc).join('<br>⚠ ')+'</div>':'')+
+    (!R.pilares.length?'<div style="margin-top:6px;color:#55687f">Sem pilares reconhecidos: os pilares atuais do programa ficam como estão (só a planta entra no 3D).</div>':'');
+  ok.disabled=!(R.pilares.length||R.paredes.length||R.fundo.length);}
+/* ───── desenho da prévia (zoom na roda, arrastar move, seleção de área) ───── */
+function impEnquadrar(){var cv=$('ci-cv');if(!cv)return;var b;
+  if(IMP.img)b=[0,0,IMP.img.w*(IMP.img.esc||1),IMP.img.h*(IMP.img.esc||1)];
+  else if(IMP.D){var t=tamanho(IMP.D.ents),k=UNID[IMP.un];b=IMP.area||[t.x0*k,t.y0*k,t.x1*k,t.y1*k];}else return;
+  var w=cv.clientWidth,h=cv.clientHeight,s=Math.min(w/((b[2]-b[0])||1),h/((b[3]-b[1])||1))*0.9;IMP.vista={s:s,ox:w/2-s*(b[0]+b[2])/2,oy:h/2+s*(b[1]+b[3])/2};impDesenhar();}
+function impDesenhar(){var cv=$('ci-cv');if(!cv)return;var w=cv.clientWidth,h=cv.clientHeight,dp=window.devicePixelRatio||1;if(cv.width!==w*dp||cv.height!==h*dp){cv.width=w*dp;cv.height=h*dp;}
+  var g=cv.getContext('2d');g.setTransform(dp,0,0,dp,0,0);g.fillStyle='#0f1a26';g.fillRect(0,0,w,h);var V=IMP.vista;
+  var bar=$('ci-bar');if(bar&&!bar.dataset.ok){bar.dataset.ok=1;bar.innerHTML=[['ver','✋ Mover'],['area','▭ Selecionar área'],['limpa','⨯ Toda a área'],['cal','📏 Escala'],['par','▬ Parede'],['pil','■ Pilar'],['desf','↶ Desfazer'],['fit','⛶']].map(function(b){return '<button data-b="'+b[0]+'" class="tb-btn" style="padding:4px 8px;font-size:12px">'+b[1]+'</button>';}).join('');}
+  if(bar)bar.querySelectorAll('button').forEach(function(b){var k=b.dataset.b,img=!!IMP.img;b.hidden=(['cal','par','pil','desf'].indexOf(k)>=0&&!img)||(['area','limpa'].indexOf(k)>=0&&img);b.style.background=IMP.modo===k?'#1d4ed8':'';b.style.color=IMP.modo===k?'#fff':'';});
+  var dica=$('ci-dica');
+  if(!V){if(dica)dica.textContent=IMP.D||IMP.img?'':'Escolha um arquivo para ver a planta aqui.';return;}
+  var X=function(x){return V.ox+x*V.s;},Y=function(y){return V.oy-y*V.s;};
+  if(IMP.img&&IMP.img.el){var e=IMP.img.esc||1;g.globalAlpha=0.95;g.drawImage(IMP.img.el,X(0),Y(IMP.img.h*e),IMP.img.w*e*V.s,IMP.img.h*e*V.s);g.globalAlpha=1;}
+  if(IMP.D){var k=UNID[IMP.un],cor={fundo:'#5b6b7d',parede:'#5aa0ff',pilar:'#ff7070',janela:'#ffd166'};g.lineWidth=1;
+    IMP.D.ents.forEach(function(o){var pa=IMP.papel[o.l]||'ign';if(pa==='ign'){g.strokeStyle='rgba(120,135,150,.18)';}else g.strokeStyle=cor[pa];
+      if(o.t==='L'){g.beginPath();o.p.forEach(function(q,i){var x=X(q[0]*k),y=Y(q[1]*k);if(i)g.lineTo(x,y);else g.moveTo(x,y);});if(o.c)g.closePath();g.stroke();}
+      else if(o.t==='C'){g.beginPath();g.arc(X(o.x*k),Y(o.y*k),Math.max(1,o.r*k*V.s),0,7);g.stroke();}});}
+  var R=IMP.img?{pilares:IMP.manual.pilares,paredes:IMP.manual.paredes,janelas:[]}:IMP.res;
+  if(R){g.lineCap='round';R.paredes.forEach(function(p){g.strokeStyle='rgba(60,140,255,.75)';g.lineWidth=Math.max(2,p[4]*V.s);g.beginPath();g.moveTo(X(p[0]),Y(p[1]));g.lineTo(X(p[2]),Y(p[3]));g.stroke();});
+    R.janelas.forEach(function(p){g.strokeStyle='#ffd166';g.lineWidth=Math.max(2,p[4]*V.s*0.6);g.beginPath();g.moveTo(X(p[0]),Y(p[1]));g.lineTo(X(p[2]),Y(p[3]));g.stroke();});
+    g.lineCap='butt';R.pilares.forEach(function(p,i){g.fillStyle=p.sug?'rgba(255,170,60,.85)':'rgba(255,60,60,.9)';var a=Math.max(4,p.bp*V.s),b=Math.max(4,p.hp*V.s);g.fillRect(X(p.x)-a/2,Y(p.y)-b/2,a,b);
+      if(V.s>8){g.fillStyle='#fff';g.font='11px system-ui';g.fillText(p.nome||('P'+(i+1)),X(p.x)+a/2+2,Y(p.y)-b/2);}});}
+  if(IMP.area){g.strokeStyle='#22c55e';g.setLineDash([6,4]);g.lineWidth=1.5;g.strokeRect(X(IMP.area[0]),Y(IMP.area[3]),(IMP.area[2]-IMP.area[0])*V.s,(IMP.area[3]-IMP.area[1])*V.s);g.setLineDash([]);}
+  if(IMP.arr&&IMP.arr.r){var r=IMP.arr.r;g.strokeStyle='#22c55e';g.strokeRect(Math.min(r[0],r[2]),Math.min(r[1],r[3]),Math.abs(r[2]-r[0]),Math.abs(r[3]-r[1]));}
+  IMP.cal.forEach(function(q){g.fillStyle='#22c55e';g.beginPath();g.arc(X(q[0]),Y(q[1]),5,0,7);g.fill();});
+  if(IMP.ini){g.strokeStyle='#5aa0ff';g.lineWidth=2;g.beginPath();g.moveTo(X(IMP.ini[0]),Y(IMP.ini[1]));g.lineTo(X(IMP.mouse[0]),Y(IMP.mouse[1]));g.stroke();}
+  if(dica)dica.textContent={ver:'Roda aproxima · arraste para mover',area:'Arraste um retângulo em volta da planta que vai para o 3D',cal:'Toque em dois pontos de uma medida conhecida (ex.: uma parede de 5 m)',par:'Toque no início e nos cantos de cada parede; duplo clique no último ponto ou Esc termina',pil:'Toque no centro de cada pilar'}[IMP.modo]||'';}
+function impMundo(ev){var cv=$('ci-cv'),r=cv.getBoundingClientRect(),V=IMP.vista;return [(ev.clientX-r.left-V.ox)/V.s,(V.oy-(ev.clientY-r.top))/V.s];}
+function impEventos(){var cv=$('ci-cv'),ini=null;new ResizeObserver(function(){impDesenhar();}).observe(cv);
+  $('ci-bar').addEventListener('click',function(ev){var b=ev.target.closest('[data-b]');if(!b)return;var k=b.dataset.b;
+    if(k==='fit'){impEnquadrar();return;}if(k==='limpa'){IMP.area=null;impDetectar();impEnquadrar();return;}
+    if(k==='desf'){var m=IMP.manual;if(IMP.ult==='pil')m.pilares.pop();else m.paredes.pop();impResumo();impDesenhar();return;}
+    IMP.modo=k;IMP.ini=null;if(k==='cal')IMP.cal=[];impDesenhar();});
+  cv.addEventListener('wheel',function(ev){ev.preventDefault();if(!IMP.vista)return;var r=cv.getBoundingClientRect(),mx=ev.clientX-r.left,my=ev.clientY-r.top,f=ev.deltaY<0?1.2:1/1.2,V=IMP.vista;
+    V.ox=mx-(mx-V.ox)*f;V.oy=my-(my-V.oy)*f;V.s*=f;impDesenhar();},{passive:false});
+  cv.addEventListener('pointerdown',function(ev){if(!IMP.vista)return;try{cv.setPointerCapture(ev.pointerId);}catch(e){}var r=cv.getBoundingClientRect();ini={x:ev.clientX,y:ev.clientY,ox:IMP.vista.ox,oy:IMP.vista.oy,b:ev.button,m:impMundo(ev)};
+    if(IMP.modo==='area'&&ev.button===0)IMP.arr={r:[ev.clientX-r.left,ev.clientY-r.top,ev.clientX-r.left,ev.clientY-r.top],m0:ini.m};});
+  cv.addEventListener('pointermove',function(ev){if(!IMP.vista)return;IMP.mouse=impMundo(ev);
+    if(ini&&IMP.arr){var r=cv.getBoundingClientRect();IMP.arr.r[2]=ev.clientX-r.left;IMP.arr.r[3]=ev.clientY-r.top;impDesenhar();return;}
+    if(ini&&(IMP.modo==='ver'||ini.b!==0)){IMP.vista.ox=ini.ox+ev.clientX-ini.x;IMP.vista.oy=ini.oy+ev.clientY-ini.y;impDesenhar();return;}if(IMP.ini)impDesenhar();});
+  cv.addEventListener('pointerup',function(ev){if(!ini)return;var mov=Math.hypot(ev.clientX-ini.x,ev.clientY-ini.y),m=impMundo(ev);
+    if(IMP.arr){var a=IMP.arr.m0;IMP.arr=null;if(mov>8){IMP.area=[Math.min(a[0],m[0]),Math.min(a[1],m[1]),Math.max(a[0],m[0]),Math.max(a[1],m[1])];impDetectar();impEnquadrar();}ini=null;impDesenhar();return;}
+    if(mov<6&&ini.b===0&&IMP.img){
+      if(IMP.modo==='cal'){IMP.cal.push(m);if(IMP.cal.length===2){var px=Math.hypot(IMP.cal[1][0]-IMP.cal[0][0],IMP.cal[1][1]-IMP.cal[0][1])/(IMP.img.esc||1),d=parseFloat((prompt('Medida real entre os dois pontos (m):','5,00')||'').replace(',','.'));
+          if(d>0&&px>0){var e0=IMP.img.esc||1,e1=d/px;IMP.manual.paredes.forEach(function(w){for(var i=0;i<4;i++)w[i]*=e1/e0;});IMP.manual.pilares.forEach(function(p){p.x*=e1/e0;p.y*=e1/e0;});IMP.img.esc=e1;IMP.modo='par';impEnquadrar();}IMP.cal=[];}impResumo();}
+      else if(!IMP.img.esc){alert('Marque primeiro a escala (📏): dois pontos e a medida real.');}
+      else if(IMP.modo==='par'){if(ev.detail>1){IMP.ini=null;}else if(!IMP.ini)IMP.ini=m;else{var t=0.15;if(Math.hypot(m[0]-IMP.ini[0],m[1]-IMP.ini[1])>0.05){IMP.manual.paredes.push([IMP.ini[0],IMP.ini[1],m[0],m[1],t]);IMP.ult='par';}IMP.ini=m;}impResumo();}
+      else if(IMP.modo==='pil'){IMP.manual.pilares.push({x:m[0],y:m[1],bp:0.20,hp:0.30});IMP.ult='pil';impResumo();}}
+    ini=null;impDesenhar();});
+  cv.addEventListener('dblclick',function(){IMP.ini=null;impDesenhar();});
+  document.addEventListener('keydown',function k(ev){if(!IMP){document.removeEventListener('keydown',k);return;}if(ev.key==='Escape'&&IMP.ini){IMP.ini=null;impDesenhar();}});}
+function carregarImagem(f){var r=new FileReader();r.onload=function(){var im=new Image();im.onload=function(){var M=2048,s=Math.min(1,M/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.round(im.width*s);c.height=Math.round(im.height*s);
+      c.getContext('2d').drawImage(im,0,0,c.width,c.height);var src=c.toDataURL('image/jpeg',0.82),el=new Image();el.src=src;
+      el.onload=function(){IMP.img={src:src,w:c.width,h:c.height,esc:0,el:el};IMP.modo='cal';impMsg('Imagem carregada ('+c.width+' × '+c.height+' px). 1) 📏 Escala: toque em dois pontos de uma medida conhecida. 2) ▬ Parede e ■ Pilar: desenhe por cima.','#166534');impEnquadrar();impResumo();};};
+    im.onerror=function(){impMsg('Não consegui abrir a imagem.','#b91c1c');};im.src=r.result;};r.readAsDataURL(f);}
+/* ───── aplicar no programa ───── */
+function aplicarImport(){if(!IMP)return;var R=IMP.img?{pilares:IMP.manual.pilares,paredes:IMP.manual.paredes,janelas:[],fundo:[],avisos:[]}:IMP.res;if(!R)return;
+  var te=$('ci-estr').value,npav=Math.max(1,Math.min(20,parseInt($('ci-pav').value)||1)),pe=Math.max(2,Math.min(8,parseFloat($('ci-pe').value)||2.8)),auto=$('ci-auto').checked;
+  if(R.pilares.length&&!confirm('Trocar os '+_pilares.length+' pilares atuais pelos '+R.pilares.length+' da planta?\nCargas de pilares com o mesmo nome são mantidas.'))return;
+  /* origem: canto inferior esquerdo do que entra no programa */
+  var xs=[],ys=[];R.pilares.forEach(function(p){xs.push(p.x);ys.push(p.y);});R.paredes.forEach(function(w){xs.push(w[0],w[2]);ys.push(w[1],w[3]);});
+  if(!xs.length)R.fundo.forEach(function(l){l.forEach(function(q){xs.push(q[0]);ys.push(q[1]);});});
+  var mn=function(a){var m=Infinity;for(var i=0;i<a.length;i++)if(a[i]<m)m=a[i];return isFinite(m)?m:0;},ox=IMP.img?0:mn(xs),oy=IMP.img?0:mn(ys);
+  if(R.pilares.length&&!IMP.img){ox=mn(R.pilares.map(function(p){return p.x;}));oy=mn(R.pilares.map(function(p){return p.y;}));}
+  var r3=function(v){return Math.round(v*1000)/1000;},mv=function(w){return [r3(w[0]-ox),r3(w[1]-oy),r3(w[2]-ox),r3(w[3]-oy),w[4]];};
+  PL={estr:te,nome:IMP.nome||'planta',paredes:R.paredes.map(mv),janelas:R.janelas.map(mv),fundo:R.fundo.map(function(l){return l.map(function(q){return[r3(q[0]-ox),r3(q[1]-oy)];});})};
+  if(IMP.img)PL.img={src:IMP.img.src,w:IMP.img.w,h:IMP.img.h,x:-ox,y:-oy,esc:IMP.img.esc};
+  if(R.pilares.length){var antigos={};_pilares.forEach(function(p){antigos[p.id]=p;});var n=1,usados={};
+    _pilares=R.pilares.map(function(p){var id=p.nome&&!usados[p.nome]?p.nome:null;while(!id||usados[id]){id='P'+(n++);if(R.pilares.some(function(q){return q.nome===id;}))id=null;}usados[id]=1;
+      var a=antigos[id]||{};return {id:id,gk:a.gk!=null?a.gk:300,qk:a.qk!=null?a.qk:80,mkx:a.mkx!=null?a.mkx:0,mky:a.mky!=null?a.mky:0,
+        bp:+Math.max(0.12,p.bp).toFixed(2),hp:+Math.max(0.12,p.hp).toFixed(2),x:r3(p.x-ox),y:r3(p.y-oy),B:1.5,L:1.5,h:0.6};});
+    _nextId=Math.max.apply(null,_pilares.map(function(p){return parseInt(String(p.id).replace(/\D/g,''))||0;}))+1;}
+  /* níveis: refaz só se mudou o número de pavimentos ou o pé-direito */
+  if(npav!==NIV.lista.length||NIV.lista.some(function(l){return Math.abs(l.pe-pe)>1e-6;})){var L=[];for(var i=0;i<npav;i++){var ult=i===npav-1,ant=NIV.lista[i]||{};
+      L.push({nome:(i===0?'Térreo':(i+1-1)+'º pavimento')+(ult?' (laje de cobertura)':''),pe:pe,g:ant.g!=null&&!ult?ant.g:(ult?4.0:6.0),q:ant.q!=null&&!ult?ant.q:(ult?1.0:1.5)});}NIV.lista=L;}
+  NIV.auto=auto&&R.pilares.length?1:NIV.auto;if(NIV.auto)_pilares.forEach(function(p){delete p.cargaMan;});
+  CFG.estr=te;CFG.fund=ESTR[te].fund;CFG.tipoPar='';guardarCfg();guardarNiv();guardarPlanta();
+  var p=getP();aplicarCargas();_pilares.forEach(function(q){try{dimensionarPilar(q,p);}catch(e){}});
+  $('c3imp').remove();IMP=null;calc();
+  aviso('Planta importada: '+(R.pilares.length?_pilares.length+' pilares, ':'')+PL.paredes.length+' paredes, '+PL.janelas.length+' janelas'+(NIV.auto?'. Cargas calculadas pelos níveis e sapatas dimensionadas.':'. Confira as cargas na aba Cargas e Pilares.'));
+  aba('vis3d');setTimeout(function(){if(S3.pronto){montar();vista('persp');}},400);}
+
+/* ════════════ EXPORTAR DWG / DXF ════════════
+   Mesmo formato do Esgoto e do Pavimento: metros, AutoCAD 2000, camadas CON-*. Planta de fundações e estrutura,
+   cortes das sapatas, quadros, carimbo e um modelo 3D em linhas (camada CON-3D, para ver em perspectiva no AutoCAD). */
+function cena(){var M=modelo(),E=[],LAY=[['CON-FUNDO',8],['CON-PAREDE',5],['CON-JANELA',4],['CON-SAPATA',3],['CON-BLOCO',3],['CON-ESTACA',6],['CON-CORRIDA',3],['CON-RADIER',3],['CON-PILAR',1],['CON-VIGA',2],['CON-EIXO',9],['CON-COTA',7],['CON-TEXTO',7],['CON-CORTE',3],['CON-QUADRO',7],['CON-CARIMBO',7],['CON-3D',8]];
+  var Ln=function(l,x1,y1,x2,y2){E.push({t:'L',l:l,x1:x1,y1:y1,x2:x2,y2:y2});},L3=function(l,a,b){E.push({t:'L',l:l,x1:a[0],y1:a[1],z1:a[2],x2:b[0],y2:b[1],z2:b[2]});},
+    Pl=function(l,pts,c){E.push({t:'P',l:l,pts:pts,c:!!c});},Ci=function(l,x,y,r){E.push({t:'C',l:l,x:x,y:y,r:r});},
+    Tx=function(l,x,y,h,s,al){s=String(s);if(al==='C'||al==='R')x-=0.62*h*s.length*(al==='C'?0.5:1);E.push({t:'T',l:l,x:x,y:y,h:h,txt:s,ang:0});},
+    ret=function(l,x,y,w,d){Pl(l,[[x-w/2,y-d/2],[x+w/2,y-d/2],[x+w/2,y+d/2],[x-w/2,y+d/2]],true);},f2=function(v){return (+v).toFixed(2).replace('.',',');};
+  var ext=M.ext,W=ext[2]-ext[0],H=ext[3]-ext[1],ht=Math.max(0.12,Math.min(0.5,Math.max(W,H)/90));
+  if(PL&&PL.fundo)PL.fundo.forEach(function(l){if(l.length>1)Pl('CON-FUNDO',l);});
+  M.paredes.filter(function(w){return w.niv===0;}).forEach(function(w){var dx=w.x2-w.x1,dy=w.y2-w.y1,l=Math.hypot(dx,dy)||1,nx=-dy/l*w.t/2,ny=dx/l*w.t/2;Pl('CON-PAREDE',[[w.x1+nx,w.y1+ny],[w.x2+nx,w.y2+ny],[w.x2-nx,w.y2-ny],[w.x1-nx,w.y1-ny]],true);});
+  M.janelas.filter(function(w){return w.niv===0;}).forEach(function(w){Ln('CON-JANELA',w.x1,w.y1,w.x2,w.y2);});
+  /* eixos dos pilares (linhas de X e Y distintos) */
+  var xsU=[],ysU=[];_sapatas.forEach(function(s){if(!xsU.some(function(v){return Math.abs(v-s.x)<0.05;}))xsU.push(s.x);if(!ysU.some(function(v){return Math.abs(v-s.y)<0.05;}))ysU.push(s.y);});
+  xsU.sort(function(a,b){return a-b;});ysU.sort(function(a,b){return a-b;});var mg=Math.max(1.5,ht*6);
+  xsU.forEach(function(x,i){Ln('CON-EIXO',x,ext[1]-mg,x,ext[3]+mg);Ci('CON-EIXO',x,ext[3]+mg+ht*1.2,ht*1.2);Tx('CON-EIXO',x,ext[3]+mg+ht*0.75,ht,String.fromCharCode(65+(i%26)),'C');if(i)Tx('CON-COTA',(xsU[i-1]+x)/2,ext[1]-mg-ht*1.6,ht*0.9,f2(x-xsU[i-1]),'C');});
+  ysU.forEach(function(y,i){Ln('CON-EIXO',ext[0]-mg,y,ext[2]+mg,y);Ci('CON-EIXO',ext[0]-mg-ht*1.2,y,ht*1.2);Tx('CON-EIXO',ext[0]-mg-ht*1.2,y-ht*0.45,ht,String(i+1),'C');if(i)Tx('CON-COTA',ext[2]+mg+ht,(ysU[i-1]+y)/2,ht*0.9,f2(y-ysU[i-1]));});
+  M.sapatas.forEach(function(a){ret('CON-SAPATA',a.x,a.y,a.B,a.L);var b=Math.min(a.B/2,a.bp/2+0.025),l=Math.min(a.L/2,a.hp/2+0.025);
+    [[-1,-1],[1,-1],[1,1],[-1,1]].forEach(function(q){Ln('CON-SAPATA',a.x+q[0]*a.B/2,a.y+q[1]*a.L/2,a.x+q[0]*b,a.y+q[1]*l);});
+    Tx('CON-TEXTO',a.x,a.y-a.L/2-ht*1.4,ht*0.85,'S'+a.s.id.replace(/^P/i,'')+' '+f2(a.B)+'x'+f2(a.L)+' h='+f2(a.h),'C');});
+  M.corridas.forEach(function(w){var dx=w.x2-w.x1,dy=w.y2-w.y1,l=Math.hypot(dx,dy)||1,nx=-dy/l*w.B/2,ny=dx/l*w.B/2;Pl('CON-CORRIDA',[[w.x1+nx,w.y1+ny],[w.x2+nx,w.y2+ny],[w.x2-nx,w.y2-ny],[w.x1-nx,w.y1-ny]],true);});
+  if(M.radier){var r=M.radier;ret('CON-RADIER',r.x,r.y,r.w,r.d);Tx('CON-TEXTO',r.x,r.y-r.d/2-ht*1.5,ht,'RADIER h='+f2(r.h)+' m','C');}
+  M.blocos.forEach(function(b){ret('CON-BLOCO',b.x,b.y,b.w,b.d);b.pos.forEach(function(q){Ci('CON-ESTACA',b.x+q[0],b.y+q[1],b.D/2);});Tx('CON-TEXTO',b.x,b.y-b.d/2-ht*1.4,ht*0.85,'B'+b.s.id.replace(/^P/i,'')+' '+b.pos.length+' est. D'+Math.round(b.D*100),'C');});
+  _sapatas.forEach(function(s){ret('CON-PILAR',s.x,s.y,s.bp,s.hp);Ln('CON-PILAR',s.x-s.bp/2,s.y-s.hp/2,s.x+s.bp/2,s.y+s.hp/2);Ln('CON-PILAR',s.x-s.bp/2,s.y+s.hp/2,s.x+s.bp/2,s.y-s.hp/2);
+    Tx('CON-TEXTO',s.x+s.bp/2+ht*0.3,s.y+s.hp/2+ht*0.3,ht,s.id+' ('+Math.round(s.bp*100)+'x'+Math.round(s.hp*100)+')');});
+  M.vigas.filter(function(v){return v.niv===0;}).forEach(function(v){var dx=v.x2-v.x1,dy=v.y2-v.y1,l=Math.hypot(dx,dy)||1,nx=-dy/l*v.b/2,ny=dx/l*v.b/2;Ln('CON-VIGA',v.x1+nx,v.y1+ny,v.x2+nx,v.y2+ny);Ln('CON-VIGA',v.x1-nx,v.y1-ny,v.x2-nx,v.y2-ny);});
+  Tx('CON-TEXTO',ext[0],ext[3]+mg+ht*4,ht*1.6,'PLANTA DE FUNDACOES E LOCACAO DOS PILARES ('+FUND[M.fund].toUpperCase()+')');
+  /* cortes das sapatas, lado a lado abaixo da planta */
+  var cy=ext[1]-mg-ht*8,cx=ext[0];
+  if(M.sapatas.length){Tx('CON-CORTE',cx,cy+ht*1.5,ht*1.3,'CORTES DAS SAPATAS (cotas em m)');var yb=cy-ht*2;
+    M.sapatas.forEach(function(a){var x0=cx+a.B/2,z0=yb-Math.max.apply(null,M.sapatas.map(function(s){return s.h;}))-0.5,b=Math.min(a.B/2,a.bp/2+0.025);
+      Pl('CON-CORTE',[[x0-a.B/2,z0],[x0+a.B/2,z0],[x0+a.B/2,z0+a.h0],[x0+b,z0+a.h],[x0-b,z0+a.h],[x0-a.B/2,z0+a.h0]],true);
+      Pl('CON-CORTE',[[x0-a.bp/2,z0+a.h],[x0+a.bp/2,z0+a.h],[x0+a.bp/2,z0+a.h+0.6],[x0-a.bp/2,z0+a.h+0.6]],false);
+      Ln('CON-CORTE',x0-a.B/2-0.05,z0-0.05,x0+a.B/2+0.05,z0-0.05);
+      Tx('CON-CORTE',x0,z0-ht*1.6,ht*0.8,a.s.id+' B='+f2(a.B)+' h='+f2(a.h)+' h0='+f2(a.h0),'C');cx+=Math.max(a.B,ht*12)+ht*3;});cy=yb-Math.max.apply(null,M.sapatas.map(function(s){return s.h;}))-ht*8;}
+  /* quadro de fundações */
+  var qx=ext[2]+mg+ht*10,qy=ext[3]+mg,rh=ht*2,cols=[['PILAR',6],['bp x hp (cm)',10],['Nk (kN)',8],['B (m)',6],['L (m)',6],['h (m)',6],['h0 (m)',6],['As X (cm2)',9],['As Y (cm2)',9],['VOL (m3)',8],['SITUACAO',16]],cw=cols.map(function(c){return c[1]*ht;}),tw=cw.reduce(function(a,b){return a+b;},0);
+  var linhas=_sapatas.map(function(s){return [s.id,Math.round(s.bp*100)+'x'+Math.round(s.hp*100),Math.round(s.Nk),f2(s.B),f2(s.L),f2(s.h),f2(s.h0),f2(s.AsXa),f2(s.AsYa),f2(s.vol),String(s.st||'').replace(/[^\x20-\x7eÀ-ÿ]/g,'').trim()];});
+  Tx('CON-QUADRO',qx,qy+rh*0.6,ht*1.2,'QUADRO DE FUNDACOES - '+FUND[M.fund].toUpperCase());
+  [cols.map(function(c){return c[0];})].concat(linhas).forEach(function(row,i){var y=qy-i*rh,x=qx;row.forEach(function(v,j){Tx('CON-QUADRO',x+cw[j]/2,y-rh*0.7,ht*0.8,v,'C');x+=cw[j];});Ln('CON-QUADRO',qx,y,qx+tw,y);});
+  var yb2=qy-(linhas.length+1)*rh;Ln('CON-QUADRO',qx,yb2,qx+tw,yb2);var xx=qx;Ln('CON-QUADRO',xx,qy,xx,yb2);cw.forEach(function(w){xx+=w;Ln('CON-QUADRO',xx,qy,xx,yb2);});
+  /* quadro de níveis (peso usado no cálculo) */
+  var ny0=yb2-rh*2.5;Tx('CON-QUADRO',qx,ny0+rh*0.6,ht*1.1,'NIVEIS E CARGAS (kN/m2)'+(NIV.auto?' - cargas dos pilares pelos niveis':''));var B0=nivBases();
+  [['NIVEL','COTA BASE','PE-DIREITO','g','q']].concat(NIV.lista.map(function(n,i){return [n.nome,f2(B0[i]),f2(n.pe),f2(n.g),f2(n.q)];})).forEach(function(row,i){var y=ny0-i*rh;[0,18,26,34,40].forEach(function(o,j){Tx('CON-QUADRO',qx+o*ht+ht*0.4,y-rh*0.7,ht*0.8,row[j]);});Ln('CON-QUADRO',qx,y,qx+46*ht,y);});
+  Ln('CON-QUADRO',qx,ny0-(NIV.lista.length+1)*rh,qx+46*ht,ny0-(NIV.lista.length+1)*rh);
+  /* carimbo */
+  var p=getP(),ky=Math.min(cy,ny0-(NIV.lista.length+3)*rh)-ht*16,kw=Math.max(tw,70*ht);
+  Pl('CON-CARIMBO',[[qx,ky],[qx+kw,ky],[qx+kw,ky+14*ht],[qx,ky+14*ht]],true);[9.5,5].forEach(function(k){Ln('CON-CARIMBO',qx,ky+k*ht,qx+kw,ky+k*ht);});
+  Tx('CON-CARIMBO',qx+ht,ky+10.8*ht,ht*1.5,'FUNDACOES E ESTRUTURA EM CONCRETO ARMADO - '+ESTR[M.tipo].nome.toUpperCase().replace(/[()]/g,''));
+  Tx('CON-CARIMBO',qx+ht,ky+6.4*ht,ht*1.1,'LOCAL: '+(S('endereco')||'')+'   RESP.: '+(S('responsavel')||'')+'   DATA: '+new Date().toLocaleDateString('pt-BR'));
+  Tx('CON-CARIMBO',qx+ht,ky+1.8*ht,ht*0.9,'fck '+p.fck+' MPa  fyk '+p.fyk+' MPa  sadm '+p.sigma_adm+' kPa  D '+f2(p.D)+' m  NBR 6118/6122. Metros. Camada CON-3D = modelo 3D em linhas. Total Civil.');
+  /* modelo 3D em linhas (pilares, vigas, sapatas, lajes): ver em perspectiva no AutoCAD */
+  var cx3=function(x,y,z0,w,d,h){var a=[[x-w/2,y-d/2],[x+w/2,y-d/2],[x+w/2,y+d/2],[x-w/2,y+d/2]];for(var i=0;i<4;i++){var b=a[(i+1)%4];L3('CON-3D',[a[i][0],a[i][1],z0],[b[0],b[1],z0]);L3('CON-3D',[a[i][0],a[i][1],z0+h],[b[0],b[1],z0+h]);L3('CON-3D',[a[i][0],a[i][1],z0],[a[i][0],a[i][1],z0+h]);}};
+  M.sapatas.forEach(function(a){cx3(a.x,a.y,a.z,a.B,a.L,a.h0);var b=Math.min(a.B/2,a.bp/2+0.025),l=Math.min(a.L/2,a.hp/2+0.025);[[-1,-1],[1,-1],[1,1],[-1,1]].forEach(function(q){L3('CON-3D',[a.x+q[0]*a.B/2,a.y+q[1]*a.L/2,a.z+a.h0],[a.x+q[0]*b,a.y+q[1]*l,a.z+a.h]);});});
+  M.blocos.forEach(function(b){cx3(b.x,b.y,b.z,b.w,b.d,b.h);b.pos.forEach(function(q){L3('CON-3D',[b.x+q[0],b.y+q[1],b.z],[b.x+q[0],b.y+q[1],b.z-b.L]);});});
+  M.pilares.forEach(function(c){cx3(c.x,c.y,c.z0,c.bp,c.hp,c.z1-c.z0);});
+  M.vigas.forEach(function(v){var dx=v.x2-v.x1,dy=v.y2-v.y1,l=Math.hypot(dx,dy)||1,nx=-dy/l*v.b/2,ny=dx/l*v.b/2;[[1,0],[1,1],[-1,0],[-1,1]].forEach(function(q){var z=v.z+q[1]*v.h;L3('CON-3D',[v.x1+nx*q[0],v.y1+ny*q[0],z],[v.x2+nx*q[0],v.y2+ny*q[0],z]);});});
+  M.lajes.forEach(function(l){cx3((l.x1+l.x2)/2,(l.y1+l.y2)/2,l.z,l.x2-l.x1+0.2,l.y2-l.y1+0.2,l.h);});
+  M.paredes.forEach(function(w){[w.z0,w.z1].forEach(function(z){L3('CON-3D',[w.x1,w.y1,z],[w.x2,w.y2,z]);});});
+  if(M.telhado){var t=M.telhado,aoX=(t.x2-t.x1)>=(t.y2-t.y1),Lu=aoX?t.x2-t.x1:t.y2-t.y1,Lv=aoX?t.y2-t.y1:t.x2-t.x1,hp=t.aguas===4?Math.min(Lu,Lv)/2:0,pl=function(u,v,z){return aoX?[t.x1+u,t.y1+v,t.z+z]:[t.x1+v,t.y1+u,t.z+z];};
+    var c=[pl(0,0,0),pl(Lu,0,0),pl(Lu,Lv,0),pl(0,Lv,0)],r1=pl(hp,Lv/2,t.f),r2=pl(Lu-hp,Lv/2,t.f);for(var i=0;i<4;i++)L3('CON-3D',c[i],c[(i+1)%4]);L3('CON-3D',r1,r2);
+    if(t.aguas===4){L3('CON-3D',c[0],r1);L3('CON-3D',c[3],r1);L3('CON-3D',c[1],r2);L3('CON-3D',c[2],r2);}else{L3('CON-3D',c[0],r1);L3('CON-3D',c[3],r1);L3('CON-3D',c[1],r2);L3('CON-3D',c[2],r2);}}
+  return {layers:LAY,ents:E};}
+function dxfDe(C){var n=function(v){return (Math.round(v*10000)/10000).toString();},tx=function(s){return String(s).replace(/[^\x20-\x7e]/g,function(ch){return '\\U+'+('0000'+ch.charCodeAt(0).toString(16).toUpperCase()).slice(-4);});},e='';
+  C.ents.forEach(function(o){
+    if(o.t==='L')e+='0\nLINE\n8\n'+o.l+'\n10\n'+n(o.x1)+'\n20\n'+n(o.y1)+'\n30\n'+n(o.z1||0)+'\n11\n'+n(o.x2)+'\n21\n'+n(o.y2)+'\n31\n'+n(o.z2||0)+'\n';
+    else if(o.t==='C')e+='0\nCIRCLE\n8\n'+o.l+'\n10\n'+n(o.x)+'\n20\n'+n(o.y)+'\n30\n0\n40\n'+n(o.r)+'\n';
+    else if(o.t==='T')e+='0\nTEXT\n8\n'+o.l+'\n10\n'+n(o.x)+'\n20\n'+n(o.y)+'\n30\n0\n40\n'+n(o.h)+'\n1\n'+tx(o.txt)+'\n50\n'+n(o.ang)+'\n';
+    else if(o.t==='P'){e+='0\nPOLYLINE\n8\n'+o.l+'\n66\n1\n70\n'+(o.c?1:0)+'\n';o.pts.forEach(function(p){e+='0\nVERTEX\n8\n'+o.l+'\n10\n'+n(p[0])+'\n20\n'+n(p[1])+'\n30\n0\n';});e+='0\nSEQEND\n8\n'+o.l+'\n';}});
+  return '0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1009\n9\n$INSUNITS\n70\n6\n0\nENDSEC\n0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLTYPE\n70\n1\n0\nLTYPE\n2\nCONTINUOUS\n70\n0\n3\nSolid line\n72\n65\n73\n0\n40\n0.0\n0\nENDTAB\n0\nTABLE\n2\nLAYER\n70\n'+C.layers.length+'\n'+
+    C.layers.map(function(l){return '0\nLAYER\n2\n'+l[0]+'\n70\n0\n62\n'+l[1]+'\n6\nCONTINUOUS\n';}).join('')+'0\nENDTAB\n0\nTABLE\n2\nSTYLE\n70\n1\n0\nSTYLE\n2\nSTANDARD\n70\n0\n40\n0.0\n41\n1.0\n50\n0.0\n71\n0\n42\n2.5\n3\ntxt\n4\n\n0\nENDTAB\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n'+e+'0\nENDSEC\n0\nEOF\n';}
+function dwgDe(C){return script(DWG_URL).then(function(){var A=window.TCDWG,doc=new A.CadDocument(),lay={};
+  C.layers.forEach(function(q){var l=new A.Layer(q[0]);l.name=q[0];l.color=new A.Color(q[1]);doc.layers.add(l);lay[q[0]]=l;});
+  var add=function(o,l){o.layer=lay[l];doc.modelSpace.entities.add(o);};
+  C.ents.forEach(function(o){
+    if(o.t==='L'){var l=new A.Line();l.startPoint=new A.XYZ(o.x1,o.y1,o.z1||0);l.endPoint=new A.XYZ(o.x2,o.y2,o.z2||0);add(l,o.l);}
+    else if(o.t==='C'){var c=new A.Circle();c.center=new A.XYZ(o.x,o.y,0);c.radius=o.r;add(c,o.l);}
+    else if(o.t==='T'){var t=new A.TextEntity(o.txt);t.insertPoint=new A.XYZ(o.x,o.y,0);t.height=o.h;t.rotation=(o.ang||0)*Math.PI/180;add(t,o.l);}
+    else if(o.t==='P'){var p=new A.LwPolyline();o.pts.forEach(function(q){var v=new A.LwPolylineVertex();v.location=new A.XY(q[0],q[1]);p.vertices.push(v);});p.isClosed=o.c;add(p,o.l);}});
+  doc.header.version=A.ACadVersion.AC1015;return A.DwgWriter.writeToBuffer(doc);});}
+function nomeArq(){return 'concreto_'+String(S('endereco')||'projeto').replace(/[^\w\-]+/g,'_').slice(0,40)+'_'+new Date().toISOString().slice(0,10);}
+function exportar(tipo){if(!_sapatas.length){calc();}if(!_sapatas.length){aviso('Cadastre os pilares primeiro.','err');return;}
+  var C=cena();
+  if(tipo==='dxf'){baixar(nomeArq()+'.dxf',new Blob([dxfDe(C)],{type:'application/dxf'}));aviso('DXF gerado: planta de fundações, pilares, eixos, cortes das sapatas, quadros, carimbo e modelo 3D em linhas (camadas CON-*).');return;}
+  aviso('Montando o DWG…');dwgDe(C).then(function(buf){baixar(nomeArq()+'.dwg',new Blob([buf],{type:'application/acad'}));aviso('DWG gerado (AutoCAD 2000): planta, cortes, quadros, carimbo e modelo 3D em linhas.');})
+  .catch(function(e){console.error(e);baixar(nomeArq()+'.dxf',new Blob([dxfDe(C)],{type:'application/dxf'}));aviso('Não consegui gerar o DWG ('+((e&&e.message)||e)+'). Baixei o DXF, que o AutoCAD abre igual.','err');});}
+window.exportDXFPlantaConc=function(){exportar('dxf');};   /* botão antigo "📐 Planta (DXF)" (dava sempre "Calcule as sapatas") */
+
+/* ════════════ LIGAÇÕES COM O PROGRAMA ════════════ */
+window.TC_CON3D={modelo:function(){return modelo();},niveis:function(){return NIV;},planta:function(){return PL;},cargas:cargasNiveis,abrirImportar:abrirImportar,exportar:exportar,_t:{lerDXF:lerDXF,EXTRAIR_DWG:EXTRAIR_DWG,detectar:detectar,cena:cena,dxfDe:dxfDe,dwgDe:dwgDe,lerDWG:lerDWG,S3:S3,CFG:CFG}};
+var calcOrig=window.calc,atrasoMontar=null;
+window.calc=function(){try{aplicarCargas();}catch(e){console.error(e);}var r=calcOrig.apply(this,arguments);try{nivCard();}catch(e){console.error(e);}
+  if(S3.pronto&&visivel()&&!$('c3').hidden){clearTimeout(atrasoMontar);atrasoMontar=setTimeout(function(){montar();},120);}return r;};
+var setPilOrig=window.setPil;window.setPil=function(i,campo,el){if(NIV.auto&&(campo==='gk'||campo==='qk')&&_pilares[i]&&!isNaN(parseFloat(el.value)))_pilares[i].cargaMan=1;return setPilOrig.apply(this,arguments);};
+window.salvarJSON=function(){var d={tipo:'tc_concreto_v2',data:new Date().toISOString(),pilares:_pilares,
+    solo:{sigma_adm:V('sigma_adm'),spt:V('spt'),D:V('D'),NA:V('NA'),gama_s:V('gama_s'),coesao:V('coesao'),phi:V('phi'),tipo_solo:S('tipo_solo'),endereco:S('endereco'),responsavel:S('responsavel')},
+    mat:{fck:V('fck'),fyk:S('fyk'),gc:S('gc'),gs:S('gs'),gfg:S('gfg'),gfq:S('gfq'),cl_agr:S('cl_agr')},
+    niveis:NIV,planta:PL,estrutura:{tipo:CFG.estr,fund:CFG.fund}};
+  baixar('fundacoes_'+new Date().toISOString().slice(0,10)+'.json',new Blob([JSON.stringify(d)],{type:'application/json'}));aviso('Projeto salvo (com níveis'+(PL?' e planta importada':'')+').');};
+window.abrirJSON=function(e){var f=e.target.files[0];if(!f)return;var r=new FileReader();r.onload=function(ev){try{var d=JSON.parse(ev.target.result);
+    if(d.pilares&&d.pilares.length){_pilares=d.pilares;_nextId=Math.max.apply(null,_pilares.map(function(p){return parseInt(String(p.id).replace(/\D/g,''))||0;}))+1;}
+    if(d.solo)Object.keys(d.solo).forEach(function(k){var el=$(k);if(el)el.value=d.solo[k];});if(d.mat)Object.keys(d.mat).forEach(function(k){var el=$(k);if(el)el.value=d.mat[k];});
+    NIV=d.niveis&&d.niveis.lista&&d.niveis.lista.length?d.niveis:JSON.parse(JSON.stringify(NIV_PADRAO));PL=d.planta||null;
+    if(d.estrutura){if(ESTR[d.estrutura.tipo])CFG.estr=d.estrutura.tipo;if(FUND[d.estrutura.fund])CFG.fund=d.estrutura.fund;}
+    if(!d.niveis)NIV.auto=0;guardarNiv();guardarPlanta();guardarCfg();calc();if(S3.pronto)montar();aviso('Projeto aberto: '+f.name);}catch(err){aviso('Erro ao abrir: '+err.message,'err');}};r.readAsText(f);e.target.value='';};
+var novoOrig=window.novoCalc;window.novoCalc=function(){var antes=_pilares;novoOrig.apply(this,arguments);if(_pilares!==antes){PL=null;guardarPlanta();NIV=JSON.parse(JSON.stringify(NIV_PADRAO));guardarNiv();calc();if(S3.pronto){montar();enquadrar();}}};
+/* barra do topo: DWG ao lado do DXF antigo, e importar planta */
+(function(){var b=document.querySelector('button[onclick="exportDXFPlantaConc()"]');if(!b)return;b.textContent='📐 Planta (DXF)';
+  var d=document.createElement('button');d.className=b.className;d.textContent='📐 Planta (DWG)';d.title='Planta, cortes, quadros e modelo 3D em DWG (AutoCAD 2000)';d.onclick=function(){exportar('dwg');};b.after(d);
+  var im=document.createElement('button');im.className=b.className;im.textContent='📥 Importar planta';im.title='Importar planta baixa em DWG, DXF ou imagem';im.onclick=abrirImportar;d.after(im);})();
+setTimeout(function(){try{nivCard();}catch(e){console.error(e);}},300);
+if(document.readyState!=='loading'&&visivel())setTimeout(desenhar,500);
+})();
+
 </script>
 </body>
 </html>
